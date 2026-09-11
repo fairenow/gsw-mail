@@ -1,0 +1,51 @@
+name: gsw-mail
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PG_DATABASE:-gsw_mail}
+      POSTGRES_USER: ${PG_USER:-gsw_mail}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?set PG_PASSWORD in infra/.env}
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-gsw_mail} -d ${PG_DATABASE:-gsw_mail}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  stalwart:
+    image: stalwartlabs/stalwart:v0.16
+    restart: unless-stopped
+    hostname: ${HOSTNAME:-mx1.guidedstepswellness.com}
+    environment:
+      HOSTNAME: ${HOSTNAME:-mx1.guidedstepswellness.com}
+      TZ: ${TZ:-America/Detroit}
+      STALWART_PUBLIC_URL: ${STALWART_PUBLIC_URL:-https://mx1.guidedstepswellness.com}
+      STALWART_RECOVERY_ADMIN: ${STALWART_RECOVERY_ADMIN:-admin:changeme_admin_password}
+    ports:
+      - "25:25"
+      - "465:465"
+      - "587:587"
+      - "143:143"
+      - "993:993"
+      - "4190:4190"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - stalwart-etc:/etc/stalwart
+      - stalwart-data:/var/lib/stalwart
+    healthcheck:
+      test: ["CMD", "curl", "-sfk", "https://localhost:443/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pg-data:
+  stalwart-etc:
+  stalwart-data:

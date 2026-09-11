@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+
+infra/data/
+infra/certs/
+*.pem
+*.key
+
+.DS_Store
+*.log
+coverage/

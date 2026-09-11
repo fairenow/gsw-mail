@@ -1,0 +1,215 @@
+import type {
+  EngineAccountId,
+  EngineMessageId,
+  EngineThreadId,
+  FullMessage,
+  MailboxName,
+  MailEngine,
+  MailEngineStatus,
+  MessageQuery,
+  MessageSummary,
+  SendDraftInput,
+  SendResult,
+} from "./types.js";
+
+const MAILBOXES: MailboxName[] = [
+  { role: "inbox", engineName: "Inbox" },
+  { role: "sent", engineName: "Sent" },
+  { role: "drafts", engineName: "Drafts" },
+  { role: "spam", engineName: "Spam" },
+  { role: "trash", engineName: "Trash" },
+  { role: "archive", engineName: "Archive" },
+];
+
+let seq = 0;
+
+const sample = (accountId: EngineAccountId): FullMessage[] => {
+  const now = new Date();
+  const make = (
+    threadId: EngineThreadId,
+    mailbox: string,
+    subject: string,
+    from: string,
+    textBody: string,
+    minutesAgo: number,
+  ): FullMessage => ({
+    engineId: `demo-${++seq}`,
+    threadId,
+    mailbox,
+    from: { email: from },
+    to: [{ email: `user@${"demo"}` }],
+    cc: [],
+    subject,
+    textBody,
+    snippet: textBody.slice(0, 80),
+    date: new Date(now.getTime() - minutesAgo * 60_000),
+    size: textBody.length,
+    read: false,
+    flagged: false,
+    hasAttachments: false,
+    keywords: [],
+    attachments: [],
+    headers: { "Message-ID": `<demo-${seq}@demo>` },
+    security: { spf: "pass", dkim: "pass", dmarc: "pass", spamScore: 0.4 },
+  });
+
+  void accountId;
+  return [
+    make(
+      "t-1",
+      "Inbox",
+      "Welcome to Guided Steps Mail",
+      "ramon@guidedstepswellness.com",
+      "Your own mail platform is live.",
+      360,
+    ),
+    make(
+      "t-2",
+      "Inbox",
+      "Referral: please contact our youth director",
+      "pastor@examplechurch.org",
+      'Please contact our youth director instead. Her email is sarah@examplechurch.org.',
+      90,
+    ),
+    make(
+      "t-1",
+      "Inbox",
+      "Re: Welcome to Guided Steps Mail",
+      "alyssa@guidedstepswellness.com",
+      "Looks great!",
+      45,
+    ),
+    make(
+      "t-3",
+      "Inbox",
+      "Invoice from the provider",
+      "billing@vendor.net",
+      "Attached is your monthly statement.",
+      10,
+    ),
+  ];
+};
+
+const messages = new Map<EngineAccountId, FullMessage[]>();
+
+export class DemoEngine implements MailEngine {
+  readonly name = "demo";
+
+  private store(accountId: EngineAccountId): FullMessage[] {
+    let list = messages.get(accountId);
+    if (!list) {
+      list = sample(accountId);
+      messages.set(accountId, list);
+    }
+    return list;
+  }
+
+  async listMailboxes(_accountId: EngineAccountId): Promise<MailboxName[]> {
+    return MAILBOXES;
+  }
+
+  async listMessages(accountId: EngineAccountId, query: MessageQuery): Promise<MessageSummary[]> {
+    const all = this.store(accountId);
+    const filtered = all.filter(
+      (m) => (!query.mailbox || m.mailbox === query.mailbox) && (!query.threadId || m.threadId === query.threadId),
+    );
+    const end = (query.offset ?? 0) + (query.limit ?? 50);
+    return filtered.slice(query.offset ?? 0, end).map(stripBody);
+  }
+
+  async getMessage(accountId: EngineAccountId, messageId: EngineMessageId): Promise<FullMessage | null> {
+    const found = this.store(accountId).find((m) => m.engineId === messageId);
+    return found ? { ...found } : null;
+  }
+
+  async getThread(accountId: EngineAccountId, threadId: EngineThreadId): Promise<MessageSummary[]> {
+    return this.store(accountId)
+      .filter((m) => m.threadId === threadId)
+      .map(stripBody);
+  }
+
+  async setSeen(accountId: EngineAccountId, messageIds: EngineMessageId[], seen: boolean): Promise<void> {
+    for (const m of this.store(accountId)) {
+      if (messageIds.includes(m.engineId)) m.read = seen;
+    }
+  }
+
+  async setFlagged(accountId: EngineAccountId, messageIds: EngineMessageId[], flagged: boolean): Promise<void> {
+    for (const m of this.store(accountId)) {
+      if (messageIds.includes(m.engineId)) m.flagged = flagged;
+    }
+  }
+
+  async move(accountId: EngineAccountId, messageIds: EngineMessageId[], toMailbox: string): Promise<void> {
+    for (const m of this.store(accountId)) {
+      if (messageIds.includes(m.engineId)) m.mailbox = toMailbox;
+    }
+  }
+
+  async saveDraft(accountId: EngineAccountId, input: SendDraftInput): Promise<EngineMessageId> {
+    const id = `demo-${++seq}`;
+    this.store(accountId).push({
+      engineId: id,
+      threadId: `draft-${id}`,
+      mailbox: "Drafts",
+      to: input.to.map((email) => ({ email })),
+      cc: (input.cc ?? []).map((email) => ({ email })),
+      subject: input.subject ?? "",
+      textBody: input.textBody,
+      snippet: input.textBody?.slice(0, 80),
+      date: new Date(),
+      size: (input.textBody ?? "").length,
+      read: true,
+      flagged: false,
+      hasAttachments: false,
+      keywords: [],
+      attachments: [],
+      headers: {},
+    });
+    return id;
+  }
+
+  async saveSent(accountId: EngineAccountId, input: SendDraftInput): Promise<SendResult> {
+    const id = `demo-${++seq}`;
+    this.store(accountId).push({
+      engineId: id,
+      threadId: `t-sent-${id}`,
+      mailbox: "Sent",
+      from: { email: input.from },
+      to: input.to.map((email) => ({ email })),
+      cc: (input.cc ?? []).map((email) => ({ email })),
+      subject: input.subject ?? "",
+      textBody: input.textBody,
+      snippet: input.textBody?.slice(0, 80),
+      date: new Date(),
+      size: (input.textBody ?? "").length,
+      read: true,
+      flagged: false,
+      hasAttachments: false,
+      keywords: [],
+      attachments: [],
+      headers: { "Message-ID": `<${id}@demo>` },
+    });
+    return { engineMessageId: id, threadId: `t-sent-${id}` };
+  }
+
+  async search(accountId: EngineAccountId, q: string, mailbox?: string): Promise<MessageSummary[]> {
+    const needle = q.toLowerCase();
+    return this.store(accountId)
+      .filter((m) => {
+        if (mailbox && m.mailbox !== mailbox) return false;
+        const haystack = `${m.subject} ${m.textBody ?? ""} ${m.from?.email ?? ""} ${m.to.map((a) => a.email).join(" ")}`.toLowerCase();
+        return haystack.includes(needle);
+      })
+      .map(stripBody);
+  }
+
+  async status(): Promise<MailEngineStatus> {
+    return { name: this.name, ok: true };
+  }
+}
+
+const stripBody = (m: FullMessage): MessageSummary => {
+  const { textBody: _textBody, htmlBody: _htmlBody, attachments: _attachments, headers: _headers, ...summary } = m;
+  return summary;
+};

@@ -1,0 +1,97 @@
+# Stalwart — example bootstrap config (production reference)
+
+This is a **reference template**, not something to mount on first boot: a fresh
+container auto-generates a valid `config.toml` into `/etc/stalwart`. Use this template
+when you want a PostgreSQL backend and tailored listeners from the start. After first
+boot, most runtime configuration is managed in the admin UI.
+
+Replace every `<PLACEHOLDER>` before deploying.
+
+```toml
+[server]
+hostname = "mx1.guidedstepswellness.com"
+max-connections = 8192
+
+[server.tls]
+enable = true
+implicit = true
+certificate = "file:///opt/stalwart/certs/fullchain.pem"
+private-key = "file:///opt/stalwart/certs/privkey.pem"
+
+[authentication.fallback-admin]
+user = "admin"
+secret = "<ADMIN_PASSWORD>"
+
+# --- Listeners ---
+[server.listener.https]
+bind = "[::]:443"
+protocol = "http"
+tls.implicit = true
+
+[server.listener.http]
+bind = "[::]:8080"
+protocol = "http"
+
+[server.listener.smtp]
+bind = "[::]:25"
+protocol = "smtp"
+
+[server.listener.submissions]
+bind = "[::]:465"
+protocol = "smtp"
+tls.implicit = true
+
+[server.listener.submission]
+bind = "[::]:587"
+protocol = "smtp"
+
+[server.listener.imap]
+bind = "[::]:143"
+protocol = "imap"
+
+[server.listener.imaptls]
+bind = "[::]:993"
+protocol = "imap"
+tls.implicit = true
+
+[server.listener.sieve]
+bind = "[::]:4190"
+protocol = "managesieve"
+
+# --- Anti-abuse (keep these high so you do not ban your own proxy) ---
+[server.auto-ban.auth-failures]
+rate = "10000/1d"
+[server.auto-ban.abuse]
+rate = "10000/1d"
+[server.auto-ban.loiter]
+rate = "10000/1d"
+[server.auto-ban.scan]
+rate = "10000/1d"
+
+# --- Product store: PostgreSQL (alternative to default RocksDB) ---
+[store.postgresql_cluster]
+type = "postgresql"
+host = "postgres"
+port = 5432
+database = "stalwart_mail"
+user = "<STALWART_DB_USER>"
+password = "<STALWART_DB_PASSWORD>"
+pool.max-connections = 10
+
+[storage]
+data = "postgresql_cluster"
+blob = "postgresql_cluster"
+fts = "postgresql_cluster"
+lookup = "postgresql_cluster"
+directory = "postgresql_cluster"
+```
+
+## Notes
+- The official Docker image in this repo instead uses named volumes (RocksDB) for local
+  development; switch to this template for production hosting.
+- When the outbound path migrates to a relay inside Stalwart (not the MVP), a relay
+  route looks like:
+  `queue.route.relay.type = "relay"`, `protocol = "smtp"`, `address`, `port`,
+  `auth.username`, `auth.secret`.
+- Gate the admin ports (443/8080) behind the security boundary; they must not be
+  published to every application.
