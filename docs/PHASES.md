@@ -19,16 +19,16 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 - [ ] Verify DKIM/DMARC/SPF pass on a received message
 
 ## Phase 2 — Account and mailbox system
-- [ ] `organizations`, `domains`, `users`, `emailAccounts`, `aliases` in schema
-- [ ] Mailboxes: Inbox, Sent, Drafts, Spam, Trash, Archive
-- [ ] Account lifecycle (create/disable) + quota
-- [ ] Aliases (`hello@...` → `ramon@...`)
-- [ ] Authentication placeholder (GSW identity integration later)
+- [x] `organizations`, `domains`, `users`, `emailAccounts`, `aliases` in schema
+- [x] Mailboxes: Inbox, Sent, Drafts, Spam, Trash, Archive
+- [x] Account lifecycle (create/disable) + quota
+- [x] Aliases (`hello@...` → `ramon@...`)
+- [x] Production-facing auth: API tokens + per-account authorization (GSW identity integration later)
 
 ## Phase 3 — Guided Steps Mail API
 - [x] Routes scaffold: accounts, aliases, messages, threads, send, drafts, search, admin
 - [x] Engine abstraction (swappable backend)
-- [ ] Stalwart JMAP adapter implementation
+- [ ] Stalwart JMAP adapter implementation (session status check done)
 - [ ] Thread assembly
 - [ ] Attachments API
 
@@ -36,8 +36,9 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 - [x] Outbound queue model + states + delivery events
 - [x] Relay interface (Resend adapter, demo adapter)
 - [x] Worker skeleton
+- [x] Idempotent sends (`clientRequestId`) + atomic claim (no duplicate delivery)
+- [x] Delivery webhook with signature verification: `delivered`/`bounced`/`complained` persisted idempotently
 - [ ] Real relay credentials + retry/backoff tuning
-- [ ] Bounce/delivery tracking wiring
 - [ ] **Done:** message from Gmail arrives → Ramon reads → replies → Gmail user receives it
 
 ## Phase 5 — Basic mail application
@@ -55,7 +56,8 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 ## Phase 7 — Spam and security hardening
 - [ ] SPF/DKIM/DMARC validation metadata on inbound
 - [ ] Spam scoring, attachment restrictions, malware scanning
-- [ ] Rate limiting, failed-login protection, account lockouts, IP abuse detection, throttle
+- [x] API-level rate limiting
+- [ ] Failed-login protection, account lockouts, IP abuse detection, throttle
 
 ## Phase 8 — AI intelligence layer
 - [ ] Mail events → AI processing (classification: needs response, waiting, referral, …)

@@ -72,6 +72,21 @@ export class StalwartEngine implements MailEngine {
   }
 
   async status(): Promise<MailEngineStatus> {
-    return { name: this.name, ok: true, detail: `JMAP endpoint configured at ${this.jmapUrl}` };
+    const base = this.jmapUrl.replace(/\/+$/, "");
+    const sessionUrl = base.endsWith("/session") ? base : `${base}/session`;
+    try {
+      const resp = await fetch(sessionUrl, {
+        headers: { Authorization: `Bearer ${this.adminToken}`, Accept: "application/json" },
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!resp.ok) {
+        return { name: this.name, ok: false, detail: `JMAP session at ${sessionUrl} returned HTTP ${resp.status}` };
+      }
+      const session = (await resp.json()) as { accounts?: Record<string, { name?: string }> };
+      const accountCount = session.accounts ? Object.keys(session.accounts).length : 0;
+      return { name: this.name, ok: true, detail: `JMAP session ok (${accountCount} account(s))` };
+    } catch (err) {
+      return { name: this.name, ok: false, detail: err instanceof Error ? err.message : String(err) };
+    }
   }
 }

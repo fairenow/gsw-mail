@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
 import { z } from "zod";
+import { getOwnedAccount } from "../auth/authorize.js";
 import { requireAdmin, requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
 import { domains, emailAccounts, mailboxes, users } from "../db/schema.js";
@@ -52,6 +53,7 @@ export default fp(async (app: FastifyInstance) => {
   });
 
   app.get<{ Params: Params }>("/mail/accounts/:id", async (req, reply) => {
+    await getOwnedAccount(req.params.id, req.user!.id);
     const rows = await db
       .select(accountColumns)
       .from(emailAccounts)
@@ -64,7 +66,7 @@ export default fp(async (app: FastifyInstance) => {
   });
 
   app.get<{ Params: Params }>("/mail/accounts/:id/mailboxes", async (req) => {
-    await requireAccount(req.params.id);
+    await getOwnedAccount(req.params.id, req.user!.id);
     return { mailboxes: await engine.listMailboxes(req.params.id) };
   });
 
@@ -114,10 +116,4 @@ export default fp(async (app: FastifyInstance) => {
     if (!updated) throw notFound("account not found");
     return updated;
   });
-
-  async function requireAccount(accountId: string) {
-    const [account] = await db.select().from(emailAccounts).where(eq(emailAccounts.id, accountId)).limit(1);
-    if (!account) throw notFound("account not found");
-    return account;
-  }
 });

@@ -42,6 +42,7 @@ export const deliveryEventType = pgEnum("delivery_event_type", [
   "delivered",
   "deferred",
   "bounced",
+  "complained",
   "failed",
 ]);
 
@@ -166,6 +167,7 @@ export const outboundMessages = pgTable(
     inReplyTo: text("in_reply_to"),
     references: text("references"),
     messageId: text("message_id"),
+    clientRequestId: text("client_request_id"),
     attempts: integer("attempts").default(0).notNull(),
     maxAttempts: integer("max_attempts").default(5).notNull(),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
@@ -176,6 +178,7 @@ export const outboundMessages = pgTable(
     index("outbound_status_idx").on(t.status),
     index("outbound_account_idx").on(t.accountId),
     index("outbound_next_attempt_idx").on(t.status, t.nextAttemptAt),
+    uniqueIndex("outbound_client_request_idx").on(t.clientRequestId),
   ],
 );
 
@@ -188,9 +191,13 @@ export const outboundDeliveryEvents = pgTable(
       .references(() => outboundMessages.id, { onDelete: "cascade" }),
     type: deliveryEventType("delivery_event_type").notNull(),
     detail: jsonb("detail").$type<Record<string, unknown>>(),
+    providerEventId: text("provider_event_id"),
     at: timestamp("at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("delivery_event_msg_idx").on(t.outboundMessageId)],
+  (t) => [
+    index("delivery_event_msg_idx").on(t.outboundMessageId),
+    uniqueIndex("delivery_event_provider_idx").on(t.providerEventId),
+  ],
 );
 
 export const messageThreads = pgTable(

@@ -1,23 +1,37 @@
 # Stalwart Mail Server — operations reference
 
-Image: `stalwartlabs/stalwart:v0.16` (pin minor series in production).
+Image: `stalwartlabs/stalwart:v0.16` (pin the **exact patch**, e.g. `v0.16.x`, in production).
 
 ## Layout
 | Path | Purpose |
 |------|---------|
-| `/etc/stalwart`  | configuration (bootstrap `config.toml`; runtime config may live in DB) |
+| `/etc/stalwart`  | datastore-oriented `config.json` (small bootstrap file only) |
 | `/var/lib/stalwart` | data: stores, blobs, FTS indexes, queue (RocksDB default) |
 
 Image runs unprivileged (UID 2000). If bind-mounting host dirs, `chown 2000:2000`.
 
+## v0.16 configuration model (important)
+
+v0.16 removed the old `config.toml` bridge. On first boot the container writes a small
+`config.json` that points at the datastore; **all** meaningful configuration and
+management — servers, domains, accounts, aliases, quotas, TLS, spam rules — are JMAP
+objects exposed over the JMAP API (`/jmap`). The admin UI and the `stalwart-cli` both
+talk to that same JMAP surface.
+
+Consequences for this repo:
+- Do not hand-write a `config.toml`. `docs/infra/config.toml.example` is retained only
+  as a pre-v0.16 reference and is **not** used by the v0.16 image.
+- Management is done in the admin UI (loopback only) or via JMAP with the admin token —
+  the same mechanism the GSW Mail API's JMAP adapter uses.
+
 ## First boot
-Container generates `config.toml`, boots, and prints the admin credentials:
+Container bootstraps its datastore `config.json`, opens the configured listeners, and
+prints the initial admin credentials to the logs:
 ```text
-✅ Configuration file written to /etc/stalwart/config.toml
 🔑 Your administrator account is 'admin' with password '…'
 ```
-Admin UI: `http://localhost:8080` (http) and `https://localhost:443` (https, self-signed
-by default). `docker logs stalwart` shows the initial password.
+Admin UI on the datastore config: `https://localhost:443` (self-signed by default).
+`STALWART_RECOVERY_ADMIN` must be set in `infra/.env`; compose fails closed if absent.
 
 Env (`infra/.env`):
 ```text
@@ -27,7 +41,7 @@ TZ=America/Detroit
 HOSTNAME=mx1.guidedstepswellness.com       # server hostname
 ```
 
-## Post-boot configuration (admin UI)
+## Post-boot configuration (admin UI / JMAP)
 1. Settings → Server → Network: confirm hostname.
 2. Management → Directory → Domains: add `guidedstepswellness.com` — the UI prints the
    MX/SPF/DKIM/DMARC records to add (mirror `docs/DNS.md`).
@@ -35,25 +49,26 @@ HOSTNAME=mx1.guidedstepswellness.com       # server hostname
    JMAP/IMAP credentials the GSW Mail API uses to read/write mailboxes.
 
 ## Protocol/port map
-| Port | Service |
-|------|---------|
-| 25   | SMTP inbound |
-| 465  | SMTPS (submission, implicit TLS) |
-| 587  | Submission (STARTTLS) |
-| 143  | IMAP |
-| 993  | IMAPS |
-| 4190 | ManageSieve |
-| 443  | Admin UI (https) / JMAP endpoint for API use |
-| 8080 | Admin UI (http) |
+| Port | Service | Bind |
+|------|---------|------|
+| 25   | SMTP inbound | public |
+| 465  | SMTPS (submission, implicit TLS) | public |
+| 587  | Submission (STARTTLS) | public |
+| 143  | IMAP | public |
+| 993  | IMAPS | public |
+| 4190 | ManageSieve | public |
+| 443  | HTTPS: admin UI + JMAP endpoint for API use | public |
+| 8080 | Admin UI (http) | loopback only (`127.0.0.1:8080:8080`) |
 
-Local dev may remap 443/8080 if another local service uses them.
+Postgres in the same compose file binds to loopback only (`127.0.0.1:5432`); nothing
+else on a private network, no raw cross-publish of the DB.
 
 ## Storage backends
 - Default: RocksDB (self-contained; fine for dev and small deployments).
 - Production option: PostgreSQL backend — set every `storage.*` key to a `postgresql`
-  cluster store. A Postgres-backed bootstrap `config.toml` template is provided at
-  `docs/infra/config.toml.example`. After bootstrap, runtime config lives in Postgres
-  (`s` table); use the admin UI for changes.
+  cluster store. Because runtime config now lives in JMAP, the old `config.toml`
+  Postgres template no longer applies; configure via the datastore directories in the
+  admin UI / JMAP management objects.
 
 ## Outbound
 MVP outbound does **not** rely on Stalwart's queue. The GSW API owns the queue and
@@ -61,7 +76,8 @@ calls the configured SMTP relay (Resend/SES/Postmark/Mailgun). Stalwart can also
 configured as a relay client later if GSW's queue is replaced.
 
 ## Health
-`curl -sfk https://localhost:443/healthz`
+`curl -sfk https://localhost:443/healthz` — the API's `StalwartEngine.status()` uses the
+JMAP `/jmap/session` endpoint as its live health check.
 
 ## Logs
 `docker compose -f infra/docker-compose.yml logs -f stalwart`

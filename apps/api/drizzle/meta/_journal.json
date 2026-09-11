@@ -8,6 +8,13 @@
       "when": 1789079025938,
       "tag": "0000_yielding_shadow_king",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789093310774,
+      "tag": "0001_parched_toad",
+      "breakpoints": true
     }
   ]
 }

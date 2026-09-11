@@ -1,4 +1,5 @@
 import cors from "@fastify/cors";
+import rateLimit from "@fastify/rate-limit";
 import Fastify from "fastify";
 import { ZodError } from "zod";
 import { requireUser } from "./auth/middleware.js";
@@ -11,11 +12,13 @@ import messages from "./routes/messages.js";
 import search from "./routes/search.js";
 import send from "./routes/send.js";
 import threads from "./routes/threads.js";
+import webhooks from "./routes/webhooks.js";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
 
   app.register(cors, { origin: true });
+  app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof HttpError) {
@@ -40,6 +43,7 @@ export function buildApp() {
   app.register(send);
   app.register(drafts);
   app.register(admin);
+  app.register(webhooks);
 
   return app;
 }

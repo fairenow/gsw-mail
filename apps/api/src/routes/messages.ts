@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
 import { z } from "zod";
+import { getOwnedAccount } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
 import { inboundMessages, mailboxRole } from "../db/schema.js";
@@ -24,9 +25,9 @@ interface Query {
 
 type ActionBody = { accountId?: string; seen?: boolean; flagged?: boolean; mailbox?: string };
 
-const seenSchema = z.object({ accountId: z.string().optional(), seen: z.boolean() });
-const flagSchema = z.object({ accountId: z.string().optional(), flagged: z.boolean() });
-const moveSchema = z.object({ accountId: z.string().optional(), mailbox: z.string() });
+const seenSchema = z.object({ accountId: z.string(), seen: z.boolean() });
+const flagSchema = z.object({ accountId: z.string(), flagged: z.boolean() });
+const moveSchema = z.object({ accountId: z.string(), mailbox: z.string() });
 
 const roleFromName = (name: string): MailboxRole | null => {
   const found = mailboxRole.enumValues.find((r) => r === name.toLowerCase());
@@ -37,8 +38,9 @@ export default fp(async (app: FastifyInstance) => {
   app.register(requireUser, { optional: false });
   const engine = getEngine();
 
-  app.get<{ Querystring: Query }>("/mail/messages", async ({ query }) => {
+  app.get<{ Querystring: Query }>("/mail/messages", async ({ query, user }) => {
     if (!query.accountId) throw badRequest("accountId is required");
+    await getOwnedAccount(query.accountId, user!.id);
 
     const mailboxes = await engine.listMailboxes(query.accountId);
     const requested = (query.mailbox ?? "inbox").toLowerCase();
@@ -56,8 +58,9 @@ export default fp(async (app: FastifyInstance) => {
     return { messages };
   });
 
-  app.get<{ Params: Params; Querystring: Query }>("/mail/messages/:id", async ({ params, query }) => {
+  app.get<{ Params: Params; Querystring: Query }>("/mail/messages/:id", async ({ params, query, user }) => {
     if (!query.accountId) throw badRequest("accountId is required");
+    await getOwnedAccount(query.accountId, user!.id);
     const message = await engine.getMessage(query.accountId, params.id);
     if (!message) throw notFound("message not found");
     return message;
@@ -65,7 +68,7 @@ export default fp(async (app: FastifyInstance) => {
 
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/read", async (req) => {
     const input = seenSchema.parse(req.body);
-    if (!input.accountId) throw badRequest("accountId is required");
+    await getOwnedAccount(input.accountId, req.user!.id);
     await engine.setSeen(input.accountId, [req.params.id], input.seen);
     await syncCache(input.accountId, req.params.id, { read: input.seen });
     return { messageId: req.params.id, read: input.seen };
@@ -73,7 +76,7 @@ export default fp(async (app: FastifyInstance) => {
 
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/flag", async (req) => {
     const input = flagSchema.parse(req.body);
-    if (!input.accountId) throw badRequest("accountId is required");
+    await getOwnedAccount(input.accountId, req.user!.id);
     await engine.setFlagged(input.accountId, [req.params.id], input.flagged);
     await syncCache(input.accountId, req.params.id, { flagged: input.flagged });
     return { messageId: req.params.id, flagged: input.flagged };
@@ -81,22 +84,24 @@ export default fp(async (app: FastifyInstance) => {
 
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/move", async (req) => {
     const input = moveSchema.parse(req.body);
-    if (!input.accountId) throw badRequest("accountId is required");
+    await getOwnedAccount(input.accountId, req.user!.id);
     await engine.move(input.accountId, [req.params.id], input.mailbox);
     const role = roleFromName(input.mailbox);
     if (role) await syncCache(input.accountId, req.params.id, { mailboxRole: role });
     return { messageId: req.params.id, mailbox: input.mailbox };
   });
 
-  app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/archive", async ({ params, body }) => {
+  app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/archive", async ({ params, body, user }) => {
     if (!body.accountId) throw badRequest("accountId is required");
+    await getOwnedAccount(body.accountId, user!.id);
     await engine.move(body.accountId, [params.id], "Archive");
     await syncCache(body.accountId, params.id, { mailboxRole: "archive" });
     return { messageId: params.id, mailbox: "Archive" };
   });
 
-  app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/trash", async ({ params, body }) => {
+  app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/trash", async ({ params, body, user }) => {
     if (!body.accountId) throw badRequest("accountId is required");
+    await getOwnedAccount(body.accountId, user!.id);
     await engine.move(body.accountId, [params.id], "Trash");
     await syncCache(body.accountId, params.id, { mailboxRole: "trash" });
     return { messageId: params.id, mailbox: "Trash" };

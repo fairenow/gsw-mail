@@ -2,11 +2,12 @@ import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
 import { z } from "zod";
+import { getOwnedAccount } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
-import { emailAccounts } from "../db/schema.js";
+import { emailAccounts, outboundMessages } from "../db/schema.js";
 import { getEngine } from "../engine/index.js";
-import { badRequest, notFound } from "../lib/errors.js";
+import { badRequest } from "../lib/errors.js";
 import { enqueueOutbound } from "../outbound/queue.js";
 
 const sendSchema = z.object({
@@ -20,6 +21,7 @@ const sendSchema = z.object({
   replyTo: z.string().email().optional(),
   inReplyTo: z.string().optional(),
   references: z.string().optional(),
+  clientRequestId: z.string().trim().min(1).max(200).optional(),
 });
 
 export default fp(async (app: FastifyInstance) => {
@@ -28,13 +30,27 @@ export default fp(async (app: FastifyInstance) => {
 
   app.post("/mail/send", async (req, reply) => {
     const input = sendSchema.parse(req.body);
+    await getOwnedAccount(input.accountId, req.user!.id);
+
+    if (input.clientRequestId) {
+      const existing = await db
+        .select({ id: outboundMessages.id, messageId: outboundMessages.messageId, status: outboundMessages.status })
+        .from(outboundMessages)
+        .where(eq(outboundMessages.clientRequestId, input.clientRequestId))
+        .limit(1);
+      const prior = existing[0];
+      if (prior) {
+        reply.code(202);
+        return { jobId: prior.id, messageId: prior.messageId ?? null, status: prior.status, idempotentReplay: true };
+      }
+    }
 
     const [account] = await db
       .select({ id: emailAccounts.id, address: emailAccounts.address, status: emailAccounts.status })
       .from(emailAccounts)
       .where(eq(emailAccounts.id, input.accountId))
       .limit(1);
-    if (!account) throw notFound("account not found");
+    if (!account) throw badRequest("account not found");
     if (account.status !== "active") throw badRequest("account is not active");
 
     const sent = await engine.saveSent(account.id, {
@@ -63,6 +79,7 @@ export default fp(async (app: FastifyInstance) => {
       inReplyTo: input.inReplyTo,
       references: input.references,
       messageId: sent.engineMessageId,
+      clientRequestId: input.clientRequestId,
     });
 
     reply.code(202);

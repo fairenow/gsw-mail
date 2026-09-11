@@ -16,6 +16,7 @@ export interface EnqueueInput {
   inReplyTo?: string | undefined;
   references?: string | undefined;
   messageId?: string | undefined;
+  clientRequestId?: string | undefined;
 }
 
 export async function enqueueOutbound(input: EnqueueInput): Promise<string> {
@@ -34,6 +35,7 @@ export async function enqueueOutbound(input: EnqueueInput): Promise<string> {
       inReplyTo: input.inReplyTo,
       references: input.references,
       messageId: input.messageId,
+      clientRequestId: input.clientRequestId,
     })
     .returning({ id: outboundMessages.id });
   const row = rows[0];
@@ -42,36 +44,37 @@ export async function enqueueOutbound(input: EnqueueInput): Promise<string> {
 }
 
 const reclaimWindow = sql`now() - interval '5 minutes'`;
+const backoffSteps = [30, 60, 120, 240];
 
 export async function claimDueJobs(limit: number): Promise<{ id: string; accountId: string }[]> {
-  const due = await db
-    .select({ id: outboundMessages.id, accountId: outboundMessages.accountId })
-    .from(outboundMessages)
-    .where(
-      or(
-        eq(outboundMessages.status, "queued"),
-        and(eq(outboundMessages.status, "sending"), lte(outboundMessages.updatedAt, reclaimWindow)),
-        and(eq(outboundMessages.status, "deferred"), lte(outboundMessages.nextAttemptAt, sql`now()`)),
-      ),
-    )
-    .orderBy(asc(outboundMessages.createdAt))
-    .limit(limit)
-    .for("update", { skipLocked: true });
+  return db.transaction(async (tx) => {
+    const due = await tx
+      .select({ id: outboundMessages.id, accountId: outboundMessages.accountId })
+      .from(outboundMessages)
+      .where(
+        or(
+          eq(outboundMessages.status, "queued"),
+          and(eq(outboundMessages.status, "sending"), lte(outboundMessages.updatedAt, reclaimWindow)),
+          and(eq(outboundMessages.status, "deferred"), lte(outboundMessages.nextAttemptAt, sql`now()`)),
+        ),
+      )
+      .orderBy(asc(outboundMessages.createdAt))
+      .limit(limit)
+      .for("update", { skipLocked: true });
 
-  if (due.length === 0) return [];
+    if (due.length === 0) return [];
 
-  const claimed = await db
-    .update(outboundMessages)
-    .set({
-      status: "sending",
-      attempts: sql`${outboundMessages.attempts} + 1`,
-      nextAttemptAt: null,
-      lastError: null,
-    })
-    .where(inArray(outboundMessages.id, due.map((d) => d.id)))
-    .returning({ id: outboundMessages.id, accountId: outboundMessages.accountId });
-
-  return claimed;
+    return tx
+      .update(outboundMessages)
+      .set({
+        status: "sending",
+        attempts: sql`${outboundMessages.attempts} + 1`,
+        nextAttemptAt: null,
+        lastError: null,
+      })
+      .where(inArray(outboundMessages.id, due.map((d) => d.id)))
+      .returning({ id: outboundMessages.id, accountId: outboundMessages.accountId });
+  });
 }
 
 export async function loadJob(id: string): Promise<OutboundJob | null> {
@@ -106,23 +109,28 @@ export async function markSent(id: string, deliveryId?: string): Promise<void> {
 }
 
 export async function markDeferred(id: string, message: string): Promise<void> {
-  const rows = await db.select({ maxAttempts: outboundMessages.maxAttempts }).from(outboundMessages).where(eq(outboundMessages.id, id)).limit(1);
+  const rows = await db
+    .select({ attempts: outboundMessages.attempts, maxAttempts: outboundMessages.maxAttempts })
+    .from(outboundMessages)
+    .where(eq(outboundMessages.id, id))
+    .limit(1);
+  const attempts = rows[0]?.attempts ?? 1;
   const maxAttempts = rows[0]?.maxAttempts ?? 5;
-  const attempts = await attemptCount(id);
+  if (attempts >= maxAttempts) {
+    return markFailed(id, `max attempts (${maxAttempts}) reached: ${message}`);
+  }
+  const seconds = backoffSteps[Math.min(attempts - 1, backoffSteps.length - 1)] ?? 240;
   await db.transaction(async (tx) => {
     await tx
       .update(outboundMessages)
       .set({
-        status: "queued",
+        status: "deferred",
         lastError: message,
-        nextAttemptAt: sql`now() + (${attempts} * interval '30 seconds')`,
+        nextAttemptAt: sql`now() + (${seconds} * interval '1 second')`,
       })
       .where(eq(outboundMessages.id, id));
     await tx.insert(outboundDeliveryEvents).values({ outboundMessageId: id, type: "deferred", detail: { message } });
   });
-  if (attempts >= maxAttempts) {
-    await markFailed(id, `max attempts (${maxAttempts}) reached: ${message}`);
-  }
 }
 
 export async function markFailed(id: string, message: string): Promise<void> {
@@ -130,13 +138,4 @@ export async function markFailed(id: string, message: string): Promise<void> {
     await tx.update(outboundMessages).set({ status: "failed", lastError: message }).where(eq(outboundMessages.id, id));
     await tx.insert(outboundDeliveryEvents).values({ outboundMessageId: id, type: "failed", detail: { message } });
   });
-}
-
-async function attemptCount(id: string): Promise<number> {
-  const rows = await db
-    .select({ attempts: outboundMessages.attempts })
-    .from(outboundMessages)
-    .where(eq(outboundMessages.id, id))
-    .limit(1);
-  return rows[0]?.attempts ?? 1;
 }

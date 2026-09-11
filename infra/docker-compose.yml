@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: ${PG_USER:-gsw_mail}
       POSTGRES_PASSWORD: ${PG_PASSWORD:?set PG_PASSWORD in infra/.env}
     ports:
-      - "${PG_PORT:-5432}:5432"
+      - "127.0.0.1:${PG_PORT:-5432}:5432"
     volumes:
       - pg-data:/var/lib/postgresql/data
     healthcheck:
@@ -26,7 +26,7 @@ services:
       HOSTNAME: ${HOSTNAME:-mx1.guidedstepswellness.com}
       TZ: ${TZ:-America/Detroit}
       STALWART_PUBLIC_URL: ${STALWART_PUBLIC_URL:-https://mx1.guidedstepswellness.com}
-      STALWART_RECOVERY_ADMIN: ${STALWART_RECOVERY_ADMIN:-admin:changeme_admin_password}
+      STALWART_RECOVERY_ADMIN: ${STALWART_RECOVERY_ADMIN:?set STALWART_RECOVERY_ADMIN in infra/.env}
     ports:
       - "25:25"
       - "465:465"
@@ -35,7 +35,7 @@ services:
       - "993:993"
       - "4190:4190"
       - "443:443"
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       - stalwart-etc:/etc/stalwart
       - stalwart-data:/var/lib/stalwart

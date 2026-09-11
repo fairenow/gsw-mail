@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
 import { z } from "zod";
@@ -16,8 +16,16 @@ const createAliasSchema = z.object({
 export default fp(async (app: FastifyInstance) => {
   app.register(requireUser, { optional: false });
 
-  app.get("/mail/aliases", async (_req, reply) => {
-    const rows = await db.select().from(aliases);
+  app.get("/mail/aliases", async (req, reply) => {
+    const owned = await db
+      .select({ id: emailAccounts.id })
+      .from(emailAccounts)
+      .where(eq(emailAccounts.userId, req.user!.id));
+    const ownedIds = owned.map((a) => a.id);
+    const rows =
+      ownedIds.length === 0
+        ? []
+        : await db.select().from(aliases).where(inArray(aliases.targetAccountId, ownedIds));
     return reply.code(200).send({ aliases: rows });
   });
 
