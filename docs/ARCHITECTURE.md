@@ -80,6 +80,14 @@ The mail server is critical infrastructure and is **not** exposed directly to ev
 application. Only the internal API reaches it (via JMAP/imap with controlled
 credentials). Administration endpoints require elevated authorization.
 
+Authentication: the API verifies a signed JWT against the Identity Provider's
+JWKS (`JWT_ISSUER`, `JWKS_URL`, `JWT_AUDIENCE`) and resolves the canonical
+`sub` to a `users` row keyed by `(identityProvider, identitySubject)`.
+Authorization is role-based: org memberships (owner/admin/member) gate admin
+operations; mail-account memberships (owner/delegate/read_only) gate mail
+actions via read/send/manage permissions. No infra credentials are ever sent
+to the browser; dev-only fallbacks are disabled in production.
+
 ## 5. Responsibilities
 
 ### Mail engine (Stalwart)
@@ -98,7 +106,8 @@ credentials). Administration endpoints require elevated authorization.
 
 ### Database (Postgres)
 - Product-level metadata only (organizations, domains, accounts, aliases,
-  outbound queue, delivery events, inbound-message index).
+  outbound queue + recipients + attachment refs, delivery events,
+  inbound-message index).
 - The mail server's complete internal state is **not** duplicated in Postgres.
 
 ### Object storage (future)
@@ -108,38 +117,55 @@ credentials). Administration endpoints require elevated authorization.
 - Outbound queue, AI processing, indexing, notifications, bounce processing,
   scheduled jobs, maintenance.
 
-## 6. Outbound flow (MVP)
+## 6. Outbound flow
+
+A send is never synchronous. The request creates an outbound row, saves a copy to
+Sent in the engine, and returns 202 with an undo window:
 
 ```text
-User sends message
+POST /mail/send  (authorized: read/send + rate + suppression checks)
        │
        ▼
-Message saved to Sent (engine)
+Reserve outbound row as "preparing"
+  (atomic ON CONFLICT (accountId, clientRequestId) DO NOTHING;
+   stores the stable RFC Message-ID)
        │
        ▼
-Outbound job created (status: queued)
+Save Sent copy via engine (Message-ID passthrough)
        │
        ▼
-Worker processes job (status: sending)
+Finalize: "queued", nextAttemptAt = undoUntil (SEND_DELAY_SECONDS)
        │
        ▼
-SMTP relay (Resend / SES / Postmark / Mailgun)
-       │
-       ▼
-Delivery status returned
-   (sent / delivered / deferred / bounced / failed)
+202 { sendId, messageId, threadId, status: queued, undoUntil }
 ```
 
-Delivery events are retained. Message states:
+Then the worker:
 
 ```text
-draft → queued → sending → sent → delivered
-              ↘ deferred (retry)
-              ↘ bounced
-              ↘ failed
+Claim due/sending-stuck jobs  (single txn, FOR UPDATE SKIP LOCKED)
+       │
+       ▼
+Relay (Resend / SES / Postmark / Mailgun)  → Message-ID/In-Reply-To/References headers
+       │
+       ▼
+accepted → "accepted" (+ deliveryId)     permanent reject → "failed"
+transient → re-queue with backoff 30/60/120/240s
 ```
 
-Never send application mail synchronously.
+Transport vs delivery:
+
+```text
+transport:  preparing → queued → sending → accepted → failed / cancelled
+delivery:   pending → delivered | deferred | bounced | complained | partial_failure
+```
+
+`delivery_status` is derived from recipient-level events (`outbound_recipients`).
+Hard bounces and complaints also insert organization-scoped suppressions that future
+sends reject (409). A worker reconciles stuck `preparing` rows against the engine
+(`findMessageByRfcMessageId`) instead of double-persisting Sent copies.
+
+Delivery events are retained. Never send application mail synchronously.
 
 ## 7. Inbound flow (MVP)
 

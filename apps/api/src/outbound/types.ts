@@ -1,3 +1,10 @@
+export interface OutboundAttachment {
+  engineAttachmentId?: string | null;
+  filename: string;
+  contentType?: string | null;
+  size?: number | null;
+}
+
 export interface OutboundJob {
   id: string;
   accountId: string;
@@ -11,6 +18,8 @@ export interface OutboundJob {
   replyTo?: string | undefined;
   inReplyTo?: string | undefined;
   references?: string | undefined;
+  messageId?: string | undefined;
+  attachments?: OutboundAttachment[] | undefined;
 }
 
 export interface RelayResult {

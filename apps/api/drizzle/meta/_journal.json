@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1789079025938,
-      "tag": "0000_yielding_shadow_king",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1789093310774,
-      "tag": "0001_parched_toad",
+      "when": 1789099573291,
+      "tag": "0000_quick_falcon",
       "breakpoints": true
     }
   ]

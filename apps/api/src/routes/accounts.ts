@@ -1,16 +1,22 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
 import { z } from "zod";
-import { getOwnedAccount } from "../auth/authorize.js";
-import { requireAdmin, requireUser } from "../auth/middleware.js";
+import { getAccessibleAccounts, requireAccountPermission, requireOrgAdminAny, requireOrgPermission } from "../auth/authorize.js";
+import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
-import { domains, emailAccounts, mailboxes, users } from "../db/schema.js";
+import { domains, emailAccounts, mailAccountMemberships, mailboxes, users } from "../db/schema.js";
 import { getEngine } from "../engine/index.js";
-import { notFound } from "../lib/errors.js";
+import { audit } from "../lib/audit.js";
+import { badRequest, notFound } from "../lib/errors.js";
 
 interface Params {
   id: string;
+}
+
+interface DelegateParams {
+  id: string;
+  userId: string;
 }
 
 const accountColumns = {
@@ -26,10 +32,10 @@ const accountColumns = {
 
 const createAccountSchema = z.object({
   domainId: z.string().uuid(),
-  userId: z.string().optional(),
   localPart: z.string().trim().regex(/^[a-z0-9._%+-]+$/i),
   displayName: z.string().trim().optional(),
   quotaBytes: z.number().int().positive().optional(),
+  ownerUserId: z.string().uuid().optional(),
 });
 
 const updateAccountSchema = z.object({
@@ -38,22 +44,32 @@ const updateAccountSchema = z.object({
   quotaBytes: z.number().int().positive().optional(),
 });
 
+const addDelegateSchema = z.object({
+  userId: z.string().uuid(),
+  role: z.enum(["delegate", "read_only"]).optional(),
+});
+
 export default fp(async (app: FastifyInstance) => {
   app.register(requireUser, { optional: false });
   const engine = getEngine();
 
   app.get("/mail/accounts", async (req) => {
-    const rows = await db
-      .select(accountColumns)
-      .from(emailAccounts)
-      .innerJoin(domains, eq(emailAccounts.domainId, domains.id))
-      .where(eq(emailAccounts.userId, req.user!.id))
-      .orderBy(emailAccounts.createdAt);
-    return { accounts: rows };
+    const accounts = await getAccessibleAccounts(req.user!.id);
+    return {
+      accounts: accounts.map((a) => ({
+        id: a.id,
+        address: a.address,
+        displayName: a.displayName,
+        status: a.status,
+        role: a.role,
+        permissions: a.permissions,
+        organizationId: a.organizationId,
+      })),
+    };
   });
 
-  app.get<{ Params: Params }>("/mail/accounts/:id", async (req, reply) => {
-    await getOwnedAccount(req.params.id, req.user!.id);
+  app.get<{ Params: Params }>("/mail/accounts/:id", async (req) => {
+    await requireAccountPermission(req.user!.id, req.params.id, "read");
     const rows = await db
       .select(accountColumns)
       .from(emailAccounts)
@@ -66,24 +82,33 @@ export default fp(async (app: FastifyInstance) => {
   });
 
   app.get<{ Params: Params }>("/mail/accounts/:id/mailboxes", async (req) => {
-    await getOwnedAccount(req.params.id, req.user!.id);
+    await requireAccountPermission(req.user!.id, req.params.id, "read");
     return { mailboxes: await engine.listMailboxes(req.params.id) };
   });
 
-  app.post("/mail/accounts", { preHandler: requireAdmin }, async (req, reply) => {
+  app.post("/mail/accounts", async (req, reply) => {
     const input = createAccountSchema.parse(req.body);
-    const rows = await db.select({ name: domains.name }).from(domains).where(eq(domains.id, input.domainId)).limit(1);
-    const domain = rows[0];
+    const orgId = await requireOrgAdminAny(req.user!.id);
+    const domainRow = await db
+      .select({ id: domains.id, name: domains.name, organizationId: domains.organizationId })
+      .from(domains)
+      .where(eq(domains.id, input.domainId))
+      .limit(1);
+    const domain = domainRow[0];
     if (!domain) throw notFound("domain not found");
+    if (domain.organizationId !== orgId) throw badRequest("domain does not belong to your organization");
+    if (input.ownerUserId) {
+      const [owner] = await db.select({ id: users.id }).from(users).where(eq(users.id, input.ownerUserId)).limit(1);
+      if (!owner) throw badRequest("ownerUserId must reference an existing user");
+    }
     const address = `${input.localPart}@${domain.name}`;
 
     const account = await db.transaction(async (tx) => {
-      const owner = input.userId ? await tx.select({ id: users.id }).from(users).where(eq(users.id, input.userId)).limit(1) : [];
       const [created] = await tx
         .insert(emailAccounts)
         .values({
           domainId: input.domainId,
-          userId: owner[0]?.id,
+          userId: input.ownerUserId,
           localPart: input.localPart,
           address,
           displayName: input.displayName,
@@ -99,21 +124,102 @@ export default fp(async (app: FastifyInstance) => {
         { accountId: created.id, role: "trash", engineName: "Trash" },
         { accountId: created.id, role: "archive", engineName: "Archive" },
       ]);
+      await tx.insert(mailAccountMemberships).values({
+        accountId: created.id,
+        userId: input.ownerUserId ?? req.user!.id,
+        role: "owner",
+      });
       return created;
     });
 
+    await audit({
+      actorUserId: req.user!.id,
+      organizationId: orgId,
+      action: "account.created",
+      resourceType: "email_account",
+      resourceId: account.id,
+      metadata: { address },
+      request: req,
+    });
     reply.code(201);
     return account;
   });
 
-  app.patch<{ Params: Params }>("/mail/accounts/:id", { preHandler: requireAdmin }, async ({ params, body }) => {
-    const input = updateAccountSchema.parse(body);
+  app.patch<{ Params: Params }>("/mail/accounts/:id", async (req, reply) => {
+    const input = updateAccountSchema.parse(req.body);
+    const [row] = await db
+      .select({ organizationId: domains.organizationId })
+      .from(emailAccounts)
+      .innerJoin(domains, eq(emailAccounts.domainId, domains.id))
+      .where(eq(emailAccounts.id, req.params.id))
+      .limit(1);
+    if (!row) throw notFound("account not found");
+    await requireOrgPermission(req.user!.id, row.organizationId, ["owner", "admin"]);
     const [updated] = await db
       .update(emailAccounts)
       .set(input)
-      .where(eq(emailAccounts.id, params.id))
+      .where(eq(emailAccounts.id, req.params.id))
       .returning();
     if (!updated) throw notFound("account not found");
+    await audit({
+      actorUserId: req.user!.id,
+      organizationId: row.organizationId,
+      action: "account.updated",
+      resourceType: "email_account",
+      resourceId: updated.id,
+      metadata: input,
+      request: req,
+    });
     return updated;
+  });
+
+  app.post<{ Params: Params }>("/mail/accounts/:id/delegates", async (req, reply) => {
+    const input = addDelegateSchema.parse(req.body);
+    const account = await requireAccountPermission(req.user!.id, req.params.id, "manage");
+    const [target] = await db.select({ id: users.id }).from(users).where(eq(users.id, input.userId)).limit(1);
+    if (!target) throw notFound("user not found");
+    const inserted = await db
+      .insert(mailAccountMemberships)
+      .values({ accountId: req.params.id, userId: input.userId, role: input.role ?? "delegate" })
+      .onConflictDoNothing()
+      .returning({ id: mailAccountMemberships.id });
+    if (inserted.length === 0) {
+      await requireAccountPermission(req.user!.id, req.params.id, "read");
+      throw badRequest("membership already exists for this user");
+    }
+    const membershipId = inserted[0]!.id;
+    await audit({
+      actorUserId: req.user!.id,
+      organizationId: account.organizationId,
+      action: "account.delegate_added",
+      resourceType: "mail_account_membership",
+      resourceId: membershipId,
+      metadata: { userId: input.userId, role: input.role ?? "delegate", accountId: req.params.id, address: account.address },
+      request: req,
+    });
+    reply.code(201);
+    return { accountId: req.params.id, userId: input.userId, role: input.role ?? "delegate" };
+  });
+
+  app.delete<{ Params: DelegateParams }>("/mail/accounts/:id/delegates/:userId", async (req) => {
+    const account = await requireAccountPermission(req.user!.id, req.params.id, "manage");
+    const [existing] = await db
+      .select({ id: mailAccountMemberships.id, role: mailAccountMemberships.role })
+      .from(mailAccountMemberships)
+      .where(and(eq(mailAccountMemberships.accountId, req.params.id), eq(mailAccountMemberships.userId, req.params.userId)))
+      .limit(1);
+    if (!existing) throw notFound("membership not found");
+    if (existing.role === "owner") throw badRequest("owner membership cannot be removed through the delegate endpoint");
+    await db.delete(mailAccountMemberships).where(eq(mailAccountMemberships.id, existing.id));
+    await audit({
+      actorUserId: req.user!.id,
+      organizationId: account.organizationId,
+      action: "account.delegate_removed",
+      resourceType: "mail_account_membership",
+      resourceId: existing.id,
+      metadata: { userId: req.params.userId, accountId: req.params.id, address: account.address },
+      request: req,
+    });
+    return { accountId: req.params.id, userId: req.params.userId, removed: true };
   });
 });

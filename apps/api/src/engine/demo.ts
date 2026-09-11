@@ -91,6 +91,7 @@ const sample = (accountId: EngineAccountId): FullMessage[] => {
 };
 
 const messages = new Map<EngineAccountId, FullMessage[]>();
+const rfcMessageIds = new Map<string, { accountId: EngineAccountId; engineId: EngineMessageId; threadId: EngineThreadId }>();
 
 export class DemoEngine implements MailEngine {
   readonly name = "demo";
@@ -171,9 +172,11 @@ export class DemoEngine implements MailEngine {
 
   async saveSent(accountId: EngineAccountId, input: SendDraftInput): Promise<SendResult> {
     const id = `demo-${++seq}`;
+    const threadId = `t-sent-${id}`;
+    const messageId = input.messageId ?? `<${id}@demo>`;
     this.store(accountId).push({
       engineId: id,
-      threadId: `t-sent-${id}`,
+      threadId,
       mailbox: "Sent",
       from: { email: input.from },
       to: input.to.map((email) => ({ email })),
@@ -185,12 +188,29 @@ export class DemoEngine implements MailEngine {
       size: (input.textBody ?? "").length,
       read: true,
       flagged: false,
-      hasAttachments: false,
+      hasAttachments: (input.attachments?.length ?? 0) > 0,
       keywords: [],
-      attachments: [],
-      headers: { "Message-ID": `<${id}@demo>` },
+      attachments: (input.attachments ?? []).map((a) => ({
+        engineId: a.engineId ?? `demo-att-${++seq}`,
+        filename: a.filename,
+        contentType: a.contentType,
+        size: a.size,
+        inline: a.contentDisposition === "inline",
+      })),
+      headers: { "Message-ID": messageId, ...(input.inReplyTo ? { "In-Reply-To": input.inReplyTo } : {}) },
     });
-    return { engineMessageId: id, threadId: `t-sent-${id}` };
+    rfcMessageIds.set(messageId, { accountId, engineId: id, threadId });
+    return { engineMessageId: id, threadId };
+  }
+
+  async findMessageByRfcMessageId(
+    accountId: EngineAccountId,
+    messageId: string,
+  ): Promise<{ engineMessageId: EngineMessageId; engineThreadId: EngineThreadId } | null> {
+    const mapped = rfcMessageIds.get(messageId);
+    if (mapped && mapped.accountId === accountId) return { engineMessageId: mapped.engineId, engineThreadId: mapped.threadId };
+    const found = this.store(accountId).find((m) => m.headers["Message-ID"] === messageId);
+    return found ? { engineMessageId: found.engineId, engineThreadId: found.threadId } : null;
   }
 
   async search(accountId: EngineAccountId, q: string, mailbox?: string): Promise<MessageSummary[]> {

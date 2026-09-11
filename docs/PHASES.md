@@ -23,7 +23,11 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 - [x] Mailboxes: Inbox, Sent, Drafts, Spam, Trash, Archive
 - [x] Account lifecycle (create/disable) + quota
 - [x] Aliases (`hello@...` → `ramon@...`)
-- [x] Production-facing auth: API tokens + per-account authorization (GSW identity integration later)
+- [x] Multi-user auth + authorization model: `users` keyed by
+      `(identityProvider, identitySubject)` from a signed JWT (issuer/audience/JWKS),
+      org memberships (owner/admin/member), mail-account memberships
+      (owner/delegate/read_only) with permissions read/send/manage. No infra secrets
+      are exposed to the browser; dev-only fallbacks are disabled in production.
 
 ## Phase 3 — Guided Steps Mail API
 - [x] Routes scaffold: accounts, aliases, messages, threads, send, drafts, search, admin
@@ -38,6 +42,11 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 - [x] Worker skeleton
 - [x] Idempotent sends (`clientRequestId`) + atomic claim (no duplicate delivery)
 - [x] Delivery webhook with signature verification: `delivered`/`bounced`/`complained` persisted idempotently
+- [x] Gmail-like send saga: reserve (`preparing`) → save Sent → finalize (`queued`),
+      stable RFC Message-ID generated before any external op, 202 + undo window
+      (`SEND_DELAY_SECONDS`), cancel/retry endpoints, `preparing` reconciliation
+- [x] `transport_status` / `delivery_status` split + recipient-level delivery state
+      (`outbound_recipients`), delivery suppression list, audit log
 - [ ] Real relay credentials + retry/backoff tuning
 - [ ] **Done:** message from Gmail arrives → Ramon reads → replies → Gmail user receives it
 
@@ -65,7 +74,8 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 - [ ] Referral/contact extraction example
 
 ## Phase 9 — Product integration
-- [ ] Identity integration with Guided Steps Wellness accounts
+- [x] Identity integration with Guided Steps Wellness accounts (signed JWT + JWKS,
+      users keyed by `(identityProvider, identitySubject)`, org + account memberships)
 - [ ] Events consumed by other GSW products
 
 ## Phase 10 — Organization / custom-domain hosting

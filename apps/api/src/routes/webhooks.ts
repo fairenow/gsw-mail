@@ -1,24 +1,31 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
-import { deliveryEventType, outboundDeliveryEvents, outboundMessages } from "../db/schema.js";
+import { domains, emailAccounts, outboundDeliveryEvents, outboundMessages } from "../db/schema.js";
 import { badRequest, unauthorized } from "../lib/errors.js";
-
-type DeliveryEventType = (typeof deliveryEventType.enumValues)[number];
+import { applyRecipientEvent, recordSuppression } from "../outbound/delivery.js";
+import { findOutboundMessageIdByDeliveryId } from "../outbound/queue.js";
 
 interface ResendPayload {
   id?: unknown;
   type?: unknown;
-  data?: { id?: unknown; to?: unknown; from?: unknown; subject?: unknown; bounce?: unknown; complaint?: unknown };
+  data?: {
+    id?: unknown;
+    to?: unknown;
+    from?: unknown;
+    subject?: unknown;
+    bounce?: unknown;
+    complaint?: unknown;
+  };
 }
 
-const toDeliveryType = (providerType: string): DeliveryEventType | null => {
+const toRecipientStatus = (
+  providerType: string,
+): "delivered" | "deferred" | "bounced" | "complained" | null => {
   switch (providerType) {
-    case "email.sent":
-      return "sent";
     case "email.delivered":
       return "delivered";
     case "email.deferred":
@@ -30,6 +37,18 @@ const toDeliveryType = (providerType: string): DeliveryEventType | null => {
     default:
       return null;
   }
+};
+
+const toEmails = (value: unknown): string[] => {
+  if (typeof value === "string") return [value.trim().toLowerCase()].filter(Boolean);
+  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === "string").map((v) => v.trim().toLowerCase());
+  return [];
+};
+
+const suppressionReasonFor = (providerType: string): "hard_bounce" | "complaint" | null => {
+  if (providerType === "email.bounced") return "hard_bounce";
+  if (providerType === "email.complained") return "complaint";
+  return null;
 };
 
 const hmacKey = (secret: string): Buffer =>
@@ -77,40 +96,54 @@ export default fp(async (app: FastifyInstance) => {
       throw badRequest("invalid JSON body");
     }
 
-    const type = toDeliveryType(String(payload.type ?? ""));
+    const providerType = String(payload.type ?? "");
+    const recipientStatus = toRecipientStatus(providerType);
     const providerEventId = String(payload.id ?? "");
     const deliveryId = String(payload.data?.id ?? "");
-    if (!type || !providerEventId || !deliveryId) {
+    if (!recipientStatus || !providerEventId || !deliveryId) {
       return { received: true, ignored: true };
     }
+    const emails = toEmails(payload.data?.to);
+    if (emails.length === 0) {
+      return { received: true, ignored: "no recipient address" };
+    }
 
-    const match = await db
-      .select({ outboundMessageId: outboundDeliveryEvents.outboundMessageId })
-      .from(outboundDeliveryEvents)
-      .where(
-        sql`${outboundDeliveryEvents.type} = ${"sent"} and ${outboundDeliveryEvents.detail}->>'deliveryId' = ${deliveryId}`,
-      )
-      .limit(1);
-    const messageId = match[0]?.outboundMessageId;
+    const messageId = await findOutboundMessageIdByDeliveryId(deliveryId);
     if (!messageId) {
       return { received: true, ignored: "unknown deliveryId" };
     }
 
-    await db.transaction(async (tx) => {
-      await tx
-        .insert(outboundDeliveryEvents)
-        .values({
-          outboundMessageId: messageId,
-          type,
-          providerEventId,
-          detail: { providerType: payload.type },
-        })
-        .onConflictDoNothing({ target: outboundDeliveryEvents.providerEventId });
-      if (type === "delivered" || type === "bounced") {
-        await tx.update(outboundMessages).set({ status: type }).where(eq(outboundMessages.id, messageId));
-      }
-    });
+    const orgInfo = await db
+      .select({ organizationId: domains.organizationId })
+      .from(outboundMessages)
+      .innerJoin(emailAccounts, eq(outboundMessages.accountId, emailAccounts.id))
+      .innerJoin(domains, eq(emailAccounts.domainId, domains.id))
+      .where(eq(outboundMessages.id, messageId))
+      .limit(1);
+    const organizationId = orgInfo[0]?.organizationId;
+    if (!organizationId) {
+      return { received: true, ignored: "unknown organization" };
+    }
 
-    return { received: true };
+    await db
+      .insert(outboundDeliveryEvents)
+      .values({
+        outboundMessageId: messageId,
+        type: providerType === "email.delivered" ? "delivered" : recipientStatus,
+        providerEventId,
+        detail: { providerType, deliveryId, emails },
+      })
+      .onConflictDoNothing({ target: outboundDeliveryEvents.providerEventId });
+
+    const reason = suppressionReasonFor(providerType);
+    if (reason) {
+      for (const email of emails) {
+        await recordSuppression(organizationId, email, reason, `resend:${providerEventId}`);
+      }
+    }
+
+    await applyRecipientEvent(messageId, emails, recipientStatus);
+
+    return { received: true, messageId, deliveryStatus: recipientStatus };
   });
 });

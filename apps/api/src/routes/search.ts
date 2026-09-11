@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
-import { getOwnedAccount } from "../auth/authorize.js";
+import { requireAccountPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
 import { getEngine } from "../engine/index.js";
 import { badRequest } from "../lib/errors.js";
@@ -18,7 +18,7 @@ export default fp(async (app: FastifyInstance) => {
   app.get<{ Querystring: Query }>("/mail/search", async ({ query, user }) => {
     if (!query.q?.trim()) throw badRequest("q is required");
     if (!query.accountId) throw badRequest("accountId is required");
-    await getOwnedAccount(query.accountId, user!.id);
+    await requireAccountPermission(user!.id, query.accountId, "read");
     const messages = await engine.search(query.accountId, query.q.trim(), query.mailbox);
     return { messages };
   });

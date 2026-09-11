@@ -3,6 +3,8 @@ export interface Account {
   address: string;
   displayName: string | null;
   status: string;
+  role: "owner" | "delegate" | "read_only";
+  permissions: ("read" | "send" | "manage")[];
 }
 
 export interface MessageSummary {
@@ -23,6 +25,15 @@ export interface FullMessage extends MessageSummary {
   htmlBody?: string;
 }
 
+export interface SendResult {
+  sendId: string;
+  messageId: string | null;
+  threadId: string | null;
+  status: string;
+  undoUntil: string | null;
+  idempotentReplay?: boolean;
+}
+
 interface AccountsResponse {
   accounts: Account[];
 }
@@ -30,6 +41,20 @@ interface AccountsResponse {
 interface MessagesResponse {
   messages: MessageSummary[];
 }
+
+const tokenStore = () => {
+  const token = sessionStorage.getItem("gsw_access_token") ?? new URLSearchParams(window.location.search).get("access_token");
+  if (token) sessionStorage.setItem("gsw_access_token", token);
+  return token;
+};
+
+const headers = (jsonBody = false): Record<string, string> => {
+  const token = tokenStore();
+  return {
+    ...(token ? { authorization: `Bearer ${token}` } : {}),
+    ...(jsonBody ? { "content-type": "application/json" } : {}),
+  };
+};
 
 const json = async <T,>(res: Response): Promise<T> => {
   if (!res.ok) {
@@ -39,29 +64,23 @@ const json = async <T,>(res: Response): Promise<T> => {
   return (await res.json()) as T;
 };
 
-const get = <T,>(url: string) => fetch(url).then((res) => json<T>(res));
+const get = <T,>(url: string) => fetch(url, { headers: headers() }).then((res) => json<T>(res));
+
+const post = async <T,>(url: string, body?: unknown): Promise<T> =>
+  fetch(url, { method: "POST", headers: headers(!!body), body: body ? JSON.stringify(body) : undefined }).then((res) => json<T>(res));
 
 export const api = {
   accounts: () => get<AccountsResponse>("/mail/accounts").then((r) => r.accounts),
   messages: (accountId: string, mailbox: string) => get<MessagesResponse>(`/mail/messages?accountId=${accountId}&mailbox=${mailbox}`).then((r) => r.messages),
   message: (accountId: string, engineId: string) => get<FullMessage>(`/mail/messages/${engineId}?accountId=${accountId}`),
   read: (accountId: string, engineId: string, seen: boolean) =>
-    fetch(`/mail/messages/${engineId}/read`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ accountId, seen }),
-    }),
-  archive: (accountId: string, engineId: string) =>
-    fetch(`/mail/messages/${engineId}/archive`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ accountId }),
-    }),
-  trash: (accountId: string, engineId: string) =>
-    fetch(`/mail/messages/${engineId}/trash`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ accountId }),
-    }),
+    post(`/mail/messages/${engineId}/read`, { accountId, seen }),
+  archive: (accountId: string, engineId: string) => post(`/mail/messages/${engineId}/archive`, { accountId }),
+  trash: (accountId: string, engineId: string) => post(`/mail/messages/${engineId}/trash`, { accountId }),
   search: (accountId: string, q: string) => get<MessagesResponse>(`/mail/search?accountId=${accountId}&q=${encodeURIComponent(q)}`).then((r) => r.messages),
+  send: (accountId: string, to: string[], body: { subject?: string; textBody?: string; clientRequestId?: string }) =>
+    post<SendResult>("/mail/send", { accountId, to, ...body }),
+  sendStatus: (sendId: string) => get<never>("/mail/sends/" + sendId),
+  cancelSend: (sendId: string) => post<{ status: string }>(`/mail/sends/${sendId}/cancel`),
+  retrySend: (sendId: string, accountId: string) => post<{ status: string }>(`/mail/sends/${sendId}/retry`, { accountId }),
 };

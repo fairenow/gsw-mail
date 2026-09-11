@@ -54,6 +54,15 @@ export interface FullMessage extends MessageSummary {
   headers: Record<string, string>;
 }
 
+export interface SendAttachment {
+  engineId?: string | undefined;
+  filename: string;
+  contentType: string;
+  size: number;
+  contentDisposition?: string | undefined;
+  contentId?: string | undefined;
+}
+
 export interface SendDraftInput {
   from: string;
   to: string[];
@@ -65,6 +74,8 @@ export interface SendDraftInput {
   replyTo?: string | undefined;
   inReplyTo?: string | undefined;
   references?: string | undefined;
+  messageId?: string | undefined;
+  attachments?: SendAttachment[] | undefined;
 }
 
 export interface SendResult {
@@ -105,6 +116,11 @@ export interface MailEngine {
   saveDraft(accountId: EngineAccountId, input: SendDraftInput): Promise<EngineMessageId>;
 
   saveSent(accountId: EngineAccountId, input: SendDraftInput): Promise<SendResult>;
+
+  findMessageByRfcMessageId(
+    accountId: EngineAccountId,
+    messageId: string,
+  ): Promise<{ engineMessageId: EngineMessageId; engineThreadId: EngineThreadId } | null>;
 
   search(accountId: EngineAccountId, q: string, mailbox?: string | undefined): Promise<MessageSummary[]>;
 

@@ -5,8 +5,8 @@ import type { OutboundJob, OutboundRelay, RelayResult } from "./types.js";
 export const NullRelay: OutboundRelay = {
   name: "null",
   async send(job: OutboundJob): Promise<RelayResult> {
-    console.info(`[relay:null] would deliver to ${job.to.join(", ")} subject="${job.subject ?? ""}"`);
-    return { accepted: true, message: "accepted by null relay (no transport configured)" };
+    console.info(`[relay:null] would deliver to ${job.to.join(", ")} subject="${job.subject ?? ""}" messageId=${job.messageId ?? ""}`);
+    return { accepted: true, deliveryId: `null-${job.id}` };
   },
 };
 
@@ -15,11 +15,17 @@ export function createResendRelay(apiKey: string): OutboundRelay {
   return {
     name: "resend",
     async send(job: OutboundJob): Promise<RelayResult> {
+      const headers: Record<string, string> = {};
+      if (job.messageId) headers["Message-ID"] = job.messageId;
+      if (job.inReplyTo) headers["In-Reply-To"] = job.inReplyTo;
+      if (job.references) headers["References"] = job.references;
+
       const options = {
         from: job.fromAddress,
         to: job.to,
         subject: job.subject ?? "",
         text: job.textBody ?? "",
+        ...(headers["Message-ID"] || headers["In-Reply-To"] || headers["References"] ? { headers } : {}),
         ...(job.cc ? { cc: job.cc } : {}),
         ...(job.bcc ? { bcc: job.bcc } : {}),
         ...(job.htmlBody ? { html: job.htmlBody } : {}),

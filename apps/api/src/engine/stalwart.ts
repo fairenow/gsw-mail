@@ -67,6 +67,13 @@ export class StalwartEngine implements MailEngine {
     throw new NotImplemented("StalwartEngine.saveSent");
   }
 
+  async findMessageByRfcMessageId(
+    _accountId: EngineAccountId,
+    _messageId: string,
+  ): Promise<{ engineMessageId: EngineMessageId; engineThreadId: EngineThreadId } | null> {
+    throw new NotImplemented("StalwartEngine.findMessageByRfcMessageId");
+  }
+
   async search(_accountId: EngineAccountId, _q: string, _mailbox?: string): Promise<MessageSummary[]> {
     throw new NotImplemented("StalwartEngine.search");
   }

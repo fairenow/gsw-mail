@@ -3,6 +3,7 @@
 ## Commands
 - API dev: `cd apps/api && npm run dev` (tsx watch, http://localhost:4000)
 - API typecheck: `cd apps/api && npm run typecheck`
+- API tests: `cd apps/api && npm test` (node:test + tsx; unit tests only, no DB required)
 - API migrations: `cd apps/api && npm run db:generate && npm run db:migrate`
 - Web dev: `cd apps/web && npm run dev` (http://localhost:3000)
 - Infra: `docker compose -f infra/docker-compose.yml up -d` (Stalwart + Postgres)

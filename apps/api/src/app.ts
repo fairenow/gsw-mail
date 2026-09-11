@@ -11,6 +11,8 @@ import drafts from "./routes/drafts.js";
 import messages from "./routes/messages.js";
 import search from "./routes/search.js";
 import send from "./routes/send.js";
+import sends from "./routes/sends.js";
+import suppressions from "./routes/suppressions.js";
 import threads from "./routes/threads.js";
 import webhooks from "./routes/webhooks.js";
 
@@ -41,8 +43,10 @@ export function buildApp() {
   app.register(threads);
   app.register(search);
   app.register(send);
+  app.register(sends);
   app.register(drafts);
   app.register(admin);
+  app.register(suppressions);
   app.register(webhooks);
 
   return app;

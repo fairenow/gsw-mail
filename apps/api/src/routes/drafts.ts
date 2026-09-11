@@ -1,21 +1,18 @@
-import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
 import { z } from "zod";
-import { getOwnedAccount } from "../auth/authorize.js";
+import { requireAccountPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
-import { db } from "../db/client.js";
-import { emailAccounts } from "../db/schema.js";
 import { getEngine } from "../engine/index.js";
-import { badRequest, notFound } from "../lib/errors.js";
-import { enqueueOutbound } from "../outbound/queue.js";
+import { notFound } from "../lib/errors.js";
+import { submitSend } from "../outbound/sendFlow.js";
 
 const draftSchema = z.object({
   accountId: z.string().uuid(),
   to: z.array(z.string().email()).optional(),
   cc: z.array(z.string().email()).optional(),
   bcc: z.array(z.string().email()).optional(),
-  subject: z.string().optional(),
+  subject: z.string().max(998).optional(),
   textBody: z.string().optional(),
   htmlBody: z.string().optional(),
   replyTo: z.string().email().optional(),
@@ -32,9 +29,9 @@ export default fp(async (app: FastifyInstance) => {
 
   app.post("/mail/drafts", async (req, reply) => {
     const input = draftSchema.parse(req.body);
-    await getOwnedAccount(input.accountId, req.user!.id);
-    const engineId = await engine.saveDraft(input.accountId, {
-      from: "",
+    const account = await requireAccountPermission(req.user!.id, input.accountId, "send");
+    const engineId = await engine.saveDraft(account.id, {
+      from: account.address,
       to: input.to ?? [],
       cc: input.cc,
       bcc: input.bcc,
@@ -49,40 +46,36 @@ export default fp(async (app: FastifyInstance) => {
 
   app.post<{ Params: { id: string } }>("/mail/drafts/:id/send", async (req, reply) => {
     const body = sendDraftSchema.parse(req.body);
-    await getOwnedAccount(body.accountId, req.user!.id);
-    const [account] = await db
-      .select({ id: emailAccounts.id, address: emailAccounts.address, status: emailAccounts.status })
-      .from(emailAccounts)
-      .where(eq(emailAccounts.id, body.accountId))
-      .limit(1);
-    if (!account) throw badRequest("account not found");
-    if (account.status !== "active") throw badRequest("account is not active");
+    const account = await requireAccountPermission(req.user!.id, body.accountId, "send");
 
     const draft = await engine.getMessage(body.accountId, req.params.id);
     if (!draft) throw notFound("draft not found");
 
-    const sent = await engine.saveSent(body.accountId, {
-      from: account.address,
+    const result = await submitSend({
+      userId: req.user!.id,
+      account,
       to: draft.to.map((a) => a.email),
       cc: draft.cc.map((a) => a.email),
       subject: draft.subject,
       textBody: draft.textBody,
       htmlBody: draft.htmlBody,
-    });
-
-    const jobId = await enqueueOutbound({
-      accountId: body.accountId,
-      fromAddress: account.address,
-      to: draft.to.map((a) => a.email),
-      cc: draft.cc.map((a) => a.email),
-      subject: draft.subject,
-      textBody: draft.textBody,
-      htmlBody: draft.htmlBody,
-      messageId: sent.engineMessageId,
+      replyTo: draft.headers["Reply-To"],
+      inReplyTo: draft.headers["In-Reply-To"],
+      references: draft.headers["References"],
       clientRequestId: body.clientRequestId,
     });
-
+    try {
+      await engine.move(body.accountId, [req.params.id], "Trash");
+    } catch {
+      app.log.warn({ draftId: req.params.id }, "draft cleanup failed after send");
+    }
     reply.code(202);
-    return { jobId, messageId: sent.engineMessageId, status: "queued" };
+    return {
+      sendId: result.sendId,
+      messageId: result.messageId,
+      threadId: result.threadId,
+      status: result.transportStatus,
+      undoUntil: result.undoUntil,
+    };
   });
 });
