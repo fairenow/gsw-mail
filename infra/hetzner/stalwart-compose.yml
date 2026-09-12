@@ -1,0 +1,23 @@
+name: gsw-mail-stalwart
+
+services:
+  stalwart:
+    image: stalwartlabs/stalwart:v0.16.18
+    restart: unless-stopped
+    hostname: ${HOSTNAME}
+    environment:
+      HOSTNAME: ${HOSTNAME}
+      TZ: ${TZ}
+      STALWART_PUBLIC_URL: ${STALWART_PUBLIC_URL}
+      STALWART_RECOVERY_ADMIN: ${STALWART_RECOVERY_ADMIN}
+    ports:
+      - "25:25"
+      - "443:443"
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - stalwart-etc:/etc/stalwart
+      - stalwart-data:/var/lib/stalwart
+
+volumes:
+  stalwart-etc:
+  stalwart-data:

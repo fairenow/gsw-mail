@@ -10,6 +10,7 @@ build/
 
 infra/data/
 infra/certs/
+infra/hetzner/keys/
 *.pem
 *.key
 
