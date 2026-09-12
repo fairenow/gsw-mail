@@ -10,6 +10,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx --env-file-if-exists=.env src/db/seed.ts",
+    "db:seed:prod": "tsx --env-file-if-exists=.env src/db/prod-seed.ts",
     "test:integration": "node --import tsx --test src/integration.test.ts",
     "build": "tsc --noEmit false --outDir dist --rootDir src --project tsconfig.build.json",
     "start": "node dist/index.js",

@@ -376,6 +376,19 @@ It does not hold canonical mailbox data.
 
 Run migrations from the API deployment process or a dedicated migration job before releasing a new API version.
 
+Run the production bootstrap seed (separate from the multi-user dev seed) on an
+empty or existing production database:
+
+```text
+npm run db:seed:prod
+```
+
+It creates the organization, the `team.guidedstepswellness.com` domain, the owner
+user, and the `test@team.guidedstepswellness.com` account with its mailboxes and
+postmaster/abuse aliases. Override identities with `PROD_SEED_DOMAIN`,
+`PROD_SEED_OWNER_ID`, `PROD_SEED_OWNER_SUBJECT`, `PROD_SEED_OWNER_EMAIL`,
+`PROD_SEED_OWNER_NAME` when the GSW identity subjects are known.
+
 Once production is initialized, migrations should be append-only.
 
 ---

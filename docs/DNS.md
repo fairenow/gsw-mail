@@ -50,8 +50,8 @@ Source: [Resend domain configuration](https://resend.com/docs/dashboard/domains/
 ### DMARC
 Start with `p=none` and monitor aggregates **before** enforcing:
 ```text
-Type  Host    Value
-TXT   team._dmarc   v=DMARC1; p=none; rua=mailto:postmaster@guidedstepswellness.com; ruf=mailto:postmaster@guidedstepswellness.com
+Type  Host                     Value
+TXT   _dmarc.team              v=DMARC1; p=none; rua=mailto:postmaster@guidedstepswellness.com; ruf=mailto:postmaster@guidedstepswellness.com
 ```
 Move `p=none` → `p=quarantine` → `p=reject` only after reviewing report volume and
 confirming no legitimate sender is missing alignment.
@@ -84,7 +84,7 @@ moving to a self-hosted GSW outbound MTA later, add reverse DNS (PTR) for the IP
 
 1. `dig MX team.guidedstepswellness.com` → `mx1.guidedstepswellness.com`
 2. `dig TXT send.team.guidedstepswellness.com` → Resend SPF present
-3. `dig TXT team._dmarc...` → DMARC present
+3. `dig TXT _dmarc.team.guidedstepswellness.com` → DMARC present
 4. `dig TXT resend._domainkey...` → DKIM present
 5. Send from an external provider to `test@team.guidedstepswellness.com`; open in the
    Stalwart admin UI / web mail and confirm headers show `dkim=pass`, `spf=pass`,
