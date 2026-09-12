@@ -285,11 +285,10 @@ Production domain:
 mail.guidedstepswellness.com
 ```
 
-Environment:
-
-```text
-VITE_API_URL=https://api.mail.guidedstepswellness.com
-```
+The web app talks to the GSW Mail API through Vercel rewrites declared in
+`apps/web/vercel.json`, proxying `/mail`, `/admin`, and `/health` to the
+Railway-hosted API URL. No client-side `VITE_API_URL` is required; the browser
+stays same-origin on the Vercel domain.
 
 No Stalwart credentials should ever exist in Vercel client-side environment variables.
 
