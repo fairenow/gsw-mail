@@ -19,7 +19,9 @@ import type {
 export interface StalwartOptions {
   resolveAccount?: (productAccountId: string) => Promise<string>;
   jmapUrl: string;
-  adminToken: string;
+  adminToken?: string;
+  mailUsername?: string;
+  mailPassword?: string;
   sessionTtlMs?: number;
   fetchImpl?: typeof fetch;
 }
@@ -147,7 +149,9 @@ export class StalwartEngine implements MailEngine {
   constructor(private readonly opts: StalwartOptions) {
     this.client = new JmapClient({
       baseUrl: opts.jmapUrl,
-      token: opts.adminToken,
+      ...(opts.adminToken ? { token: opts.adminToken } : {}),
+      ...(opts.mailUsername ? { username: opts.mailUsername } : {}),
+      ...(opts.mailPassword ? { password: opts.mailPassword } : {}),
       sessionTtlMs: opts.sessionTtlMs ?? 60_000,
       ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
     });
@@ -518,7 +522,7 @@ export class StalwartEngine implements MailEngine {
         method: "POST",
         headers: {
           "Content-Type": a.contentType,
-          Authorization: `Bearer ${this.opts.adminToken}`,
+          Authorization: this.client.authHeader(),
         },
         body: Buffer.from(a.content, "base64"),
       });
@@ -601,7 +605,7 @@ export class StalwartEngine implements MailEngine {
     });
     const res = await this.fetchImpl(url, {
       method: "GET",
-      headers: { Authorization: `Bearer ${this.opts.adminToken}` },
+      headers: { Authorization: this.client.authHeader() },
     });
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`attachment download failed: HTTP ${res.status} ${res.statusText}`);

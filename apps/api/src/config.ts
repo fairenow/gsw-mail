@@ -17,6 +17,8 @@ const config = {
   stalwart: {
     jmapUrl: env("STALWART_JMAP_URL", "https://localhost:443"),
     adminToken: env("STALWART_ADMIN_TOKEN", "change-me-stalwart-admin"),
+    mailUsername: process.env.STALWART_MAIL_USERNAME,
+    mailPassword: process.env.STALWART_MAIL_PASSWORD,
     sessionTtlSeconds: Number(env("STALWART_SESSION_TTL_SECONDS", "60")),
   },
   outbound: {
@@ -65,6 +67,9 @@ if (isProduction) {
   assertExplicit("STALWART_JMAP_URL", explicit("STALWART_JMAP_URL"));
   assertNotPlaceholder("STALWART_ADMIN_TOKEN", config.stalwart.adminToken);
   assertNotPlaceholder("STALWART_JMAP_URL", config.stalwart.jmapUrl);
+  assertExplicit("STALWART_MAIL_USERNAME", explicit("STALWART_MAIL_USERNAME"));
+  assertExplicit("STALWART_MAIL_PASSWORD", explicit("STALWART_MAIL_PASSWORD"));
+  assertNotPlaceholder("STALWART_MAIL_PASSWORD", config.stalwart.mailPassword!);
   assertExplicit("DELIVERY_WEBHOOK_SECRET", explicit("DELIVERY_WEBHOOK_SECRET"));
   assertNotPlaceholder("DELIVERY_WEBHOOK_SECRET", config.deliveryWebhookSecret!);
   assertExplicit("JWT_ISSUER", explicit("JWT_ISSUER"));

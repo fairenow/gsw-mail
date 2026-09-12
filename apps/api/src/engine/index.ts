@@ -19,7 +19,9 @@ export function getEngine(): MailEngine {
               return account.address;
             },
             jmapUrl: config.stalwart.jmapUrl,
-            adminToken: config.stalwart.adminToken,
+            ...(config.stalwart.adminToken ? { adminToken: config.stalwart.adminToken } : {}),
+            ...(config.stalwart.mailUsername ? { mailUsername: config.stalwart.mailUsername } : {}),
+            ...(config.stalwart.mailPassword ? { mailPassword: config.stalwart.mailPassword } : {}),
             sessionTtlMs: config.stalwart.sessionTtlSeconds * 1000,
           })
         : new DemoEngine();

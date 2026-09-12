@@ -19,7 +19,9 @@ export type JmapMethodCall = [string, Record<string, unknown>, string];
 
 export interface JmapClientOptions {
   baseUrl: string;
-  token: string;
+  token?: string;
+  username?: string;
+  password?: string;
   sessionTtlMs: number;
   fetchImpl?: typeof fetch;
 }
@@ -29,8 +31,17 @@ const abs = (base: string, url: string): string => {
   return `${base.replace(/\/$/, "")}/${url.replace(/^\//, "")}`;
 };
 
+const authorizationHeader = (opts: JmapClientOptions): string => {
+  if (opts.username && opts.password) {
+    return `Basic ${Buffer.from(`${opts.username}:${opts.password}`, "utf8").toString("base64")}`;
+  }
+  return `Bearer ${opts.token ?? ""}`;
+};
+
 export class JmapClient {
   constructor(private readonly opts: JmapClientOptions) {}
+
+  readonly authHeader = (): string => authorizationHeader(this.opts);
 
   private sessionCache: { at: number; session: JmapSession } | undefined;
 
@@ -45,7 +56,7 @@ export class JmapClient {
     }
     const res = await this.fetchImpl(abs(this.opts.baseUrl, "/.well-known/jmap"), {
       method: "GET",
-      headers: { Accept: "application/json", Authorization: `Bearer ${this.opts.token}` },
+      headers: { Accept: "application/json", Authorization: authorizationHeader(this.opts) },
     });
     if (!res.ok) {
       throw new JmapError(`JMAP session request failed: HTTP ${res.status} ${res.statusText}`, "session_failed");
@@ -75,7 +86,7 @@ export class JmapClient {
     const session = await this.session();
     const res = await this.fetchImpl(session.apiUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.opts.token}` },
+      headers: { "Content-Type": "application/json", Authorization: authorizationHeader(this.opts) },
       body: JSON.stringify({
         using: ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail", "urn:ietf:params:jmap:submission"],
         methodCalls: methods,

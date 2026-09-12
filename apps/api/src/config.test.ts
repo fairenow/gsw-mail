@@ -14,6 +14,8 @@ const runProductionConfig = (overrides: Record<string, string>): { code: number;
     "MAIL_ENGINE",
     "STALWART_ADMIN_TOKEN",
     "STALWART_JMAP_URL",
+    "STALWART_MAIL_USERNAME",
+    "STALWART_MAIL_PASSWORD",
     "DELIVERY_WEBHOOK_SECRET",
     "JWT_ISSUER",
     "JWKS_URL",
@@ -37,6 +39,8 @@ const prodOkVars = {
   MAIL_ENGINE: "stalwart",
   STALWART_ADMIN_TOKEN: "prod-stalwart-key-2026",
   STALWART_JMAP_URL: "https://mx1.guidedstepswellness.com",
+  STALWART_MAIL_USERNAME: "test@team.guidedstepswellness.com",
+  STALWART_MAIL_PASSWORD: "prod-mailbox-pass-2026",
   DELIVERY_WEBHOOK_SECRET: "whsec_3f4a9c1b8e7d2f6a",
   JWT_ISSUER: "https://identity.guidedstepswellness.com",
   JWKS_URL: "https://identity.guidedstepswellness.com/.well-known/jwks.json",
@@ -56,12 +60,27 @@ test("production refuses to start without MAIL_ENGINE", () => {
   assert.match(stderr, /MAIL_ENGINE must be set explicitly in production|MAIL_ENGINE must be stalwart in production/);
 });
 
-test("a fully-specified valid configuration starts, but a placeholder admin token fails", () => {
+test("a fully-specified valid configuration starts", () => {
   const valid = runProductionConfig(prodOkVars);
   assert.equal(valid.code, 0);
+});
+
+test("production refuses a placeholder admin token", () => {
   const placeholder = runProductionConfig({ ...prodOkVars, STALWART_ADMIN_TOKEN: "change-me-stalwart-admin" });
   assert.notEqual(placeholder.code, 0);
   assert.match(placeholder.stderr, /looks like a placeholder/);
+});
+
+test("production requires explicit mailbox credentials", () => {
+  const noUser = runProductionConfig({ ...prodOkVars, STALWART_MAIL_USERNAME: "" });
+  assert.notEqual(noUser.code, 0);
+  assert.match(noUser.stderr, /STALWART_MAIL_USERNAME must be set explicitly/);
+  const noPass = runProductionConfig({ ...prodOkVars, STALWART_MAIL_PASSWORD: "" });
+  assert.notEqual(noPass.code, 0);
+  assert.match(noPass.stderr, /STALWART_MAIL_PASSWORD must be set explicitly/);
+  const placeholder = runProductionConfig({ ...prodOkVars, STALWART_MAIL_PASSWORD: "change-me" });
+  assert.notEqual(placeholder.code, 0);
+  assert.match(placeholder.stderr, /STALWART_MAIL_PASSWORD looks like a placeholder/);
 });
 
 test("production refuses the null relay", () => {

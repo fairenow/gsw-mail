@@ -334,6 +334,8 @@ DATABASE_URL=<Neon connection>
 
 STALWART_JMAP_URL=https://mx1.guidedstepswellness.com
 STALWART_ADMIN_TOKEN=<secret>
+STALWART_MAIL_USERNAME=test@team.guidedstepswellness.com
+STALWART_MAIL_PASSWORD=<secret>
 
 OUTBOUND_RELAY=resend
 RESEND_API_KEY=<secret>
