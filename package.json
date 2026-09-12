@@ -8,7 +8,8 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace apps/api & npm run dev --workspace apps/web",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "infra:hetzner:check": "tsx infra/hetzner/check.ts"
   },
   "engines": {
     "node": ">=22"

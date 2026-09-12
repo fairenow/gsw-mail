@@ -6,6 +6,7 @@ build/
 .env
 .env.*
 !.env.example
+!.env.local.example
 
 infra/data/
 infra/certs/
