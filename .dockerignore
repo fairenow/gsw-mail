@@ -6,4 +6,3 @@ node_modules
 infra/api.env
 **/dist
 **/*.log
-**/bodbt*.ts
