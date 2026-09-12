@@ -1,7 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import fp from "fastify-plugin";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { domains, emailAccounts, outboundDeliveryEvents, outboundMessages } from "../db/schema.js";
@@ -14,6 +13,7 @@ interface ResendPayload {
   type?: unknown;
   data?: {
     id?: unknown;
+    email_id?: unknown;
     to?: unknown;
     from?: unknown;
     subject?: unknown;
@@ -78,7 +78,7 @@ function verifySvix(req: FastifyRequest, raw: Buffer): boolean {
   return false;
 }
 
-export default fp(async (app: FastifyInstance) => {
+export default async (app: FastifyInstance) => {
   app.addContentTypeParser("application/json", { parseAs: "buffer" }, (_req, body, done) => done(null, body));
 
   app.post("/webhooks/delivery", async (req) => {
@@ -98,8 +98,8 @@ export default fp(async (app: FastifyInstance) => {
 
     const providerType = String(payload.type ?? "");
     const recipientStatus = toRecipientStatus(providerType);
-    const providerEventId = String(payload.id ?? "");
-    const deliveryId = String(payload.data?.id ?? "");
+    const providerEventId = String(req.headers["svix-id"] ?? payload.id ?? "");
+    const deliveryId = String(payload.data?.email_id ?? payload.data?.id ?? "");
     if (!recipientStatus || !providerEventId || !deliveryId) {
       return { received: true, ignored: true };
     }
@@ -146,4 +146,4 @@ export default fp(async (app: FastifyInstance) => {
 
     return { received: true, messageId, deliveryStatus: recipientStatus };
   });
-});
+};

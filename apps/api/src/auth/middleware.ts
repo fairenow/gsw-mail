@@ -1,5 +1,4 @@
-import type { FastifyReply, FastifyRequest } from "fastify";
-import fp from "fastify-plugin";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { config } from "../config.js";
 import { resolveUser, verifyAccessToken, type AuthenticatedUser } from "./identity.js";
 
@@ -15,7 +14,7 @@ const bearer = (req: FastifyRequest): string | null => {
   return null;
 };
 
-export const requireUser = fp<{ optional?: boolean }>(async (app, opts) => {
+export const requireUser = async (app: FastifyInstance, opts: { optional?: boolean }): Promise<void> => {
   app.addHook("onRequest", async (req: FastifyRequest, reply: FastifyReply) => {
     if (config.env === "production") {
       const token = bearer(req);
@@ -46,4 +45,4 @@ export const requireUser = fp<{ optional?: boolean }>(async (app, opts) => {
       return reply.code(401).send({ error: "unauthorized" });
     }
   });
-});
+};

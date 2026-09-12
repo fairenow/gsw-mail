@@ -143,27 +143,7 @@ export async function requireOrgPermission(userId: string, organizationId: strin
   if (!roles.includes(membership.role)) throw forbidden();
 }
 
-export async function requireOrgAdminAny(userId: string): Promise<string> {
-  const rows = await db
-    .select({ organizationId: organizationMemberships.organizationId, role: organizationMemberships.role })
-    .from(organizationMemberships)
-    .where(
-      and(
-        eq(organizationMemberships.userId, userId),
-        eq(organizationMemberships.status, "active"),
-        inArray(organizationMemberships.role, ["owner", "admin"]),
-      ),
-    )
-    .limit(1);
-  const orgId = rows[0]?.organizationId;
-  if (!orgId) throw forbidden();
-  return orgId;
-}
-
-export async function resolveAdminOrg(userId: string, organizationId?: string): Promise<string> {
-  if (organizationId) {
-    await requireOrgPermission(userId, organizationId, ["owner", "admin"]);
-    return organizationId;
-  }
-  return requireOrgAdminAny(userId);
+export async function resolveAdminOrg(userId: string, organizationId: string): Promise<string> {
+  await requireOrgPermission(userId, organizationId, ["owner", "admin"]);
+  return organizationId;
 }

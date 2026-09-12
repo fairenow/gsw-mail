@@ -1,6 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import fp from "fastify-plugin";
 import { z } from "zod";
 import { getAccessibleAccounts, requireOrgPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
@@ -10,6 +9,7 @@ import { audit } from "../lib/audit.js";
 import { badRequest, conflict, notFound } from "../lib/errors.js";
 
 const createAliasSchema = z.object({
+  organizationId: z.string().uuid(),
   domainId: z.string().uuid(),
   source: z.string().trim().regex(/^[a-z0-9._%+-]+$/i),
   targetAccountId: z.string().uuid(),
@@ -19,8 +19,8 @@ interface AliasParams {
   id: string;
 }
 
-export default fp(async (app: FastifyInstance) => {
-  app.register(requireUser, { optional: false });
+export default async (app: FastifyInstance) => {
+  await requireUser(app, { optional: false });
 
   app.get("/mail/aliases", async (req) => {
     const accounts = await getAccessibleAccounts(req.user!.id);
@@ -38,6 +38,7 @@ export default fp(async (app: FastifyInstance) => {
 
   app.post("/mail/aliases", async (req, reply) => {
     const input = createAliasSchema.parse(req.body);
+    await requireOrgPermission(req.user!.id, input.organizationId, ["owner", "admin"]);
 
     const [target] = await db
       .select({ id: emailAccounts.id, address: emailAccounts.address, organizationId: domains.organizationId })
@@ -53,7 +54,7 @@ export default fp(async (app: FastifyInstance) => {
       .where(eq(domains.id, input.domainId))
       .limit(1);
     if (!domain) throw notFound("domain not found");
-    if (domain.organizationId !== target.organizationId) throw badRequest("domain and target account must be in the same organization");
+    if (domain.organizationId !== input.organizationId || domain.organizationId !== target.organizationId) throw badRequest("domain and target account must be in the same organization");
     await requireOrgPermission(req.user!.id, target.organizationId, ["owner", "admin"]);
 
     const [existing] = await db
@@ -82,11 +83,13 @@ export default fp(async (app: FastifyInstance) => {
   });
 
   app.delete<{ Params: AliasParams }>("/mail/aliases/:id", async (req) => {
+    const { organizationId } = z.object({ organizationId: z.string().uuid() }).parse(req.query);
+    await requireOrgPermission(req.user!.id, organizationId, ["owner", "admin"]);
     const [row] = await db
       .select({ id: aliases.id, source: aliases.source, domainName: domains.name, organizationId: domains.organizationId })
       .from(aliases)
       .innerJoin(domains, eq(aliases.domainId, domains.id))
-      .where(eq(aliases.id, req.params.id))
+      .where(and(eq(aliases.id, req.params.id), eq(domains.organizationId, organizationId)))
       .limit(1);
     if (!row) throw notFound("alias not found");
     await requireOrgPermission(req.user!.id, row.organizationId, ["owner", "admin"]);
@@ -102,4 +105,4 @@ export default fp(async (app: FastifyInstance) => {
     });
     return { id: req.params.id, deleted: true };
   });
-});
+};

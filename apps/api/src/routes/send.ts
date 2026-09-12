@@ -1,5 +1,4 @@
 import type { FastifyInstance } from "fastify";
-import fp from "fastify-plugin";
 import { z } from "zod";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
@@ -24,6 +23,7 @@ const sendSchema = z.object({
         size: z.number().int().nonnegative(),
         contentDisposition: z.enum(["attachment", "inline"]).optional(),
         contentId: z.string().optional(),
+        content: z.string().regex(/^[A-Za-z0-9+/]+={0,2}$/, { message: "attachment content must be base64" }).optional(),
       }),
     )
     .max(20)
@@ -31,8 +31,8 @@ const sendSchema = z.object({
   clientRequestId: z.string().trim().min(1).max(200).optional(),
 });
 
-export default fp(async (app: FastifyInstance) => {
-  app.register(requireUser, { optional: false });
+export default async (app: FastifyInstance) => {
+  await requireUser(app, { optional: false });
 
   app.post("/mail/send", async (req, reply) => {
     const input = sendSchema.parse(req.body);
@@ -62,4 +62,4 @@ export default fp(async (app: FastifyInstance) => {
       ...(result.idempotentReplay ? { idempotentReplay: true } : {}),
     };
   });
-});
+};

@@ -1,8 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import fp from "fastify-plugin";
 import { z } from "zod";
-import { getAccessibleAccounts, requireAccountPermission, requireOrgAdminAny, requireOrgPermission } from "../auth/authorize.js";
+import { getAccessibleAccounts, requireAccountPermission, requireOrgPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
 import { domains, emailAccounts, mailAccountMemberships, mailboxes, users } from "../db/schema.js";
@@ -31,6 +30,7 @@ const accountColumns = {
 };
 
 const createAccountSchema = z.object({
+  organizationId: z.string().uuid(),
   domainId: z.string().uuid(),
   localPart: z.string().trim().regex(/^[a-z0-9._%+-]+$/i),
   displayName: z.string().trim().optional(),
@@ -39,6 +39,7 @@ const createAccountSchema = z.object({
 });
 
 const updateAccountSchema = z.object({
+  organizationId: z.string().uuid(),
   status: z.enum(["pending", "active", "disabled"]).optional(),
   displayName: z.string().optional(),
   quotaBytes: z.number().int().positive().optional(),
@@ -49,8 +50,8 @@ const addDelegateSchema = z.object({
   role: z.enum(["delegate", "read_only"]).optional(),
 });
 
-export default fp(async (app: FastifyInstance) => {
-  app.register(requireUser, { optional: false });
+export default async (app: FastifyInstance) => {
+  await requireUser(app, { optional: false });
   const engine = getEngine();
 
   app.get("/mail/accounts", async (req) => {
@@ -88,7 +89,8 @@ export default fp(async (app: FastifyInstance) => {
 
   app.post("/mail/accounts", async (req, reply) => {
     const input = createAccountSchema.parse(req.body);
-    const orgId = await requireOrgAdminAny(req.user!.id);
+    const orgId = input.organizationId;
+    await requireOrgPermission(req.user!.id, orgId, ["owner", "admin"]);
     const domainRow = await db
       .select({ id: domains.id, name: domains.name, organizationId: domains.organizationId })
       .from(domains)
@@ -154,10 +156,11 @@ export default fp(async (app: FastifyInstance) => {
       .where(eq(emailAccounts.id, req.params.id))
       .limit(1);
     if (!row) throw notFound("account not found");
-    await requireOrgPermission(req.user!.id, row.organizationId, ["owner", "admin"]);
+    await requireOrgPermission(req.user!.id, input.organizationId, ["owner", "admin"]);
+    if (row.organizationId !== input.organizationId) throw notFound("account not found");
     const [updated] = await db
       .update(emailAccounts)
-      .set(input)
+      .set({ status: input.status, displayName: input.displayName, quotaBytes: input.quotaBytes })
       .where(eq(emailAccounts.id, req.params.id))
       .returning();
     if (!updated) throw notFound("account not found");
@@ -222,4 +225,4 @@ export default fp(async (app: FastifyInstance) => {
     });
     return { accountId: req.params.id, userId: req.params.userId, removed: true };
   });
-});
+};

@@ -1,5 +1,4 @@
 import type { FastifyInstance } from "fastify";
-import fp from "fastify-plugin";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
 import { getEngine } from "../engine/index.js";
@@ -11,8 +10,8 @@ interface Query {
   mailbox?: string;
 }
 
-export default fp(async (app: FastifyInstance) => {
-  app.register(requireUser, { optional: false });
+export default async (app: FastifyInstance) => {
+  await requireUser(app, { optional: false });
   const engine = getEngine();
 
   app.get<{ Querystring: Query }>("/mail/search", async ({ query, user }) => {
@@ -22,4 +21,4 @@ export default fp(async (app: FastifyInstance) => {
     const messages = await engine.search(query.accountId, query.q.trim(), query.mailbox);
     return { messages };
   });
-});
+};

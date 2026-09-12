@@ -2,7 +2,7 @@ import { and, eq, lte, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { outboundMessages } from "../db/schema.js";
 import { getEngine } from "../engine/index.js";
-import { failSendPreparation, finalizeSend } from "./queue.js";
+import { backfillOutboundAttachmentEngineIds, failSendPreparation, finalizeSend, loadJob } from "./queue.js";
 
 export async function reconcilePreparing(thresholdMinutes = 5): Promise<number> {
   const rows = await db
@@ -27,7 +27,17 @@ export async function reconcilePreparing(thresholdMinutes = 5): Promise<number> 
       const engine = getEngine();
       const found = await engine.findMessageByRfcMessageId(row.accountId, row.messageId);
       if (found) {
+        const message = await engine.getMessage(row.accountId, found.engineMessageId);
+        if (message?.attachments?.length) {
+          await backfillOutboundAttachmentEngineIds(row.id, message.attachments.map((a) => ({ engineId: a.engineId, filename: a.filename })));
+        }
         await finalizeSend(row.id, { engineMessageId: found.engineMessageId, engineThreadId: found.engineThreadId }, new Date());
+        reconciled += 1;
+        continue;
+      }
+      const job = await loadJob(row.id);
+      if (job?.attachments?.length) {
+        await failSendPreparation(row.id, "attachment_recovery", "Attachment bytes were not persisted; compose a new send with the original attachments");
         reconciled += 1;
         continue;
       }

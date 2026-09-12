@@ -17,6 +17,7 @@ const config = {
   stalwart: {
     jmapUrl: env("STALWART_JMAP_URL", "https://localhost:443"),
     adminToken: env("STALWART_ADMIN_TOKEN", "change-me-stalwart-admin"),
+    sessionTtlSeconds: Number(env("STALWART_SESSION_TTL_SECONDS", "60")),
   },
   outbound: {
     relay: env("OUTBOUND_RELAY", "null"),
@@ -56,13 +57,19 @@ function assertNotPlaceholder(key: string, value: string): void {
 
 if (isProduction) {
   assertExplicit("DATABASE_URL", explicit("DATABASE_URL"));
+  assertExplicit("MAIL_ENGINE", explicit("MAIL_ENGINE"));
+  if (config.mailEngine !== "stalwart") {
+    throw new Error("[config] MAIL_ENGINE must be stalwart in production");
+  }
   assertExplicit("STALWART_ADMIN_TOKEN", explicit("STALWART_ADMIN_TOKEN"));
   assertExplicit("STALWART_JMAP_URL", explicit("STALWART_JMAP_URL"));
+  assertNotPlaceholder("STALWART_ADMIN_TOKEN", config.stalwart.adminToken);
+  assertNotPlaceholder("STALWART_JMAP_URL", config.stalwart.jmapUrl);
   assertExplicit("DELIVERY_WEBHOOK_SECRET", explicit("DELIVERY_WEBHOOK_SECRET"));
+  assertNotPlaceholder("DELIVERY_WEBHOOK_SECRET", config.deliveryWebhookSecret!);
   assertExplicit("JWT_ISSUER", explicit("JWT_ISSUER"));
   assertExplicit("JWKS_URL", explicit("JWKS_URL"));
   assertNotPlaceholder("DATABASE_URL", config.databaseUrl);
-  assertNotPlaceholder("STALWART_ADMIN_TOKEN", config.stalwart.adminToken);
   assertNotPlaceholder("JWT_ISSUER", config.auth.issuer);
   if (config.send.delaySeconds < 0 || config.send.maxRecipients < 1) {
     throw new Error("[config] invalid send settings: SEND_DELAY_SECONDS must be >= 0 and MAX_RECIPIENTS >= 1");

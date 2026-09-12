@@ -1,12 +1,34 @@
 import { config } from "../config.js";
+import { getEngine } from "../engine/index.js";
 import { reconcilePreparing } from "./reconcile.js";
 import { getRelay } from "./relay.js";
 import { claimDueJobs, loadJob, markAccepted, markFailed, markTransportRetry } from "./queue.js";
+import type { RelayAttachment } from "./types.js";
 
 export interface OutboundWorker {
   start(): void;
   stop(): void;
   runOnce(): Promise<number>;
+}
+
+async function resolveRelayAttachments(job: import("./types.js").OutboundJob): Promise<RelayAttachment[] | undefined> {
+  if (!job.attachments?.length) return undefined;
+  const engine = getEngine();
+  const resolved: RelayAttachment[] = [];
+  for (const a of job.attachments) {
+    if (!a.engineAttachmentId) throw new Error(`attachment ${a.filename} has no engine blob`);
+    const body = await engine.getAttachment(job.accountId, a.engineAttachmentId);
+    if (!body) {
+      throw new Error(`attachment ${a.filename} missing in engine for ${job.id}`);
+    }
+    resolved.push({
+      filename: a.filename,
+      contentType: a.contentType ?? (body.contentType || "application/octet-stream"),
+      content: body.content,
+      contentId: a.contentId ?? undefined,
+    });
+  }
+  return resolved;
 }
 
 export function createOutboundWorker(intervalMs = 5_000): OutboundWorker {
@@ -31,7 +53,8 @@ export function createOutboundWorker(intervalMs = 5_000): OutboundWorker {
         const job = await loadJob(jobId.id);
         if (!job) continue;
         try {
-          const result = await relay.send(job);
+          const relayAttachments = await resolveRelayAttachments(job);
+          const result = await relay.send(job, relayAttachments);
           if (result.accepted) {
             await markAccepted(job.id, result.deliveryId);
           } else if (result.permanent) {

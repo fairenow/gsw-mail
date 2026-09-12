@@ -1,11 +1,13 @@
 import { Resend } from "resend";
 import { config } from "../config.js";
-import type { OutboundJob, OutboundRelay, RelayResult } from "./types.js";
+import type { OutboundJob, OutboundRelay, RelayAttachment, RelayResult } from "./types.js";
 
 export const NullRelay: OutboundRelay = {
   name: "null",
-  async send(job: OutboundJob): Promise<RelayResult> {
-    console.info(`[relay:null] would deliver to ${job.to.join(", ")} subject="${job.subject ?? ""}" messageId=${job.messageId ?? ""}`);
+  async send(job: OutboundJob, attachments?: RelayAttachment[]): Promise<RelayResult> {
+    console.info(
+      `[relay:null] would deliver to ${job.to.join(", ")} subject="${job.subject ?? ""}" messageId=${job.messageId ?? ""} attachments=${attachments?.length ?? 0}`,
+    );
     return { accepted: true, deliveryId: `null-${job.id}` };
   },
 };
@@ -14,7 +16,7 @@ export function createResendRelay(apiKey: string): OutboundRelay {
   const client = new Resend(apiKey);
   return {
     name: "resend",
-    async send(job: OutboundJob): Promise<RelayResult> {
+    async send(job: OutboundJob, attachments?: RelayAttachment[]): Promise<RelayResult> {
       const headers: Record<string, string> = {};
       if (job.messageId) headers["Message-ID"] = job.messageId;
       if (job.inReplyTo) headers["In-Reply-To"] = job.inReplyTo;
@@ -30,6 +32,16 @@ export function createResendRelay(apiKey: string): OutboundRelay {
         ...(job.bcc ? { bcc: job.bcc } : {}),
         ...(job.htmlBody ? { html: job.htmlBody } : {}),
         ...(job.replyTo ? { replyTo: job.replyTo } : {}),
+        ...(attachments?.length
+          ? {
+              attachments: attachments.map((a) => ({
+                filename: a.filename,
+                contentType: a.contentType,
+                content: a.content,
+                ...(a.contentId ? { contentId: a.contentId } : {}),
+              })),
+            }
+          : {}),
       };
       const response = await client.emails.send(options);
       if (response.error) {

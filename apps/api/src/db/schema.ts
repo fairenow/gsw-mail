@@ -19,7 +19,7 @@ const timestamps = {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull()
-    .$onUpdate(() => sql`now()`),
+    .$onUpdate(() => new Date()),
 };
 
 export const accountStatus = pgEnum("account_status", ["pending", "active", "disabled"]);

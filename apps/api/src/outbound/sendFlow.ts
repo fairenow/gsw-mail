@@ -1,10 +1,12 @@
 import { config } from "../config.js";
 import { getEngine } from "../engine/index.js";
+import type { SendAttachment } from "../engine/types.js";
 import { badRequest, conflict } from "../lib/errors.js";
 import { generateMessageId } from "../lib/messageId.js";
 import type { AccessibleAccount } from "../auth/authorize.js";
 import { checkSuppressions } from "./delivery.js";
 import {
+  backfillOutboundAttachmentEngineIds,
   checkSendRate,
   failSendPreparation,
   finalizeSend,
@@ -26,9 +28,7 @@ export interface SubmitSendInput {
   replyTo?: string | undefined;
   inReplyTo?: string | undefined;
   references?: string | undefined;
-  attachments?:
-    | { filename: string; contentType: string; size: number; contentDisposition?: string | undefined; contentId?: string | undefined }[]
-    | undefined;
+  attachments?: SendAttachment[] | undefined;
   clientRequestId?: string | undefined;
 }
 
@@ -95,7 +95,7 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
   await insertRecipients(reserve.id, input.to, input.cc ?? [], input.bcc ?? []);
   await insertOutboundAttachments(
     reserve.id,
-    (input.attachments ?? []).map((a) => ({ ...a, engineAttachmentId: null })),
+    (input.attachments ?? []).map(({ content: _content, ...a }) => ({ ...a, engineAttachmentId: null })),
   );
 
   let sent;
@@ -112,10 +112,18 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
       inReplyTo: input.inReplyTo,
       references: input.references,
       messageId,
+      attachments: input.attachments,
     });
   } catch (err) {
     await failSendPreparation(reserve.id, "sent_persistence", err instanceof Error ? err.message : String(err));
     throw new Error("failed to persist sent message");
+  }
+
+  if (sent.attachments?.length) {
+    await backfillOutboundAttachmentEngineIds(
+      reserve.id,
+      sent.attachments.map((a) => ({ engineId: a.engineId, filename: a.filename })),
+    );
   }
 
   await finalizeSend(reserve.id, { engineMessageId: sent.engineMessageId, engineThreadId: sent.threadId }, nextAttemptAt);

@@ -1,23 +1,35 @@
-import { and, count, desc, eq, gte, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import fp from "fastify-plugin";
 import { z } from "zod";
-import { requireOrgAdminAny, resolveAdminOrg } from "../auth/authorize.js";
+import { requireOrgPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
 import { db, pingDatabase } from "../db/client.js";
-import { auditEvents, inboundMessages, outboundMessages } from "../db/schema.js";
+import { auditEvents, domains, emailAccounts, inboundMessages, outboundMessages } from "../db/schema.js";
 import { getEngine } from "../engine/index.js";
 import { getRelay } from "../outbound/relay.js";
 
+const orgQuery = z.object({ organizationId: z.string().uuid() });
+
 const todayStart = sql`date_trunc('day', now())`;
 
-export default fp(async (app: FastifyInstance) => {
-  app.register(requireUser, { optional: false });
+export default async (app: FastifyInstance) => {
+  await requireUser(app, { optional: false });
+
+  const orgAccountIds = async (organizationId: string): Promise<string[]> => {
+    const rows = await db
+      .select({ id: emailAccounts.id })
+      .from(emailAccounts)
+      .innerJoin(domains, eq(emailAccounts.domainId, domains.id))
+      .where(eq(domains.organizationId, organizationId));
+    return rows.map((r) => r.id);
+  };
 
   app.get("/admin/health", async (req) => {
-    await requireOrgAdminAny(req.user!.id);
+    const { organizationId } = orgQuery.parse(req.query ?? {});
+    await requireOrgPermission(req.user!.id, organizationId, ["owner", "admin"]);
     const [dbOk, engine, relay] = await Promise.all([pingDatabase(), getEngine().status(), Promise.resolve(getRelay().name)]);
     return {
+      organizationId,
       ok: dbOk && engine.ok,
       db: dbOk ? "ok" : "down",
       mailEngine: engine,
@@ -26,22 +38,50 @@ export default fp(async (app: FastifyInstance) => {
   });
 
   app.get("/admin/stats", async (req) => {
-    await requireOrgAdminAny(req.user!.id);
+    const { organizationId } = orgQuery.parse(req.query ?? {});
+    await requireOrgPermission(req.user!.id, organizationId, ["owner", "admin"]);
+    const accountIds = await orgAccountIds(organizationId);
+    if (accountIds.length === 0) {
+      return {
+        organizationId,
+        outboundQueue: 0,
+        sending: 0,
+        failed: 0,
+        cancelled: 0,
+        deferred: 0,
+        byTransport: [],
+        byDelivery: [],
+        spamBlockedToday: 0,
+        messagesToday: 0,
+      };
+    }
+
     const byTransport = await db
       .select({ transportStatus: outboundMessages.transportStatus, n: count() })
       .from(outboundMessages)
+      .where(inArray(outboundMessages.accountId, accountIds))
       .groupBy(outboundMessages.transportStatus);
     const byDelivery = await db
       .select({ deliveryStatus: outboundMessages.deliveryStatus, n: count() })
       .from(outboundMessages)
+      .where(inArray(outboundMessages.accountId, accountIds))
       .groupBy(outboundMessages.deliveryStatus);
 
     const [messagesToday, spamToday] = await Promise.all([
-      db.select({ n: count() }).from(inboundMessages).where(gte(inboundMessages.date, todayStart)),
       db
         .select({ n: count() })
         .from(inboundMessages)
-        .where(and(gte(inboundMessages.date, todayStart), gte(inboundMessages.spamScore, sql`5`))),
+        .where(and(inArray(inboundMessages.accountId, accountIds), gte(inboundMessages.date, todayStart))),
+      db
+        .select({ n: count() })
+        .from(inboundMessages)
+        .where(
+          and(
+            inArray(inboundMessages.accountId, accountIds),
+            gte(inboundMessages.date, todayStart),
+            gte(inboundMessages.spamScore, sql`5`),
+          ),
+        ),
     ]);
 
     const outboundQueue = byTransport.find((s) => s.transportStatus === "queued")?.n ?? 0;
@@ -51,6 +91,7 @@ export default fp(async (app: FastifyInstance) => {
     const deferred = byDelivery.find((s) => s.deliveryStatus === "deferred")?.n ?? 0;
 
     return {
+      organizationId,
       outboundQueue,
       sending,
       failed,
@@ -64,7 +105,9 @@ export default fp(async (app: FastifyInstance) => {
   });
 
   app.get("/admin/outbound", async (req) => {
-    await requireOrgAdminAny(req.user!.id);
+    const { organizationId } = orgQuery.parse(req.query ?? {});
+    await requireOrgPermission(req.user!.id, organizationId, ["owner", "admin"]);
+    const accountIds = await orgAccountIds(organizationId);
     const rows = await db
       .select({
         id: outboundMessages.id,
@@ -80,20 +123,22 @@ export default fp(async (app: FastifyInstance) => {
         createdAt: outboundMessages.createdAt,
       })
       .from(outboundMessages)
+      .where(accountIds.length > 0 ? inArray(outboundMessages.accountId, accountIds) : sql`false`)
       .orderBy(desc(outboundMessages.createdAt))
       .limit(50);
-    return { outbound: rows };
+    return { organizationId, outbound: rows };
   });
 
   app.get("/admin/audit", async (req) => {
     const input = z
       .object({
-        organizationId: z.string().uuid().optional(),
+        organizationId: z.string().uuid(),
         limit: z.coerce.number().int().min(1).max(500).optional(),
         offset: z.coerce.number().int().min(0).optional(),
       })
       .parse(req.query ?? {});
-    const organizationId = await resolveAdminOrg(req.user!.id, input.organizationId);
+    const organizationId = input.organizationId;
+    await requireOrgPermission(req.user!.id, organizationId, ["owner", "admin"]);
     const events = await db
       .select({
         id: auditEvents.id,
@@ -113,4 +158,4 @@ export default fp(async (app: FastifyInstance) => {
       .offset(input.offset ?? 0);
     return { organizationId, events };
   });
-});
+};

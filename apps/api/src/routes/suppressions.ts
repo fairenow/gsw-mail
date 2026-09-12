@@ -1,6 +1,5 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import fp from "fastify-plugin";
 import { z } from "zod";
 import { resolveAdminOrg } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
@@ -10,14 +9,14 @@ import { audit } from "../lib/audit.js";
 import { badRequest, conflict, notFound } from "../lib/errors.js";
 
 const listSchema = z.object({
-  organizationId: z.string().uuid().optional(),
+  organizationId: z.string().uuid(),
   limit: z.coerce.number().int().min(1).max(500).optional(),
   offset: z.coerce.number().int().min(0).optional(),
 });
 
 const createSchema = z.object({
   email: z.string().email(),
-  organizationId: z.string().uuid().optional(),
+  organizationId: z.string().uuid(),
   reason: z.enum(suppressionReason.enumValues),
 });
 
@@ -25,8 +24,8 @@ interface Params {
   id: string;
 }
 
-export default fp(async (app: FastifyInstance) => {
-  app.register(requireUser, { optional: false });
+export default async (app: FastifyInstance) => {
+  await requireUser(app, { optional: false });
 
   app.get("/admin/suppressions", async (req, reply) => {
     const input = listSchema.parse(req.query ?? {});
@@ -70,13 +69,14 @@ export default fp(async (app: FastifyInstance) => {
   });
 
   app.delete<{ Params: Params }>("/admin/suppressions/:id", async (req, reply) => {
+    const input = z.object({ organizationId: z.string().uuid() }).parse(req.query);
+    const organizationId = await resolveAdminOrg(req.user!.id, input.organizationId);
     const [row] = await db
       .select({ id: deliverySuppressions.id, organizationId: deliverySuppressions.organizationId, email: deliverySuppressions.email })
       .from(deliverySuppressions)
-      .where(eq(deliverySuppressions.id, req.params.id))
+      .where(and(eq(deliverySuppressions.id, req.params.id), eq(deliverySuppressions.organizationId, organizationId)))
       .limit(1);
     if (!row) throw notFound("suppression not found");
-    const organizationId = await resolveAdminOrg(req.user!.id, row.organizationId);
     if (organizationId !== row.organizationId) throw badRequest("you do not administer this suppression's organization");
     await db.delete(deliverySuppressions).where(eq(deliverySuppressions.id, row.id));
     await audit({
@@ -90,4 +90,4 @@ export default fp(async (app: FastifyInstance) => {
     });
     return reply.code(200).send({ id: row.id, removed: true });
   });
-});
+};

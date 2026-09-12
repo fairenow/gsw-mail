@@ -1,8 +1,17 @@
 export interface OutboundAttachment {
-  engineAttachmentId?: string | null;
+  engineAttachmentId?: string | null | undefined;
   filename: string;
-  contentType?: string | null;
-  size?: number | null;
+  contentType?: string | null | undefined;
+  size?: number | null | undefined;
+  contentDisposition?: string | null | undefined;
+  contentId?: string | null | undefined;
+}
+
+export interface RelayAttachment {
+  filename: string;
+  contentType: string;
+  content: Buffer;
+  contentId?: string | undefined;
 }
 
 export interface OutboundJob {
@@ -31,5 +40,5 @@ export interface RelayResult {
 
 export interface OutboundRelay {
   readonly name: string;
-  send(job: OutboundJob): Promise<RelayResult>;
+  send(job: OutboundJob, attachments?: RelayAttachment[] | undefined): Promise<RelayResult>;
 }

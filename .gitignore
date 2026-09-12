@@ -15,3 +15,5 @@ infra/certs/
 .DS_Store
 *.log
 coverage/
+infra/api.env
+!infra/api.env.example

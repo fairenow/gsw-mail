@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "./client.js";
 import { aliases, domains, emailAccounts, mailAccountMemberships, mailboxes, organizationMemberships, organizations, users } from "./schema.js";
 
@@ -93,6 +93,15 @@ async function ensureOrgMembership(organizationId: string, userId: string, role:
   await db.insert(organizationMemberships).values({ organizationId, userId, role });
 }
 
+async function reconcileSeedMemberships(seedPairs: Set<string>, accountIds: string[], userIds: string[]): Promise<void> {
+  const rows = await db
+    .select({ id: mailAccountMemberships.id, accountId: mailAccountMemberships.accountId, userId: mailAccountMemberships.userId })
+    .from(mailAccountMemberships)
+    .where(and(inArray(mailAccountMemberships.accountId, accountIds), inArray(mailAccountMemberships.userId, userIds)));
+  const stale = rows.filter((r) => !seedPairs.has(`${r.accountId}|${r.userId}`)).map((r) => r.id);
+  if (stale.length > 0) await db.delete(mailAccountMemberships).where(inArray(mailAccountMemberships.id, stale));
+}
+
 async function ensureSeed() {
   const { organizationId, domainId } = await ensureOrgAndDomain();
 
@@ -106,11 +115,20 @@ async function ensureSeed() {
   const alyssaAccountId = await ensureAccount(domainId, "alyssa", "alyssa@guidedstepswellness.com", "Alyssa Morgan", alyssaId);
   const communityAccountId = await ensureAccount(domainId, "community", "community@guidedstepswellness.com", "Community", ramonId);
 
-  await ensureMembership(ramonAccountId, ramonId, "owner");
-  await ensureMembership(ramonAccountId, alyssaId, "delegate");
-  await ensureMembership(alyssaAccountId, alyssaId, "owner");
-  await ensureMembership(communityAccountId, ramonId, "owner");
-  await ensureMembership(communityAccountId, alyssaId, "delegate");
+  const memberships = [
+    [ramonAccountId, ramonId, "owner"],
+    [alyssaAccountId, alyssaId, "owner"],
+    [communityAccountId, ramonId, "owner"],
+    [communityAccountId, alyssaId, "delegate"],
+  ] as const;
+  for (const [accountId, userId, role] of memberships) {
+    await ensureMembership(accountId, userId, role);
+  }
+  await reconcileSeedMemberships(
+    new Set(memberships.map((m) => `${m[0]}|${m[1]}`)),
+    [ramonAccountId, alyssaAccountId, communityAccountId],
+    [ramonId, alyssaId],
+  );
 
   await db
     .insert(aliases)

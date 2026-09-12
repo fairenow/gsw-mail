@@ -1,6 +1,5 @@
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import fp from "fastify-plugin";
 import { z } from "zod";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
@@ -34,8 +33,8 @@ const roleFromName = (name: string): MailboxRole | null => {
   return found ?? null;
 };
 
-export default fp(async (app: FastifyInstance) => {
-  app.register(requireUser, { optional: false });
+export default async (app: FastifyInstance) => {
+  await requireUser(app, { optional: false });
   const engine = getEngine();
 
   app.get<{ Querystring: Query }>("/mail/messages", async ({ query, user }) => {
@@ -122,4 +121,4 @@ export default fp(async (app: FastifyInstance) => {
       app.log.warn(err, "inbound-message index sync failed; mail action still succeeded");
     }
   }
-});
+};

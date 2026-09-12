@@ -1,4 +1,6 @@
 import type {
+  AttachmentBody,
+  AttachmentMeta,
   EngineAccountId,
   EngineMessageId,
   EngineThreadId,
@@ -92,6 +94,7 @@ const sample = (accountId: EngineAccountId): FullMessage[] => {
 
 const messages = new Map<EngineAccountId, FullMessage[]>();
 const rfcMessageIds = new Map<string, { accountId: EngineAccountId; engineId: EngineMessageId; threadId: EngineThreadId }>();
+const attachmentBodies = new Map<string, { contentType: string; content: Buffer }>();
 
 export class DemoEngine implements MailEngine {
   readonly name = "demo";
@@ -174,6 +177,18 @@ export class DemoEngine implements MailEngine {
     const id = `demo-${++seq}`;
     const threadId = `t-sent-${id}`;
     const messageId = input.messageId ?? `<${id}@demo>`;
+    const attachments: AttachmentMeta[] = (input.attachments ?? []).map((a) => {
+      const engineId = a.engineId ?? `demo-att-${++seq}`;
+      const content = a.content ? Buffer.from(a.content, "base64") : Buffer.from(`${a.filename} demo bytes`);
+      attachmentBodies.set(`${accountId}:${engineId}`, { contentType: a.contentType, content });
+      return {
+        engineId,
+        filename: a.filename,
+        contentType: a.contentType,
+        size: content.byteLength,
+        inline: a.contentDisposition === "inline",
+      };
+    });
     this.store(accountId).push({
       engineId: id,
       threadId,
@@ -188,19 +203,18 @@ export class DemoEngine implements MailEngine {
       size: (input.textBody ?? "").length,
       read: true,
       flagged: false,
-      hasAttachments: (input.attachments?.length ?? 0) > 0,
+      hasAttachments: attachments.length > 0,
       keywords: [],
-      attachments: (input.attachments ?? []).map((a) => ({
-        engineId: a.engineId ?? `demo-att-${++seq}`,
-        filename: a.filename,
-        contentType: a.contentType,
-        size: a.size,
-        inline: a.contentDisposition === "inline",
-      })),
+      attachments,
       headers: { "Message-ID": messageId, ...(input.inReplyTo ? { "In-Reply-To": input.inReplyTo } : {}) },
     });
     rfcMessageIds.set(messageId, { accountId, engineId: id, threadId });
-    return { engineMessageId: id, threadId };
+    return { engineMessageId: id, threadId, attachments };
+  }
+
+  async getAttachment(accountId: EngineAccountId, attachmentEngineId: string): Promise<AttachmentBody | null> {
+    const body = attachmentBodies.get(`${accountId}:${attachmentEngineId}`);
+    return body ? { ...body } : null;
   }
 
   async findMessageByRfcMessageId(

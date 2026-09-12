@@ -61,6 +61,8 @@ export interface SendAttachment {
   size: number;
   contentDisposition?: string | undefined;
   contentId?: string | undefined;
+  /** base64-encoded bytes, used by the demo engine and ignored by remote engines */
+  content?: string | undefined;
 }
 
 export interface SendDraftInput {
@@ -81,6 +83,12 @@ export interface SendDraftInput {
 export interface SendResult {
   engineMessageId: EngineMessageId;
   threadId: EngineThreadId;
+  attachments?: AttachmentMeta[] | undefined;
+}
+
+export interface AttachmentBody {
+  contentType: string;
+  content: Buffer;
 }
 
 export interface MessageQuery {
@@ -121,6 +129,8 @@ export interface MailEngine {
     accountId: EngineAccountId,
     messageId: string,
   ): Promise<{ engineMessageId: EngineMessageId; engineThreadId: EngineThreadId } | null>;
+
+  getAttachment(accountId: EngineAccountId, attachmentEngineId: string): Promise<AttachmentBody | null>;
 
   search(accountId: EngineAccountId, q: string, mailbox?: string | undefined): Promise<MessageSummary[]>;
 

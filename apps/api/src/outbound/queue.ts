@@ -60,6 +60,7 @@ export async function reserveSendOperation(input: ReserveInput): Promise<Reserve
       clientRequestId: input.clientRequestId,
       preparingStartedAt: sql`now()`,
       nextAttemptAt: input.undoUntil,
+      undoUntil: input.undoUntil,
     })
     .onConflictDoNothing({ target: [outboundMessages.accountId, outboundMessages.clientRequestId] })
     .returning({ id: outboundMessages.id });
@@ -116,6 +117,18 @@ export async function insertOutboundAttachments(
   await db.insert(outboundAttachments).values(rows);
 }
 
+export async function backfillOutboundAttachmentEngineIds(
+  outboundMessageId: string,
+  attachments: { engineId: string; filename: string }[],
+): Promise<void> {
+  for (const a of attachments) {
+    await db
+      .update(outboundAttachments)
+      .set({ engineAttachmentId: a.engineId })
+      .where(and(eq(outboundAttachments.outboundMessageId, outboundMessageId), eq(outboundAttachments.filename, a.filename)));
+  }
+}
+
 export type TransportStatusRow = typeof outboundMessages.$inferSelect;
 
 export async function finalizeSend(
@@ -131,7 +144,7 @@ export async function finalizeSend(
       engineThreadId: result.engineThreadId,
       nextAttemptAt,
     })
-    .where(eq(outboundMessages.id, id));
+    .where(and(eq(outboundMessages.id, id), eq(outboundMessages.transportStatus, "preparing")));
 }
 
 export async function failSendPreparation(id: string, code: string, detail: string): Promise<void> {
@@ -182,7 +195,14 @@ export async function loadJob(id: string): Promise<OutboundJob | null> {
   const row = rows[0];
   if (!row) return null;
   const attachments = await db
-    .select({ engineId: outboundAttachments.engineAttachmentId, filename: outboundAttachments.filename })
+    .select({
+      engineAttachmentId: outboundAttachments.engineAttachmentId,
+      filename: outboundAttachments.filename,
+      contentType: outboundAttachments.contentType,
+      size: outboundAttachments.size,
+      contentDisposition: outboundAttachments.contentDisposition,
+      contentId: outboundAttachments.contentId,
+    })
     .from(outboundAttachments)
     .where(eq(outboundAttachments.outboundMessageId, id));
   return {
@@ -200,8 +220,12 @@ export async function loadJob(id: string): Promise<OutboundJob | null> {
     references: row.references ?? undefined,
     messageId: row.messageId ?? undefined,
     attachments: attachments.map((a) => ({
-      engineAttachmentId: a.engineId,
+      engineAttachmentId: a.engineAttachmentId ?? undefined,
       filename: a.filename,
+      contentType: a.contentType,
+      size: a.size,
+      contentDisposition: a.contentDisposition ?? undefined,
+      contentId: a.contentId ?? undefined,
     })),
   };
 }

@@ -1,5 +1,4 @@
 import type { FastifyInstance } from "fastify";
-import fp from "fastify-plugin";
 import { z } from "zod";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
@@ -23,8 +22,8 @@ const sendDraftSchema = z.object({
   clientRequestId: z.string().trim().min(1).max(200).optional(),
 });
 
-export default fp(async (app: FastifyInstance) => {
-  app.register(requireUser, { optional: false });
+export default async (app: FastifyInstance) => {
+  await requireUser(app, { optional: false });
   const engine = getEngine();
 
   app.post("/mail/drafts", async (req, reply) => {
@@ -78,4 +77,4 @@ export default fp(async (app: FastifyInstance) => {
       undoUntil: result.undoUntil,
     };
   });
-});
+};

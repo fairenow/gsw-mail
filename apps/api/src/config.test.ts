@@ -11,6 +11,7 @@ const runProductionConfig = (overrides: Record<string, string>): { code: number;
   const env: Record<string, string | undefined> = { ...(process.env as Record<string, string>) };
   for (const key of [
     "DATABASE_URL",
+    "MAIL_ENGINE",
     "STALWART_ADMIN_TOKEN",
     "STALWART_JMAP_URL",
     "DELIVERY_WEBHOOK_SECRET",
@@ -33,6 +34,7 @@ const runProductionConfig = (overrides: Record<string, string>): { code: number;
 
 const prodOkVars = {
   DATABASE_URL: "postgres://gsw:pw9f2k8a1cb@prod-db.internal:5432/gsw_mail",
+  MAIL_ENGINE: "stalwart",
   STALWART_ADMIN_TOKEN: "prod-stalwart-key-2026",
   STALWART_JMAP_URL: "https://mx1.guidedstepswellness.com",
   DELIVERY_WEBHOOK_SECRET: "whsec_3f4a9c1b8e7d2f6a",
@@ -48,6 +50,12 @@ test("production refuses to start without DATABASE_URL", () => {
   assert.match(stderr, /DATABASE_URL must be set explicitly in production/);
 });
 
+test("production refuses to start without MAIL_ENGINE", () => {
+  const { code, stderr } = runProductionConfig({ ...prodOkVars, MAIL_ENGINE: "" });
+  assert.notEqual(code, 0);
+  assert.match(stderr, /MAIL_ENGINE must be set explicitly in production|MAIL_ENGINE must be stalwart in production/);
+});
+
 test("a fully-specified valid configuration starts, but a placeholder admin token fails", () => {
   const valid = runProductionConfig(prodOkVars);
   assert.equal(valid.code, 0);
@@ -60,4 +68,10 @@ test("production refuses the null relay", () => {
   const { code, stderr } = runProductionConfig({ ...prodOkVars, OUTBOUND_RELAY: "null" });
   assert.notEqual(code, 0);
   assert.match(stderr, /OUTBOUND_RELAY=null is not allowed in production/);
+});
+
+test("production refuses a placeholder delivery webhook secret", () => {
+  const { code, stderr } = runProductionConfig({ ...prodOkVars, DELIVERY_WEBHOOK_SECRET: "change-me" });
+  assert.notEqual(code, 0);
+  assert.match(stderr, /DELIVERY_WEBHOOK_SECRET looks like a placeholder/);
 });

@@ -1,6 +1,6 @@
 # Stalwart Mail Server — operations reference
 
-Image: `stalwartlabs/stalwart:v0.16` (pin the **exact patch**, e.g. `v0.16.x`, in production).
+Image: `stalwartlabs/stalwart:v0.16.18`.
 
 ## Layout
 | Path | Purpose |
@@ -72,12 +72,11 @@ else on a private network, no raw cross-publish of the DB.
 
 ## Outbound
 MVP outbound does **not** rely on Stalwart's queue. The GSW API owns the queue and
-calls the configured SMTP relay (Resend/SES/Postmark/Mailgun). Stalwart can also be
+calls the implemented Resend HTTP relay. Stalwart can also be
 configured as a relay client later if GSW's queue is replaced.
 
 ## Health
-`curl -sfk https://localhost:443/healthz` — the API's `StalwartEngine.status()` uses the
-JMAP `/jmap/session` endpoint as its live health check.
+The API engine status discovers the authenticated JMAP session at `/.well-known/jmap`. Use `/admin/health?organizationId=<uuid>` with an administrator JWT for dependency monitoring. No curl-based healthcheck is assumed inside the Stalwart image.
 
 ## Logs
 `docker compose -f infra/docker-compose.yml logs -f stalwart`
