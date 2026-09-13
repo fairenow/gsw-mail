@@ -5,16 +5,17 @@ import { Resend } from "resend";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { authAccounts, authSessions, authUsers, authVerifications } from "../db/schema.js";
+import { renderGswAuthEmail } from "./email.js";
 
 const resend = config.outbound.resendApiKey ? new Resend(config.outbound.resendApiKey) : null;
 
-async function sendAuthEmail(to: string, subject: string, text: string): Promise<void> {
+async function sendAuthEmail(to: string, subject: string, content: { text: string; html: string }): Promise<void> {
   if (!resend) {
     if (config.env === "production") throw new Error("auth email delivery is not configured");
-    console.info(`[auth email] ${to}: ${text}`);
+    console.info(`[auth email] ${to}: ${content.text}`);
     return;
   }
-  await resend.emails.send({ from: config.authEmail.from, to, subject, text });
+  await resend.emails.send({ from: config.authEmail.from, to, subject, text: content.text, html: content.html });
 }
 
 export const auth = betterAuth({
@@ -29,15 +30,19 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
-    sendResetPassword: async ({ user, url }) => sendAuthEmail(user.email, "Reset your GSW password", `Reset your password: ${url}`),
+    sendResetPassword: async ({ user, url }) => sendAuthEmail(user.email, "Reset your GSW password", renderGswAuthEmail({ title: "Reset your password", message: "Use the button below to reset your GSW Account password.", ctaUrl: url, ctaLabel: "Reset password" })),
   },
   emailVerification: {
-    sendVerificationEmail: async ({ user, url }) => sendAuthEmail(user.email, "Verify your GSW Account", `Verify your email address: ${url}`),
+    sendVerificationEmail: async ({ user, url }) => sendAuthEmail(user.email, "Verify your GSW Account", renderGswAuthEmail({ title: "Verify your email", message: "Confirm your email address to continue to GSW.", ctaUrl: url, ctaLabel: "Verify email" })),
   },
   plugins: [emailOTP({
-    sendVerificationOTP: async ({ email, otp, type }) => sendAuthEmail(email, `Your GSW ${type === "sign-in" ? "sign-in" : "verification"} code`, `Your one-time code is ${otp}. It expires in five minutes.`),
+    sendVerificationOTP: async ({ email, otp, type }) => sendAuthEmail(email, `Your GSW ${type === "sign-in" ? "sign-in" : "verification"} code`, renderGswAuthEmail({ title: type === "sign-in" ? "Your sign-in code" : "Your verification code", message: "Use this one-time code to continue to GSW Mail.", code: otp, expiryMinutes: 10 })),
     sendVerificationOnSignUp: false,
     overrideDefaultEmailVerification: true,
+    otpLength: 6,
+    expiresIn: 600,
+    allowedAttempts: 5,
+    resendStrategy: "reuse",
     storeOTP: "hashed",
   })],
 });
