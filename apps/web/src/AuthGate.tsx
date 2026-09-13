@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { getSession, requestOneTimeCode, setPassword, signInWithCode, signInWithPassword, type AuthSession } from "./auth";
+import { getAccountContext, getSession, requestOneTimeCode, setPassword, signInWithCode, signInWithPassword, type AuthSession } from "./auth";
 import { AuthCard } from "./components/auth/AuthCard";
 import { AuthError } from "./components/auth/AuthError";
 import { AuthPage } from "./components/auth/AuthPage";
@@ -18,11 +18,22 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [error, setError] = useState("");
   const [otpRequested, setOtpRequested] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [routing, setRouting] = useState(false);
 
   const refresh = () => void getSession().then(setSession).catch(() => setSession(null)).finally(() => setLoading(false));
   useEffect(() => { refresh(); window.addEventListener("gsw-auth-change", refresh); return () => window.removeEventListener("gsw-auth-change", refresh); }, []);
+  useEffect(() => {
+    if (!session || !["/", "/mail", "/control-center"].includes(window.location.pathname)) return;
+    setRouting(true);
+    void getAccountContext().then((context) => {
+      const destination = context.defaultDestination === "control-center" ? "/control-center" : context.defaultDestination === "mail" ? "/mail" : "/setup";
+      if (window.location.pathname !== destination) window.location.replace(destination);
+      else setRouting(false);
+    }).catch(() => setRouting(false));
+  }, [session]);
 
   if (loading) return <AuthPage><AuthCard><p className="gsw-login-hint">Loading GSW…</p></AuthCard></AuthPage>;
+  if (routing) return <AuthPage><AuthCard><p className="gsw-login-hint">Opening your GSW workspace…</p></AuthCard></AuthPage>;
   if (session && window.location.pathname === "/create-password") return <PasswordSetup session={session} onComplete={() => window.location.assign("/setup")} />;
   if (session) return children;
 

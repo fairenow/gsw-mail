@@ -201,6 +201,33 @@
 .gsw-reconcile { display: grid; gap: 8px; padding: 18px; border: 1px solid var(--gsw-border); border-radius: 14px; text-align: left; }
 .gsw-reconcile h2 { font-size: 20px; }
 .gsw-reconcile p { margin: 0; color: var(--gsw-text-muted); }
+.gsw-control-center { min-height: 100dvh; display: grid; grid-template-columns: 250px 1fr; background: #fbf8f1; color: var(--gsw-text-body); }
+.gsw-control-nav { display: flex; flex-direction: column; gap: 10px; padding: 32px 24px; border-right: 1px solid var(--gsw-border); background: #fffdf9; }
+.gsw-control-nav h1 { margin: 4px 0 22px; font-size: 22px; }
+.gsw-control-nav nav { display: grid; gap: 4px; margin-bottom: auto; }
+.gsw-control-nav nav a { padding: 10px 12px; border-radius: 9px; color: var(--gsw-text-muted); text-decoration: none; }
+.gsw-control-nav nav a:hover, .gsw-control-nav nav a.is-active { background: #fff3d7; color: var(--gsw-text-heading); }
+.gsw-control-main { max-width: 1000px; width: 100%; padding: 52px clamp(24px, 5vw, 72px); }
+.gsw-control-main header { display: flex; align-items: start; justify-content: space-between; gap: 24px; }
+.gsw-control-main h2 { margin: 4px 0 8px; font-size: 36px; }
+.gsw-control-main header p { margin: 0; color: var(--gsw-text-muted); }
+.gsw-control-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 40px 0 18px; }
+.gsw-control-stats div, .gsw-control-grid article { padding: 22px; border: 1px solid var(--gsw-border); border-radius: 16px; background: #fff; }
+.gsw-control-stats strong { display: block; font-family: var(--font-display); font-size: 30px; }
+.gsw-control-stats span { color: var(--gsw-text-muted); font-size: 13px; }
+.gsw-control-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.gsw-control-grid h3 { font-size: 20px; }
+.gsw-control-grid p { min-height: 44px; color: var(--gsw-text-muted); }
+.gsw-status-pill { display: inline-block; padding: 5px 9px; border-radius: 999px; background: #fff3d7; color: var(--gsw-accent-dark); font-size: 12px; font-weight: 700; }
+@media (max-width: 700px) {
+  .gsw-control-center { display: block; }
+  .gsw-control-nav { padding: 22px; border-right: 0; border-bottom: 1px solid var(--gsw-border); }
+  .gsw-control-nav nav { display: flex; overflow-x: auto; margin-bottom: 0; }
+  .gsw-control-nav nav a { white-space: nowrap; }
+  .gsw-control-main { padding: 32px 20px; }
+  .gsw-control-main header { display: grid; }
+  .gsw-control-stats, .gsw-control-grid { grid-template-columns: 1fr; }
+}
 
 @media (max-width: 480px) {
   .gsw-login {

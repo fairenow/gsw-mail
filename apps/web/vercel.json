@@ -41,6 +41,10 @@
       "destination": "/index.html"
     },
     {
+      "source": "/control-center",
+      "destination": "/index.html"
+    },
+    {
       "source": "/settings",
       "destination": "/index.html"
     },

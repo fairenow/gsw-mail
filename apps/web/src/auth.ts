@@ -3,6 +3,14 @@ export interface AuthSession {
   session: { expiresAt: string };
 }
 
+export interface AccountContext {
+  user: { id: string; email: string | null };
+  workspaceMemberships: { id: string; name: string; role: "owner" | "admin" | "member"; status: string; setupStep: string | null; migratedFromExisting: boolean | null }[];
+  mailboxMemberships: { id: string; address: string; displayName: string | null; role: "owner" | "delegate" | "read_only"; workspaceId: string; workspaceName: string; domain: string }[];
+  onboardingComplete: boolean;
+  defaultDestination: "setup" | "control-center" | "mail";
+}
+
 async function authRequest<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`/api/auth${path}`, {
     method: body ? "POST" : "GET",
@@ -17,6 +25,14 @@ async function authRequest<T>(path: string, body?: unknown): Promise<T> {
 
 export function getSession(): Promise<AuthSession | null> {
   return authRequest<AuthSession | null>("/get-session");
+}
+
+export function getAccountContext(): Promise<AccountContext> {
+  return fetch("/api/account/context", { credentials: "include" }).then(async (response) => {
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? "Could not load account context.");
+    return result as AccountContext;
+  });
 }
 
 export function requestOneTimeCode(email: string): Promise<unknown> {

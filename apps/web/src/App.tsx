@@ -3,9 +3,11 @@ import { MailPage } from "./pages/MailPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { AppShell } from "./components/AppShell";
 import { SetupPage } from "./pages/SetupPage";
+import { ControlCenterPage } from "./pages/ControlCenterPage";
 
 export function App() {
   if (window.location.pathname === "/setup") return <SetupPage />;
+  if (window.location.pathname === "/control-center") return <ControlCenterPage />;
   const page = window.location.pathname === "/settings" ? <SettingsPage /> : window.location.pathname === "/contacts" ? <ContactsPage /> : <MailPage />;
   return <AppShell>{page}</AppShell>;
 }
