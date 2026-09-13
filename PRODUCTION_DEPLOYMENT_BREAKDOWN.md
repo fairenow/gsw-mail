@@ -286,7 +286,7 @@ mail.guidedstepswellness.com
 ```
 
 The web app talks to the GSW Mail API through Vercel rewrites declared in
-`apps/web/vercel.json`, proxying `/mail`, `/admin`, `/health`, and the PKCE
+`apps/web/vercel.json`, proxying `/mail`, `/admin`, `/product`, `/health`, and the PKCE
 `/auth/exchange` route to the Railway-hosted API URL with `/auth/callback`
 falling back to the SPA. No client-side `VITE_API_URL` is required; the browser
 stays same-origin on the Vercel domain. Every API path the web app uses must
