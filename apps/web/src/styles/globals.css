@@ -1,0 +1,90 @@
+@import "tokens.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--gsw-bg);
+  color: var(--gsw-text-body);
+  font-family: var(--font-body);
+  font-size: 14.5px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  color: var(--gsw-text-heading);
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  margin: 0;
+}
+
+button {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+input,
+textarea {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--gsw-text-heading);
+  border: 1px solid var(--gsw-border);
+  border-radius: var(--radius-sm);
+  background: var(--gsw-surface);
+  padding: 9px 12px;
+  outline: none;
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--gsw-text-muted);
+}
+
+input:focus,
+textarea:focus {
+  border-color: var(--gsw-accent);
+  box-shadow: 0 0 0 3px var(--gsw-accent-soft);
+}
+
+select {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--gsw-text-heading);
+  border: 1px solid var(--gsw-border);
+  border-radius: var(--radius-sm);
+  background: var(--gsw-surface);
+  padding: 8px 10px;
+}
+
+:root {
+  color-scheme: light;
+}
+
+::selection {
+  background: var(--gsw-accent-light);
+  color: var(--gsw-text-heading);
+}

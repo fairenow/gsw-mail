@@ -1,0 +1,108 @@
+@keyframes gsw-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes gsw-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes gsw-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes gsw-compose-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes gsw-slide-pane {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes gsw-skeleton {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+
+@keyframes gsw-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.a-fade {
+  animation: gsw-fade-in var(--dur-enter) var(--ease) both;
+}
+
+.a-rise {
+  animation: gsw-rise var(--dur-enter) var(--ease) both;
+}
+
+.a-scale {
+  animation: gsw-scale-in var(--dur-pane) var(--ease) both;
+}
+
+.a-compose {
+  animation: gsw-compose-in var(--dur-compose) var(--ease) both;
+}
+
+.a-pane {
+  animation: gsw-slide-pane var(--dur-pane) var(--ease) both;
+}
+
+.hover-lift {
+  transition:
+    transform var(--dur-row) var(--ease),
+    box-shadow var(--dur-row) var(--ease);
+}
+
+.hover-lift:hover {
+  transform: translateY(-1px);
+}
+
+.hover-fade {
+  transition:
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
+}
