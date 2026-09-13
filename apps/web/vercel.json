@@ -13,6 +13,10 @@
       "destination": "https://gsw-mail-production.up.railway.app/health"
     },
     {
+      "source": "/auth/exchange",
+      "destination": "https://gsw-mail-production.up.railway.app/auth/exchange"
+    },
+    {
       "source": "/auth/callback",
       "destination": "/index.html"
     }
