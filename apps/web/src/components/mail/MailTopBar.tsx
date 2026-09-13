@@ -16,11 +16,13 @@ export function MailTopBar({ account, accounts, search, onSearchChange, onSearch
 
   return (
     <header className="gsw-topnav">
-      <button className="gsw-nav-toggle" onClick={onToggleSidebar} aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"} title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}>☰</button>
-      <a className="gsw-topnav-brand" href="/">
-        <img className="gsw-wordmark-mark" src="/logo-3.png" alt="" aria-hidden="true" />
-        <span className="gsw-wordmark">GSW Mail</span>
-      </a>
+      <div className="gsw-topnav-brand">
+        <button className="gsw-logo-toggle" onClick={onToggleSidebar} aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"} title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}>
+          <img className="gsw-wordmark-mark" src="/logo-3.png" alt="" aria-hidden="true" />
+          <span className="gsw-logo-toggle-icon" aria-hidden="true">{sidebarCollapsed ? "›" : "‹"}</span>
+        </button>
+        <a className="gsw-wordmark" href="/">GSW Mail</a>
+      </div>
       <form className="gsw-topnav-search" onSubmit={submit} role="search">
         <span className="gsw-search-icon" aria-hidden="true">⌕</span>
         <input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Search mail" aria-label="Search mail" />
