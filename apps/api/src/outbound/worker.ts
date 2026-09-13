@@ -53,9 +53,17 @@ export function createOutboundWorker(intervalMs = 5_000): OutboundWorker {
         const job = await loadJob(jobId.id);
         if (!job) continue;
         try {
-          const relayAttachments = await resolveRelayAttachments(job);
-          const result = await relay.send(job, relayAttachments);
-          if (result.accepted) {
+           const relayAttachments = await resolveRelayAttachments(job);
+           const result = await relay.send(job, relayAttachments);
+           console.info("[outbound:worker] relay result", {
+             sendId: job.id,
+             accountId: job.accountId,
+             accepted: result.accepted,
+             permanent: result.permanent ?? false,
+             deliveryId: result.deliveryId,
+             message: result.message,
+           });
+           if (result.accepted) {
             await markAccepted(job.id, result.deliveryId);
           } else if (result.permanent) {
             await markFailed(job.id, "relay_rejected", result.message ?? "relay rejected permanently");

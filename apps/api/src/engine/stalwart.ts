@@ -98,6 +98,7 @@ const GET_PROPERTIES = [
   "references",
   "messageId",
   "hasAttachment",
+  "bodyValues",
   "attachments",
   "textBody",
   "htmlBody",
@@ -478,7 +479,9 @@ export class StalwartEngine implements MailEngine {
   ): Promise<void> {
     const { accountId } = await this.accountIdOf(engineAccountId);
     const update: Record<string, unknown> = {};
-    for (const id of messageIds) update[id] = { keywords, onDestroyRemoveKeywords: { [keyword]: true } };
+    for (const id of messageIds) {
+      update[id] = Object.fromEntries(Object.entries(keywords).map(([name, value]) => [`/keywords/${name}`, value ? true : null]));
+    }
     await this.emailSet(accountId, {
       accountId,
       ifInState: undefined,
@@ -494,7 +497,11 @@ export class StalwartEngine implements MailEngine {
     if (!targetId) throw new Error(`mailbox "${toMailbox}" not found`);
     const update: Record<string, unknown> = {};
     for (const id of messageIds) {
-      update[id] = { mailboxIds: { [targetId]: true }, onDestroyRemoveKeywords: { $seen: true, $flagged: true } };
+      update[id] = {
+        mailboxIds: { [targetId]: true },
+        "/keywords/$seen": null,
+        "/keywords/$flagged": null,
+      };
     }
     await this.emailSet(accountId, {
       accountId,

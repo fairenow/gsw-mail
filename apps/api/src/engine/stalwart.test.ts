@@ -226,6 +226,15 @@ const mailstore = (methodCalls: { name: string; args: Record<string, unknown>; i
       for (const [id, patch] of Object.entries(update)) {
         const e = emails.get(id);
         if (!e) continue;
+        for (const [path, value] of Object.entries(patch)) {
+          if (!path.startsWith("/keywords/")) continue;
+          const keyword = path.slice("/keywords/".length);
+          if (value === null) {
+            if (patch.mailboxIds) delete e.keywords[keyword];
+            else e.keywords[keyword] = false;
+          }
+          else e.keywords[keyword] = Boolean(value);
+        }
         if (patch.keywords) e.keywords = { ...(e.keywords ?? {}), ...(patch.keywords as Record<string, boolean>) };
         if (patch.mailboxIds) {
           const previous = Object.keys(e.mailboxIds ?? {});
