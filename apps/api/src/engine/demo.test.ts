@@ -28,6 +28,25 @@ test("saveDraft places a retrievable draft in Drafts", async () => {
   assert.equal(draft.subject, "Draft subject");
 });
 
+test("updateDraft keeps one draft and preserves reply headers", async () => {
+  const engine = new DemoEngine();
+  const id = await engine.saveDraft("account-a", { from: "a@example.com", to: [], subject: "Draft", textBody: "one" });
+  await engine.updateDraft("account-a", id, {
+    from: "a@example.com",
+    to: ["b@example.com"],
+    subject: "Re: Draft",
+    textBody: "two",
+    inReplyTo: "<original@example.com>",
+    references: "<original@example.com>",
+  });
+  const draft = await engine.getMessage("account-a", id);
+  assert.equal(draft?.subject, "Re: Draft");
+  assert.equal(draft?.textBody, "two");
+  assert.equal(draft?.headers["In-Reply-To"], "<original@example.com>");
+  assert.equal(draft?.headers.References, "<original@example.com>");
+  assert.equal((await engine.listMessages("account-a", { mailbox: "Drafts" })).filter((message) => message.engineId === id).length, 1);
+});
+
 test("saveSent preserves the RFC Message-ID and findMessageByRfcMessageId round-trips", async () => {
   const engine = new DemoEngine();
   const messageId = "<00000000-0000-4000-8000-0000000000aa@mail.guidedstepswellness.com>";

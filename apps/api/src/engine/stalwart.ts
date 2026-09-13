@@ -53,9 +53,9 @@ interface JmapEmail {
   cc?: JmapEmailAddress[];
   bcc?: JmapEmailAddress[];
   replyTo?: JmapEmailAddress[];
-  inReplyTo?: string;
-  references?: string;
-  messageId?: string;
+  inReplyTo?: string | string[];
+  references?: string | string[];
+  messageId?: string | string[];
   hasAttachment?: boolean;
   attachments?: {
     blobId: string;
@@ -130,6 +130,11 @@ const firstFrom = (a?: JmapEmailAddress[]): MessageAddress | undefined => {
         ...(f.name ? { name: f.name } : {}),
       }
     : undefined;
+};
+
+const messageIdsToHeader = (value?: string | string[]): string | undefined => {
+  if (Array.isArray(value)) return value.length > 0 ? value.join(" ") : undefined;
+  return value;
 };
 
 const snippetOf = (email: JmapEmail): string => {
@@ -339,9 +344,9 @@ export class StalwartEngine implements MailEngine {
     const mailbox = await this.mailboxNameById(engineAccountId, summary.mailbox);
     const headers: Record<string, string> = {};
     const headerMap: [string, string | null | undefined][] = [
-      ["Message-ID", email["header:Message-ID"] ?? email.messageId],
-      ["In-Reply-To", email["header:In-Reply-To"] ?? email.inReplyTo],
-      ["References", email["header:References"] ?? email.references],
+      ["Message-ID", email["header:Message-ID"] ?? messageIdsToHeader(email.messageId)],
+      ["In-Reply-To", email["header:In-Reply-To"] ?? messageIdsToHeader(email.inReplyTo)],
+      ["References", email["header:References"] ?? messageIdsToHeader(email.references)],
     ];
     for (const [name, value] of headerMap) {
       if (value) headers[name] = value;
@@ -474,9 +479,9 @@ export class StalwartEngine implements MailEngine {
       bcc: (input.bcc ?? []).map((email) => ({ email })),
       ...(input.replyTo ? { replyTo: [{ email: input.replyTo }] } : {}),
       subject: input.subject ?? "",
-      ...(input.messageId ? { messageId: input.messageId, header: { "Message-ID": [input.messageId] } } : {}),
-      ...(input.inReplyTo ? { inReplyTo: input.inReplyTo, header: { "In-Reply-To": [input.inReplyTo] } } : {}),
-      ...(input.references ? { references: input.references, header: { "References": [input.references] } } : {}),
+      ...(input.messageId ? { messageId: [input.messageId] } : {}),
+      ...(input.inReplyTo ? { inReplyTo: [input.inReplyTo] } : {}),
+      ...(input.references ? { references: [input.references] } : {}),
       bodyValues,
       ...(body ? { textBody: body } : {}),
       ...(html ? { htmlBody: html } : {}),
@@ -546,6 +551,26 @@ export class StalwartEngine implements MailEngine {
   async saveDraft(engineAccountId: EngineAccountId, input: SendDraftInput): Promise<EngineMessageId> {
     const result = await this.createDraftOrSent(engineAccountId, input, "drafts");
     return result.engineMessageId;
+  }
+
+  async updateDraft(engineAccountId: EngineAccountId, messageId: EngineMessageId, input: SendDraftInput): Promise<void> {
+    const { accountId } = await this.accountIdOf(engineAccountId);
+    const bodyValues: Record<string, unknown> = {
+      ...(input.textBody !== undefined ? { body: { value: input.textBody } } : {}),
+      ...(input.htmlBody !== undefined ? { htmlBody: { value: input.htmlBody } } : {}),
+    };
+    const update: Record<string, unknown> = {
+      to: input.to.map((email) => ({ email })),
+      cc: (input.cc ?? []).map((email) => ({ email })),
+      bcc: (input.bcc ?? []).map((email) => ({ email })),
+      subject: input.subject ?? "",
+      ...(input.inReplyTo ? { inReplyTo: [input.inReplyTo] } : {}),
+      ...(input.references ? { references: [input.references] } : {}),
+      ...(Object.keys(bodyValues).length ? { bodyValues } : {}),
+      ...(input.textBody !== undefined ? { textBody: [{ partId: "body", type: "text/plain", charset: "utf-8", size: input.textBody.length }] } : {}),
+      ...(input.htmlBody !== undefined ? { htmlBody: [{ partId: "htmlBody", type: "text/html", charset: "utf-8", size: input.htmlBody.length }] } : {}),
+    };
+    await this.client.call([["Email/set", { accountId, update: { [messageId]: update }, create: undefined, destroy: undefined, ifInState: undefined }, "s1"]]);
   }
 
   async saveSent(engineAccountId: EngineAccountId, input: SendDraftInput): Promise<SendResult> {

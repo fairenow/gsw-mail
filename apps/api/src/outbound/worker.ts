@@ -62,9 +62,17 @@ export function createOutboundWorker(intervalMs = 5_000): OutboundWorker {
           } else {
             await markTransportRetry(job.id, result.message ?? "relay deferred");
           }
-        } catch (err) {
-          await markTransportRetry(job.id, err instanceof Error ? err.message : String(err));
-        }
+         } catch (err) {
+           console.warn("[outbound:worker] delivery failed", {
+             error: err instanceof Error ? err.message : String(err),
+             accountId: job.accountId,
+             sendId: job.id,
+             recipients: { to: job.to, cc: job.cc ?? [], bccCount: job.bcc?.length ?? 0 },
+             subject: job.subject ?? "",
+             threading: { hasInReplyTo: Boolean(job.inReplyTo), hasReferences: Boolean(job.references) },
+           });
+           await markTransportRetry(job.id, err instanceof Error ? err.message : String(err));
+         }
       }
     } catch (err) {
       console.warn("[outbound:worker] run failed", err instanceof Error ? err.message : err);

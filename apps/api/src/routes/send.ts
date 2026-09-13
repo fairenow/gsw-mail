@@ -15,6 +15,7 @@ const sendSchema = z.object({
   replyTo: z.string().email().optional(),
   inReplyTo: z.string().optional(),
   references: z.string().optional(),
+  mode: z.enum(["new", "reply", "replyAll", "forward"]).optional(),
   attachments: z
     .array(
       z.object({
@@ -37,30 +38,42 @@ export default async (app: FastifyInstance) => {
   app.post("/mail/send", async (req, reply) => {
     const input = sendSchema.parse(req.body);
     const account = await requireAccountPermission(req.user!.id, input.accountId, "send");
-    const result = await submitSend({
-      userId: req.user!.id,
-      accessToken: req.accessToken,
-      account,
-      to: input.to,
-      cc: input.cc,
-      bcc: input.bcc,
-      subject: input.subject,
-      textBody: input.textBody,
-      htmlBody: input.htmlBody,
-      replyTo: input.replyTo,
-      inReplyTo: input.inReplyTo,
-      references: input.references,
-      attachments: input.attachments,
-      clientRequestId: input.clientRequestId,
-    });
-    reply.code(202);
-    return {
-      sendId: result.sendId,
-      messageId: result.messageId,
-      threadId: result.threadId,
-      status: result.transportStatus,
-      undoUntil: result.undoUntil,
-      ...(result.idempotentReplay ? { idempotentReplay: true } : {}),
-    };
+    try {
+      const result = await submitSend({
+        userId: req.user!.id,
+        accessToken: req.accessToken,
+        account,
+        to: input.to,
+        cc: input.cc,
+        bcc: input.bcc,
+        subject: input.subject,
+        textBody: input.textBody,
+        htmlBody: input.htmlBody,
+        replyTo: input.replyTo,
+        inReplyTo: input.inReplyTo,
+        references: input.references,
+        attachments: input.attachments,
+        clientRequestId: input.clientRequestId,
+      });
+      reply.code(202);
+      return {
+        sendId: result.sendId,
+        messageId: result.messageId,
+        threadId: result.threadId,
+        status: result.transportStatus,
+        undoUntil: result.undoUntil,
+        ...(result.idempotentReplay ? { idempotentReplay: true } : {}),
+      };
+    } catch (error) {
+      req.log.error({
+        err: error,
+        accountId: input.accountId,
+        replyMode: input.mode ?? (input.inReplyTo ? "reply" : "new"),
+        recipients: { to: input.to, cc: input.cc ?? [], bccCount: input.bcc?.length ?? 0 },
+        subject: input.subject ?? "",
+        threading: { hasInReplyTo: Boolean(input.inReplyTo), hasReferences: Boolean(input.references) },
+      }, "mail send failed");
+      throw error;
+    }
   });
 };

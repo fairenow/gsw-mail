@@ -123,6 +123,8 @@ export interface MailEngine {
 
   saveDraft(accountId: EngineAccountId, input: SendDraftInput): Promise<EngineMessageId>;
 
+  updateDraft(accountId: EngineAccountId, messageId: EngineMessageId, input: SendDraftInput): Promise<void>;
+
   saveSent(accountId: EngineAccountId, input: SendDraftInput): Promise<SendResult>;
 
   findMessageByRfcMessageId(

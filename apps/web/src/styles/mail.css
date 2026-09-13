@@ -667,6 +667,48 @@
   animation: gsw-compose-enter var(--dur-compose) var(--ease);
 }
 
+.gsw-compose-minimized {
+  position: fixed;
+  right: 28px;
+  bottom: 24px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 12px 16px;
+  border: 1px solid var(--gsw-border);
+  border-radius: var(--radius-md);
+  background: var(--gsw-surface);
+  box-shadow: var(--shadow-3);
+  text-align: left;
+  animation: gsw-compose-enter var(--dur-compose) var(--ease);
+}
+
+.gsw-compose-minimized span:first-child {
+  min-width: 0;
+}
+
+.gsw-compose-minimized strong,
+.gsw-compose-minimized small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gsw-compose-minimized strong {
+  color: var(--gsw-text-heading);
+  font-size: 13px;
+}
+
+.gsw-compose-minimized small,
+.gsw-compose-minimized-status {
+  color: var(--gsw-text-muted);
+  font-size: 12px;
+}
+
 .gsw-compose-head {
   display: flex;
   align-items: center;
@@ -678,6 +720,24 @@
 
 .gsw-compose-head strong {
   font-size: 14px;
+}
+
+.gsw-compose-head > div {
+  display: flex;
+  gap: 4px;
+}
+
+.gsw-compose-head-action {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.gsw-compose-head-action:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .gsw-compose-close {
@@ -766,6 +826,8 @@
   .gsw-toolbar button { flex: 0 0 auto; padding-inline: 10px; }
   .gsw-message-list-head { padding: 12px; }
   .gsw-compose-window { right: 8px; bottom: 8px; width: calc(100vw - 16px); }
+  .gsw-compose-window { inset: 58px 0 0; width: 100%; border-radius: 0; }
+  .gsw-compose-minimized { right: 8px; bottom: 8px; width: calc(100vw - 16px); }
 }
 
 .gsw-reading-empty {

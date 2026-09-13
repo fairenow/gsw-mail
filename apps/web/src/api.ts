@@ -48,6 +48,16 @@ interface MessagesResponse {
   messages: MessageSummary[];
 }
 
+export interface DraftInput {
+  accountId: string;
+  to?: string[];
+  cc?: string[];
+  subject?: string;
+  textBody?: string;
+  inReplyTo?: string;
+  references?: string;
+}
+
 const headers = (jsonBody = false): Record<string, string> => {
   const token = accessToken();
   return {
@@ -79,8 +89,11 @@ export const api = {
   archive: (accountId: string, engineId: string) => post(`/mail/messages/${engineId}/archive`, { accountId }),
   trash: (accountId: string, engineId: string) => post(`/mail/messages/${engineId}/trash`, { accountId }),
   search: (accountId: string, q: string) => get<MessagesResponse>(`/mail/search?accountId=${accountId}&q=${encodeURIComponent(q)}`).then((r) => r.messages),
-  send: (accountId: string, to: string[], body: { cc?: string[]; subject?: string; textBody?: string; inReplyTo?: string; references?: string; clientRequestId?: string }) =>
+  send: (accountId: string, to: string[], body: { cc?: string[]; subject?: string; textBody?: string; inReplyTo?: string; references?: string; mode?: "new" | "reply" | "replyAll" | "forward"; clientRequestId?: string }) =>
     post<SendResult>("/mail/send", { accountId, to, ...body }),
+  createDraft: (body: DraftInput) => post<{ engineId: string }>("/mail/drafts", body),
+  updateDraft: (id: string, body: DraftInput) => fetch(`/mail/drafts/${id}`, { method: "PATCH", headers: headers(true), body: JSON.stringify(body) }).then((res) => { if (res.status === 401) logout(); if (!res.ok) throw new Error(`draft save failed: ${res.status}`); }),
+  sendDraft: (id: string, accountId: string, clientRequestId?: string, mode?: "new" | "reply" | "replyAll" | "forward") => post<SendResult>(`/mail/drafts/${id}/send`, { accountId, ...(clientRequestId ? { clientRequestId } : {}), ...(mode ? { mode } : {}) }),
   sendStatus: (sendId: string) => get<never>("/mail/sends/" + sendId),
   cancelSend: (sendId: string) => post<{ status: string }>(`/mail/sends/${sendId}/cancel`),
   retrySend: (sendId: string, accountId: string) => post<{ status: string }>(`/mail/sends/${sendId}/retry`, { accountId }),

@@ -117,7 +117,7 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
     });
   } catch (err) {
     await failSendPreparation(reserve.id, "sent_persistence", err instanceof Error ? err.message : String(err));
-    throw new Error("failed to persist sent message");
+    throw new Error("failed to persist sent message", { cause: err });
   }
 
   if (sent.attachments?.length) {

@@ -426,6 +426,8 @@ test("saveSent uploads attachments and creates in Sent", async () => {
     subject: "With attachment",
     textBody: "See pdf",
     messageId: "<send-1@gs.com>",
+    inReplyTo: "<previous@gs.com>",
+    references: "<previous@gs.com>",
     attachments: [
       { filename: "report.pdf", contentType: "application/pdf", size: 9, content },
     ],
@@ -443,6 +445,15 @@ test("saveSent uploads attachments and creates in Sent", async () => {
   assert.equal(created.bodyValues?.[bodyKey]?.value, "See pdf");
   const uploadRequest = requestLog.find((l) => l.url.includes("/jmap/upload/"));
   assert.ok(uploadRequest, "upload request was made");
+  const jmapRequests = requestLog.filter((l) => l.url.endsWith("/jmap"));
+  const jmapRequest = jmapRequests[jmapRequests.length - 1];
+  const jmapBody = JSON.parse(jmapRequest!.body!) as { methodCalls: [string, Record<string, unknown>, string][] };
+  const emailSet = jmapBody.methodCalls.find(([name]) => name === "Email/set");
+  const create = (emailSet![1].create as Record<string, Record<string, unknown>>)["c1"]!;
+  assert.deepEqual(create.messageId, ["<send-1@gs.com>"]);
+  assert.deepEqual(create.inReplyTo, ["<previous@gs.com>"]);
+  assert.deepEqual(create.references, ["<previous@gs.com>"]);
+  assert.equal(create.header, undefined);
 });
 
 test("saveSent without content throws", async () => {

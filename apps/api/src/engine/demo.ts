@@ -173,6 +173,22 @@ export class DemoEngine implements MailEngine {
     return id;
   }
 
+  async updateDraft(accountId: EngineAccountId, messageId: EngineMessageId, input: SendDraftInput): Promise<void> {
+    const draft = this.store(accountId).find((message) => message.engineId === messageId && message.mailbox === "Drafts");
+    if (!draft) throw new Error("draft not found");
+    draft.to = input.to.map((email) => ({ email }));
+    draft.cc = (input.cc ?? []).map((email) => ({ email }));
+    draft.subject = input.subject ?? "";
+    draft.textBody = input.textBody;
+    draft.snippet = input.textBody?.slice(0, 80);
+    draft.size = (input.textBody ?? "").length;
+    draft.date = new Date();
+    draft.headers = {
+      ...(input.inReplyTo ? { "In-Reply-To": input.inReplyTo } : {}),
+      ...(input.references ? { References: input.references } : {}),
+    };
+  }
+
   async saveSent(accountId: EngineAccountId, input: SendDraftInput): Promise<SendResult> {
     const id = `demo-${++seq}`;
     const threadId = `t-sent-${id}`;
