@@ -62,6 +62,15 @@
   transition: opacity var(--dur-fast) var(--ease);
 }
 
+.gsw-logo-toggle .gsw-wordmark-mark {
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+.gsw-logo-toggle:hover .gsw-wordmark-mark,
+.gsw-logo-toggle:focus-visible .gsw-wordmark-mark {
+  opacity: 0;
+}
+
 .gsw-logo-toggle:hover .gsw-logo-toggle-icon,
 .gsw-logo-toggle:focus-visible .gsw-logo-toggle-icon {
   opacity: 1;
