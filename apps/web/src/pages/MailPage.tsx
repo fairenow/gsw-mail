@@ -48,7 +48,9 @@ export function MailPage() {
   const [lastSend, setLastSend] = useState<SendResult | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [draftDirty, setDraftDirty] = useState(false);
+  const [draftRetryCount, setDraftRetryCount] = useState(0);
   const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved" | "notSaved">("idle");
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const loadFolder = useCallback(async (accountId: string, name: Folder) => {
     setError(null);
@@ -84,7 +86,7 @@ export function MailPage() {
   };
 
   const openDraft = (draft: FullMessage) => {
-    setComposeMode("new"); setCompose(true); setComposeMinimized(false); setDraftId(draft.engineId); setDraftDirty(false); setDraftStatus("saved"); setLastSend(null);
+    setComposeMode("new"); setCompose(true); setComposeMinimized(false); setDraftId(draft.engineId); setDraftDirty(false); setDraftRetryCount(0); setDraftStatus("saved"); setLastSend(null); setSendError(null);
     setTo(draft.to?.map((item) => item.email).join(", ") ?? ""); setCc(draft.cc?.map((item) => item.email).join(", ") ?? ""); setSubject(draft.subject); setText(messageBody(draft));
     setInReplyTo(draft.headers?.["In-Reply-To"]); setReferences(draft.headers?.References);
   };
@@ -109,14 +111,14 @@ export function MailPage() {
   };
 
   const openCompose = (mode: ComposeMode = "new", message?: FullMessage) => {
-    setComposeMode(mode); setLastSend(null); setCompose(true); setComposeMinimized(false); setDraftId(null); setDraftDirty(mode !== "new"); setDraftStatus("idle");
+    setComposeMode(mode); setLastSend(null); setSendError(null); setCompose(true); setComposeMinimized(false); setDraftId(null); setDraftDirty(mode !== "new"); setDraftRetryCount(0); setDraftStatus("idle");
     const currentAccount = account;
     if (!message) {
       const stored = mode === "new" && currentAccount ? localStorage.getItem(localDraftKey(currentAccount.id)) : null;
       if (stored) {
         try {
           const local = JSON.parse(stored) as { to?: string; cc?: string; subject?: string; text?: string; inReplyTo?: string; references?: string; mode?: ComposeMode };
-          setComposeMode(local.mode ?? "new"); setTo(local.to ?? ""); setCc(local.cc ?? ""); setSubject(local.subject ?? ""); setText(local.text ?? ""); setInReplyTo(local.inReplyTo); setReferences(local.references); setDraftDirty(true); setDraftStatus("notSaved");
+          setComposeMode(local.mode ?? "new"); setTo(local.to ?? ""); setCc(local.cc ?? ""); setSubject(local.subject ?? ""); setText(local.text ?? ""); setInReplyTo(local.inReplyTo); setReferences(local.references); setDraftDirty(true); setDraftRetryCount(0); setDraftStatus("notSaved");
           return;
         } catch {
           if (currentAccount) localStorage.removeItem(localDraftKey(currentAccount.id));
@@ -143,8 +145,8 @@ export function MailPage() {
 
   const draftPayload = useCallback((): import("../api").DraftInput | null => {
     if (!account) return null;
-    return { accountId: account.id, to: parseRecipients(to), cc: parseRecipients(cc), subject, textBody: text, inReplyTo, references };
-  }, [account, cc, inReplyTo, references, subject, text, to]);
+    return { accountId: account.id, to: parseRecipients(to), cc: parseRecipients(cc), subject, textBody: text, inReplyTo, references, mode: composeMode };
+  }, [account, cc, composeMode, inReplyTo, references, subject, text, to]);
 
   const saveDraft = useCallback(async (force = false): Promise<string | null> => {
     if (!account || !compose || (!draftDirty && !force)) return draftId;
@@ -152,23 +154,24 @@ export function MailPage() {
     if (!payload) return draftId;
     setDraftStatus("saving");
     try {
-      const savedId = draftId ?? (await api.createDraft(payload)).engineId;
-      if (draftId) await api.updateDraft(savedId, payload);
+      const savedId = draftId ? (await api.updateDraft(draftId, payload)).engineId : (await api.createDraft(payload)).engineId;
       localStorage.removeItem(localDraftKey(account.id));
-      setDraftId(savedId); setDraftDirty(false); setDraftStatus("saved");
+      setDraftId(savedId); setDraftDirty(false); setDraftRetryCount(0); setDraftStatus("saved");
       return savedId;
     } catch {
       localStorage.setItem(localDraftKey(account.id), JSON.stringify({ mode: composeMode, to, cc, subject, text, inReplyTo, references }));
+      setDraftRetryCount((count) => Math.min(count + 1, 4));
       setDraftStatus("notSaved");
       return null;
     }
   }, [account, cc, compose, composeMode, draftDirty, draftId, draftPayload, inReplyTo, references, subject, text, to]);
 
   useEffect(() => {
-    if (!compose || !draftDirty) return;
-    const timer = window.setTimeout(() => { void saveDraft(); }, 1500);
+    if (!compose || !draftDirty || draftRetryCount >= 4) return;
+    const retryDelays = [1500, 3000, 8000, 20000];
+    const timer = window.setTimeout(() => { void saveDraft(); }, retryDelays[draftRetryCount]);
     return () => window.clearTimeout(timer);
-  }, [compose, draftDirty, to, cc, subject, text, saveDraft]);
+  }, [compose, draftDirty, draftRetryCount, to, cc, subject, text, saveDraft]);
 
   useEffect(() => {
     const saveOnHide = () => { if (document.visibilityState === "hidden") void saveDraft(true); };
@@ -179,16 +182,16 @@ export function MailPage() {
   const runSend = async () => {
     if (!account) return;
     try {
-      setError(null); setSending(true);
+      setError(null); setSendError(null); setSending(true);
       const clientRequestId = crypto.randomUUID();
       const savedId = await saveDraft(true);
       const result = savedId
         ? await api.sendDraft(savedId, account.id, clientRequestId, composeMode)
         : await api.send(account.id, parseRecipients(to), { cc: parseRecipients(cc), subject, textBody: text, inReplyTo, references, mode: composeMode, clientRequestId });
-      setLastSend(result); setCompose(false); setComposeMinimized(false); setSending(false); setDraftId(null); setDraftDirty(false);
+      setLastSend(result); setSendError(null); setCompose(false); setComposeMinimized(false); setSending(false); setDraftId(null); setDraftDirty(false); setDraftRetryCount(0);
       localStorage.removeItem(localDraftKey(account.id));
       setTo(""); setCc(""); setSubject(""); setText(""); setInReplyTo(undefined); setReferences(undefined);
-    } catch (err) { setSending(false); setError(err instanceof Error ? err.message : String(err)); }
+    } catch (err) { const message = err instanceof Error ? err.message : String(err); setSending(false); setSendError(message); setError(message); }
   };
 
   const runUndo = async () => {
@@ -211,6 +214,6 @@ export function MailPage() {
         {open ? <MessageReader message={open} accountAddress={account?.address} onBack={() => setMobileView("messages")} onReply={() => openCompose("reply", open)} onReplyAll={() => openCompose("replyAll", open)} onForward={() => openCompose("forward", open)} onArchive={() => void runAction("archive", open.engineId)} onTrash={() => void runAction("trash", open.engineId)} /> : <EmptyReader />}
       </section>
     </main>
-    {compose && <ComposeWindow mode={composeMode} minimized={composeMinimized} to={to} cc={cc} subject={subject} text={text} sending={sending} draftStatus={draftStatus} sendNote={lastSend ? `Sent · ${lastSend.status}` : undefined} onToChange={(value) => { setTo(value); setDraftDirty(true); }} onCcChange={(value) => { setCc(value); setDraftDirty(true); }} onSubjectChange={(value) => { setSubject(value); setDraftDirty(true); }} onTextChange={(value) => { setText(value); setDraftDirty(true); }} onMinimize={() => { void saveDraft(true); setComposeMinimized(true); }} onClose={() => { void saveDraft(true); setCompose(false); }} onSubmit={() => void runSend()} onUndo={lastSend ? () => void runUndo() : undefined} />}
+    {compose && <ComposeWindow mode={composeMode} minimized={composeMinimized} to={to} cc={cc} subject={subject} text={text} sending={sending} draftStatus={draftStatus} sendError={sendError} sendNote={lastSend ? `Sent · ${lastSend.status}` : undefined} onToChange={(value) => { setTo(value); setDraftDirty(true); setDraftRetryCount(0); }} onCcChange={(value) => { setCc(value); setDraftDirty(true); setDraftRetryCount(0); }} onSubjectChange={(value) => { setSubject(value); setDraftDirty(true); setDraftRetryCount(0); }} onTextChange={(value) => { setText(value); setDraftDirty(true); setDraftRetryCount(0); }} onMinimize={() => { void saveDraft(true); setComposeMinimized(true); }} onClose={() => { void saveDraft(true); setCompose(false); }} onSubmit={() => void runSend()} onRetry={() => void runSend()} onUndo={lastSend ? () => void runUndo() : undefined} />}
   </div>;
 }

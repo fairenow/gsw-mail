@@ -123,7 +123,7 @@ export interface MailEngine {
 
   saveDraft(accountId: EngineAccountId, input: SendDraftInput): Promise<EngineMessageId>;
 
-  updateDraft(accountId: EngineAccountId, messageId: EngineMessageId, input: SendDraftInput): Promise<void>;
+  updateDraft(accountId: EngineAccountId, messageId: EngineMessageId, input: SendDraftInput): Promise<EngineMessageId>;
 
   saveSent(accountId: EngineAccountId, input: SendDraftInput): Promise<SendResult>;
 

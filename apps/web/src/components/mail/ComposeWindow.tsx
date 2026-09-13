@@ -2,7 +2,7 @@ import type { FormEvent } from "react";
 
 export type ComposeMode = "new" | "reply" | "replyAll" | "forward";
 
-export function ComposeWindow({ mode, minimized, to, cc, subject, text, sending, draftStatus, sendNote, onToChange, onCcChange, onSubjectChange, onTextChange, onMinimize, onClose, onSubmit, onUndo }: {
+export function ComposeWindow({ mode, minimized, to, cc, subject, text, sending, draftStatus, sendError, sendNote, onToChange, onCcChange, onSubjectChange, onTextChange, onMinimize, onClose, onSubmit, onRetry, onUndo }: {
   mode: ComposeMode;
   minimized: boolean;
   to: string;
@@ -11,6 +11,7 @@ export function ComposeWindow({ mode, minimized, to, cc, subject, text, sending,
   text: string;
   sending: boolean;
   draftStatus: "idle" | "saving" | "saved" | "notSaved";
+  sendError?: string | null;
   sendNote?: string;
   onToChange: (value: string) => void;
   onCcChange: (value: string) => void;
@@ -19,6 +20,7 @@ export function ComposeWindow({ mode, minimized, to, cc, subject, text, sending,
   onMinimize: () => void;
   onClose: () => void;
   onSubmit: () => void;
+  onRetry: () => void;
   onUndo?: () => void;
 }) {
   const submit = (event: FormEvent) => { event.preventDefault(); onSubmit(); };
@@ -32,7 +34,7 @@ export function ComposeWindow({ mode, minimized, to, cc, subject, text, sending,
       <input value={cc} onChange={(event) => onCcChange(event.target.value)} placeholder="Cc" aria-label="Cc" />
       <input value={subject} onChange={(event) => onSubjectChange(event.target.value)} placeholder="Subject" aria-label="Subject" />
       <textarea value={text} onChange={(event) => onTextChange(event.target.value)} placeholder="Write a message" aria-label="Message body" />
-      <div className="gsw-compose-actions"><span className="gsw-send-note">{status || sendNote}{sendNote && onUndo && <button type="button" className="gsw-link-btn" onClick={onUndo}>Undo</button>}</span><button className="gsw-primary-btn" type="submit" disabled={sending}>{sending ? "Sending..." : "Send"}</button></div>
+      <div className="gsw-compose-actions"><span className={`gsw-send-note ${sendError ? "gsw-send-error" : ""}`}>{sendError || status || sendNote}{sendError && <button type="button" className="gsw-link-btn" onClick={onRetry}>Retry</button>}{sendNote && onUndo && <button type="button" className="gsw-link-btn" onClick={onUndo}>Undo</button>}</span><button className="gsw-primary-btn" type="submit" disabled={sending}>{sending ? "Sending..." : "Send"}</button></div>
     </form>
   </section>;
 }

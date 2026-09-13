@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
 import { getEngine } from "../engine/index.js";
+import { describeJmapFailure } from "../lib/jmapError.js";
 import { notFound } from "../lib/errors.js";
 import { submitSend } from "../outbound/sendFlow.js";
 
@@ -17,6 +18,7 @@ const draftSchema = z.object({
   replyTo: z.string().email().optional(),
   inReplyTo: z.string().optional(),
   references: z.string().optional(),
+  mode: z.enum(["new", "reply", "replyAll", "forward"]).optional(),
 });
 
 const sendDraftSchema = z.object({
@@ -32,40 +34,49 @@ export default async (app: FastifyInstance) => {
     const input = draftSchema.parse(req.body);
     const account = await requireAccountPermission(req.user!.id, input.accountId, "send");
     const engine = getEngine(req.accessToken);
-    const engineId = await engine.saveDraft(account.id, {
-      from: account.address,
-      to: input.to ?? [],
-      cc: input.cc,
-      bcc: input.bcc,
-      subject: input.subject,
-      textBody: input.textBody,
-      htmlBody: input.htmlBody,
-      replyTo: input.replyTo,
-      inReplyTo: input.inReplyTo,
-      references: input.references,
-    });
-    reply.code(201);
-    return { engineId };
+    try {
+      const engineId = await engine.saveDraft(account.id, {
+        from: account.address,
+        to: input.to ?? [],
+        cc: input.cc,
+        bcc: input.bcc,
+        subject: input.subject,
+        textBody: input.textBody,
+        htmlBody: input.htmlBody,
+        replyTo: input.replyTo,
+        inReplyTo: input.inReplyTo,
+        references: input.references,
+      });
+      reply.code(201);
+      return { engineId };
+    } catch (error) {
+      req.log.error({ err: error, jmap: { method: "Email/set", operation: "create" }, ...draftLogContext(input, error) }, "draft creation failed");
+      throw error;
+    }
   });
 
   app.patch<{ Params: { id: string } }>("/mail/drafts/:id", async (req, reply) => {
     const input = draftSchema.parse(req.body);
     const account = await requireAccountPermission(req.user!.id, input.accountId, "send");
     const engine = getEngine(req.accessToken);
-    await engine.updateDraft(account.id, req.params.id, {
-      from: account.address,
-      to: input.to ?? [],
-      cc: input.cc,
-      bcc: input.bcc,
-      subject: input.subject,
-      textBody: input.textBody,
-      htmlBody: input.htmlBody,
-      replyTo: input.replyTo,
-      inReplyTo: input.inReplyTo,
-      references: input.references,
-    });
-    reply.code(204);
-    return;
+    try {
+      const engineId = await engine.updateDraft(account.id, req.params.id, {
+        from: account.address,
+        to: input.to ?? [],
+        cc: input.cc,
+        bcc: input.bcc,
+        subject: input.subject,
+        textBody: input.textBody,
+        htmlBody: input.htmlBody,
+        replyTo: input.replyTo,
+        inReplyTo: input.inReplyTo,
+        references: input.references,
+      });
+      return { engineId };
+    } catch (error) {
+      req.log.error({ err: error, jmap: { method: "Email/set", operation: "replace" }, draftId: req.params.id, ...draftLogContext(input, error) }, "draft update failed");
+      throw error;
+    }
   });
 
   app.post<{ Params: { id: string } }>("/mail/drafts/:id/send", async (req, reply) => {
@@ -95,11 +106,13 @@ export default async (app: FastifyInstance) => {
     } catch (error) {
       req.log.error({
         err: error,
+        jmap: { method: "Email/set", operation: "sent" },
         accountId: body.accountId,
         replyMode: body.mode ?? (draft.headers["In-Reply-To"] ? "reply" : "new"),
         recipients: { to: draft.to.map((a) => a.email), cc: draft.cc.map((a) => a.email), bccCount: draft.headers.Bcc ? 1 : 0 },
         subject: draft.subject,
         threading: { hasInReplyTo: Boolean(draft.headers["In-Reply-To"]), hasReferences: Boolean(draft.headers.References) },
+        jmapFailure: describeJmapFailure(error),
       }, "draft send failed");
       throw error;
     }
@@ -118,3 +131,14 @@ export default async (app: FastifyInstance) => {
     };
   });
 };
+
+function draftLogContext(input: { accountId: string; to?: string[] | undefined; cc?: string[] | undefined; subject?: string | undefined; inReplyTo?: string | undefined; references?: string | undefined; mode?: string | undefined }, error: unknown) {
+  return {
+    accountId: input.accountId,
+    mode: input.mode ?? (input.inReplyTo ? "reply" : "new"),
+    recipientCount: (input.to?.length ?? 0) + (input.cc?.length ?? 0),
+    subjectPresent: Boolean(input.subject),
+    threading: { hasInReplyTo: Boolean(input.inReplyTo), hasReferences: Boolean(input.references) },
+    jmapFailure: describeJmapFailure(error),
+  };
+}

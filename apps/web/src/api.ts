@@ -56,6 +56,7 @@ export interface DraftInput {
   textBody?: string;
   inReplyTo?: string;
   references?: string;
+  mode?: "new" | "reply" | "replyAll" | "forward";
 }
 
 const headers = (jsonBody = false): Record<string, string> => {
@@ -92,7 +93,7 @@ export const api = {
   send: (accountId: string, to: string[], body: { cc?: string[]; subject?: string; textBody?: string; inReplyTo?: string; references?: string; mode?: "new" | "reply" | "replyAll" | "forward"; clientRequestId?: string }) =>
     post<SendResult>("/mail/send", { accountId, to, ...body }),
   createDraft: (body: DraftInput) => post<{ engineId: string }>("/mail/drafts", body),
-  updateDraft: (id: string, body: DraftInput) => fetch(`/mail/drafts/${id}`, { method: "PATCH", headers: headers(true), body: JSON.stringify(body) }).then((res) => { if (res.status === 401) logout(); if (!res.ok) throw new Error(`draft save failed: ${res.status}`); }),
+  updateDraft: (id: string, body: DraftInput) => fetch(`/mail/drafts/${id}`, { method: "PATCH", headers: headers(true), body: JSON.stringify(body) }).then(async (res) => { if (res.status === 401) logout(); if (!res.ok) throw new Error(`draft save failed: ${res.status}`); return (await res.json()) as { engineId: string }; }),
   sendDraft: (id: string, accountId: string, clientRequestId?: string, mode?: "new" | "reply" | "replyAll" | "forward") => post<SendResult>(`/mail/drafts/${id}/send`, { accountId, ...(clientRequestId ? { clientRequestId } : {}), ...(mode ? { mode } : {}) }),
   sendStatus: (sendId: string) => get<never>("/mail/sends/" + sendId),
   cancelSend: (sendId: string) => post<{ status: string }>(`/mail/sends/${sendId}/cancel`),

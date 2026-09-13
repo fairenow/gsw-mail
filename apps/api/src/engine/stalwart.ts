@@ -1,4 +1,4 @@
-import { JmapClient, type JmapSession } from "./jmap.js";
+import { JmapClient, JmapError, type JmapSession } from "./jmap.js";
 import type {
   AttachmentBody,
   AttachmentMeta,
@@ -465,9 +465,9 @@ export class StalwartEngine implements MailEngine {
       ...(input.textBody ? { body: { value: input.textBody } } : {}),
       ...(input.htmlBody ? { htmlBody: { value: input.htmlBody } } : {}),
     };
-    const body = input.textBody ? [{ partId: "body", type: "text/plain", charset: "utf-8", size: input.textBody.length }] : null;
+    const body = input.textBody ? [{ partId: "body", type: "text/plain" }] : null;
     const html = input.htmlBody
-      ? [{ partId: "htmlBody", type: "text/html", charset: "utf-8", size: input.htmlBody.length }]
+      ? [{ partId: "htmlBody", type: "text/html" }]
       : null;
 
     const create: Record<string, unknown> = {
@@ -506,7 +506,12 @@ export class StalwartEngine implements MailEngine {
     if (!result) {
       const notCreated = (responses[0]![1].notCreated as Record<string, unknown>) ?? {};
       const problem = notCreated["c1"] as { type?: string; description?: string } | undefined;
-      throw new Error(`mailbox "${mailboxRole}" persistence failed: ${problem?.description ?? "unknown"}`);
+      throw new JmapError(
+        `mailbox "${mailboxRole}" persistence failed: ${problem?.description ?? "unknown"}`,
+        problem?.type ?? "not_created",
+        "s1",
+        problem ?? notCreated,
+      );
     }
     return { engineMessageId: result.id, threadId: result.threadId ?? result.id, attachments };
   }
@@ -553,24 +558,14 @@ export class StalwartEngine implements MailEngine {
     return result.engineMessageId;
   }
 
-  async updateDraft(engineAccountId: EngineAccountId, messageId: EngineMessageId, input: SendDraftInput): Promise<void> {
-    const { accountId } = await this.accountIdOf(engineAccountId);
-    const bodyValues: Record<string, unknown> = {
-      ...(input.textBody !== undefined ? { body: { value: input.textBody } } : {}),
-      ...(input.htmlBody !== undefined ? { htmlBody: { value: input.htmlBody } } : {}),
-    };
-    const update: Record<string, unknown> = {
-      to: input.to.map((email) => ({ email })),
-      cc: (input.cc ?? []).map((email) => ({ email })),
-      bcc: (input.bcc ?? []).map((email) => ({ email })),
-      subject: input.subject ?? "",
-      ...(input.inReplyTo ? { inReplyTo: [input.inReplyTo] } : {}),
-      ...(input.references ? { references: [input.references] } : {}),
-      ...(Object.keys(bodyValues).length ? { bodyValues } : {}),
-      ...(input.textBody !== undefined ? { textBody: [{ partId: "body", type: "text/plain", charset: "utf-8", size: input.textBody.length }] } : {}),
-      ...(input.htmlBody !== undefined ? { htmlBody: [{ partId: "htmlBody", type: "text/html", charset: "utf-8", size: input.htmlBody.length }] } : {}),
-    };
-    await this.client.call([["Email/set", { accountId, update: { [messageId]: update }, create: undefined, destroy: undefined, ifInState: undefined }, "s1"]]);
+  async updateDraft(engineAccountId: EngineAccountId, messageId: EngineMessageId, input: SendDraftInput): Promise<EngineMessageId> {
+    const replacementId = await this.saveDraft(engineAccountId, input);
+    try {
+      await this.move(engineAccountId, [messageId], "Trash");
+    } catch (error) {
+      throw new Error(`draft replacement cleanup failed for ${messageId}`, { cause: error });
+    }
+    return replacementId;
   }
 
   async saveSent(engineAccountId: EngineAccountId, input: SendDraftInput): Promise<SendResult> {

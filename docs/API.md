@@ -72,7 +72,7 @@ failed index sync logs a warning but does not fail the mail action.
 |--------|------|-------|
 | POST | `/mail/send` | `{accountId, to[], cc?, bcc?, subject?, textBody?, htmlBody?, replyTo?, inReplyTo?, references?, mode?, clientRequestId?}` → **202** `{sendId, messageId, threadId, status: "queued", undoUntil}` |
 | POST | `/mail/drafts` | save draft → 201 `{engineId}` |
-| PATCH | `/mail/drafts/:id` | update the existing draft with the same draft body fields → **204** |
+| PATCH | `/mail/drafts/:id` | update the draft with the same draft body fields → `{engineId}`; Stalwart replaces the immutable message body and retires the previous draft |
 | POST | `/mail/drafts/:id/send` | `{accountId, mode?, clientRequestId?}` → **202**, same response as `/mail/send` |
 
 Requires the `send` permission on the account. Recipients are checked against the

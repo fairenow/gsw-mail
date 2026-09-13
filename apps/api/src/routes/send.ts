@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
 import { submitSend } from "../outbound/sendFlow.js";
+import { describeJmapFailure } from "../lib/jmapError.js";
 
 const sendSchema = z.object({
   accountId: z.string().uuid(),
@@ -67,11 +68,13 @@ export default async (app: FastifyInstance) => {
     } catch (error) {
       req.log.error({
         err: error,
+        jmap: { method: "Email/set", operation: "sent" },
         accountId: input.accountId,
         replyMode: input.mode ?? (input.inReplyTo ? "reply" : "new"),
         recipients: { to: input.to, cc: input.cc ?? [], bccCount: input.bcc?.length ?? 0 },
         subject: input.subject ?? "",
         threading: { hasInReplyTo: Boolean(input.inReplyTo), hasReferences: Boolean(input.references) },
+        jmapFailure: describeJmapFailure(error),
       }, "mail send failed");
       throw error;
     }

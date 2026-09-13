@@ -173,7 +173,7 @@ export class DemoEngine implements MailEngine {
     return id;
   }
 
-  async updateDraft(accountId: EngineAccountId, messageId: EngineMessageId, input: SendDraftInput): Promise<void> {
+  async updateDraft(accountId: EngineAccountId, messageId: EngineMessageId, input: SendDraftInput): Promise<EngineMessageId> {
     const draft = this.store(accountId).find((message) => message.engineId === messageId && message.mailbox === "Drafts");
     if (!draft) throw new Error("draft not found");
     draft.to = input.to.map((email) => ({ email }));
@@ -187,6 +187,7 @@ export class DemoEngine implements MailEngine {
       ...(input.inReplyTo ? { "In-Reply-To": input.inReplyTo } : {}),
       ...(input.references ? { References: input.references } : {}),
     };
+    return messageId;
   }
 
   async saveSent(accountId: EngineAccountId, input: SendDraftInput): Promise<SendResult> {
