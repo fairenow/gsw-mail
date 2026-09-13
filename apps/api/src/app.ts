@@ -17,8 +17,8 @@ import threads from "./routes/threads.js";
 import webhooks from "./routes/webhooks.js";
 import product from "./routes/product.js";
 import setup from "./routes/setup.js";
-import { toNodeHandler } from "better-auth/node";
 import { auth as betterAuth } from "./auth/better.js";
+import { config } from "./config.js";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -26,8 +26,16 @@ export function buildApp() {
   app.register(cors, { origin: true });
   app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
   app.all("/api/auth/*", async (req, reply) => {
-    await toNodeHandler(betterAuth)(req.raw, reply.raw);
-    reply.sent = true;
+    const body = req.method === "GET" || req.method === "HEAD" ? undefined : JSON.stringify(req.body ?? {});
+    const request = new Request(`${config.auth.baseUrl}${req.url}`, {
+      method: req.method,
+      headers: req.headers as Record<string, string>,
+      ...(body ? { body } : {}),
+    });
+    const response = await betterAuth.handler(request);
+    reply.code(response.status);
+    response.headers.forEach((value, key) => reply.header(key, value));
+    return reply.send(Buffer.from(await response.arrayBuffer()));
   });
 
   app.setErrorHandler((error, _request, reply) => {
