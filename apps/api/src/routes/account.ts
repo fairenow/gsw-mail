@@ -1,8 +1,8 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
-import { domains, emailAccounts, mailAccountMemberships, organizationMemberships, organizations, workspaceSetupStates } from "../db/schema.js";
+import { domains, emailAccounts, mailAccountMemberships, organizationMemberships, organizations, users, workspaceSetupStates } from "../db/schema.js";
 
 export default async function accountRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
@@ -26,10 +26,14 @@ export default async function accountRoutes(app: FastifyInstance) {
     const mailboxUser = mailboxMemberships.length > 0;
     const incomplete = workspaces.some((workspace) => workspace.status === "active" && workspace.setupStep !== "complete");
     const defaultDestination = incomplete && !mailboxUser ? "setup" : workspaceAdmin ? "control-center" : mailboxUser ? "mail" : "setup";
+    const managedMailboxes = workspaceAdmin && workspaces.length > 0
+      ? await db.select({ id: emailAccounts.id, address: emailAccounts.address, displayName: emailAccounts.displayName, workspaceId: emailAccounts.workspaceId, authUserId: users.authUserId, status: emailAccounts.status }).from(emailAccounts).innerJoin(users, eq(emailAccounts.userId, users.id)).where(inArray(emailAccounts.workspaceId, workspaces.map((workspace) => workspace.id)))
+      : [];
     return {
       user: { id: userId, email: req.user!.email ?? null },
       workspaceMemberships: workspaces,
       mailboxMemberships,
+      managedMailboxes,
       onboardingComplete: workspaces.length > 0 && workspaces.every((workspace) => workspace.setupStep === "complete"),
       defaultDestination,
     };

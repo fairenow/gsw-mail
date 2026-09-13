@@ -7,6 +7,7 @@ export interface AccountContext {
   user: { id: string; email: string | null };
   workspaceMemberships: { id: string; name: string; role: "owner" | "admin" | "member"; status: string; setupStep: string | null; migratedFromExisting: boolean | null }[];
   mailboxMemberships: { id: string; address: string; displayName: string | null; role: "owner" | "delegate" | "read_only"; workspaceId: string; workspaceName: string; domain: string }[];
+  managedMailboxes: { id: string; address: string; displayName: string | null; workspaceId: string; authUserId: string | null; status: string }[];
   onboardingComplete: boolean;
   defaultDestination: "setup" | "control-center" | "mail";
 }

@@ -218,6 +218,7 @@
 .gsw-control-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
 .gsw-control-grid h3 { font-size: 20px; }
 .gsw-control-grid p { min-height: 44px; color: var(--gsw-text-muted); }
+.gsw-control-grid article:nth-child(2) p { white-space: pre-line; }
 .gsw-status-pill { display: inline-block; padding: 5px 9px; border-radius: 999px; background: #fff3d7; color: var(--gsw-accent-dark); font-size: 12px; font-weight: 700; }
 @media (max-width: 700px) {
   .gsw-control-center { display: block; }
