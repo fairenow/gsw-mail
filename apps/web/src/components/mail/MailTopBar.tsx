@@ -15,7 +15,7 @@ export function MailTopBar({ account, accounts, search, onSearchChange, onSearch
   return (
     <header className="gsw-topnav">
       <a className="gsw-topnav-brand" href="/">
-        <span className="gsw-wordmark-mark" aria-hidden="true"><i className="gsw-step gsw-step-1" /><i className="gsw-step gsw-step-2" /><i className="gsw-step gsw-step-3" /></span>
+        <span className="gsw-wordmark-mark" aria-hidden="true">✉</span>
         <span className="gsw-wordmark">GSW Mail</span>
       </a>
       <form className="gsw-topnav-search" onSubmit={submit} role="search">

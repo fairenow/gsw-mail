@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Account, type FullMessage, type MessageSummary, type SendResult } from "../api";
 import { type Folder } from "../components/folders";
 import { ComposeWindow, type ComposeMode } from "../components/mail/ComposeWindow";
@@ -34,6 +34,7 @@ export function MailPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [mobileView, setMobileView] = useState<MobileView>("folders");
+  const readTimers = useRef(new Map<string, number>());
 
   const [compose, setCompose] = useState(false);
   const [composeMinimized, setComposeMinimized] = useState(false);
@@ -65,6 +66,8 @@ export function MailPage() {
       if (rows[0]) { setAccount(rows[0]); void loadFolder(rows[0].id, "Inbox"); }
     }).catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, [loadFolder]);
+
+  useEffect(() => () => readTimers.current.forEach((timer) => window.clearTimeout(timer)), []);
 
   const selectAccount = (id: string) => {
     const next = accounts.find((item) => item.id === id);
@@ -99,9 +102,30 @@ export function MailPage() {
       if (folder === "Drafts") { openDraft(full); return; }
       setOpen(full); setMobileView("reader");
       if (!message.read) {
-        await api.read(account.id, message.engineId, true);
-        setMessages((prev) => prev.map((item) => item.engineId === message.engineId ? { ...item, read: true } : item));
+        const timer = window.setTimeout(() => {
+          void api.read(account.id, message.engineId, true).then(() => {
+            setMessages((prev) => prev.map((item) => item.engineId === message.engineId ? { ...item, read: true } : item));
+            setOpen((current) => current?.engineId === message.engineId ? { ...current, read: true } : current);
+          }).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+          readTimers.current.delete(message.engineId);
+        }, 400);
+        readTimers.current.set(message.engineId, timer);
       }
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+  };
+
+  const toggleRead = async (message: MessageSummary | FullMessage) => {
+    if (!account) return;
+    const read = !message.read;
+    const pending = readTimers.current.get(message.engineId);
+    if (pending !== undefined) {
+      window.clearTimeout(pending);
+      readTimers.current.delete(message.engineId);
+    }
+    try {
+      await api.read(account.id, message.engineId, read);
+      setMessages((prev) => prev.map((item) => item.engineId === message.engineId ? { ...item, read } : item));
+      setOpen((current) => current?.engineId === message.engineId ? { ...current, read } : current);
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   };
 
@@ -210,10 +234,10 @@ export function MailPage() {
       <section className={`gsw-message-list ${mobileView !== "messages" ? "" : "mobile-open"}`} aria-label={`${folder} messages`}>
         <MessageListHeader folder={folder} count={messages.length} onRefresh={refresh} />
         {error && <p className="gsw-errors">{error}</p>}
-        {messages.length ? messages.map((message) => <MessageRow key={message.engineId} message={message} active={open?.engineId === message.engineId} onOpen={() => void selectMessage(message)} />) : <div className="gsw-list-empty"><span aria-hidden="true">✉</span><strong>No messages here</strong><p>Your {folder.toLowerCase()} is clear.</p></div>}
+        {messages.length ? messages.map((message) => <MessageRow key={message.engineId} message={message} active={open?.engineId === message.engineId} onOpen={() => void selectMessage(message)} onToggleRead={() => void toggleRead(message)} />) : <div className="gsw-list-empty"><span aria-hidden="true">✉</span><strong>No messages here</strong><p>Your {folder.toLowerCase()} is clear.</p></div>}
       </section>
       <section className={`gsw-reading-pane ${mobileView === "reader" ? "mobile-open" : ""}`} aria-label="Message reader">
-        {open ? <MessageReader message={open} accountAddress={account?.address} onBack={() => setMobileView("messages")} onReply={() => openCompose("reply", open)} onReplyAll={() => openCompose("replyAll", open)} onForward={() => openCompose("forward", open)} onArchive={() => void runAction("archive", open.engineId)} onTrash={() => void runAction("trash", open.engineId)} /> : <EmptyReader />}
+        {open ? <MessageReader message={open} accountAddress={account?.address} onBack={() => setMobileView("messages")} onReply={() => openCompose("reply", open)} onReplyAll={() => openCompose("replyAll", open)} onForward={() => openCompose("forward", open)} onArchive={() => void runAction("archive", open.engineId)} onTrash={() => void runAction("trash", open.engineId)} onToggleRead={() => void toggleRead(open)} /> : <EmptyReader />}
       </section>
     </main>
     {compose && <ComposeWindow mode={composeMode} minimized={composeMinimized} to={to} cc={cc} subject={subject} text={text} sending={sending} draftStatus={draftStatus} sendError={sendError} sendNote={lastSend ? `Sent · ${lastSend.status}` : undefined} onToChange={(value) => { setTo(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onCcChange={(value) => { setCc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onSubjectChange={(value) => { setSubject(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onTextChange={(value) => { setText(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onMinimize={() => { void saveDraft(true); setComposeMinimized(true); }} onClose={() => { void saveDraft(true); setCompose(false); }} onSubmit={() => void runSend()} onRetry={() => void runSend()} onUndo={lastSend ? () => void runUndo() : undefined} />}

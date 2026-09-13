@@ -3,8 +3,18 @@ import { SenderAvatar } from "./SenderAvatar";
 
 const fmtDate = (value: string) => new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 const stripHtml = (value: string) => value.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>|<[^>]+>/gi, "").trim();
+type BodyBlock = { kind: "normal" | "quote"; lines: string[] };
 
-export function MessageReader({ message, accountAddress, onBack, onReply, onReplyAll, onForward, onArchive, onTrash }: {
+const bodyBlocks = (body: string): BodyBlock[] => body.split("\n").reduce<BodyBlock[]>((blocks, line) => {
+  const quoted = /^\s*>/.test(line);
+  const content = quoted ? line.replace(/^\s*(?:>\s?)+/, "") : line;
+  const previous = blocks[blocks.length - 1];
+  if (previous?.kind === (quoted ? "quote" : "normal")) previous.lines.push(content);
+  else blocks.push({ kind: quoted ? "quote" : "normal", lines: [content] });
+  return blocks;
+}, []);
+
+export function MessageReader({ message, accountAddress, onBack, onReply, onReplyAll, onForward, onArchive, onTrash, onToggleRead }: {
   message: FullMessage;
   accountAddress?: string;
   onBack: () => void;
@@ -13,10 +23,10 @@ export function MessageReader({ message, accountAddress, onBack, onReply, onRepl
   onForward: () => void;
   onArchive: () => void;
   onTrash: () => void;
+  onToggleRead: () => void;
 }) {
   const body = message.textBody?.trim() || (message.htmlBody ? stripHtml(message.htmlBody) : "");
   const recipientLabel = message.to?.map((recipient) => recipient.name || recipient.email).join(", ") || accountAddress || "your mailbox";
-  const bodyLines = body.split("\n");
 
   return (
     <article className="gsw-reading-inner">
@@ -30,9 +40,10 @@ export function MessageReader({ message, accountAddress, onBack, onReply, onRepl
         <button onClick={onForward}>↪ <span>Forward</span></button>
         <button onClick={onArchive}>▣ <span>Archive</span></button>
         <button onClick={onTrash}>⌫ <span>Delete</span></button>
+        <button onClick={onToggleRead}>◉ <span>{message.read ? "Mark unread" : "Mark read"}</span></button>
         <button aria-label="More message actions">⋯</button>
       </div>
-      <div className="gsw-reading-body">{body ? bodyLines.map((line, index) => <span className={/^\s*>/.test(line) ? "gsw-quoted-line" : undefined} key={`${index}-${line}`}>{line || "\u00a0"}</span>) : <span className="gsw-body-empty">This message has no readable body.</span>}</div>
+      <div className="gsw-reading-body">{body ? bodyBlocks(body).map((block, index) => block.kind === "quote" ? <blockquote className="gsw-quoted-block" key={`${block.kind}-${index}`}><span className="gsw-quoted-label">Quoted reply</span>{block.lines.join("\n")}</blockquote> : <div className="gsw-normal-block" key={`${block.kind}-${index}`}>{block.lines.join("\n")}</div>) : <span className="gsw-body-empty">This message has no readable body.</span>}</div>
       {!!message.attachments?.length && <div className="gsw-attachments"><h3>Attachments</h3>{message.attachments.map((attachment) => <div className="gsw-attachment" key={attachment.engineId}><span className="gsw-att-icon" aria-hidden="true">▤</span><div><strong>{attachment.filename}</strong><span>{formatBytes(attachment.size)} · {attachment.contentType}</span></div><span className="gsw-attachment-action">Download</span></div>)}</div>}
       <div className="gsw-reader-bottom-actions"><button className="gsw-secondary-btn" onClick={onReply}>↩ Reply</button><button className="gsw-secondary-btn" onClick={onForward}>↪ Forward</button></div>
     </article>

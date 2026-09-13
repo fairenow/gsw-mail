@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { accessToken, finishSignIn, logout, signIn } from "./auth";
+import { accessToken, finishSignIn, signIn } from "./auth";
 import { AuthCard } from "./components/auth/AuthCard";
 import { AuthError } from "./components/auth/AuthError";
 import { AuthHeading } from "./components/auth/AuthHeading";
@@ -79,21 +79,5 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  return (
-    <div className="gsw-auth-shell">
-      <div className="gsw-topbar">
-        <BrandMark size={32} className="gsw-topbrand" />
-        <button
-          type="button"
-          className="gsw-btn gsw-btn-quiet"
-          onClick={() => {
-            logout();
-          }}
-        >
-          Sign out
-        </button>
-      </div>
-      {children}
-    </div>
-  );
+  return children;
 }
