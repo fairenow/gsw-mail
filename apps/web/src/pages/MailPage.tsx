@@ -2,18 +2,15 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   api,
   type Account,
-  type Folder,
   type FullMessage,
   type MessageSummary,
   type SendResult,
 } from "../api";
+import { type Folder } from "../components/folders";
 import { MessageRow } from "../components/MessageRow";
 import { Sidebar } from "../components/Sidebar";
 
-const FOLDERS = ["Inbox", "Sent", "Drafts", "Spam", "Trash", "Archive"] as const;
-
 const fmtTime = (value: string) => new Date(value).toLocaleString();
-const canSend = (account: Account) => account.permissions.includes("send");
 
 const sx: { [k: string]: React.CSSProperties } = {
   shell: { display: "flex", minHeight: "100vh", fontFamily: "system-ui, sans-serif" },
@@ -33,8 +30,7 @@ export function MailPage() {
   const [folder, setFolder] = useState<Folder>("Inbox");
   const [messages, setMessages] = useState<MessageSummary[]>([]);
   const [open, setOpen] = useState<FullMessage | null>(null);
-  const [query, setQuery] = useState("");
-  const [error, setError] = useState<string | null>(nullapsed);
+  const [error, setError] = useState<string | null>(null);
 
   const [compose, setCompose] = useState(false);
   const [to, setTo] = useState("");
@@ -94,16 +90,6 @@ export function MailPage() {
     await (action === "archive" ? api.archive(account.id, engineId) : api.trash(account.id, engineId));
     setOpen(null);
     await loadFolder(account.id, folder);
-  };
-
-  const runSearch = async () => {
-    if (!account || !query.trim()) return;
-    setError(null);
-    try {
-      setMessages(await api.search(account.id, query));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
   };
 
   const runSend = async () => {
