@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/mail",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/sign-in",
+      "destination": "/index.html"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://gsw-mail-production.up.railway.app/api/:path*"
     },
