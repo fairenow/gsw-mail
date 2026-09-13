@@ -19,16 +19,16 @@ export function getSession(): Promise<AuthSession | null> {
   return authRequest<AuthSession | null>("/get-session");
 }
 
-export function requestSignUp(email: string, name: string): Promise<unknown> {
-  return authRequest("/sign-in/magic-link", { email, name, newUserCallbackURL: `${window.location.origin}/create-password`, callbackURL: `${window.location.origin}/` });
+export function requestOneTimeCode(email: string): Promise<unknown> {
+  return authRequest("/email-otp/send-verification-otp", { email, type: "sign-in" });
 }
 
 export function signInWithPassword(email: string, password: string): Promise<unknown> {
   return authRequest("/sign-in/email", { email, password });
 }
 
-export function requestSignInLink(email: string): Promise<unknown> {
-  return authRequest("/sign-in/magic-link", { email, callbackURL: `${window.location.origin}/` });
+export function signInWithCode(email: string, otp: string, name?: string): Promise<unknown> {
+  return authRequest("/sign-in/email-otp", { email, otp, ...(name ? { name } : {}) });
 }
 
 export function setPassword(password: string): Promise<unknown> {
