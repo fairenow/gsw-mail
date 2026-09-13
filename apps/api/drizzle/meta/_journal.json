@@ -64,6 +64,20 @@
       "when": 1789318000000,
       "tag": "0008_existing_setup_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789320000000,
+      "tag": "0009_mailbox_auth_setup",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789321000000,
+      "tag": "0010_mailbox_auth_setup_tokens",
+      "breakpoints": true
     }
   ]
 }

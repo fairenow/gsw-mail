@@ -9,7 +9,7 @@ import { renderGswAuthEmail } from "./email.js";
 
 const resend = config.outbound.resendApiKey ? new Resend(config.outbound.resendApiKey) : null;
 
-async function sendAuthEmail(to: string, subject: string, content: { text: string; html: string }): Promise<void> {
+export async function sendAuthEmail(to: string, subject: string, content: { text: string; html: string }): Promise<void> {
   if (!resend) {
     if (config.env === "production") throw new Error("auth email delivery is not configured");
     console.info(`[auth email] ${to}: ${content.text}`);

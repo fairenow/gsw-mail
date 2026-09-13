@@ -7,7 +7,7 @@ export interface AccountContext {
   user: { id: string; email: string | null };
   workspaceMemberships: { id: string; name: string; role: "owner" | "admin" | "member"; status: string; setupStep: string | null; migratedFromExisting: boolean | null }[];
   mailboxMemberships: { id: string; address: string; displayName: string | null; role: "owner" | "delegate" | "read_only"; workspaceId: string; workspaceName: string; domain: string }[];
-  managedMailboxes: { id: string; address: string; displayName: string | null; workspaceId: string; authUserId: string | null; status: string }[];
+  managedMailboxes: { id: string; address: string; displayName: string | null; workspaceId: string; authUserId: string | null; authSetupStatus: "pending" | "ready"; status: string }[];
   onboardingComplete: boolean;
   defaultDestination: "setup" | "control-center" | "mail";
 }
@@ -54,6 +54,14 @@ export function requestPasswordResetCode(email: string): Promise<unknown> {
 
 export function resetPasswordWithCode(email: string, otp: string, password: string): Promise<unknown> {
   return authRequest("/email-otp/reset-password", { email, otp, password });
+}
+
+export function requestMailboxSetup(accountId: string): Promise<unknown> {
+  return fetch(`/api/mailboxes/${accountId}/setup`, { method: "POST", credentials: "include" }).then(async (response) => { const result = await response.json(); if (!response.ok) throw new Error(result.error ?? "Could not send mailbox setup code."); return result; });
+}
+
+export function completeMailboxSetup(accountId: string, code: string, password: string): Promise<unknown> {
+  return fetch(`/api/mailboxes/${accountId}/setup/complete`, { method: "POST", headers: { "content-type": "application/json" }, credentials: "include", body: JSON.stringify({ code, password }) }).then(async (response) => { const result = await response.json(); if (!response.ok) throw new Error(result.error ?? "Could not set up mailbox login."); return result; });
 }
 
 export function setPassword(password: string): Promise<unknown> {

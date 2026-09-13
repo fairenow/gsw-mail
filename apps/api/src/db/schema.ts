@@ -23,6 +23,7 @@ const timestamps = {
 };
 
 export const accountStatus = pgEnum("account_status", ["pending", "active", "disabled"]);
+export const authSetupStatus = pgEnum("auth_setup_status", ["pending", "ready"]);
 export const domainStatus = pgEnum("domain_status", ["pending", "verified", "failed"]);
 export const recordStatus = pgEnum("record_status", ["not_configured", "verifying", "verified", "failed"]);
 export const aliasStatus = pgEnum("alias_status", ["active", "disabled"]);
@@ -217,6 +218,7 @@ export const emailAccounts = pgTable(
     stalwartPrincipalId: text("stalwart_principal_id"),
     displayName: text("display_name"),
     status: accountStatus("account_status").default("pending").notNull(),
+    authSetupStatus: authSetupStatus("auth_setup_status").default("pending").notNull(),
     quotaBytes: bigint("quota_bytes", { mode: "number" }),
     usedBytes: bigint("used_bytes", { mode: "number" }).default(0).notNull(),
     ...timestamps,
@@ -227,6 +229,22 @@ export const emailAccounts = pgTable(
     index("email_accounts_domain_idx").on(t.domainId),
     index("email_accounts_workspace_idx").on(t.workspaceId),
   ],
+);
+
+export const mailboxAuthSetupTokens = pgTable(
+  "mailbox_auth_setup_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id").notNull().references(() => emailAccounts.id, { onDelete: "cascade" }),
+    requestedByUserId: text("requested_by_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    recoveryEmail: text("recovery_email").notNull(),
+    codeHash: text("code_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    attempts: integer("attempts").default(0).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [index("mailbox_auth_setup_account_idx").on(t.accountId, t.createdAt)],
 );
 
 export const mailAccountMemberships = pgTable(

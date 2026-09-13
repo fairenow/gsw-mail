@@ -27,7 +27,7 @@ export default async function accountRoutes(app: FastifyInstance) {
     const incomplete = workspaces.some((workspace) => workspace.status === "active" && workspace.setupStep !== "complete");
     const defaultDestination = incomplete && !mailboxUser ? "setup" : workspaceAdmin ? "control-center" : mailboxUser ? "mail" : "setup";
     const managedMailboxes = workspaceAdmin && workspaces.length > 0
-      ? await db.select({ id: emailAccounts.id, address: emailAccounts.address, displayName: emailAccounts.displayName, workspaceId: emailAccounts.workspaceId, authUserId: users.authUserId, status: emailAccounts.status }).from(emailAccounts).innerJoin(users, eq(emailAccounts.userId, users.id)).where(inArray(emailAccounts.workspaceId, workspaces.map((workspace) => workspace.id)))
+      ? await db.select({ id: emailAccounts.id, address: emailAccounts.address, displayName: emailAccounts.displayName, workspaceId: emailAccounts.workspaceId, authUserId: users.authUserId, authSetupStatus: emailAccounts.authSetupStatus, status: emailAccounts.status }).from(emailAccounts).innerJoin(users, eq(emailAccounts.userId, users.id)).where(inArray(emailAccounts.workspaceId, workspaces.map((workspace) => workspace.id)))
       : [];
     return {
       user: { id: userId, email: req.user!.email ?? null },

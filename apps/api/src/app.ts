@@ -18,6 +18,7 @@ import webhooks from "./routes/webhooks.js";
 import product from "./routes/product.js";
 import setup from "./routes/setup.js";
 import account from "./routes/account.js";
+import mailboxSetup from "./routes/mailboxSetup.js";
 import { auth as betterAuth } from "./auth/better.js";
 import { config } from "./config.js";
 
@@ -68,6 +69,7 @@ export function buildApp() {
   app.register(product);
   app.register(setup);
   app.register(account);
+  app.register(mailboxSetup);
 
   return app;
 }

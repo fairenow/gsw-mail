@@ -219,6 +219,11 @@
 .gsw-control-grid h3 { font-size: 20px; }
 .gsw-control-grid p { min-height: 44px; color: var(--gsw-text-muted); }
 .gsw-control-grid article:nth-child(2) p { white-space: pre-line; }
+.gsw-managed-mailbox { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--gsw-border); }
+.gsw-managed-mailbox p { min-height: 0; margin: 10px 0; }
+.gsw-managed-mailbox small { color: var(--gsw-text-muted); }
+.gsw-setup-inline { margin-top: 18px; padding: 20px; border: 1px solid var(--gsw-border); border-radius: 16px; background: #fff; }
+.gsw-setup-inline h3 { margin-bottom: 8px; }
 .gsw-status-pill { display: inline-block; padding: 5px 9px; border-radius: 999px; background: #fff3d7; color: var(--gsw-accent-dark); font-size: 12px; font-weight: 700; }
 @media (max-width: 700px) {
   .gsw-control-center { display: block; }
