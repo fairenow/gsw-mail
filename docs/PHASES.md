@@ -72,6 +72,9 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 - [x] Neon contacts with normalized emails/phones/tags, engagement counts, and custom fields
 - [x] Sent-recipient automatic contact creation/update and compose autocomplete
 - [x] CSV preview, mapping, duplicate merge/skip/overwrite, and import history
+- [x] Merged Contacts ownership boundary: Stalwart standard identity, Neon GSW enrichment
+- [x] Nullable Stalwart contact linkage and lazy idempotent migration for existing contacts
+- [x] Request-scoped JMAP Contacts methods for address books and ContactCards
 - [ ] Contact enrichment from inbound mail and attachment/image upload workflow
 
 ## Phase 7 — Spam and security hardening

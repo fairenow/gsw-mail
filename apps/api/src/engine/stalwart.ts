@@ -1,8 +1,12 @@
+import { randomUUID } from "node:crypto";
 import { JmapClient, JmapError, type JmapMethodCall, type JmapSession } from "./jmap.js";
 import type {
   AttachmentBody,
   AttachmentMeta,
+  EngineAddressBook,
   EngineAccountId,
+  EngineContact,
+  EngineContactInput,
   EngineMessageId,
   EngineThreadId,
   FullMessage,
@@ -39,6 +43,24 @@ interface JmapMailbox {
 interface JmapEmailAddress {
   email: string;
   name?: string | null;
+}
+
+interface JmapAddressBook {
+  id: string;
+  name: string;
+  isDefault?: boolean;
+}
+
+interface JmapContact {
+  id: string;
+  addressBookIds?: Record<string, boolean>;
+  name?: { full?: string; components?: { kind: string; value: string }[] };
+  emails?: Record<string, { address: string; label?: string; pref?: number }>;
+  phones?: Record<string, { number: string; label?: string; pref?: number }>;
+  organizations?: Record<string, { name?: string }>;
+  titles?: Record<string, { name?: string }>;
+  onlineServices?: Record<string, { uri?: string }>;
+  addresses?: Record<string, { full?: string; components?: { kind: string; value: string }[] }>;
 }
 
 interface JmapEmail {
@@ -151,6 +173,71 @@ const renderTemplate = (template: string, vars: Record<string, string>): string 
   Object.entries(vars).reduce((acc, [k, v]) => acc.replaceAll(`{${k}}`, v), template);
 
 const presentKeys = (value: Record<string, unknown>): string[] => Object.entries(value).filter(([, item]) => item !== undefined).map(([key]) => key);
+
+const objectValues = <T>(value: Record<string, T> | undefined): T[] => Object.values(value ?? {});
+
+const contactInputToCard = (input: EngineContactInput, addressBookId: string, uid: string): Record<string, unknown> => {
+  const card: Record<string, unknown> = {
+    "@type": "Card",
+    version: "1.0",
+    uid,
+    addressBookIds: Object.fromEntries((input.addressBookIds ?? [addressBookId]).map((id) => [id, true])),
+  };
+  const components = [
+    input.firstName ? { kind: "given", value: input.firstName } : undefined,
+    input.middleName ? { kind: "given2", value: input.middleName } : undefined,
+    input.lastName ? { kind: "surname", value: input.lastName } : undefined,
+  ].filter((item): item is { kind: string; value: string } => Boolean(item));
+  if (components.length || input.displayName) card.name = { ...(input.displayName ? { full: input.displayName } : {}), ...(components.length ? { components, isOrdered: true } : {}) };
+  if (input.organization) card.organizations = { o1: { name: input.organization } };
+  if (input.jobTitle) card.titles = { t1: { kind: "title", name: input.jobTitle } };
+  if (input.website) card.onlineServices = { s1: { uri: input.website } };
+  if (input.address || input.city || input.state || input.postalCode || input.country) {
+    const addressComponents = [
+      input.city ? { kind: "locality", value: input.city } : undefined,
+      input.state ? { kind: "region", value: input.state } : undefined,
+      input.postalCode ? { kind: "postcode", value: input.postalCode } : undefined,
+      input.country ? { kind: "country", value: input.country } : undefined,
+    ].filter((item): item is { kind: string; value: string } => Boolean(item));
+    card.addresses = { a1: { ...(input.address ? { full: input.address } : {}), ...(addressComponents.length ? { components: addressComponents } : {}) } };
+  }
+  if (input.emails.length) card.emails = Object.fromEntries(input.emails.map((item, index) => [`e${index + 1}`, { address: item.value, ...(item.label ? { label: item.label } : {}), ...(item.isPrimary ? { pref: 1 } : {}) }]));
+  if (input.phones.length) card.phones = Object.fromEntries(input.phones.map((item, index) => [`p${index + 1}`, { number: item.value, ...(item.label ? { label: item.label } : {}), ...(item.isPrimary ? { pref: 1 } : {}) }]));
+  return card;
+};
+
+const cardToContact = (card: JmapContact): EngineContact => {
+  const components = card.name?.components ?? [];
+  const given = components.find((item) => item.kind === "given")?.value;
+  const middle = components.find((item) => item.kind === "given2")?.value;
+  const surname = components.find((item) => item.kind === "surname")?.value;
+  const address = objectValues(card.addresses)[0];
+  const addressComponents = address?.components ?? [];
+  const first = (kind: string) => addressComponents.find((item) => item.kind === kind)?.value;
+  const emails = objectValues(card.emails).map((item) => ({ value: item.address, ...(item.label ? { label: item.label } : {}), ...(item.pref === 1 ? { isPrimary: true } : {}) }));
+  const phones = objectValues(card.phones).map((item) => ({ value: item.number, ...(item.label ? { label: item.label } : {}), ...(item.pref === 1 ? { isPrimary: true } : {}) }));
+  if (emails.length && !emails.some((item) => item.isPrimary)) emails[0]!.isPrimary = true;
+  if (phones.length && !phones.some((item) => item.isPrimary)) phones[0]!.isPrimary = true;
+  return {
+    engineId: card.id,
+    addressBookIds: Object.entries(card.addressBookIds ?? {}).filter(([, included]) => included).map(([id]) => id),
+    ...(given ? { firstName: given } : {}),
+    ...(middle ? { middleName: middle } : {}),
+    ...(surname ? { lastName: surname } : {}),
+    ...(card.name?.full ? { displayName: card.name.full } : {}),
+    ...(!card.name?.full && (given || middle || surname) ? { displayName: [given, middle, surname].filter(Boolean).join(" ") } : {}),
+    ...(objectValues(card.organizations)[0]?.name ? { organization: objectValues(card.organizations)[0]!.name } : {}),
+    ...(objectValues(card.titles)[0]?.name ? { jobTitle: objectValues(card.titles)[0]!.name } : {}),
+    ...(objectValues(card.onlineServices)[0]?.uri ? { website: objectValues(card.onlineServices)[0]!.uri } : {}),
+    ...(address?.full ? { address: address.full } : {}),
+    ...(first("locality") ? { city: first("locality") } : {}),
+    ...(first("region") ? { state: first("region") } : {}),
+    ...(first("postcode") ? { postalCode: first("postcode") } : {}),
+    ...(first("country") ? { country: first("country") } : {}),
+    emails,
+    phones,
+  };
+};
 
 const summarizeParts = (value: unknown) => Array.isArray(value)
   ? value.map((part) => {
@@ -717,6 +804,59 @@ export class StalwartEngine implements MailEngine {
     const buffer = Buffer.from(await res.arrayBuffer());
     const contentType = res.headers.get("content-type") ?? "application/octet-stream";
     return { contentType, content: buffer };
+  }
+
+  async listAddressBooks(engineAccountId: EngineAccountId): Promise<EngineAddressBook[]> {
+    const { accountId } = await this.accountIdOf(engineAccountId);
+    const responses = await this.client.call([["AddressBook/get", { accountId, ids: null }, "ab1"]]);
+    const payload = responses[0]![1] as { list?: JmapAddressBook[] };
+    return (payload.list ?? []).map((book) => ({ engineId: book.id, name: book.name, isDefault: book.isDefault === true }));
+  }
+
+  async listContacts(engineAccountId: EngineAccountId): Promise<EngineContact[]> {
+    const { accountId } = await this.accountIdOf(engineAccountId);
+    const responses = await this.client.call([["ContactCard/get", { accountId, ids: null }, "cc1"]]);
+    const payload = responses[0]![1] as { list?: JmapContact[] };
+    return (payload.list ?? []).map(cardToContact);
+  }
+
+  async getContact(engineAccountId: EngineAccountId, contactId: string): Promise<EngineContact | null> {
+    const { accountId } = await this.accountIdOf(engineAccountId);
+    const responses = await this.client.call([["ContactCard/get", { accountId, ids: [contactId] }, "cc1"]]);
+    const payload = responses[0]![1] as { list?: JmapContact[] };
+    const card = payload.list?.[0];
+    return card ? cardToContact(card) : null;
+  }
+
+  async createContact(engineAccountId: EngineAccountId, input: EngineContactInput): Promise<EngineContact> {
+    const { accountId } = await this.accountIdOf(engineAccountId);
+    const addressBooks = await this.listAddressBooks(engineAccountId);
+    const addressBookId = input.addressBookIds?.[0] ?? addressBooks.find((book) => book.isDefault)?.engineId ?? addressBooks[0]?.engineId;
+    if (!addressBookId) throw new Error("Stalwart has no writable address book");
+    const clientId = "c1";
+    const responses = await this.client.call([["ContactCard/set", { accountId, create: { [clientId]: contactInputToCard(input, addressBookId, randomUUID()) } }, "cs1"]]);
+    const payload = responses[0]![1] as { created?: Record<string, { id?: string }>; notCreated?: Record<string, { description?: string }> };
+    const created = payload.created?.[clientId];
+    if (!created?.id) throw new Error(payload.notCreated?.[clientId]?.description ?? "Stalwart did not return a contact ID");
+    const contact = await this.getContact(engineAccountId, created.id);
+    if (!contact) throw new Error("Stalwart contact disappeared after creation");
+    return contact;
+  }
+
+  async updateContact(engineAccountId: EngineAccountId, contactId: string, input: EngineContactInput): Promise<EngineContact> {
+    const current = await this.getContact(engineAccountId, contactId);
+    if (!current) throw new Error("contact not found");
+    const card = contactInputToCard(input, current.addressBookIds[0] ?? "", "");
+    delete card.uid;
+    const { accountId } = await this.accountIdOf(engineAccountId);
+    const update = Object.fromEntries(["name", "organizations", "titles", "onlineServices", "addresses", "emails", "phones"].map((property) => [`/${property}`, card[property] ?? null]));
+    update["/addressBookIds"] = Object.fromEntries((input.addressBookIds ?? current.addressBookIds).map((id) => [id, true]));
+    const responses = await this.client.call([["ContactCard/set", { accountId, update: { [contactId]: update } }, "cs1"]]);
+    const payload = responses[0]![1] as { notUpdated?: Record<string, { description?: string }> };
+    if (payload.notUpdated?.[contactId]) throw new Error(payload.notUpdated[contactId].description ?? "Stalwart contact update failed");
+    const updated = await this.getContact(engineAccountId, contactId);
+    if (!updated) throw new Error("Stalwart contact disappeared after update");
+    return updated;
   }
 
   async status(): Promise<MailEngineStatus> {

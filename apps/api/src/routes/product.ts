@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
 import { contactEmails, contactImportBatches, contactImportRows, contacts, emailSignatures, userSettings } from "../db/schema.js";
-import { createContact, getContact, listContacts, normalizeEmail, type ContactInput, updateContact } from "../lib/contacts.js";
+import { createContact, getContact, getContactEngineContext, listContacts, normalizeEmail, type ContactInput, updateContact } from "../lib/contacts.js";
 import { notFound } from "../lib/errors.js";
 import { mergeImportedEmails, validateImportedEmails } from "../lib/contactImport.js";
 import { richTextToPlainText, sanitizeRichText } from "../lib/richText.js";
@@ -73,25 +73,30 @@ export default async function productRoutes(app: FastifyInstance) {
     const requestedOffset = Number(params?.offset ?? 0);
     const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 100) : 100;
     const offset = Number.isFinite(requestedOffset) ? Math.max(Math.trunc(requestedOffset), 0) : 0;
-    return listContacts(req.user!.id, query, limit, offset);
+    return listContacts(req.user!.id, query, limit, offset, await getContactEngineContext(req.user!.id, req.accessToken));
+  });
+
+  app.get("/product/contacts/address-books", async (req) => {
+    const context = await getContactEngineContext(req.user!.id, req.accessToken);
+    return { addressBooks: context ? await context.engine.listAddressBooks(context.accountId) : [] };
   });
 
   app.get<{ Params: { id: string } }>("/product/contacts/:id", async (req) => {
-    const contact = await getContact(req.user!.id, req.params.id);
+    const contact = await getContact(req.user!.id, req.params.id, await getContactEngineContext(req.user!.id, req.accessToken));
     if (!contact) throw notFound("contact not found");
     return contact;
   });
 
   app.post("/product/contacts", async (req, reply) => {
     const input = contactInput.parse(req.body);
-    const contact = await createContact(req.user!.id, input);
+    const contact = await createContact(req.user!.id, input, undefined, await getContactEngineContext(req.user!.id, req.accessToken));
     reply.code(201);
     return contact;
   });
 
   app.patch<{ Params: { id: string } }>("/product/contacts/:id", async (req) => {
     const input = contactInput.parse(req.body);
-    const contact = await updateContact(req.user!.id, req.params.id, input);
+    const contact = await updateContact(req.user!.id, req.params.id, input, await getContactEngineContext(req.user!.id, req.accessToken));
     if (!contact) throw notFound("contact not found");
     return contact;
   });
@@ -109,6 +114,7 @@ export default async function productRoutes(app: FastifyInstance) {
 
   app.post("/product/contact-imports", async (req, reply) => {
     const input = importSchema.parse(req.body);
+    const context = await getContactEngineContext(req.user!.id, req.accessToken);
     const [batch] = await db.insert(contactImportBatches).values({ ownerUserId: req.user!.id, filename: input.filename, rowCount: input.rows.length }).returning();
     if (!batch) throw new Error("failed to create import batch");
     let createdCount = 0;
@@ -128,15 +134,15 @@ export default async function productRoutes(app: FastifyInstance) {
           contactId = existing[0].contactId;
           if (input.duplicateBehavior === "skip") { skippedCount += 1; status = "skipped"; }
           else {
-            const current = await getContact(req.user!.id, contactId);
+            const current = await getContact(req.user!.id, contactId, context);
             if (!current) throw new Error("duplicate contact disappeared");
             const merged = input.duplicateBehavior === "merge" ? mergeContact(current, mapped) : mapped;
-            await updateContact(req.user!.id, contactId, merged);
+            await updateContact(req.user!.id, contactId, merged, context);
             updatedCount += 1;
             status = "updated";
           }
         } else {
-          const created = await createContact(req.user!.id, { ...mapped, source: "csv_import", sourceFile: input.filename }, { importBatchId: batch.id });
+          const created = await createContact(req.user!.id, { ...mapped, source: "csv_import", sourceFile: input.filename }, { importBatchId: batch.id }, context);
           contactId = created?.id;
           createdCount += 1;
         }

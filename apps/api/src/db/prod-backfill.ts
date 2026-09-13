@@ -1,4 +1,5 @@
 import { provisionUserFromIdentity } from "../auth/provision.js";
+import { config } from "../config.js";
 
 const subjects = (process.env.STALWART_BACKFILL_USERS ?? "")
   .split(",")
@@ -10,6 +11,6 @@ if (subjects.length === 0) {
 }
 
 for (const subject of subjects) {
-  const user = await provisionUserFromIdentity("stalwart", subject);
+  const user = await provisionUserFromIdentity(config.auth.identityProvider, subject);
   console.log("provisioned:", subject, "->", user.id);
 }

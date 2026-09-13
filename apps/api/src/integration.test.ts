@@ -171,6 +171,45 @@ test("mailbox isolation: a private account is invisible and unreachable to outsi
   assert.equal(denied.status, 403);
 });
 
+test("just-in-time provisioning creates an isolated user mailbox graph", async () => {
+  const { provisionUserFromIdentity } = await import("./auth/provision.js");
+  const user = await provisionUserFromIdentity("gsw", "newuser@it.example.com");
+
+  const userRows = await db.select({ id: schema.users.id, email: schema.users.email }).from(schema.users).where(eq(schema.users.id, user.id)).limit(1);
+  assert.deepEqual(userRows[0], { id: user.id, email: "newuser@it.example.com" });
+
+  const accountRows = await db
+    .select({ id: schema.emailAccounts.id, address: schema.emailAccounts.address, userId: schema.emailAccounts.userId })
+    .from(schema.emailAccounts)
+    .where(eq(schema.emailAccounts.address, "newuser@it.example.com"))
+    .limit(1);
+  const account = accountRows[0];
+  assert.ok(account);
+  assert.equal(account.userId, user.id);
+
+  const memberships = await db
+    .select({ role: schema.mailAccountMemberships.role, userId: schema.mailAccountMemberships.userId })
+    .from(schema.mailAccountMemberships)
+    .where(eq(schema.mailAccountMemberships.accountId, account.id));
+  assert.deepEqual(memberships, [{ role: "owner", userId: user.id }]);
+
+  const orgMemberships = await db
+    .select({ status: schema.organizationMemberships.status })
+    .from(schema.organizationMemberships)
+    .where(eq(schema.organizationMemberships.userId, user.id));
+  assert.deepEqual(orgMemberships, [{ status: "active" }]);
+
+  const mailboxCount = await db
+    .select({ count: count() })
+    .from(schema.mailboxes)
+    .where(eq(schema.mailboxes.accountId, account.id));
+  assert.equal(mailboxCount[0]?.count, 6);
+
+  const accounts = await request("GET", "/mail/accounts", { userId: user.id });
+  assert.equal(accounts.status, 200);
+  assert.deepEqual((accounts.json.accounts as { address: string }[]).map((item) => item.address), ["newuser@it.example.com"]);
+});
+
 test("delegate access: a delegated account is readable", async (t) => {
   if (!dbAvailable) return t.skip("postgres unavailable");
   const boxes = await request("GET", `/mail/accounts/${communityAccountId}/mailboxes`, { userId: alyssaId });

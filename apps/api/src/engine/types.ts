@@ -3,6 +3,39 @@ export type EngineMessageId = string;
 export type EngineThreadId = string;
 export type EngineMailboxId = string;
 
+export interface EngineAddressBook {
+  engineId: string;
+  name: string;
+  isDefault: boolean;
+}
+
+export interface EngineContactValue {
+  value: string;
+  label?: string | undefined;
+  isPrimary?: boolean | undefined;
+}
+
+export interface EngineContact {
+  engineId: string;
+  addressBookIds: string[];
+  firstName?: string | undefined;
+  middleName?: string | undefined;
+  lastName?: string | undefined;
+  displayName?: string | undefined;
+  organization?: string | undefined;
+  jobTitle?: string | undefined;
+  website?: string | undefined;
+  address?: string | undefined;
+  city?: string | undefined;
+  state?: string | undefined;
+  postalCode?: string | undefined;
+  country?: string | undefined;
+  emails: EngineContactValue[];
+  phones: EngineContactValue[];
+}
+
+export type EngineContactInput = Omit<EngineContact, "engineId" | "addressBookIds"> & { addressBookIds?: string[] | undefined };
+
 export interface MailboxName {
   role: "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive" | null;
   engineName: string;
@@ -143,6 +176,16 @@ export interface MailEngine {
   ): Promise<{ engineMessageId: EngineMessageId; engineThreadId: EngineThreadId } | null>;
 
   getAttachment(accountId: EngineAccountId, attachmentEngineId: string): Promise<AttachmentBody | null>;
+
+  listAddressBooks(accountId: EngineAccountId): Promise<EngineAddressBook[]>;
+
+  listContacts(accountId: EngineAccountId): Promise<EngineContact[]>;
+
+  getContact(accountId: EngineAccountId, contactId: string): Promise<EngineContact | null>;
+
+  createContact(accountId: EngineAccountId, input: EngineContactInput): Promise<EngineContact>;
+
+  updateContact(accountId: EngineAccountId, contactId: string, input: EngineContactInput): Promise<EngineContact>;
 
   search(accountId: EngineAccountId, q: string, mailbox?: string | undefined): Promise<MessageSummary[]>;
 

@@ -1,7 +1,10 @@
 import type {
   AttachmentBody,
   AttachmentMeta,
+  EngineAddressBook,
   EngineAccountId,
+  EngineContact,
+  EngineContactInput,
   EngineMessageId,
   EngineThreadId,
   FullMessage,
@@ -96,6 +99,8 @@ const sample = (accountId: EngineAccountId): FullMessage[] => {
 const messages = new Map<EngineAccountId, FullMessage[]>();
 const rfcMessageIds = new Map<string, { accountId: EngineAccountId; engineId: EngineMessageId; threadId: EngineThreadId }>();
 const attachmentBodies = new Map<string, { contentType: string; content: Buffer }>();
+const contacts = new Map<EngineAccountId, EngineContact[]>();
+const addressBooks = new Map<EngineAccountId, EngineAddressBook[]>();
 
 export class DemoEngine implements MailEngine {
   readonly name = "demo";
@@ -252,6 +257,39 @@ export class DemoEngine implements MailEngine {
     return body ? { ...body } : null;
   }
 
+  async listAddressBooks(accountId: EngineAccountId): Promise<EngineAddressBook[]> {
+    const existing = addressBooks.get(accountId);
+    if (existing) return existing;
+    const created = [{ engineId: `demo-address-book-${accountId}`, name: "Personal", isDefault: true }];
+    addressBooks.set(accountId, created);
+    return created;
+  }
+
+  async listContacts(accountId: EngineAccountId): Promise<EngineContact[]> {
+    return contacts.get(accountId)?.map(cloneContact) ?? [];
+  }
+
+  async getContact(accountId: EngineAccountId, contactId: string): Promise<EngineContact | null> {
+    const contact = contacts.get(accountId)?.find((item) => item.engineId === contactId);
+    return contact ? cloneContact(contact) : null;
+  }
+
+  async createContact(accountId: EngineAccountId, input: EngineContactInput): Promise<EngineContact> {
+    const books = input.addressBookIds ?? [(await this.listAddressBooks(accountId))[0]!.engineId];
+    const contact: EngineContact = { ...input, engineId: `demo-contact-${++seq}`, addressBookIds: books, emails: input.emails.map((item) => ({ ...item })), phones: input.phones.map((item) => ({ ...item })) };
+    const accountContacts = contacts.get(accountId) ?? [];
+    accountContacts.push(contact);
+    contacts.set(accountId, accountContacts);
+    return cloneContact(contact);
+  }
+
+  async updateContact(accountId: EngineAccountId, contactId: string, input: EngineContactInput): Promise<EngineContact> {
+    const contact = contacts.get(accountId)?.find((item) => item.engineId === contactId);
+    if (!contact) throw new Error("contact not found");
+    Object.assign(contact, { ...input, addressBookIds: input.addressBookIds ?? contact.addressBookIds, emails: input.emails.map((item) => ({ ...item })), phones: input.phones.map((item) => ({ ...item })) });
+    return cloneContact(contact);
+  }
+
   async findMessageByRfcMessageId(
     accountId: EngineAccountId,
     messageId: string,
@@ -282,3 +320,5 @@ const stripBody = (m: FullMessage): MessageSummary => {
   const { textBody: _textBody, htmlBody: _htmlBody, attachments: _attachments, headers: _headers, ...summary } = m;
   return summary;
 };
+
+const cloneContact = (contact: EngineContact): EngineContact => ({ ...contact, addressBookIds: [...contact.addressBookIds], emails: contact.emails.map((item) => ({ ...item })), phones: contact.phones.map((item) => ({ ...item })) });

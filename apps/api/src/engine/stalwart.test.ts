@@ -45,6 +45,7 @@ const MAILBOXES = [
 ];
 
 const emails = new Map<string, EmailRecord>();
+const contactRecords = new Map<string, Record<string, unknown>>();
 let seq = 0;
 
 const full: EmailRecord[] = [
@@ -126,7 +127,32 @@ const mailstore = (methodCalls: { name: string; args: Record<string, unknown>; i
   const responses: [string, Record<string, unknown>, string][] = [];
   for (const call of methodCalls) {
     const args = call.args;
-    if (call.name === "Mailbox/get") {
+    if (call.name === "AddressBook/get") {
+      responses.push(["AddressBook/get", { accountId: args.accountId, list: [{ id: "address-book-1", name: "Personal", isDefault: true }] }, call.id]);
+    } else if (call.name === "ContactCard/get") {
+      const requested = Array.isArray(args.ids) ? args.ids as string[] : null;
+      const list = [...contactRecords.values()].filter((contact) => !requested || requested.includes(String(contact.id)));
+      responses.push(["ContactCard/get", { accountId: args.accountId, list }, call.id]);
+    } else if (call.name === "ContactCard/set") {
+      const created = args.create as Record<string, Record<string, unknown>> | undefined;
+      const createdIds: Record<string, { id: string }> = {};
+      for (const [clientId, card] of Object.entries(created ?? {})) {
+        const id = `contact-${++seq}`;
+        contactRecords.set(id, { ...card, id });
+        createdIds[clientId] = { id };
+      }
+      const updates = args.update as Record<string, Record<string, unknown>> | undefined;
+      for (const [id, patch] of Object.entries(updates ?? {})) {
+        const current = contactRecords.get(id);
+        if (!current) continue;
+        for (const [path, value] of Object.entries(patch)) {
+          const property = path.replace(/^\//, "");
+          if (value === null) delete current[property];
+          else current[property] = value;
+        }
+      }
+      responses.push(["ContactCard/set", { accountId: args.accountId, ...(Object.keys(createdIds).length ? { created: createdIds } : {}) }, call.id]);
+    } else if (call.name === "Mailbox/get") {
       responses.push([
         "Mailbox/get",
         {
@@ -511,6 +537,23 @@ test("saveSent without content throws", async () => {
     attachments: [{ filename: "a.bin", contentType: "application/octet-stream", size: 1 }],
   };
   await assert.rejects(() => engine.saveSent("ramon@gs.com", draft), /missing base64 content/);
+});
+
+test("contacts map JSContact fields through JMAP", async () => {
+  const created = await engine.createContact("ramon@gs.com", {
+    displayName: "Jane Smith",
+    firstName: "Jane",
+    lastName: "Smith",
+    organization: "Example Church",
+    jobTitle: "Pastor",
+    emails: [{ value: "jane@example.org", isPrimary: true }],
+    phones: [{ value: "+1 555 0100", label: "work", isPrimary: true }],
+  });
+  assert.equal(created.displayName, "Jane Smith");
+  assert.equal(created.organization, "Example Church");
+  assert.equal(created.emails[0]?.value, "jane@example.org");
+  const updated = await engine.updateContact("ramon@gs.com", created.engineId, { ...created, displayName: "Jane S.", emails: created.emails, phones: created.phones });
+  assert.equal(updated.displayName, "Jane S.");
 });
 
 test("findMessageByRfcMessageId locates by header filter", async () => {

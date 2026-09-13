@@ -477,6 +477,8 @@ export const contacts = pgTable(
     postalCode: text("postal_code"),
     country: text("country"),
     notes: text("notes"),
+    stalwartContactId: text("stalwart_contact_id"),
+    stalwartAddressBookId: text("stalwart_address_book_id"),
     source: text("source").default("manual").notNull(),
     sourceFile: text("source_file"),
     importBatchId: uuid("import_batch_id").references(() => contactImportBatches.id, { onDelete: "set null" }),
@@ -485,7 +487,7 @@ export const contacts = pgTable(
     timesEmailed: integer("times_emailed").default(0).notNull(),
     ...timestamps,
   },
-  (t) => [index("contacts_owner_idx").on(t.ownerUserId), index("contacts_search_idx").on(t.ownerUserId, t.displayName, t.organization)],
+  (t) => [index("contacts_owner_idx").on(t.ownerUserId), index("contacts_stalwart_idx").on(t.ownerUserId, t.stalwartContactId), index("contacts_search_idx").on(t.ownerUserId, t.displayName, t.organization)],
 );
 
 export const contactEmails = pgTable(

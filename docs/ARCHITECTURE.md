@@ -116,18 +116,19 @@ production.
 - Search indexing at the product layer
 - AI / automation / analytics / administration
 - User settings and sanitized rich-text signatures
-- Contacts, autocomplete metadata, engagement history, and CSV import history
+- Contacts product view, GSW relationship intelligence, engagement history, and CSV import history
 
 ### Database (Postgres)
 - Product-level metadata only (organizations, domains, accounts, aliases,
   outbound queue + recipients + attachment refs, delivery events,
   inbound-message index).
 - The mail server's complete internal state is **not** duplicated in Postgres.
-- Contacts normalize core identity data into `contacts`, `contact_emails`,
-  `contact_phones`, and `contact_tags`; flexible imported attributes live in
-  `contact_custom_fields`. `email_signatures` stores HTML and plaintext separately
-  from message bodies. Sent-recipient contact growth is best-effort product metadata
-  after Sent persistence and never blocks delivery.
+- Stalwart is authoritative for standard contact identity and address-book membership
+  through JMAP Contacts/JSContact. Neon stores the link plus GSW enrichment: tags,
+  notes, outreach metadata, engagement counts, custom fields, and CSV import history.
+  Legacy Neon identity columns remain as migration cache data until all records are
+  linked; linked reads come from Stalwart. Sent-recipient contact growth is best-effort
+  product metadata after Sent persistence and never blocks delivery.
 
 ### Object storage (future)
 - Large attachments, exports, backups.

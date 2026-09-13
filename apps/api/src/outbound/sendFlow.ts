@@ -153,7 +153,7 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
   }
 
   await finalizeSend(reserve.id, { engineMessageId: sent.engineMessageId, engineThreadId: sent.threadId }, nextAttemptAt);
-  void recordSentRecipients(input.userId, recipientEmails).catch(() => undefined);
+  void recordSentRecipients(input.userId, recipientEmails, { engine, accountId: input.account.id }).catch(() => undefined);
 
   return {
     sendId: reserve.id,
