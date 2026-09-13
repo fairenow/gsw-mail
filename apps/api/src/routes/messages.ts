@@ -130,8 +130,10 @@ export default async (app: FastifyInstance) => {
     if (!body.accountId) throw badRequest("accountId is required");
     await requireAccountPermission(user!.id, body.accountId, "send");
     const engine = getEngine(req.accessToken);
-    const messages = await engine.listMessages(body.accountId, { mailbox: "Trash", limit: 10_000 });
-    if (messages.length) await engine.destroy(body.accountId, messages.map((message) => message.engineId));
+    const messages = await engine.listMessages(body.accountId, { mailbox: "Trash", limit: 100 });
+    for (let index = 0; index < messages.length; index += 50) {
+      await engine.destroy(body.accountId, messages.slice(index, index + 50).map((message) => message.engineId));
+    }
     return { deleted: messages.length };
   });
 

@@ -22,7 +22,7 @@ function RecipientField({ label, value, onChange }: { label: string; value: stri
   };
   return <div className="gsw-recipient-field">
     <input value={value} onChange={(event) => onChange(event.target.value)} onFocus={() => setFocused(true)} onBlur={() => window.setTimeout(() => setFocused(false), 150)} placeholder={label} aria-label={label} required={label === "To"} />
-    {focused && results.length > 0 && <div className="gsw-contact-autocomplete">{results.slice(0, 7).map((contact) => <button type="button" key={contact.id} onMouseDown={(event) => event.preventDefault()} onClick={() => select(contact)}><strong>{contact.displayName || contact.emails[0]?.email}</strong><span>{contact.jobTitle || contact.organization || contact.emails[0]?.email}</span><small>{contact.emails[0]?.email}</small></button>)}</div>}
+     {focused && results.length > 0 && <div className="gsw-contact-autocomplete">{results.slice(0, 50).map((contact) => <button type="button" key={contact.id} onMouseDown={(event) => event.preventDefault()} onClick={() => select(contact)}><strong>{contact.displayName || contact.emails[0]?.email}</strong><span>{contact.jobTitle || contact.organization || contact.emails[0]?.email}</span><small>{contact.emails[0]?.email}</small></button>)}</div>}
   </div>;
 }
 

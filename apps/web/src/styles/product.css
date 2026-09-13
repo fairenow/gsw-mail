@@ -97,7 +97,7 @@
 .gsw-recipient-row { display: flex; align-items: flex-start; gap: 6px; }
 .gsw-recipient-field { position: relative; min-width: 0; width: 100%; }
 .gsw-recipient-toggle { flex: 0 0 auto; padding: 8px 0; color: var(--gsw-accent-dark); font-size: 11px; }
-.gsw-contact-autocomplete { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 60; overflow: hidden; border: 1px solid var(--gsw-border); border-radius: 9px; background: var(--gsw-surface); box-shadow: var(--shadow-3); }
+.gsw-contact-autocomplete { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 60; max-height: 280px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--gsw-border); border-radius: 9px; background: var(--gsw-surface); box-shadow: var(--shadow-3); }
 .gsw-contact-autocomplete button { display: grid; gap: 1px; width: 100%; padding: 9px 11px; text-align: left; }
 .gsw-contact-autocomplete button:hover { background: var(--gsw-accent-soft); }
 .gsw-contact-autocomplete strong { font-size: 12px; }
