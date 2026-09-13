@@ -19,6 +19,7 @@ import product from "./routes/product.js";
 import setup from "./routes/setup.js";
 import account from "./routes/account.js";
 import mailboxSetup from "./routes/mailboxSetup.js";
+import recovery from "./routes/recovery.js";
 import { auth as betterAuth } from "./auth/better.js";
 import { config } from "./config.js";
 
@@ -70,6 +71,7 @@ export function buildApp() {
   app.register(setup);
   app.register(account);
   app.register(mailboxSetup);
+  app.register(recovery);
 
   return app;
 }

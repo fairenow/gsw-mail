@@ -48,12 +48,19 @@ export function signInWithCode(email: string, otp: string, name?: string): Promi
   return authRequest("/sign-in/email-otp", { email, otp, ...(name ? { name } : {}) });
 }
 
-export function requestPasswordResetCode(email: string): Promise<unknown> {
-  return authRequest("/email-otp/request-password-reset", { email });
+export interface PasswordResetRequest {
+  success: true;
+  recoveryType: "workspace-recovery" | "self";
+  maskedRecoveryEmail: string;
+  targetEmail: string;
+}
+
+export function requestPasswordResetCode(email: string): Promise<PasswordResetRequest> {
+  return fetch("/api/account/request-password-reset", { method: "POST", headers: { "content-type": "application/json" }, credentials: "include", body: JSON.stringify({ email }) }).then(async (response) => { const result = await response.json(); if (!response.ok) throw new Error(result.message ?? result.error ?? "Could not send a reset code."); return result as PasswordResetRequest; });
 }
 
 export function resetPasswordWithCode(email: string, otp: string, password: string): Promise<unknown> {
-  return authRequest("/email-otp/reset-password", { email, otp, password });
+  return fetch("/api/account/complete-password-reset", { method: "POST", headers: { "content-type": "application/json" }, credentials: "include", body: JSON.stringify({ email, otp, newPassword: password }) }).then(async (response) => { const result = await response.json(); if (!response.ok) throw new Error(result.message ?? result.error ?? "Could not reset your password."); return result; });
 }
 
 export function requestMailboxSetup(accountId: string): Promise<unknown> {

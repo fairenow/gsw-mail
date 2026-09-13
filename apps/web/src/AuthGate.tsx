@@ -23,6 +23,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [resetRequested, setResetRequested] = useState(false);
   const [resetPassword, setResetPasswordValue] = useState("");
   const [resetConfirm, setResetConfirm] = useState("");
+  const [resetDestination, setResetDestination] = useState("");
 
   const refresh = () => void getSession().then(setSession).catch(() => setSession(null)).finally(() => setLoading(false));
   useEffect(() => { refresh(); window.addEventListener("gsw-auth-change", refresh); return () => window.removeEventListener("gsw-auth-change", refresh); }, []);
@@ -62,7 +63,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   };
   const requestReset = async () => {
     setBusy(true); setError("");
-    try { await requestPasswordResetCode(email); setResetRequested(true); setCode(""); }
+    try { const result = await requestPasswordResetCode(email); setResetDestination(result.maskedRecoveryEmail); setResetRequested(true); setCode(""); }
     catch (err) { setError(err instanceof Error ? err.message : "Could not send a reset code."); }
     finally { setBusy(false); }
   };
@@ -82,7 +83,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <h1 className="gsw-login-title">Reset your password</h1>
       <p className="gsw-login-sub">We’ll send a reset code to your verified recovery email.</p>
       <label className="gsw-auth-field">Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>
-      {!resetRequested ? <button className="gsw-btn gsw-btn-primary gsw-btn-block" disabled={busy || !email} onClick={() => void requestReset()}>Email me a reset code</button> : <><p className="gsw-login-hint">Enter the 6-digit code sent to <strong>{email}</strong>.</p><label className="gsw-auth-field">Reset code<input autoFocus inputMode="numeric" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} /></label><label className="gsw-auth-field">New password<input type="password" value={resetPassword} onChange={(event) => setResetPasswordValue(event.target.value)} /></label><label className="gsw-auth-field">Confirm new password<input type="password" value={resetConfirm} onChange={(event) => setResetConfirm(event.target.value)} /></label><button className="gsw-btn gsw-btn-primary gsw-btn-block" disabled={busy} onClick={() => void completeReset()}>Set new password</button><button className="gsw-btn gsw-btn-ghost" disabled={busy} onClick={() => void requestReset()}>Resend reset code</button></>}
+      {!resetRequested ? <button className="gsw-btn gsw-btn-primary gsw-btn-block" disabled={busy || !email} onClick={() => void requestReset()}>Email me a reset code</button> : <><p className="gsw-login-hint">Check your {resetDestination ? "recovery" : "email"}. We sent a 6-digit code to <strong>{resetDestination}</strong>.<br /><br />This code will reset the password for <strong>{email}</strong>.</p><label className="gsw-auth-field">Reset code<input autoFocus inputMode="numeric" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} /></label><label className="gsw-auth-field">New password<input type="password" value={resetPassword} onChange={(event) => setResetPasswordValue(event.target.value)} /></label><label className="gsw-auth-field">Confirm new password<input type="password" value={resetConfirm} onChange={(event) => setResetConfirm(event.target.value)} /></label><button className="gsw-btn gsw-btn-primary gsw-btn-block" disabled={busy} onClick={() => void completeReset()}>Set new password</button><button className="gsw-btn gsw-btn-ghost" disabled={busy} onClick={() => void requestReset()}>Resend reset code</button></>}
       <button className="gsw-btn gsw-btn-quiet gsw-btn-block" onClick={() => { setResetMode(false); setResetRequested(false); setError(""); }}>Back to sign in</button>
     </> : !otpRequested ? <>
       <p className="gsw-setup-kicker">GSW Account</p>
