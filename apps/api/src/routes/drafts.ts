@@ -24,11 +24,11 @@ const sendDraftSchema = z.object({
 
 export default async (app: FastifyInstance) => {
   await requireUser(app, { optional: false });
-  const engine = getEngine();
 
   app.post("/mail/drafts", async (req, reply) => {
     const input = draftSchema.parse(req.body);
     const account = await requireAccountPermission(req.user!.id, input.accountId, "send");
+    const engine = getEngine(req.accessToken);
     const engineId = await engine.saveDraft(account.id, {
       from: account.address,
       to: input.to ?? [],
@@ -46,12 +46,14 @@ export default async (app: FastifyInstance) => {
   app.post<{ Params: { id: string } }>("/mail/drafts/:id/send", async (req, reply) => {
     const body = sendDraftSchema.parse(req.body);
     const account = await requireAccountPermission(req.user!.id, body.accountId, "send");
+    const engine = getEngine(req.accessToken);
 
     const draft = await engine.getMessage(body.accountId, req.params.id);
     if (!draft) throw notFound("draft not found");
 
     const result = await submitSend({
       userId: req.user!.id,
+      accessToken: req.accessToken,
       account,
       to: draft.to.map((a) => a.email),
       cc: draft.cc.map((a) => a.email),

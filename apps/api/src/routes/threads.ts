@@ -14,11 +14,12 @@ interface Query {
 
 export default async (app: FastifyInstance) => {
   await requireUser(app, { optional: false });
-  const engine = getEngine();
 
-  app.get<{ Params: Params; Querystring: Query }>("/mail/threads/:threadId", async ({ params, query, user }) => {
+  app.get<{ Params: Params; Querystring: Query }>("/mail/threads/:threadId", async (req) => {
+    const { params, query, user } = req;
     if (!query.accountId) throw badRequest("accountId is required");
     await requireAccountPermission(user!.id, query.accountId, "read");
+    const engine = getEngine(req.accessToken);
     const messages = await engine.getThread(query.accountId, params.threadId);
     if (messages.length === 0) throw notFound("thread not found");
     return { threadId: params.threadId, messages };

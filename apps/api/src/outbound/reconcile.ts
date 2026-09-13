@@ -1,7 +1,7 @@
 import { and, eq, lte, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { outboundMessages } from "../db/schema.js";
-import { getEngine } from "../engine/index.js";
+import { getServiceEngine } from "../engine/index.js";
 import { backfillOutboundAttachmentEngineIds, failSendPreparation, finalizeSend, loadJob } from "./queue.js";
 
 export async function reconcilePreparing(thresholdMinutes = 5): Promise<number> {
@@ -24,7 +24,7 @@ export async function reconcilePreparing(thresholdMinutes = 5): Promise<number> 
       continue;
     }
     try {
-      const engine = getEngine();
+      const engine = getServiceEngine();
       const found = await engine.findMessageByRfcMessageId(row.accountId, row.messageId);
       if (found) {
         const message = await engine.getMessage(row.accountId, found.engineMessageId);

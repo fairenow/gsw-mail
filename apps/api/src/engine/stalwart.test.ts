@@ -307,20 +307,20 @@ function makeFetch() {
 
 const engine = new StalwartEngine({
   jmapUrl: BASE,
-  adminToken: "admin-token",
+  accessToken: "user-token",
   sessionTtlMs: 10_000,
   fetchImpl: makeFetch(),
 });
 
 const mailboxEngine = new StalwartEngine({
   jmapUrl: BASE,
-  mailUsername: "test@team.guidedstepswellness.com",
-  mailPassword: "mailbox-pass",
+  serviceUsername: "test@team.guidedstepswellness.com",
+  servicePassword: "mailbox-pass",
   sessionTtlMs: 10_000,
   fetchImpl: makeFetch(),
 });
 
-test("mailbox credentials are sent as Basic auth", async () => {
+test("service credentials are sent as Basic auth", async () => {
   requestLog.length = 0;
   capturedAuth.clear();
   await mailboxEngine.listMailboxes("test@team.guidedstepswellness.com");
@@ -328,6 +328,16 @@ test("mailbox credentials are sent as Basic auth", async () => {
   assert.ok(requestLog.length >= 2, "session and jmap requests were made");
   for (const index of requestLog.keys()) {
     assert.equal(capturedAuth.get(index), expected, `request ${index} used Basic mailbox auth`);
+  }
+});
+
+test("request access tokens are sent as Bearer auth", async () => {
+  requestLog.length = 0;
+  capturedAuth.clear();
+  await engine.listMailboxes("ramon@gs.com");
+  assert.ok(requestLog.length >= 2, "session and jmap requests were made");
+  for (const index of requestLog.keys()) {
+    assert.equal(capturedAuth.get(index), "Bearer user-token", `request ${index} used request bearer auth`);
   }
 });
 

@@ -18,6 +18,7 @@ import {
 
 export interface SubmitSendInput {
   userId: string;
+  accessToken?: string | undefined;
   account: AccessibleAccount;
   to: string[];
   cc?: string[] | undefined;
@@ -59,7 +60,7 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
   const now = new Date();
   const nextAttemptAt = new Date(now.getTime() + config.send.delaySeconds * 1000);
   const messageId = generateMessageId();
-  const engine = getEngine();
+  const engine = getEngine(input.accessToken);
 
   const reserve = await reserveSendOperation({
     accountId: input.account.id,

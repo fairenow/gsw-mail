@@ -19,9 +19,9 @@ import type {
 export interface StalwartOptions {
   resolveAccount?: (productAccountId: string) => Promise<string>;
   jmapUrl: string;
-  adminToken?: string;
-  mailUsername?: string;
-  mailPassword?: string;
+  accessToken?: string;
+  serviceUsername?: string;
+  servicePassword?: string;
   sessionTtlMs?: number;
   fetchImpl?: typeof fetch;
 }
@@ -149,9 +149,9 @@ export class StalwartEngine implements MailEngine {
   constructor(private readonly opts: StalwartOptions) {
     this.client = new JmapClient({
       baseUrl: opts.jmapUrl,
-      ...(opts.adminToken ? { token: opts.adminToken } : {}),
-      ...(opts.mailUsername ? { username: opts.mailUsername } : {}),
-      ...(opts.mailPassword ? { password: opts.mailPassword } : {}),
+      ...(opts.accessToken ? { token: opts.accessToken } : {}),
+      ...(opts.serviceUsername ? { username: opts.serviceUsername } : {}),
+      ...(opts.servicePassword ? { password: opts.servicePassword } : {}),
       sessionTtlMs: opts.sessionTtlMs ?? 60_000,
       ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
     });

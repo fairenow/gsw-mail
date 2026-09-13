@@ -39,6 +39,7 @@ export default async (app: FastifyInstance) => {
     const account = await requireAccountPermission(req.user!.id, input.accountId, "send");
     const result = await submitSend({
       userId: req.user!.id,
+      accessToken: req.accessToken,
       account,
       to: input.to,
       cc: input.cc,

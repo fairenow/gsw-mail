@@ -7,11 +7,12 @@ const ORG_SLUG = "guided-steps-wellness";
 const MAIL_DOMAIN = process.env.PROD_SEED_DOMAIN ?? "team.guidedstepswellness.com";
 const OWNER_USER_ID = process.env.PROD_SEED_OWNER_ID ?? "ramon-prod";
 const OWNER_IDENTITY_PROVIDER = process.env.PROD_SEED_IDENTITY_PROVIDER ?? "stalwart";
-const OWNER_IDENTITY_SUBJECT = process.env.PROD_SEED_OWNER_SUBJECT ?? "test@team.guidedstepswellness.com";
+const OWNER_IDENTITY_SUBJECT = process.env.PROD_SEED_OWNER_SUBJECT ?? `ramon@${MAIL_DOMAIN}`;
 const OWNER_EMAIL = process.env.PROD_SEED_OWNER_EMAIL ?? "ramon@guidedstepswellness.com";
 const OWNER_NAME = process.env.PROD_SEED_OWNER_NAME ?? "Ramon Williams";
-const TEST_LOCAL_PART = "test";
-const TEST_ADDRESS = `${TEST_LOCAL_PART}@${MAIL_DOMAIN}`;
+const MAILBOX_LOCAL_PART = process.env.PROD_SEED_MAILBOX_LOCAL_PART ?? "ramon";
+const OWNER_ADDRESS = `${MAILBOX_LOCAL_PART}@${MAIL_DOMAIN}`;
+const MAILBOX_DISPLAY_NAME = process.env.PROD_SEED_MAILBOX_DISPLAY_NAME ?? OWNER_NAME;
 
 async function ensureOrgAndDomain(): Promise<{ organizationId: string; domainId: string }> {
   const [org] = await db.insert(organizations).values({ name: ORG, slug: ORG_SLUG }).onConflictDoNothing().returning();
@@ -110,24 +111,24 @@ async function ensureSeed() {
   const ownerUserId = await ensureUser(OWNER_USER_ID, OWNER_IDENTITY_SUBJECT, OWNER_EMAIL, OWNER_NAME);
   await ensureOrgMembership(organizationId, ownerUserId, "owner");
 
-  const testAccountId = await ensureAccount(domainId, TEST_LOCAL_PART, TEST_ADDRESS, "Test Mailbox", ownerUserId);
-  await ensureMembership(testAccountId, ownerUserId, "owner");
+  const ownerAccountId = await ensureAccount(domainId, MAILBOX_LOCAL_PART, OWNER_ADDRESS, MAILBOX_DISPLAY_NAME, ownerUserId);
+  await ensureMembership(ownerAccountId, ownerUserId, "owner");
 
   await db
     .insert(aliases)
     .values([
-      { domainId, source: "postmaster", targetAccountId: testAccountId },
-      { domainId, source: "abuse", targetAccountId: testAccountId },
+      { domainId, source: "postmaster", targetAccountId: ownerAccountId },
+      { domainId, source: "abuse", targetAccountId: ownerAccountId },
     ])
-    .onConflictDoNothing();
+    .onConflictDoUpdate({ target: [aliases.domainId, aliases.source], set: { targetAccountId: ownerAccountId } });
 
   console.log("seeded (production bootstrap):");
   console.log("  organization:", ORG);
   console.log("  domain:", MAIL_DOMAIN);
   console.log("  owner:", OWNER_USER_ID, "(" + OWNER_EMAIL + ")");
-  console.log("  account:", TEST_ADDRESS, "(owner ramon-prod)");
+  console.log("  account:", OWNER_ADDRESS, "(owner", OWNER_USER_ID + ")");
   console.log("  mailboxes: Inbox, Sent, Drafts, Spam, Trash, Archive");
-  console.log("  aliases: postmaster@ -> test@, abuse@ -> test@");
+  console.log("  aliases: postmaster@ ->", OWNER_ADDRESS + ",", "abuse@ ->", OWNER_ADDRESS);
 }
 
 ensureSeed()

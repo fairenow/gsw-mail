@@ -12,12 +12,13 @@ interface Query {
 
 export default async (app: FastifyInstance) => {
   await requireUser(app, { optional: false });
-  const engine = getEngine();
 
-  app.get<{ Querystring: Query }>("/mail/search", async ({ query, user }) => {
+  app.get<{ Querystring: Query }>("/mail/search", async (req) => {
+    const { query, user } = req;
     if (!query.q?.trim()) throw badRequest("q is required");
     if (!query.accountId) throw badRequest("accountId is required");
     await requireAccountPermission(user!.id, query.accountId, "read");
+    const engine = getEngine(req.accessToken);
     const messages = await engine.search(query.accountId, query.q.trim(), query.mailbox);
     return { messages };
   });

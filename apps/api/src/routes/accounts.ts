@@ -52,7 +52,6 @@ const addDelegateSchema = z.object({
 
 export default async (app: FastifyInstance) => {
   await requireUser(app, { optional: false });
-  const engine = getEngine();
 
   app.get("/mail/accounts", async (req) => {
     const accounts = await getAccessibleAccounts(req.user!.id);
@@ -84,7 +83,7 @@ export default async (app: FastifyInstance) => {
 
   app.get<{ Params: Params }>("/mail/accounts/:id/mailboxes", async (req) => {
     await requireAccountPermission(req.user!.id, req.params.id, "read");
-    return { mailboxes: await engine.listMailboxes(req.params.id) };
+    return { mailboxes: await getEngine(req.accessToken).listMailboxes(req.params.id) };
   });
 
   app.post("/mail/accounts", async (req, reply) => {

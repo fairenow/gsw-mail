@@ -1,10 +1,11 @@
 # Guided Steps Mail API
 
 Base path: `/mail`. Admin: `/admin`. Auth: `Authorization: Bearer <token>`. In
-production the token is verified against Stalwart's `/auth/introspect`
-(authenticated as the trusted Stalwart mailbox service account
-`STALWART_MAIL_USERNAME`/`STALWART_MAIL_PASSWORD`, never with the caller's token)
-and resolved to a `users` row keyed by `(identityProvider, identitySubject)`.
+production the token is verified against Stalwart's `/auth/introspect` using the
+server-only `STALWART_MAIL_USERNAME`/`STALWART_MAIL_PASSWORD` credential and resolved
+to a `users` row keyed by `(identityProvider, identitySubject)`. Mailbox operations
+then use the caller's bearer token for JMAP; the server credential is not used for
+normal user reads or writes.
 `POST /auth/exchange` is the public, unauthenticated PKCE token-exchange route
 that proxies the browser's OAuth code to Stalwart. Development only:
 `X-GSW-User-Id` / `DEV_USER_ID`.

@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { getEngine } from "../engine/index.js";
+import { getServiceEngine } from "../engine/index.js";
 import { reconcilePreparing } from "./reconcile.js";
 import { getRelay } from "./relay.js";
 import { claimDueJobs, loadJob, markAccepted, markFailed, markTransportRetry } from "./queue.js";
@@ -13,7 +13,7 @@ export interface OutboundWorker {
 
 async function resolveRelayAttachments(job: import("./types.js").OutboundJob): Promise<RelayAttachment[] | undefined> {
   if (!job.attachments?.length) return undefined;
-  const engine = getEngine();
+  const engine = getServiceEngine();
   const resolved: RelayAttachment[] = [];
   for (const a of job.attachments) {
     if (!a.engineAttachmentId) throw new Error(`attachment ${a.filename} has no engine blob`);

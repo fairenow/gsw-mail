@@ -32,13 +32,13 @@ const abs = (base: string, url: string): string => {
 };
 
 const authorizationHeader = (opts: JmapClientOptions): string => {
-  if (opts.username && opts.password) {
-    return `Basic ${Buffer.from(`${opts.username}:${opts.password}`, "utf8").toString("base64")}`;
-  }
   if (opts.token) {
     return `Bearer ${opts.token}`;
   }
-  throw new Error("JMAP client requires either mailbox credentials or a Bearer token");
+  if (opts.username && opts.password) {
+    return `Basic ${Buffer.from(`${opts.username}:${opts.password}`, "utf8").toString("base64")}`;
+  }
+  throw new Error("JMAP client requires either a service credential or a Bearer token");
 };
 
 export class JmapClient {

@@ -77,18 +77,21 @@ GSW Applications
 ```
 
 The mail server is critical infrastructure and is **not** exposed directly to every
-application. Only the internal API reaches it (via JMAP/imap with controlled
-credentials). Administration endpoints require elevated authorization.
+application. Only the internal API reaches it via JMAP. Administration endpoints
+require elevated authorization.
 
 Authentication: the web app signs in with Stalwart's OAuth authorization server
 via PKCE (public client `gsw-mail-web`, no secret). The browser never talks to the
 authorization server directly: the token exchange runs server-side through the
 API's `POST /auth/exchange` route, so `mail.guidedstepswellness.com` never needs
 Stalwart CORS. The API verifies bearer access tokens by calling Stalwart's
-`/auth/introspect` authenticated as the trusted Stalwart mailbox service account
-(`STALWART_MAIL_USERNAME`/`STALWART_MAIL_PASSWORD`), never with the caller's token, and
-resolves the canonical `sub` to a `users` row keyed by
-`(identityProvider, identitySubject)`.
+`/auth/introspect` authenticated as the trusted Stalwart service account
+(`STALWART_MAIL_USERNAME`/`STALWART_MAIL_PASSWORD`), then resolves the canonical
+`sub` to a `users` row keyed by `(identityProvider, identitySubject)`. After
+authentication, normal mailbox operations create a request-scoped JMAP client with
+the caller's OAuth bearer token. The service credential is not used to read the
+caller's mailbox. Background recovery jobs may use the explicitly named service
+engine and require matching Stalwart delegation.
 Authorization is role-based: org memberships (owner/admin/member) gate admin
 operations; mail-account memberships (owner/delegate/read_only) gate mail
 actions via read/send/manage permissions. `/health` and `/auth/exchange` are

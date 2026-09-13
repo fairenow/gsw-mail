@@ -6,25 +6,40 @@ import { DemoEngine } from "./demo.js";
 import { StalwartEngine } from "./stalwart.js";
 import type { MailEngine } from "./types.js";
 
-let engine: MailEngine | undefined;
+let demoEngine: MailEngine | undefined;
+let serviceEngine: MailEngine | undefined;
 
-export function getEngine(): MailEngine {
-  if (!engine) {
-    engine =
-      config.mailEngine === "stalwart"
-        ? new StalwartEngine({
-            resolveAccount: async (id) => {
-              const [account] = await db.select({ address: emailAccounts.address }).from(emailAccounts).where(eq(emailAccounts.id, id)).limit(1);
-              if (!account) throw new Error("mail account not found");
-              return account.address;
-            },
-            jmapUrl: config.stalwart.jmapUrl,
-            ...(config.stalwart.adminToken ? { adminToken: config.stalwart.adminToken } : {}),
-            ...(config.stalwart.mailUsername ? { mailUsername: config.stalwart.mailUsername } : {}),
-            ...(config.stalwart.mailPassword ? { mailPassword: config.stalwart.mailPassword } : {}),
-            sessionTtlMs: config.stalwart.sessionTtlSeconds * 1000,
-          })
-        : new DemoEngine();
+const resolveAccount = async (id: string): Promise<string> => {
+  const [account] = await db.select({ address: emailAccounts.address }).from(emailAccounts).where(eq(emailAccounts.id, id)).limit(1);
+  if (!account) throw new Error("mail account not found");
+  return account.address;
+};
+
+export function getEngine(accessToken?: string): MailEngine {
+  if (config.mailEngine === "demo") {
+    demoEngine ??= new DemoEngine();
+    return demoEngine;
   }
-  return engine;
+
+  if (!accessToken) throw new Error("authenticated JMAP access token required");
+  return new StalwartEngine({
+    resolveAccount,
+    jmapUrl: config.stalwart.jmapUrl,
+    accessToken,
+    sessionTtlMs: config.stalwart.sessionTtlSeconds * 1000,
+  });
+}
+
+export function getServiceEngine(): MailEngine {
+  if (config.mailEngine === "demo") {
+    return getEngine();
+  }
+  serviceEngine ??= new StalwartEngine({
+    resolveAccount,
+    jmapUrl: config.stalwart.jmapUrl,
+    ...(config.stalwart.mailUsername ? { serviceUsername: config.stalwart.mailUsername } : {}),
+    ...(config.stalwart.mailPassword ? { servicePassword: config.stalwart.mailPassword } : {}),
+    sessionTtlMs: config.stalwart.sessionTtlSeconds * 1000,
+  });
+  return serviceEngine;
 }

@@ -335,7 +335,9 @@ DATABASE_URL=<Neon connection>
 
 STALWART_JMAP_URL=https://mx1.guidedstepswellness.com
 STALWART_ADMIN_TOKEN=<secret>
-STALWART_MAIL_USERNAME=test@team.guidedstepswellness.com
+# Server-only credential for /auth/introspect and explicit background recovery;
+# normal request JMAP calls use the caller's OAuth bearer token.
+STALWART_MAIL_USERNAME=<dedicated-service-account>
 STALWART_MAIL_PASSWORD=<secret>
 
 OUTBOUND_RELAY=resend
@@ -345,8 +347,8 @@ DELIVERY_WEBHOOK_SECRET=<secret>
 OIDC_ISSUER=https://mx1.guidedstepswellness.com
 OIDC_CLIENT_ID=gsw-mail-web
 
-# Stalwart /auth/introspect authenticates its caller as an account login, so the
-# API verifies bearer tokens as the trusted mailbox service account (server-only).
+# Stalwart /auth/introspect authenticates its caller as an account login. The
+# server-only credential above is not used for normal user mailbox operations.
 IDENTITY_PROVIDER=stalwart
 
 SEND_DELAY_SECONDS=5
@@ -388,14 +390,17 @@ npm run db:seed:prod
 ```
 
 It creates the organization, the `team.guidedstepswellness.com` domain, the owner
-user, and the `test@team.guidedstepswellness.com` account with its mailboxes and
-postmaster/abuse aliases. The owner user's identity defaults to
-`identityProvider=stalwart`, `identitySubject=test@team.guidedstepswellness.com`
-(the Stalwart username returned by introspection for that account), and the seed
-reconciles these identity fields on an existing owner row. Override identities
-with `PROD_SEED_DOMAIN`, `PROD_SEED_OWNER_ID`, `PROD_SEED_IDENTITY_PROVIDER`,
-`PROD_SEED_OWNER_SUBJECT`, `PROD_SEED_OWNER_EMAIL`,
-`PROD_SEED_OWNER_NAME` when the GSW identity subjects differ.
+user, and the owner's own mailbox with its mailboxes and postmaster/abuse
+aliases. The owner user's identity defaults to `identityProvider=stalwart`,
+`identitySubject=ramon@team.guidedstepswellness.com` (the Stalwart username
+returned by introspection for that account), the mailbox defaults to
+`PROD_SEED_MAILBOX_LOCAL_PART=ramon` (address `ramon@team.guidedstepswellness.com`),
+and the seed reconciles these identity fields on an existing owner row. The seed
+never grants the owner membership of a separate test mailbox. Override with
+`PROD_SEED_DOMAIN`, `PROD_SEED_OWNER_ID`, `PROD_SEED_IDENTITY_PROVIDER`,
+`PROD_SEED_OWNER_SUBJECT`, `PROD_SEED_OWNER_EMAIL`, `PROD_SEED_OWNER_NAME`,
+`PROD_SEED_MAILBOX_LOCAL_PART`, `PROD_SEED_MAILBOX_DISPLAY_NAME` when the GSW
+identity subjects or mailbox local-part differ.
 
 Once production is initialized, migrations should be append-only.
 

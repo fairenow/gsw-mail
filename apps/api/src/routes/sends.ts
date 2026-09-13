@@ -43,7 +43,7 @@ export default async (app: FastifyInstance) => {
     if (!cancelled) throw badRequest("send can only be cancelled while preparing or queued");
 
     if (row.engineMessageId) {
-      await getEngine().move(row.accountId, [row.engineMessageId], "Drafts");
+      await getEngine(req.accessToken).move(row.accountId, [row.engineMessageId], "Drafts");
     }
     await audit({
       actorUserId: req.user!.id,

@@ -35,12 +35,13 @@ const roleFromName = (name: string): MailboxRole | null => {
 
 export default async (app: FastifyInstance) => {
   await requireUser(app, { optional: false });
-  const engine = getEngine();
 
-  app.get<{ Querystring: Query }>("/mail/messages", async ({ query, user }) => {
+  app.get<{ Querystring: Query }>("/mail/messages", async (req) => {
+    const { query, user } = req;
     if (!query.accountId) throw badRequest("accountId is required");
     const accountId = query.accountId;
     await requireAccountPermission(user!.id, accountId, "read");
+    const engine = getEngine(req.accessToken);
 
     const mailboxes = await engine.listMailboxes(accountId);
     const requested = (query.mailbox ?? "inbox").toLowerCase();
@@ -58,9 +59,11 @@ export default async (app: FastifyInstance) => {
     return { messages };
   });
 
-  app.get<{ Params: Params; Querystring: Query }>("/mail/messages/:id", async ({ params, query, user }) => {
+  app.get<{ Params: Params; Querystring: Query }>("/mail/messages/:id", async (req) => {
+    const { params, query, user } = req;
     if (!query.accountId) throw badRequest("accountId is required");
     await requireAccountPermission(user!.id, query.accountId, "read");
+    const engine = getEngine(req.accessToken);
     const message = await engine.getMessage(query.accountId, params.id);
     if (!message) throw notFound("message not found");
     return message;
@@ -69,6 +72,7 @@ export default async (app: FastifyInstance) => {
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/read", async (req) => {
     const input = seenSchema.parse(req.body);
     await requireAccountPermission(req.user!.id, input.accountId, "read");
+    const engine = getEngine(req.accessToken);
     await engine.setSeen(input.accountId, [req.params.id], input.seen);
     await syncCache(input.accountId, req.params.id, { read: input.seen });
     return { messageId: req.params.id, read: input.seen };
@@ -77,6 +81,7 @@ export default async (app: FastifyInstance) => {
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/flag", async (req) => {
     const input = flagSchema.parse(req.body);
     await requireAccountPermission(req.user!.id, input.accountId, "read");
+    const engine = getEngine(req.accessToken);
     await engine.setFlagged(input.accountId, [req.params.id], input.flagged);
     await syncCache(input.accountId, req.params.id, { flagged: input.flagged });
     return { messageId: req.params.id, flagged: input.flagged };
@@ -85,23 +90,28 @@ export default async (app: FastifyInstance) => {
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/move", async (req) => {
     const input = moveSchema.parse(req.body);
     await requireAccountPermission(req.user!.id, input.accountId, "send");
+    const engine = getEngine(req.accessToken);
     await engine.move(input.accountId, [req.params.id], input.mailbox);
     const role = roleFromName(input.mailbox);
     if (role) await syncCache(input.accountId, req.params.id, { mailboxRole: role });
     return { messageId: req.params.id, mailbox: input.mailbox };
   });
 
-  app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/archive", async ({ params, body, user }) => {
+  app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/archive", async (req) => {
+    const { params, body, user } = req;
     if (!body.accountId) throw badRequest("accountId is required");
     await requireAccountPermission(user!.id, body.accountId, "send");
+    const engine = getEngine(req.accessToken);
     await engine.move(body.accountId, [params.id], "Archive");
     await syncCache(body.accountId, params.id, { mailboxRole: "archive" });
     return { messageId: params.id, mailbox: "Archive" };
   });
 
-  app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/trash", async ({ params, body, user }) => {
+  app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/trash", async (req) => {
+    const { params, body, user } = req;
     if (!body.accountId) throw badRequest("accountId is required");
     await requireAccountPermission(user!.id, body.accountId, "send");
+    const engine = getEngine(req.accessToken);
     await engine.move(body.accountId, [params.id], "Trash");
     await syncCache(body.accountId, params.id, { mailboxRole: "trash" });
     return { messageId: params.id, mailbox: "Trash" };

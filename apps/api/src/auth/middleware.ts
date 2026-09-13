@@ -5,6 +5,7 @@ import { resolveUser, verifyAccessToken, type AuthenticatedUser } from "./identi
 declare module "fastify" {
   interface FastifyRequest {
     user?: AuthenticatedUser;
+    accessToken?: string;
   }
 }
 
@@ -22,7 +23,10 @@ export const requireUser = async (app: FastifyInstance, opts: { optional?: boole
         const claims = await verifyAccessToken(token).catch(() => null);
         if (claims) {
           const user = await resolveUser(config.auth.identityProvider, claims.sub).catch(() => null);
-          if (user) req.user = user;
+          if (user) {
+            req.user = user;
+            req.accessToken = token;
+          }
         }
       }
     } else {
@@ -38,6 +42,7 @@ export const requireUser = async (app: FastifyInstance, opts: { optional?: boole
       if (userId) {
         const user = await resolveUser(config.auth.identityProvider, userId).catch(() => null);
         req.user = user ?? { id: userId };
+        if (user && token) req.accessToken = token;
       }
     }
 

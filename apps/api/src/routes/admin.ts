@@ -27,7 +27,7 @@ export default async (app: FastifyInstance) => {
   app.get("/admin/health", async (req) => {
     const { organizationId } = orgQuery.parse(req.query ?? {});
     await requireOrgPermission(req.user!.id, organizationId, ["owner", "admin"]);
-    const [dbOk, engine, relay] = await Promise.all([pingDatabase(), getEngine().status(), Promise.resolve(getRelay().name)]);
+    const [dbOk, engine, relay] = await Promise.all([pingDatabase(), getEngine(req.accessToken).status(), Promise.resolve(getRelay().name)]);
     return {
       organizationId,
       ok: dbOk && engine.ok,
