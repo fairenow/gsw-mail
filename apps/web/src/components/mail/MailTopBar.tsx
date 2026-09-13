@@ -1,4 +1,5 @@
 import type { FormEvent } from "react";
+import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import type { Account } from "../../api";
 import { AccountMenu } from "./AccountMenu";
 
@@ -20,12 +21,12 @@ export function MailTopBar({ account, accounts, profileImageUrl, search, onSearc
       <div className="gsw-topnav-brand">
         <button className="gsw-logo-toggle" onClick={onToggleSidebar} aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"} title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}>
           <img className="gsw-wordmark-mark" src="/logo.png" alt="" aria-hidden="true" />
-          <span className="gsw-logo-toggle-icon" aria-hidden="true">{sidebarCollapsed ? "›" : "‹"}</span>
+          <span className="gsw-logo-toggle-icon" aria-hidden="true">{sidebarCollapsed ? <ChevronRight size={20} strokeWidth={1.75} /> : <ChevronLeft size={20} strokeWidth={1.75} />}</span>
         </button>
         <a className="gsw-wordmark" href="/">GSW Mail</a>
       </div>
       <form className="gsw-topnav-search" onSubmit={submit} role="search">
-        <span className="gsw-search-icon" aria-hidden="true">⌕</span>
+        <span className="gsw-search-icon" aria-hidden="true"><Search size={18} strokeWidth={1.75} /></span>
         <input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Search mail" aria-label="Search mail" />
       </form>
       <div className="gsw-topnav-end"><AccountMenu account={account} accounts={accounts} profileImageUrl={profileImageUrl} onSelect={onSelectAccount} /></div>

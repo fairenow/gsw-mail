@@ -60,6 +60,7 @@ quotaBytes, usedBytes`. List responses add `role` and `permissions`.
 | POST | `/mail/messages/:id/move` | `{accountId, mailbox}` |
 | POST | `/mail/messages/:id/archive` | `{accountId}` |
 | POST | `/mail/messages/:id/trash` | `{accountId}` |
+| POST | `/mail/messages/empty-trash` | `{accountId}`; permanently deletes all Trash messages |
 
 The product `inbound_messages` table is an **index**, not the source of truth. A
 failed index sync logs a warning but does not fail the mail action.

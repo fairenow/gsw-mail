@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, type Account, type FullMessage, type MessageSummary, type ProductSettings, type SendResult } from "../api";
+import { Inbox } from "lucide-react";
+import { api, type FullMessage, type MessageSummary, type ProductSettings, type SendResult } from "../api";
+import { useAppShell } from "../components/AppShell";
 import { plainTextToHtml, richTextToText } from "../components/RichTextEditor";
 import { FOLDERS, type Folder } from "../components/folders";
 import { ComposeWindow, type ComposeMode } from "../components/mail/ComposeWindow";
 import { EmptyReader } from "../components/mail/EmptyReader";
 import { MailSidebar } from "../components/mail/MailSidebar";
-import { MailTopBar } from "../components/mail/MailTopBar";
 import { MessageListHeader } from "../components/mail/MessageListHeader";
 import { MessageReader } from "../components/mail/MessageReader";
 import { MessageRow } from "../components/mail/MessageRow";
@@ -24,8 +25,7 @@ const localDraftKey = (accountId: string) => `gsw-mail-draft:${accountId}`;
 const emptyFolderCounts = (): Record<Folder, { total: number; unread: number }> => Object.fromEntries(FOLDERS.map((name) => [name, { total: 0, unread: 0 }])) as Record<Folder, { total: number; unread: number }>;
 
 export function MailPage() {
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [account, setAccount] = useState<Account | null>(null);
+  const { account, accounts, profileImageUrl, selectAccount: shellSelectAccount, configureTopBar } = useAppShell();
   const [folder, setFolder] = useState<Folder>("Inbox");
   const [folderCounts, setFolderCounts] = useState<Record<Folder, { total: number; unread: number }>>(emptyFolderCounts);
   const [messages, setMessages] = useState<MessageSummary[]>([]);
@@ -44,7 +44,6 @@ export function MailPage() {
   const [subject, setSubject] = useState("");
   const [html, setHtml] = useState("");
   const [signature, setSignature] = useState<ProductSettings["signature"] | null>(null);
-  const [profileImageUrl, setProfileImageUrl] = useState("");
   const [templateKey, setTemplateKey] = useState(fallbackTemplateKey);
   const [inReplyTo, setInReplyTo] = useState<string | undefined>();
   const [references, setReferences] = useState<string | undefined>();
@@ -65,19 +64,20 @@ export function MailPage() {
     const results = await Promise.all(FOLDERS.map(async (name) => [name, await api.messages(accountId, name, 10_000)] as const));
     setFolderCounts(Object.fromEntries(results.map(([name, rows]) => [name, { total: rows.length, unread: rows.filter((row) => !row.read).length }])) as Record<Folder, { total: number; unread: number }>);
   }, []);
-  useEffect(() => { void api.accounts().then((rows) => { setAccounts(rows); if (rows[0]) { setAccount(rows[0]); void loadFolder(rows[0].id, "Inbox"); void loadFolderCounts(rows[0].id); } }).catch((err) => setError(err instanceof Error ? err.message : String(err))); }, [loadFolder, loadFolderCounts]);
-  useEffect(() => { void api.settings().then((settings) => { setSignature(settings.signature); setProfileImageUrl(typeof settings.general.profileImageUrl === "string" ? settings.general.profileImageUrl : ""); setTemplateKey(settings.general.templateKey === "bible_reader" ? "bible_reader" : fallbackTemplateKey); }).catch(() => undefined); }, []);
+  useEffect(() => { if (account) { void loadFolder(account.id, "Inbox"); void loadFolderCounts(account.id); } }, [account, loadFolder, loadFolderCounts]);
+  useEffect(() => { void api.settings().then((settings) => { setSignature(settings.signature); setTemplateKey(settings.general.templateKey === "bible_reader" ? "bible_reader" : fallbackTemplateKey); }).catch(() => undefined); }, []);
   useEffect(() => () => readTimers.current.forEach((timer) => window.clearTimeout(timer)), []);
 
   const signatureFor = (mode: ComposeMode) => {
     if (!signature?.enabled || (mode === "new" && !signature.onNew) || ((mode === "reply" || mode === "replyAll") && !signature.onReply) || (mode === "forward" && !signature.onForward)) return "";
     return signature.signatureHtml ? `<div class="gsw-signature">${signature.signatureHtml}</div><div><br></div>` : "";
   };
-  const selectAccount = (id: string) => { const next = accounts.find((item) => item.id === id); if (!next) return; setAccount(next); setOpen(null); setLastSend(null); setMobileView("folders"); void loadFolder(next.id, folder); void loadFolderCounts(next.id); };
+  const selectAccount = useCallback((id: string) => { const next = accounts.find((item) => item.id === id); if (!next) return; shellSelectAccount(id); setOpen(null); setLastSend(null); setMobileView("folders"); void loadFolder(next.id, folder); void loadFolderCounts(next.id); }, [accounts, folder, loadFolder, loadFolderCounts, shellSelectAccount]);
   const selectFolder = (name: Folder) => { setFolder(name); setOpen(null); setMobileView("messages"); if (account) void loadFolder(account.id, name); };
-  const refresh = () => { if (account) { void loadFolder(account.id, folder); void loadFolderCounts(account.id); } };
-  const toggleSidebar = () => { if (window.matchMedia("(max-width: 699px)").matches) { setMobileView((current) => current === "folders" ? "messages" : "folders"); return; } setSidebarCollapsed((current) => { const next = !current; localStorage.setItem("gsw-mail-sidebar-collapsed", String(next)); return next; }); };
-  const runSearch = async () => { if (!account) return; if (!search.trim()) { refresh(); return; } try { setError(null); setMessages(await api.search(account.id, search.trim())); setOpen(null); setMobileView("messages"); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
+  const refresh = useCallback(() => { if (account) { void loadFolder(account.id, folder); void loadFolderCounts(account.id); } }, [account, folder, loadFolder, loadFolderCounts]);
+  const toggleSidebar = useCallback(() => { if (window.matchMedia("(max-width: 699px)").matches) { setMobileView((current) => current === "folders" ? "messages" : "folders"); return; } setSidebarCollapsed((current) => { const next = !current; localStorage.setItem("gsw-mail-sidebar-collapsed", String(next)); return next; }); }, []);
+  const runSearch = useCallback(async () => { if (!account) return; if (!search.trim()) { refresh(); return; } try { setError(null); setMessages(await api.search(account.id, search.trim())); setOpen(null); setMobileView("messages"); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } }, [account, refresh, search]);
+  useEffect(() => { configureTopBar({ search, searchPlaceholder: "Search mail", onSearchChange: setSearch, onSearch: () => void runSearch(), searchDisabled: false, sidebarCollapsed, onToggleSidebar: toggleSidebar, onSelectAccount: selectAccount }); }, [configureTopBar, runSearch, search, selectAccount, sidebarCollapsed, toggleSidebar]);
 
   const openDraft = (draft: FullMessage) => {
     setComposeMode("new"); setCompose(true); setComposeMinimized(false); setDraftId(draft.engineId); setDraftDirty(false); setDraftSaveBlocked(false); setDraftStatus("saved"); setLastSend(null); setSendError(null); setSendRequestId(null);
@@ -113,13 +113,12 @@ export function MailPage() {
    const runSend = async () => { if (!account) return; try { setError(null); setSendError(null); setSending(true); const clientRequestId = sendRequestId ?? crypto.randomUUID(); setSendRequestId(clientRequestId); const savedId = await saveDraft(true); const result = savedId ? await api.sendDraft(savedId, account.id, clientRequestId, composeMode, templateKey) : await api.send(account.id, parseRecipients(to), { cc: parseRecipients(cc), bcc: parseRecipients(bcc), subject, textBody: richTextToText(html), htmlBody: html, inReplyTo, references, mode: composeMode, clientRequestId, templateKey }); setLastSend(result); setSendError(null); setCompose(false); setComposeMinimized(false); setDraftId(null); setDraftDirty(false); setDraftSaveBlocked(false); setSendRequestId(null); localStorage.removeItem(localDraftKey(account.id)); setTo(""); setCc(""); setBcc(""); setSubject(""); setHtml(""); setInReplyTo(undefined); setReferences(undefined); } catch (err) { const message = err instanceof Error ? err.message : String(err); setSendError(message); setError(message); } finally { setSending(false); } };
   const runUndo = async () => { if (!lastSend) return; try { const result = await api.cancelSend(lastSend.sendId); setLastSend({ ...lastSend, status: result.status }); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
 
-   return <div className="gsw-mail-shell">
-    <MailTopBar account={account} accounts={accounts} profileImageUrl={profileImageUrl} search={search} onSearchChange={setSearch} onSearch={() => void runSearch()} onSelectAccount={selectAccount} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={toggleSidebar} />
-    <main className={`gsw-mail-body ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+    return <>
+     <main className={`gsw-mail-body ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <MailSidebar account={account} profileImageUrl={profileImageUrl} folder={folder} counts={folderCounts} composeOpen={compose} mobileHidden={mobileView !== "folders"} collapsed={sidebarCollapsed} onSelectFolder={selectFolder} onToggleCompose={() => openCompose()} />
-       <section className={`gsw-message-list ${mobileView !== "messages" ? "" : "mobile-open"}`} aria-label={`${folder} messages`}><MessageListHeader folder={folder} count={messages.length} onRefresh={refresh} onEmptyTrash={folder === "Trash" ? () => void emptyTrash() : undefined} />{error && <p className="gsw-errors">{error}</p>}{messages.length ? messages.map((message) => <MessageRow key={message.engineId} message={message} folder={folder} active={open?.engineId === message.engineId} onOpen={() => void selectMessage(message)} onToggleRead={() => void toggleRead(message)} onDelete={() => void runAction("trash", message.engineId)} onArchive={() => void runAction("archive", message.engineId)} onRestore={folder === "Trash" ? () => void restoreMessage(message.engineId) : undefined} onDestroy={folder === "Trash" ? () => void destroyMessage(message.engineId) : undefined} />) : <div className="gsw-list-empty"><span aria-hidden="true">✉</span><strong>No messages here</strong><p>Your {folder.toLowerCase()} is clear.</p></div>}</section>
+       <section className={`gsw-message-list ${mobileView !== "messages" ? "" : "mobile-open"}`} aria-label={`${folder} messages`}><MessageListHeader folder={folder} count={messages.length} onRefresh={refresh} onEmptyTrash={folder === "Trash" ? () => void emptyTrash() : undefined} />{error && <p className="gsw-errors">{error}</p>}{messages.length ? messages.map((message) => <MessageRow key={message.engineId} message={message} folder={folder} active={open?.engineId === message.engineId} onOpen={() => void selectMessage(message)} onToggleRead={() => void toggleRead(message)} onDelete={() => void runAction("trash", message.engineId)} onArchive={() => void runAction("archive", message.engineId)} onRestore={folder === "Trash" ? () => void restoreMessage(message.engineId) : undefined} onDestroy={folder === "Trash" ? () => void destroyMessage(message.engineId) : undefined} />) : <div className="gsw-list-empty"><span aria-hidden="true"><Inbox size={28} strokeWidth={1.75} /></span><strong>No messages here</strong><p>Your {folder.toLowerCase()} is clear.</p></div>}</section>
       <section className={`gsw-reading-pane ${mobileView === "reader" ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} aria-label="Message reader">{open ? <MessageReader message={open} accountAddress={account?.address} folder={folder} onBack={() => setMobileView("messages")} onReply={() => openCompose("reply", open)} onReplyAll={() => openCompose("replyAll", open)} onForward={() => openCompose("forward", open)} onArchive={() => void runAction("archive", open.engineId)} onTrash={() => void runAction("trash", open.engineId)} onToggleRead={() => void toggleRead(open)} onRestore={() => void restoreMessage(open.engineId)} onDestroy={() => void destroyMessage(open.engineId)} /> : <EmptyReader />}</section>
     </main>
     {compose && <ComposeWindow mode={composeMode} minimized={composeMinimized} to={to} cc={cc} bcc={bcc} subject={subject} html={html} sending={sending} draftStatus={draftStatus} sendError={sendError} sendNote={lastSend ? `Sent · ${lastSend.status}` : undefined} onToChange={(value) => { setTo(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onCcChange={(value) => { setCc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onBccChange={(value) => { setBcc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onSubjectChange={(value) => { setSubject(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onHtmlChange={(value) => { setHtml(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onMinimize={() => { void saveDraft(true); setComposeMinimized(true); }} onClose={() => { void saveDraft(true); setCompose(false); }} onSubmit={() => void runSend()} onRetry={() => void runSend()} onUndo={lastSend ? () => void runUndo() : undefined} />}
-  </div>;
+   </>;
 }

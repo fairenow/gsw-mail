@@ -4,7 +4,7 @@ export type EngineThreadId = string;
 export type EngineMailboxId = string;
 
 export interface MailboxName {
-  role: "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive";
+  role: "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive" | null;
   engineName: string;
   engineId?: EngineMailboxId;
 }

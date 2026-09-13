@@ -5,13 +5,13 @@ import { aliases, domains, emailAccounts, mailAccountMemberships, mailboxes, org
 const ORG = "Guided Steps Wellness";
 const ORG_SLUG = "guided-steps-wellness";
 const MAIL_DOMAIN = process.env.PROD_SEED_DOMAIN ?? "team.guidedstepswellness.com";
-const OWNER_USER_ID = process.env.PROD_SEED_OWNER_ID ?? "ramon-prod";
+const OWNER_USER_ID = process.env.PROD_SEED_OWNER_ID;
 const OWNER_IDENTITY_PROVIDER = process.env.PROD_SEED_IDENTITY_PROVIDER ?? "stalwart";
-const OWNER_IDENTITY_SUBJECT = process.env.PROD_SEED_OWNER_SUBJECT ?? `ramon@${MAIL_DOMAIN}`;
-const OWNER_EMAIL = process.env.PROD_SEED_OWNER_EMAIL ?? "ramon@guidedstepswellness.com";
-const OWNER_NAME = process.env.PROD_SEED_OWNER_NAME ?? "Ramon Williams";
-const MAILBOX_LOCAL_PART = process.env.PROD_SEED_MAILBOX_LOCAL_PART ?? "ramon";
-const OWNER_ADDRESS = `${MAILBOX_LOCAL_PART}@${MAIL_DOMAIN}`;
+const OWNER_IDENTITY_SUBJECT = process.env.PROD_SEED_OWNER_SUBJECT;
+const OWNER_EMAIL = process.env.PROD_SEED_OWNER_EMAIL;
+const OWNER_NAME = process.env.PROD_SEED_OWNER_NAME;
+const MAILBOX_LOCAL_PART = process.env.PROD_SEED_MAILBOX_LOCAL_PART;
+const OWNER_ADDRESS = MAILBOX_LOCAL_PART ? `${MAILBOX_LOCAL_PART}@${MAIL_DOMAIN}` : undefined;
 const MAILBOX_DISPLAY_NAME = process.env.PROD_SEED_MAILBOX_DISPLAY_NAME ?? OWNER_NAME;
 
 async function ensureOrgAndDomain(): Promise<{ organizationId: string; domainId: string }> {
@@ -108,27 +108,29 @@ async function ensureOrgMembership(organizationId: string, userId: string, role:
 async function ensureSeed() {
   const { organizationId, domainId } = await ensureOrgAndDomain();
 
-  const ownerUserId = await ensureUser(OWNER_USER_ID, OWNER_IDENTITY_SUBJECT, OWNER_EMAIL, OWNER_NAME);
-  await ensureOrgMembership(organizationId, ownerUserId, "owner");
+  const ownerFields = [OWNER_USER_ID, OWNER_IDENTITY_SUBJECT, OWNER_EMAIL, OWNER_NAME, MAILBOX_LOCAL_PART].every(Boolean);
+  if (ownerFields && OWNER_USER_ID && OWNER_IDENTITY_SUBJECT && OWNER_EMAIL && OWNER_NAME && MAILBOX_LOCAL_PART && OWNER_ADDRESS) {
+    const ownerUserId = await ensureUser(OWNER_USER_ID, OWNER_IDENTITY_SUBJECT, OWNER_EMAIL, OWNER_NAME);
+    await ensureOrgMembership(organizationId, ownerUserId, "owner");
 
-  const ownerAccountId = await ensureAccount(domainId, MAILBOX_LOCAL_PART, OWNER_ADDRESS, MAILBOX_DISPLAY_NAME, ownerUserId);
-  await ensureMembership(ownerAccountId, ownerUserId, "owner");
+    const ownerAccountId = await ensureAccount(domainId, MAILBOX_LOCAL_PART, OWNER_ADDRESS, MAILBOX_DISPLAY_NAME ?? OWNER_NAME, ownerUserId);
+    await ensureMembership(ownerAccountId, ownerUserId, "owner");
 
-  await db
-    .insert(aliases)
-    .values([
-      { domainId, source: "postmaster", targetAccountId: ownerAccountId },
-      { domainId, source: "abuse", targetAccountId: ownerAccountId },
-    ])
-    .onConflictDoUpdate({ target: [aliases.domainId, aliases.source], set: { targetAccountId: ownerAccountId } });
+    await db
+      .insert(aliases)
+      .values([
+        { domainId, source: "postmaster", targetAccountId: ownerAccountId },
+        { domainId, source: "abuse", targetAccountId: ownerAccountId },
+      ])
+      .onConflictDoUpdate({ target: [aliases.domainId, aliases.source], set: { targetAccountId: ownerAccountId } });
+  } else if ([OWNER_USER_ID, OWNER_IDENTITY_SUBJECT, OWNER_EMAIL, OWNER_NAME, MAILBOX_LOCAL_PART].some(Boolean)) {
+    throw new Error("PROD_SEED_OWNER_ID, PROD_SEED_OWNER_SUBJECT, PROD_SEED_OWNER_EMAIL, PROD_SEED_OWNER_NAME, and PROD_SEED_MAILBOX_LOCAL_PART must be set together");
+  }
 
   console.log("seeded (production bootstrap):");
   console.log("  organization:", ORG);
   console.log("  domain:", MAIL_DOMAIN);
-  console.log("  owner:", OWNER_USER_ID, "(" + OWNER_EMAIL + ")");
-  console.log("  account:", OWNER_ADDRESS, "(owner", OWNER_USER_ID + ")");
-  console.log("  mailboxes: Inbox, Sent, Drafts, Spam, Trash, Archive");
-  console.log("  aliases: postmaster@ ->", OWNER_ADDRESS + ",", "abuse@ ->", OWNER_ADDRESS);
+  console.log("  owner bootstrap:", ownerFields ? OWNER_USER_ID : "not configured; provision on login or run db:backfill:prod");
 }
 
 ensureSeed()

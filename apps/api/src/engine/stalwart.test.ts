@@ -35,11 +35,13 @@ const ACCOUNTS: Record<string, { name: string }> = {
 
 const MAILBOXES = [
   { id: "mbox-inbox", name: "Inbox", role: "inbox", sortOrder: 0 },
-  { id: "mbox-archive", name: "Archive", role: "archive", sortOrder: 1 },
-  { id: "mbox-drafts", name: "Drafts", role: "drafts", sortOrder: 2 },
-  { id: "mbox-sent", name: "Sent", role: "sent", sortOrder: 3 },
-  { id: "mbox-junk", name: "Junk", role: "junk", sortOrder: 4 },
-  { id: "mbox-trash", name: "Trash", role: "trash", sortOrder: 5 },
+  { id: "mbox-custom", name: "Receipts", role: null, sortOrder: 1 },
+  { id: "mbox-unknown", name: "Quarantine", role: "quarantine", sortOrder: 2 },
+  { id: "mbox-archive", name: "Archive", role: "archive", sortOrder: 3 },
+  { id: "mbox-drafts", name: "Drafts", role: "drafts", sortOrder: 4 },
+  { id: "mbox-sent", name: "Sent", role: "sent", sortOrder: 5 },
+  { id: "mbox-junk", name: "Junk", role: "junk", sortOrder: 6 },
+  { id: "mbox-trash", name: "Trash", role: "trash", sortOrder: 7 },
 ];
 
 const emails = new Map<string, EmailRecord>();
@@ -358,6 +360,13 @@ test("listMailboxes maps roles", async () => {
   assert.equal(boxes.find((b) => b.role === "spam")?.engineName, "Junk");
 });
 
+test("listMailboxes does not classify custom folders as archive", async () => {
+  const boxes = await engine.listMailboxes("ramon@gs.com");
+  assert.equal(boxes.find((b) => b.engineId === "mbox-archive")?.role, "archive");
+  assert.equal(boxes.find((b) => b.engineId === "mbox-custom")?.role, null);
+  assert.equal(boxes.find((b) => b.engineId === "mbox-unknown")?.role, null);
+});
+
 test("listMessages returns summaries with names", async () => {
   requestLog.length = 0;
   const rows = await engine.listMessages("ramon@gs.com", { mailbox: "Inbox", limit: 50 });
@@ -412,6 +421,11 @@ test("move relocates and clears keywords", async () => {
   await engine.move("ramon@gs.com", ["e1"], "Trash");
   assert.deepEqual(emails.get("e1")?.mailboxIds, { "mbox-trash": true });
   assert.equal(emails.get("e1")?.keywords["$flagged"], undefined);
+});
+
+test("move to Archive resolves the actual archive mailbox", async () => {
+  await engine.move("ramon@gs.com", ["e3"], "archive");
+  assert.deepEqual(emails.get("e3")?.mailboxIds, { "mbox-archive": true });
 });
 
 test("saveDraft creates email in Drafts", async () => {

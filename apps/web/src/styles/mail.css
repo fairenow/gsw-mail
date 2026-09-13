@@ -1,5 +1,24 @@
 @import "tokens.css";
 
+.gsw-app-shell {
+  display: grid;
+  grid-template-rows: 72px minmax(0, 1fr);
+  height: 100vh;
+  min-height: 0;
+  background: var(--gsw-bg);
+}
+
+.gsw-app-shell > .gsw-product-shell,
+.gsw-app-shell > .gsw-contacts-page,
+.gsw-app-shell > .gsw-settings-layout {
+  min-height: 0;
+  overflow: auto;
+}
+
+.gsw-app-shell .gsw-product-header {
+  display: none;
+}
+
 .gsw-mail-shell {
   display: grid;
   grid-template-rows: 72px 1fr;
@@ -55,8 +74,6 @@
   justify-content: center;
   background: #fff;
   color: var(--gsw-text-heading);
-  font-size: 30px;
-  font-weight: 400;
   line-height: 1;
   opacity: 0;
   transition: opacity var(--dur-fast) var(--ease);
@@ -225,8 +242,9 @@
 }
 
 .gsw-account-chevron {
+  display: inline-flex;
+  align-items: center;
   color: var(--gsw-text-muted);
-  font-size: 17px;
   line-height: 1;
 }
 
@@ -395,6 +413,11 @@
     background var(--dur-row) var(--ease);
 }
 
+.gsw-compose-btn > span:first-child {
+  display: inline-flex;
+  align-items: center;
+}
+
 .gsw-sidebar.collapsed .gsw-compose-btn {
   width: 48px;
   height: 48px;
@@ -461,12 +484,12 @@
 
 .gsw-folder .gsw-folder-icon {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 18px;
-  color: var(--gsw-text-muted);
-}
-
-.gsw-folder.active .gsw-folder-icon {
-  color: var(--gsw-accent-dark);
+  height: 18px;
+  flex: 0 0 18px;
+  color: currentColor;
 }
 
 .gsw-folder .gsw-badge {
@@ -668,6 +691,22 @@
   box-shadow: var(--shadow-2);
 }
 
+.gsw-row-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  color: var(--gsw-text-body);
+}
+
+.gsw-row-actions button:hover {
+  background: var(--gsw-accent-soft);
+  color: var(--gsw-accent-dark);
+}
+
 .gsw-message-row:hover .gsw-row-actions {
   display: inline-flex;
 }
@@ -781,6 +820,12 @@
     color var(--dur-fast) var(--ease);
 }
 
+.gsw-toolbar button svg,
+.gsw-reader-back svg,
+.gsw-reader-bottom-actions button svg {
+  flex: 0 0 auto;
+}
+
 .gsw-toolbar button:hover {
   background: var(--gsw-accent-soft);
   color: var(--gsw-accent-dark);
@@ -859,6 +904,8 @@
 
 .gsw-reader-back {
   display: none;
+  align-items: center;
+  gap: 6px;
 }
 
 .gsw-compose-window {
@@ -936,12 +983,13 @@
 }
 
 .gsw-compose-head-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 30px;
   height: 30px;
   border-radius: 6px;
   color: #fff;
-  font-size: 20px;
-  line-height: 1;
 }
 
 .gsw-compose-head-action:hover {

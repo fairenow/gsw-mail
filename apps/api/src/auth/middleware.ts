@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { config } from "../config.js";
+import { provisionUserFromIdentity } from "./provision.js";
 import { resolveUser, verifyAccessToken, type AuthenticatedUser } from "./identity.js";
 
 declare module "fastify" {
@@ -22,7 +23,7 @@ export const requireUser = async (app: FastifyInstance, opts: { optional?: boole
       if (token) {
         const claims = await verifyAccessToken(token).catch(() => null);
         if (claims) {
-          const user = await resolveUser(config.auth.identityProvider, claims.sub).catch(() => null);
+          const user = await provisionUserFromIdentity(config.auth.identityProvider, claims.sub).catch(() => null);
           if (user) {
             req.user = user;
             req.accessToken = token;

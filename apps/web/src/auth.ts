@@ -19,13 +19,15 @@ export function accessToken(): string | null {
 
 const base64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
-export async function signIn() {
+export async function signIn(options: { forceLogin?: boolean } = {}) {
   const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
   const state = base64url(crypto.getRandomValues(new Uint8Array(32)));
   const challenge = base64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
   sessionStorage.setItem(transactionKey, JSON.stringify({ verifier, state, created: Date.now() }));
   const url = new URL(`${issuer}/login`);
-  url.search = new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: redirectUri, scope: "openid urn:ietf:params:oauth:scope:mail", state, code_challenge: challenge, code_challenge_method: "S256" }).toString();
+  const params = { response_type: "code", client_id: clientId, redirect_uri: redirectUri, scope: "openid urn:ietf:params:oauth:scope:mail", state, code_challenge: challenge, code_challenge_method: "S256" };
+  if (options.forceLogin) Object.assign(params, { prompt: "login" });
+  url.search = new URLSearchParams(params).toString();
   window.location.assign(url);
 }
 

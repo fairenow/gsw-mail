@@ -37,7 +37,7 @@
 .gsw-product-loading { display: grid; place-items: center; min-height: 100vh; color: var(--gsw-text-muted); }
 .gsw-contacts-page { max-width: 1120px; margin: 0 auto; padding: 60px 28px; }
 .gsw-page-actions { display: flex; gap: 10px; }
-.gsw-secondary-btn { display: inline-flex; align-items: center; justify-content: center; padding: 9px 14px; border: 1px solid var(--gsw-border); border-radius: 999px; background: var(--gsw-surface); color: var(--gsw-text-body); font-size: 13px; cursor: pointer; }
+.gsw-secondary-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 14px; border: 1px solid var(--gsw-border); border-radius: 999px; background: var(--gsw-surface); color: var(--gsw-text-body); font-size: 13px; cursor: pointer; }
 .gsw-secondary-btn:hover { background: var(--gsw-accent-soft); }
 .gsw-hidden-input { display: none; }
 .gsw-contacts-toolbar { display: flex; align-items: center; gap: 18px; margin-bottom: 18px; }

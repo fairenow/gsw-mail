@@ -104,6 +104,7 @@ production.
 ### Mail engine (Stalwart)
 - SMTP, IMAP, JMAP
 - Mail storage and routing
+- Standard mailbox roles map from JMAP roles; custom or unrecognized folders remain unclassified and never fall back to Archive
 - DKIM/DMARC/SPF validation and signing
 - Spam processing
 - Protocol authentication

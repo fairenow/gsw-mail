@@ -107,7 +107,7 @@ const GET_PROPERTIES = [
   "header:References",
 ] as const;
 
-const ROLE_TO_ENGINE: Record<string, MailboxName["role"]> = {
+const ROLE_TO_ENGINE: Record<string, Exclude<MailboxName["role"], null>> = {
   inbox: "inbox",
   sent: "sent",
   drafts: "drafts",
@@ -238,7 +238,7 @@ export class StalwartEngine implements MailEngine {
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
       .map<MailboxName>((m) => ({
         engineId: m.id,
-        role: m.role ? (ROLE_TO_ENGINE[m.role.toLowerCase()] ?? "archive") : "archive",
+        role: m.role ? (ROLE_TO_ENGINE[m.role.toLowerCase()] ?? null) : null,
         engineName: m.name,
       }));
     this.mailboxes.set(engineAccountId, mailboxes);
@@ -254,10 +254,9 @@ export class StalwartEngine implements MailEngine {
   private async mailboxIdByName(engineAccountId: EngineAccountId, roleOrName: string): Promise<string | null> {
     const mailboxes = await this.ensureMailboxes(engineAccountId);
     const needle = roleOrName.toLowerCase();
-    let match = mailboxes.find((m) => m.role === roleOrName || m.engineName.toLowerCase() === needle || (m.engineId === roleOrName));
-    if (!match) {
-      match = mailboxes.find((m) => m.role.toLowerCase() === needle);
-    }
+    const match = mailboxes.find((m) => m.engineId === roleOrName)
+      ?? mailboxes.find((m) => m.role === needle)
+      ?? mailboxes.find((m) => m.engineName.toLowerCase() === needle);
     return match?.engineId ?? null;
   }
 
@@ -266,7 +265,7 @@ export class StalwartEngine implements MailEngine {
     return mailboxes.find((m) => m.engineId === id)?.engineName ?? id;
   }
 
-  private async roleToEngineName(engineAccountId: EngineAccountId, role: MailboxName["role"]): Promise<string> {
+  private async roleToEngineName(engineAccountId: EngineAccountId, role: Exclude<MailboxName["role"], null>): Promise<string> {
     const mailboxes = await this.ensureMailboxes(engineAccountId);
     const found = mailboxes.find((m) => m.role === role);
     if (found) return found.engineName;

@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Minus, X } from "lucide-react";
 import { api, type Contact } from "../../api";
 import { RichTextEditor } from "../RichTextEditor";
 
@@ -55,7 +56,7 @@ export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, sen
   const status = draftStatus === "saving" ? "Saving..." : draftStatus === "saved" ? "Saved" : draftStatus === "notSaved" ? "Not saved" : "";
   if (minimized) return <button className="gsw-compose-minimized" onClick={onMinimize}><span><strong>{title}</strong><small>{subject || to || "New draft"}</small></span><span className="gsw-compose-minimized-status">{status || "Draft"}</span></button>;
   return <section className="gsw-compose-window" aria-label="Compose message">
-    <div className="gsw-compose-head"><strong>{title}</strong><div><button className="gsw-compose-head-action" onClick={onMinimize} aria-label="Minimize compose">−</button><button className="gsw-compose-head-action" onClick={onClose} aria-label="Close compose">×</button></div></div>
+     <div className="gsw-compose-head"><strong>{title}</strong><div><button className="gsw-compose-head-action" onClick={onMinimize} aria-label="Minimize compose"><Minus size={16} strokeWidth={1.75} aria-hidden="true" /></button><button className="gsw-compose-head-action" onClick={onClose} aria-label="Close compose"><X size={16} strokeWidth={1.75} aria-hidden="true" /></button></div></div>
     <form className="gsw-compose-form" onSubmit={submit}>
       <div className="gsw-recipient-row"><RecipientField label="To" value={to} onChange={onToChange} /><button type="button" className="gsw-recipient-toggle" onClick={() => setShowBcc((current) => !current)}>Cc/Bcc</button></div>
       <RecipientField label="Cc" value={cc} onChange={onCcChange} />

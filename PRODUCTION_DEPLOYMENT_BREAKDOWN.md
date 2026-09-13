@@ -389,18 +389,16 @@ empty or existing production database:
 npm run db:seed:prod
 ```
 
-It creates the organization, the `team.guidedstepswellness.com` domain, the owner
-user, and the owner's own mailbox with its mailboxes and postmaster/abuse
-aliases. The owner user's identity defaults to `identityProvider=stalwart`,
-`identitySubject=ramon@team.guidedstepswellness.com` (the Stalwart username
-returned by introspection for that account), the mailbox defaults to
-`PROD_SEED_MAILBOX_LOCAL_PART=ramon` (address `ramon@team.guidedstepswellness.com`),
-and the seed reconciles these identity fields on an existing owner row. The seed
-never grants the owner membership of a separate test mailbox. Override with
-`PROD_SEED_DOMAIN`, `PROD_SEED_OWNER_ID`, `PROD_SEED_IDENTITY_PROVIDER`,
-`PROD_SEED_OWNER_SUBJECT`, `PROD_SEED_OWNER_EMAIL`, `PROD_SEED_OWNER_NAME`,
-`PROD_SEED_MAILBOX_LOCAL_PART`, `PROD_SEED_MAILBOX_DISPLAY_NAME` when the GSW
-identity subjects or mailbox local-part differ.
+It creates the organization and `team.guidedstepswellness.com` domain. An initial
+owner mailbox is optional and is created only when all `PROD_SEED_OWNER_ID`,
+`PROD_SEED_OWNER_SUBJECT`, `PROD_SEED_OWNER_EMAIL`, `PROD_SEED_OWNER_NAME`, and
+`PROD_SEED_MAILBOX_LOCAL_PART` values are explicitly supplied. This seed is not
+the user-management mechanism. Authenticated Stalwart users are provisioned on
+login, and existing users can be reconciled once with:
+
+```text
+STALWART_BACKFILL_USERS=alyssa@team.guidedstepswellness.com,support@team.guidedstepswellness.com,admin@team.guidedstepswellness.com,test@team.guidedstepswellness.com,ramon@team.guidedstepswellness.com npm run db:backfill:prod
+```
 
 Once production is initialized, migrations should be append-only.
 

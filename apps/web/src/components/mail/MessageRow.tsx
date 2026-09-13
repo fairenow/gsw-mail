@@ -1,4 +1,5 @@
 import type { MessageSummary } from "../../api";
+import { Archive, Ellipsis, Mail, MailOpen, RotateCcw, Trash2 } from "lucide-react";
 import type { Folder } from "../folders";
 import { SenderAvatar } from "./SenderAvatar";
 
@@ -14,7 +15,7 @@ export function MessageRow({ message, active, folder, onOpen, onToggleRead, onDe
         <div className="gsw-message-row-meta">{message.subject || "(no subject)"}</div>
         <div className="gsw-message-row-preview">{message.snippet || "No preview available"}</div>
       </div>
-      <div className="gsw-row-actions">{folder === "Trash" ? <><button onClick={(event) => { event.stopPropagation(); onRestore?.(); }} aria-label="Restore message">↶</button><button onClick={(event) => { event.stopPropagation(); onDestroy?.(); }} aria-label="Delete forever">🗑</button></> : <><button onClick={(event) => { event.stopPropagation(); onToggleRead(); }} aria-label={message.read ? "Mark message unread" : "Mark message read"}>{message.read ? "○" : "●"}</button><button onClick={(event) => { event.stopPropagation(); onArchive(); }} aria-label="Archive message">🗄</button><button onClick={(event) => { event.stopPropagation(); onDelete(); }} aria-label="Move message to Trash">🗑</button></>}<button onClick={(event) => event.stopPropagation()} aria-label="More message actions">⋯</button></div>
+       <div className="gsw-row-actions">{folder === "Trash" ? <><button onClick={(event) => { event.stopPropagation(); onRestore?.(); }} aria-label="Restore message"><RotateCcw size={16} strokeWidth={1.75} aria-hidden="true" /></button><button onClick={(event) => { event.stopPropagation(); onDestroy?.(); }} aria-label="Delete forever"><Trash2 size={16} strokeWidth={1.75} aria-hidden="true" /></button></> : <><button onClick={(event) => { event.stopPropagation(); onToggleRead(); }} aria-label={message.read ? "Mark message unread" : "Mark message read"}>{message.read ? <Mail size={16} strokeWidth={1.75} aria-hidden="true" /> : <MailOpen size={16} strokeWidth={1.75} aria-hidden="true" />}</button><button onClick={(event) => { event.stopPropagation(); onArchive(); }} aria-label="Archive message"><Archive size={16} strokeWidth={1.75} aria-hidden="true" /></button><button onClick={(event) => { event.stopPropagation(); onDelete(); }} aria-label="Move message to Trash"><Trash2 size={16} strokeWidth={1.75} aria-hidden="true" /></button></>}<button onClick={(event) => event.stopPropagation()} aria-label="More message actions"><Ellipsis size={16} strokeWidth={1.75} aria-hidden="true" /></button></div>
     </article>
   );
 }

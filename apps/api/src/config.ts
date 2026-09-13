@@ -45,6 +45,11 @@ const config = {
   mail: {
     defaultTemplateKey: env("DEFAULT_MAIL_TEMPLATE_KEY", "gsw_default"),
   },
+  provisioning: {
+    organizationName: env("PROVISIONING_ORGANIZATION_NAME", "Guided Steps Wellness"),
+    organizationSlug: env("PROVISIONING_ORGANIZATION_SLUG", "guided-steps-wellness"),
+    defaultQuotaBytes: Number(env("PROVISIONING_DEFAULT_QUOTA_BYTES", "5000000000")),
+  },
   deliveryWebhookSecret: process.env.DELIVERY_WEBHOOK_SECRET,
   dev: {
     userId: process.env.DEV_USER_ID ?? "ramon-dev",

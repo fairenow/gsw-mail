@@ -70,7 +70,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
             onUse={() => {
               setStarting(false);
               setError("");
-              void signIn().catch((err: unknown) => setError(err instanceof Error ? err.message : "Unable to start sign-in."));
+              void signIn({ forceLogin: true }).catch((err: unknown) => setError(err instanceof Error ? err.message : "Unable to start sign-in."));
             }}
           />
           {error && <AuthError>{error}</AuthError>}
