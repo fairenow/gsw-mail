@@ -1,4 +1,4 @@
-import { JmapClient, JmapError, type JmapSession } from "./jmap.js";
+import { JmapClient, JmapError, type JmapMethodCall, type JmapSession } from "./jmap.js";
 import type {
   AttachmentBody,
   AttachmentMeta,
@@ -146,6 +146,56 @@ const snippetOf = (email: JmapEmail): string => {
 const renderTemplate = (template: string, vars: Record<string, string>): string =>
   Object.entries(vars).reduce((acc, [k, v]) => acc.replaceAll(`{${k}}`, v), template);
 
+const presentKeys = (value: Record<string, unknown>): string[] => Object.entries(value).filter(([, item]) => item !== undefined).map(([key]) => key);
+
+const summarizeParts = (value: unknown) => Array.isArray(value)
+  ? value.map((part) => {
+      if (!part || typeof part !== "object") return { type: typeof part };
+      const item = part as Record<string, unknown>;
+      return { keys: presentKeys(item), partId: item.partId, type: item.type };
+    })
+  : undefined;
+
+const summarizeEmail = (value: Record<string, unknown>) => ({
+  keys: presentKeys(value),
+  mailboxIds: value.mailboxIds && typeof value.mailboxIds === "object" ? Object.keys(value.mailboxIds as object) : undefined,
+  recipientCounts: {
+    to: Array.isArray(value.to) ? value.to.length : 0,
+    cc: Array.isArray(value.cc) ? value.cc.length : 0,
+    bcc: Array.isArray(value.bcc) ? value.bcc.length : 0,
+  },
+  bodyValueIds: value.bodyValues && typeof value.bodyValues === "object" ? Object.keys(value.bodyValues as object) : undefined,
+  textBody: summarizeParts(value.textBody),
+  htmlBody: summarizeParts(value.htmlBody),
+  hasMessageId: value.messageId !== undefined,
+  hasInReplyTo: value.inReplyTo !== undefined,
+  hasReferences: value.references !== undefined,
+});
+
+const summarizeEmailSet = (args: Record<string, unknown>) => ({
+  keys: presentKeys(args),
+  create: args.create && typeof args.create === "object"
+    ? Object.fromEntries(Object.entries(args.create as Record<string, unknown>).map(([id, value]) => [id, value && typeof value === "object" ? summarizeEmail(value as Record<string, unknown>) : { type: typeof value }]))
+    : undefined,
+  update: args.update && typeof args.update === "object"
+    ? Object.fromEntries(Object.entries(args.update as Record<string, unknown>).map(([id, value]) => [id, value && typeof value === "object" ? { keys: presentKeys(value as Record<string, unknown>) } : { type: typeof value }]))
+    : undefined,
+  destroy: Array.isArray(args.destroy) ? args.destroy.length : undefined,
+});
+
+const summarizeEmailSetResponse = (response: [string, Record<string, unknown>, string | null]) => {
+  const [name, payload, callId] = response;
+  return {
+    responseName: name,
+    callId,
+    errorType: typeof payload.type === "string" ? payload.type : undefined,
+    errorDescription: typeof payload.description === "string" ? payload.description : undefined,
+    payloadKeys: Object.keys(payload),
+    notCreated: payload.notCreated,
+    notUpdated: payload.notUpdated,
+  };
+};
+
 export class StalwartEngine implements MailEngine {
   readonly name = "stalwart";
   private readonly client: JmapClient;
@@ -222,6 +272,27 @@ export class StalwartEngine implements MailEngine {
     const fallback = mailboxes[0]?.engineName;
     if (fallback) return fallback;
     return role;
+  }
+
+  private async emailSet(
+    accountId: string,
+    args: Record<string, unknown>,
+    operation: string,
+    context: Record<string, unknown>,
+  ): Promise<[string, Record<string, unknown>, string | null][]> {
+    const method: JmapMethodCall = ["Email/set", args, "s1"];
+    console.info("[stalwart:Email/set] request", JSON.stringify({ operation, accountId, ...context, request: summarizeEmailSet(args) }));
+    try {
+      const responses = await this.client.call([method]);
+      console.info("[stalwart:Email/set] response", JSON.stringify({ operation, accountId, ...context, response: summarizeEmailSetResponse(responses[0]!) }));
+      return responses;
+    } catch (error) {
+      const jmap = error instanceof JmapError
+        ? { errorType: error.type, errorDescription: error.message, callId: error.callId, response: error.response }
+        : { errorDescription: error instanceof Error ? error.message : String(error) };
+      console.error("[stalwart:Email/set] failed", JSON.stringify({ operation, accountId, ...context, jmap }));
+      throw error;
+    }
   }
 
   private async queryEmails(
@@ -408,19 +479,13 @@ export class StalwartEngine implements MailEngine {
     const { accountId } = await this.accountIdOf(engineAccountId);
     const update: Record<string, unknown> = {};
     for (const id of messageIds) update[id] = { keywords, onDestroyRemoveKeywords: { [keyword]: true } };
-    await this.client.call([
-      [
-        "Email/set",
-        {
-          accountId,
-          ifInState: undefined,
-          create: undefined,
-          update,
-          destroy: undefined,
-        },
-        "s1",
-      ],
-    ]);
+    await this.emailSet(accountId, {
+      accountId,
+      ifInState: undefined,
+      create: undefined,
+      update,
+      destroy: undefined,
+    }, "updateKeywords", { keyword });
   }
 
   async move(engineAccountId: EngineAccountId, messageIds: EngineMessageId[], toMailbox: string): Promise<void> {
@@ -431,25 +496,20 @@ export class StalwartEngine implements MailEngine {
     for (const id of messageIds) {
       update[id] = { mailboxIds: { [targetId]: true }, onDestroyRemoveKeywords: { $seen: true, $flagged: true } };
     }
-    await this.client.call([
-      [
-        "Email/set",
-        {
-          accountId,
-          update,
-          create: undefined,
-          destroy: undefined,
-          ifInState: undefined,
-        },
-        "s1",
-      ],
-    ]);
+    await this.emailSet(accountId, {
+      accountId,
+      update,
+      create: undefined,
+      destroy: undefined,
+      ifInState: undefined,
+    }, "move", { targetMailbox: toMailbox, targetMailboxId: targetId });
   }
 
   private async createDraftOrSent(
     engineAccountId: EngineAccountId,
     input: SendDraftInput,
     mailboxRole: "drafts" | "sent",
+    operation = mailboxRole === "drafts" ? "saveDraft" : "saveSent",
   ): Promise<SendResult> {
     const { accountId } = await this.accountIdOf(engineAccountId);
     const mailboxId = await this.mailboxIdByName(engineAccountId, mailboxRole);
@@ -488,19 +548,13 @@ export class StalwartEngine implements MailEngine {
       ...(uploaded.length ? { attachments: uploaded } : {}),
     };
 
-    const responses = await this.client.call([
-      [
-        "Email/set",
-        {
-          accountId,
-          create: { "c1": create },
-          update: undefined,
-          destroy: undefined,
-          ifInState: undefined,
-        },
-        "s1",
-      ],
-    ]);
+    const responses = await this.emailSet(accountId, {
+      accountId,
+      create: { "c1": create },
+      update: undefined,
+      destroy: undefined,
+      ifInState: undefined,
+    }, operation, { mailboxRole, mailboxId });
     const created = (responses[0]![1].created ?? {}) as Record<string, { id: string; threadId?: string }>;
     const result = created["c1"];
     if (!result) {
@@ -559,13 +613,13 @@ export class StalwartEngine implements MailEngine {
   }
 
   async updateDraft(engineAccountId: EngineAccountId, messageId: EngineMessageId, input: SendDraftInput): Promise<EngineMessageId> {
-    const replacementId = await this.saveDraft(engineAccountId, input);
+    const replacement = await this.createDraftOrSent(engineAccountId, input, "drafts", "updateDraft");
     try {
       await this.move(engineAccountId, [messageId], "Trash");
     } catch (error) {
       throw new Error(`draft replacement cleanup failed for ${messageId}`, { cause: error });
     }
-    return replacementId;
+    return replacement.engineMessageId;
   }
 
   async saveSent(engineAccountId: EngineAccountId, input: SendDraftInput): Promise<SendResult> {
