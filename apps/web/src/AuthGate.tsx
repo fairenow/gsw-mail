@@ -1,18 +1,15 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { accessToken, finishSignIn, logout, signIn } from "./auth";
+import { AuthCard } from "./components/auth/AuthCard";
+import { AuthError } from "./components/auth/AuthError";
+import { AuthHeading } from "./components/auth/AuthHeading";
+import { AuthPage } from "./components/auth/AuthPage";
+import { AuthSubtitle } from "./components/auth/AuthSubtitle";
+import { BrandMark } from "./components/auth/BrandMark";
+import { PrimarySignInButton } from "./components/auth/PrimarySignInButton";
+import { SecondaryAccountButton } from "./components/auth/SecondaryAccountButton";
 
 const isCallback = window.location.pathname === "/auth/callback";
-
-function Brand({ size, className }: { size: number; className?: string }) {
-  return (
-    <img
-      src="/logo.png"
-      alt="Guided Steps Mail"
-      className={className}
-      style={{ width: size, height: size, display: "block" }}
-    />
-  );
-}
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const [authenticated, setAuthenticated] = useState(!!accessToken());
@@ -40,31 +37,27 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   if (pending) {
     return (
-      <main className="gsw-login">
-        <div className="gsw-login-card a-scale">
-          <Brand size={88} className="gsw-login-intro" />
+      <AuthPage>
+        <AuthCard>
+          <BrandMark size={80} className="gsw-login-intro" />
           <p className="gsw-login-hint">Completing sign-in…</p>
-        </div>
-      </main>
+        </AuthCard>
+      </AuthPage>
     );
   }
 
   if (!authenticated) {
     return (
-      <main className="gsw-login">
-        <div className="gsw-login-card a-rise">
-          <div className="gsw-login-mark-wrap">
-            <Brand size={128} className="gsw-intro-logo" />
-          </div>
-          <h1 className="gsw-login-title">Mail for your community</h1>
-          <p className="gsw-login-sub">
+      <AuthPage>
+        <AuthCard>
+          <BrandMark size={80} className="gsw-intro-logo" />
+          <AuthHeading>Mail for your community</AuthHeading>
+          <AuthSubtitle>
             Stay connected with your wellness community — one warm inbox for every guided step.
-          </p>
-          <button
-            type="button"
-            className="gsw-btn gsw-btn-primary gsw-btn-block gsw-btn-lg"
+          </AuthSubtitle>
+          <PrimarySignInButton
             disabled={starting}
-            onClick={() => {
+            onStart={() => {
               setStarting(true);
               setError("");
               signIn().catch((err: unknown) => {
@@ -72,38 +65,24 @@ export function AuthGate({ children }: { children: ReactNode }) {
                 setStarting(false);
               });
             }}
-          >
-            <span>Sign in with Guided Steps</span>
-            <span className="gsw-btn-arrow" aria-hidden="true">
-              →
-            </span>
-          </button>
-          <button
-            type="button"
-            className="gsw-btn gsw-btn-ghost"
-            onClick={() => {
+          />
+          <SecondaryAccountButton
+            onUse={() => {
               setStarting(false);
               setError("");
               void signIn().catch((err: unknown) => setError(err instanceof Error ? err.message : "Unable to start sign-in."));
             }}
-          >
-            Or use another account
-          </button>
-          {error && (
-            <p className="gsw-login-error" role="alert">
-              {error}
-            </p>
-          )}
-        </div>
-        <footer className="gsw-login-footer">Guided Steps Wellness · Community Mail</footer>
-      </main>
+          />
+          {error && <AuthError>{error}</AuthError>}
+        </AuthCard>
+      </AuthPage>
     );
   }
 
   return (
     <div className="gsw-auth-shell">
       <div className="gsw-topbar">
-        <Brand size={32} className="gsw-topbrand" />
+        <BrandMark size={32} className="gsw-topbrand" />
         <button
           type="button"
           className="gsw-btn gsw-btn-quiet"
