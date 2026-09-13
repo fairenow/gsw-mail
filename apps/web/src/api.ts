@@ -57,6 +57,13 @@ export interface Contact {
   customFields: Record<string, string | number | boolean | null>;
 }
 
+export interface ContactListResponse {
+  contacts: Contact[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface ProductSettings {
   general: Record<string, unknown>;
   compose: Record<string, unknown>;
@@ -160,11 +167,12 @@ export const api = {
   settings: () => get<ProductSettings>("/product/settings"),
   updateSettings: (body: { general?: Record<string, unknown>; compose?: Record<string, unknown>; contacts?: Record<string, unknown> }) => patch<ProductSettings>("/product/settings", body),
   saveSignature: (body: ProductSettings["signature"]) => request("/product/signature", { method: "PUT", headers: headers(true), body: JSON.stringify(body) }).then((res) => json<ProductSettings["signature"]>(res)),
-  contacts: (q = "") => get<{ contacts: Contact[] }>(`/product/contacts?q=${encodeURIComponent(q)}`).then((r) => r.contacts),
+  contacts: (q = "") => get<ContactListResponse>(`/product/contacts?q=${encodeURIComponent(q)}`).then((r) => r.contacts),
+  contactsPage: (q = "", limit = 100, offset = 0) => get<ContactListResponse>(`/product/contacts?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
   contact: (id: string) => get<Contact>(`/product/contacts/${id}`),
   createContact: (body: unknown) => post<Contact>("/product/contacts", body),
   updateContact: (id: string, body: unknown) => patch<Contact>(`/product/contacts/${id}`, body),
-  importContacts: (body: unknown) => post<{ id: string; filename: string; rowCount: number; createdCount: number; updatedCount: number; skippedCount: number; failedCount: number }>("/product/contact-imports", body, interactiveTimeout),
-  contactImports: () => get<{ imports: { id: string; filename: string; rowCount: number; createdCount: number; updatedCount: number; skippedCount: number; failedCount: number; createdAt: string }[] }>("/product/contact-imports"),
+  importContacts: (body: unknown) => post<{ id: string; filename: string; rowCount: number; createdCount: number; updatedCount: number; skippedCount: number; duplicateCount: number; failedCount: number }>("/product/contact-imports", body, interactiveTimeout),
+  contactImports: () => get<{ imports: { id: string; filename: string; rowCount: number; createdCount: number; updatedCount: number; skippedCount: number; duplicateCount: number; failedCount: number; createdAt: string }[] }>("/product/contact-imports"),
   contactImportRows: (id: string) => get<{ rows: { rowNumber: number; raw: Record<string, string>; status: string; error?: string | null }[] }>(`/product/contact-imports/${id}/rows`),
 };

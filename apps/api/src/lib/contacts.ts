@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { contactCustomFields, contactEmails, contactPhones, contactTags, contacts } from "../db/schema.js";
+import { paginateContacts } from "./contactPaging.js";
 
 export interface ContactInput {
   firstName?: string | undefined;
@@ -24,9 +25,10 @@ export interface ContactInput {
   sourceFile?: string | undefined;
 }
 
-export async function listContacts(ownerUserId: string, query = "") {
-  const contactRows = await db.select().from(contacts).where(eq(contacts.ownerUserId, ownerUserId)).orderBy(desc(contacts.lastContactedAt), asc(contacts.displayName)).limit(500);
-  return presentContacts(contactRows, query);
+export async function listContacts(ownerUserId: string, query = "", limit = 100, offset = 0) {
+  const contactRows = await db.select().from(contacts).where(eq(contacts.ownerUserId, ownerUserId)).orderBy(desc(contacts.lastContactedAt), asc(contacts.displayName));
+  const presented = await presentContacts(contactRows, query);
+  return paginateContacts(presented, limit, offset);
 }
 
 export async function getContact(ownerUserId: string, id: string) {
@@ -90,9 +92,9 @@ async function replaceChildren(contactId: string, input: ContactInput) {
     await tx.delete(contactPhones).where(eq(contactPhones.contactId, contactId));
     await tx.delete(contactTags).where(eq(contactTags.contactId, contactId));
     await tx.delete(contactCustomFields).where(eq(contactCustomFields.contactId, contactId));
-    const emails = (input.emails ?? []).map((item, index) => ({ contactId, email: item.email.trim(), normalizedEmail: normalizeEmail(item.email), label: clean(item.label), isPrimary: item.isPrimary ?? index === 0 })).filter((item) => item.normalizedEmail);
+    const emails = uniqueBy((input.emails ?? []).map((item, index) => ({ contactId, email: item.email.trim(), normalizedEmail: normalizeEmail(item.email), label: clean(item.label), isPrimary: item.isPrimary ?? index === 0 })).filter((item) => item.normalizedEmail), (item) => item.normalizedEmail);
     if (emails.length) await tx.insert(contactEmails).values(emails);
-    const phones = (input.phones ?? []).filter((item) => item.phone.trim()).map((item, index) => ({ contactId, phone: item.phone.trim(), label: clean(item.label), isPrimary: item.isPrimary ?? index === 0 }));
+    const phones = uniqueBy((input.phones ?? []).filter((item) => item.phone.trim()).map((item, index) => ({ contactId, phone: item.phone.trim(), label: clean(item.label), isPrimary: item.isPrimary ?? index === 0 })), (item) => item.phone);
     if (phones.length) await tx.insert(contactPhones).values(phones);
     const tags = [...new Set((input.tags ?? []).map((tag) => tag.trim()).filter(Boolean))].map((tag) => ({ contactId, tag, normalizedTag: tag.toLowerCase() }));
     if (tags.length) await tx.insert(contactTags).values(tags);
@@ -127,10 +129,20 @@ async function presentContacts(rows: typeof contacts.$inferSelect[], query = "")
       customFields,
       relevance: exact + relevance,
     };
-  }).filter((row) => !needle || row.relevance > 0).sort((a, b) => b.relevance - a.relevance || b.timesEmailed - a.timesEmailed || (new Date(b.lastContactedAt ?? 0).getTime() - new Date(a.lastContactedAt ?? 0).getTime())).slice(0, 50);
+  }).filter((row) => !needle || row.relevance > 0).sort((a, b) => b.relevance - a.relevance || b.timesEmailed - a.timesEmailed || (new Date(b.lastContactedAt ?? 0).getTime() - new Date(a.lastContactedAt ?? 0).getTime()));
 }
 
 function clean(value: string | undefined) {
   const result = value?.trim();
   return result || undefined;
+}
+
+function uniqueBy<T>(items: T[], key: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const value = key(item);
+    if (seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  });
 }

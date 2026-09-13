@@ -140,13 +140,13 @@ that block future sends. Delivery events append to `outbound_delivery_events`
 | GET | `/product/settings` | user settings and sanitized signature |
 | PATCH | `/product/settings` | merge general, compose, or contacts preferences |
 | PUT | `/product/signature` | sanitized HTML plus generated plaintext; new/reply/forward flags and quote placement |
-| GET | `/product/contacts?q=` | contact autocomplete/search, ranked by exact match, engagement, and recency |
+| GET | `/product/contacts?q=&limit=100&offset=0` | paginated contact search; returns `contacts`, `total`, `limit`, and `offset`, ranked by exact match, engagement, and recency |
 | GET | `/product/contacts/:id` | contact detail |
 | POST | `/product/contacts` | create normalized contact with emails, phones, tags, and custom fields |
 | PATCH | `/product/contacts/:id` | update contact and normalized child records |
-| GET | `/product/contact-imports` | import history counts |
+| GET | `/product/contact-imports` | import history counts, including duplicates and failures |
 | GET | `/product/contact-imports/:id/rows` | raw and failed import rows |
-| POST | `/product/contact-imports` | mapped CSV rows with `skip`, `merge`, or `overwrite` duplicate behavior |
+| POST | `/product/contact-imports` | mapped CSV rows with `skip`, `merge`, or `overwrite` duplicate behavior; returns row, created, updated, skipped, duplicate, and failed counts |
 
 Successful outbound sends asynchronously record each recipient in the caller's
 contact scope, creating a `sent_mail` contact or incrementing engagement on the

@@ -1,0 +1,1 @@
+ALTER TABLE "contact_import_batches" ADD COLUMN "duplicate_count" integer DEFAULT 0 NOT NULL;

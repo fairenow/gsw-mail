@@ -452,6 +452,7 @@ export const contactImportBatches = pgTable(
     createdCount: integer("created_count").default(0).notNull(),
     updatedCount: integer("updated_count").default(0).notNull(),
     skippedCount: integer("skipped_count").default(0).notNull(),
+    duplicateCount: integer("duplicate_count").default(0).notNull(),
     failedCount: integer("failed_count").default(0).notNull(),
     ...timestamps,
   },

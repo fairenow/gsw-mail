@@ -6,6 +6,7 @@ import { db } from "../db/client.js";
 import { contactEmails, contactImportBatches, contactImportRows, contacts, emailSignatures, userSettings } from "../db/schema.js";
 import { createContact, getContact, listContacts, normalizeEmail, type ContactInput, updateContact } from "../lib/contacts.js";
 import { notFound } from "../lib/errors.js";
+import { mergeImportedEmails, validateImportedEmails } from "../lib/contactImport.js";
 import { richTextToPlainText, sanitizeRichText } from "../lib/richText.js";
 
 const customValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
@@ -66,8 +67,13 @@ export default async function productRoutes(app: FastifyInstance) {
   });
 
   app.get("/product/contacts", async (req) => {
-    const query = typeof req.query === "object" && req.query && "q" in req.query ? String((req.query as { q?: unknown }).q ?? "") : "";
-    return { contacts: await listContacts(req.user!.id, query) };
+    const params = req.query as { q?: unknown; limit?: unknown; offset?: unknown };
+    const query = String(params?.q ?? "");
+    const requestedLimit = Number(params?.limit ?? 100);
+    const requestedOffset = Number(params?.offset ?? 0);
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 100) : 100;
+    const offset = Number.isFinite(requestedOffset) ? Math.max(Math.trunc(requestedOffset), 0) : 0;
+    return listContacts(req.user!.id, query, limit, offset);
   });
 
   app.get<{ Params: { id: string } }>("/product/contacts/:id", async (req) => {
@@ -108,15 +114,17 @@ export default async function productRoutes(app: FastifyInstance) {
     let createdCount = 0;
     let updatedCount = 0;
     let skippedCount = 0;
+    let duplicateCount = 0;
     let failedCount = 0;
     for (const [index, row] of input.rows.entries()) {
       try {
         const mapped = mapImportRow(row, input.mapping);
-        if (!mapped.emails?.length) throw new Error("an email column is required");
+        validateImportContact(mapped);
         const existing = await db.select({ contactId: contactEmails.contactId }).from(contactEmails).innerJoin(contacts, eq(contactEmails.contactId, contacts.id)).where(and(eq(contacts.ownerUserId, req.user!.id), eq(contactEmails.normalizedEmail, normalizeEmail(mapped.emails[0]!.email)))).limit(1);
         let contactId: string | undefined;
         let status = "created";
         if (existing[0]) {
+          duplicateCount += 1;
           contactId = existing[0].contactId;
           if (input.duplicateBehavior === "skip") { skippedCount += 1; status = "skipped"; }
           else {
@@ -135,10 +143,10 @@ export default async function productRoutes(app: FastifyInstance) {
         await db.insert(contactImportRows).values({ batchId: batch.id, rowNumber: index + 2, raw: row, status, contactId });
       } catch (error) {
         failedCount += 1;
-        await db.insert(contactImportRows).values({ batchId: batch.id, rowNumber: index + 2, raw: row, status: "failed", error: error instanceof Error ? error.message : String(error) });
+        await db.insert(contactImportRows).values({ batchId: batch.id, rowNumber: index + 2, raw: row, status: "failed", error: importErrorMessage(error) });
       }
     }
-    const [updatedBatch] = await db.update(contactImportBatches).set({ createdCount, updatedCount, skippedCount, failedCount }).where(eq(contactImportBatches.id, batch.id)).returning();
+    const [updatedBatch] = await db.update(contactImportBatches).set({ createdCount, updatedCount, skippedCount, duplicateCount, failedCount }).where(eq(contactImportBatches.id, batch.id)).returning();
     reply.code(201);
     return updatedBatch;
   });
@@ -168,13 +176,39 @@ function mapImportRow(row: Record<string, string>, mapping: Record<string, strin
   return result;
 }
 
+function validateImportContact(input: ContactInput): asserts input is ContactInput & { emails: { email: string; label?: string; isPrimary?: boolean }[] } {
+  input.emails = validateImportedEmails(input.emails);
+}
+
+function importErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("contact_emails_contact_normalized_idx")) return "duplicate email in contact row";
+  if (message.includes("contact_custom_fields_contact_key_idx")) return "duplicate custom field in contact row";
+  return message;
+}
+
 function mergeContact(current: NonNullable<Awaited<ReturnType<typeof getContact>>>, incoming: ContactInput): ContactInput {
+  const phones = uniqueBy(
+    [...current.phones, ...(incoming.phones ?? [])].map((item) => ({ phone: item.phone, label: item.label ?? undefined, isPrimary: item.isPrimary })),
+    (item) => item.phone.trim(),
+  );
   return {
     firstName: current.firstName || incoming.firstName, middleName: current.middleName || incoming.middleName, lastName: current.lastName || incoming.lastName,
     displayName: current.displayName || incoming.displayName, organization: current.organization || incoming.organization, jobTitle: current.jobTitle || incoming.jobTitle,
     website: current.website || incoming.website, address: current.address || incoming.address, city: current.city || incoming.city, state: current.state || incoming.state,
     postalCode: current.postalCode || incoming.postalCode, country: current.country || incoming.country, notes: current.notes || incoming.notes,
-    emails: [...current.emails, ...(incoming.emails ?? [])], phones: [...current.phones, ...(incoming.phones ?? [])], tags: [...new Set([...current.tags, ...(incoming.tags ?? [])])],
+    emails: mergeImportedEmails(current.emails.map((item) => ({ email: item.email, label: item.label ?? undefined, isPrimary: item.isPrimary })), incoming.emails ?? []),
+    phones, tags: [...new Set([...current.tags, ...(incoming.tags ?? [])])],
     customFields: { ...current.customFields, ...(incoming.customFields ?? {}) }, source: current.source,
   };
+}
+
+function uniqueBy<T>(items: T[], key: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const value = key(item);
+    if (seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  });
 }
