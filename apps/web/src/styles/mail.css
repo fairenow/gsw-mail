@@ -456,6 +456,7 @@
   background: var(--gsw-accent-soft);
   color: var(--gsw-accent-dark);
   font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--gsw-accent);
 }
 
 .gsw-folder .gsw-folder-icon {
@@ -494,6 +495,27 @@
   top: 0;
   background: var(--gsw-surface);
   z-index: 5;
+}
+
+.gsw-list-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gsw-danger-btn {
+  padding: 7px 11px;
+  border: 1px solid #e0b8b5;
+  border-radius: 999px;
+  background: #fff5f4;
+  color: #a52b24;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.gsw-danger-btn:hover,
+.gsw-danger-action:hover {
+  background: #fbe4e1;
 }
 
 .gsw-message-list-head h2 {
@@ -762,6 +784,10 @@
 .gsw-toolbar button:hover {
   background: var(--gsw-accent-soft);
   color: var(--gsw-accent-dark);
+}
+
+.gsw-toolbar .gsw-danger-action {
+  color: #a52b24;
 }
 
 .gsw-reading-body {

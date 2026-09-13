@@ -6,7 +6,7 @@ export const FOLDER_ICON: Record<Folder, string> = {
   Sent: "➤",
   Drafts: "✎",
   Spam: "!",
-  Trash: "⌫",
+  Trash: "🗑",
   Archive: "🗄",
 };
 

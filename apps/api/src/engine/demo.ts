@@ -150,6 +150,11 @@ export class DemoEngine implements MailEngine {
     }
   }
 
+  async destroy(accountId: EngineAccountId, messageIds: EngineMessageId[]): Promise<void> {
+    const remaining = this.store(accountId).filter((message) => !messageIds.includes(message.engineId));
+    messages.set(accountId, remaining);
+  }
+
   async saveDraft(accountId: EngineAccountId, input: SendDraftInput): Promise<EngineMessageId> {
     const id = `demo-${++seq}`;
     this.store(accountId).push({

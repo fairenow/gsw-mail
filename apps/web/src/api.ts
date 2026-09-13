@@ -139,12 +139,15 @@ const interactiveTimeout = 20_000;
 
 export const api = {
   accounts: () => get<AccountsResponse>("/mail/accounts").then((r) => r.accounts),
-  messages: (accountId: string, mailbox: string) => get<MessagesResponse>(`/mail/messages?accountId=${accountId}&mailbox=${mailbox}`).then((r) => r.messages),
+  messages: (accountId: string, mailbox: string, limit = 50) => get<MessagesResponse>(`/mail/messages?accountId=${accountId}&mailbox=${mailbox}&limit=${limit}`).then((r) => r.messages),
   message: (accountId: string, engineId: string) => get<FullMessage>(`/mail/messages/${engineId}?accountId=${accountId}`),
   read: (accountId: string, engineId: string, seen: boolean) =>
     post(`/mail/messages/${engineId}/read`, { accountId, seen }),
   archive: (accountId: string, engineId: string) => post(`/mail/messages/${engineId}/archive`, { accountId }),
   trash: (accountId: string, engineId: string) => post(`/mail/messages/${engineId}/trash`, { accountId }),
+  move: (accountId: string, engineId: string, mailbox: string) => post(`/mail/messages/${engineId}/move`, { accountId, mailbox }),
+  destroy: (accountId: string, engineId: string) => post(`/mail/messages/${engineId}/destroy`, { accountId }),
+  emptyTrash: (accountId: string) => post<{ deleted: number }>("/mail/messages/empty-trash", { accountId }),
   search: (accountId: string, q: string) => get<MessagesResponse>(`/mail/search?accountId=${accountId}&q=${encodeURIComponent(q)}`).then((r) => r.messages),
   send: (accountId: string, to: string[], body: { cc?: string[]; bcc?: string[]; subject?: string; textBody?: string; htmlBody?: string; inReplyTo?: string; references?: string; mode?: "new" | "reply" | "replyAll" | "forward"; clientRequestId?: string; templateKey?: string }) =>
     post<SendResult>("/mail/send", { accountId, to, ...body }, interactiveTimeout),

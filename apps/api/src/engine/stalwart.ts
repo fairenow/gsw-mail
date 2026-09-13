@@ -512,6 +512,17 @@ export class StalwartEngine implements MailEngine {
     }, "move", { targetMailbox: toMailbox, targetMailboxId: targetId });
   }
 
+  async destroy(engineAccountId: EngineAccountId, messageIds: EngineMessageId[]): Promise<void> {
+    const { accountId } = await this.accountIdOf(engineAccountId);
+    await this.emailSet(accountId, {
+      accountId,
+      update: undefined,
+      create: undefined,
+      destroy: messageIds,
+      ifInState: undefined,
+    }, "destroy", { messageCount: messageIds.length });
+  }
+
   private async createDraftOrSent(
     engineAccountId: EngineAccountId,
     input: SendDraftInput,

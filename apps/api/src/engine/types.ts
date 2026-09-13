@@ -121,6 +121,8 @@ export interface MailEngine {
 
   move(accountId: EngineAccountId, messageIds: EngineMessageId[], toMailbox: string): Promise<void>;
 
+  destroy(accountId: EngineAccountId, messageIds: EngineMessageId[]): Promise<void>;
+
   saveDraft(accountId: EngineAccountId, input: SendDraftInput): Promise<EngineMessageId>;
 
   updateDraft(accountId: EngineAccountId, messageId: EngineMessageId, input: SendDraftInput): Promise<EngineMessageId>;

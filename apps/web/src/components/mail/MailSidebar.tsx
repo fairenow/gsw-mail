@@ -3,11 +3,11 @@ import type { Folder } from "../folders";
 import { FolderNav } from "./FolderNav";
 import { SenderAvatar } from "./SenderAvatar";
 
-export function MailSidebar({ account, profileImageUrl, folder, unreadCount, composeOpen, mobileHidden, collapsed, onSelectFolder, onToggleCompose }: {
+export function MailSidebar({ account, profileImageUrl, folder, counts, composeOpen, mobileHidden, collapsed, onSelectFolder, onToggleCompose }: {
   account: Account | null;
   profileImageUrl?: string;
   folder: Folder;
-  unreadCount: number;
+  counts: Record<Folder, { total: number; unread: number }>;
   composeOpen: boolean;
   mobileHidden: boolean;
   collapsed: boolean;
@@ -18,7 +18,7 @@ export function MailSidebar({ account, profileImageUrl, folder, unreadCount, com
     <aside className={`gsw-sidebar ${mobileHidden ? "mobile-hidden" : ""} ${collapsed ? "collapsed" : ""}`}>
       <div className="gsw-sidebar-identity"><SenderAvatar name={account?.displayName ?? undefined} email={account?.address} imageUrl={profileImageUrl} /><div><strong>{account?.displayName || "Your mailbox"}</strong><span>{account?.address}</span></div></div>
       <button className="gsw-compose-btn" onClick={onToggleCompose} title={collapsed ? (composeOpen ? "Close compose" : "Compose") : undefined}><span aria-hidden="true">＋</span><span className="gsw-sidebar-label">{composeOpen ? "Close compose" : "Compose"}</span></button>
-      <FolderNav folder={folder} unreadCount={unreadCount} collapsed={collapsed} onSelect={onSelectFolder} />
+      <FolderNav folder={folder} counts={counts} collapsed={collapsed} onSelect={onSelectFolder} />
     </aside>
   );
 }

@@ -117,6 +117,24 @@ export default async (app: FastifyInstance) => {
     return { messageId: params.id, mailbox: "Trash" };
   });
 
+  app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/destroy", async (req) => {
+    const { params, body, user } = req;
+    if (!body.accountId) throw badRequest("accountId is required");
+    await requireAccountPermission(user!.id, body.accountId, "send");
+    await getEngine(req.accessToken).destroy(body.accountId, [params.id]);
+    return { messageId: params.id, deleted: true };
+  });
+
+  app.post<{ Body: ActionBody }>("/mail/messages/empty-trash", async (req) => {
+    const { body, user } = req;
+    if (!body.accountId) throw badRequest("accountId is required");
+    await requireAccountPermission(user!.id, body.accountId, "send");
+    const engine = getEngine(req.accessToken);
+    const messages = await engine.listMessages(body.accountId, { mailbox: "Trash", limit: 10_000 });
+    if (messages.length) await engine.destroy(body.accountId, messages.map((message) => message.engineId));
+    return { deleted: messages.length };
+  });
+
   async function syncCache(accountId: string, engineId: string, patch: Partial<{ read: boolean; flagged: boolean; mailboxRole: MailboxRole }>) {
     try {
       const [cached] = await db
