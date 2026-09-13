@@ -105,6 +105,7 @@ export default async (app: FastifyInstance) => {
         textBody: draft.textBody,
         htmlBody: draft.htmlBody,
         templateKey: body.templateKey ?? DEFAULT_MAIL_TEMPLATE_KEY,
+        mode: body.mode,
         replyTo: draft.headers["Reply-To"],
         inReplyTo: draft.headers["In-Reply-To"],
         references: draft.headers["References"],

@@ -12,7 +12,7 @@ const textToHtml = (value: string): string => escapeHtml(value).replaceAll("\n",
 
 export const gswDefaultTemplate: MailTemplate = {
   key: "gsw_default",
-  name: "GSW default",
+  name: "Guided Steps Wellness: The Community",
   category: "personal",
   description: "A restrained branded wrapper for everyday mail.",
   render: (input: MailTemplateInput): RenderedMailTemplate => {
@@ -20,7 +20,7 @@ export const gswDefaultTemplate: MailTemplate = {
     const body = input.bodyHtml ?? textToHtml(text);
     return {
       text,
-      html: `<!doctype html><html lang="en"><body style="margin:0;background:#f7f3ea;color:#484640;font-family:Arial,sans-serif;line-height:1.6"><div style="width:100%;padding:32px 16px"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8e1d4;border-radius:12px;overflow:hidden"><div style="padding:18px 24px;border-bottom:2px solid #e89a12;color:#292824;font-size:16px;font-weight:700">Guided Steps Wellness</div><div style="padding:28px 24px;font-size:15px">${body}</div><div style="padding:16px 24px;border-top:1px solid #eee9df;color:#77756f;font-size:12px">Guided Steps Wellness<br />Building community with purpose.</div></div></div></body></html>`,
+      html: `<!doctype html><html lang="en"><body style="margin:0;background:#f7f3ea;color:#484640;font-family:Arial,sans-serif;line-height:1.6"><div style="width:100%;padding:32px 16px"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8e1d4;border-radius:12px;overflow:hidden"><div style="padding:18px 24px;border-bottom:2px solid #e89a12;color:#292824;font-size:16px;font-weight:700">Guided Steps Wellness: The Community</div><div style="padding:28px 24px;font-size:15px">${body}</div><div style="padding:16px 24px;border-top:1px solid #eee9df;color:#77756f;font-size:12px">Guided Steps Wellness: The Community<br />Building community with purpose.</div></div></div></body></html>`,
     };
   },
 };

@@ -11,7 +11,7 @@ import { MessageReader } from "../components/mail/MessageReader";
 import { MessageRow } from "../components/mail/MessageRow";
 
 type MobileView = "folders" | "messages" | "reader";
-const defaultTemplateKey = "gsw_default";
+const fallbackTemplateKey = "gsw_default";
 const parseRecipients = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
 const uniqueRecipients = (values: string[], accountAddress: string) => {
   const seen = new Set<string>();
@@ -42,6 +42,7 @@ export function MailPage() {
   const [html, setHtml] = useState("");
   const [signature, setSignature] = useState<ProductSettings["signature"] | null>(null);
   const [profileImageUrl, setProfileImageUrl] = useState("");
+  const [templateKey, setTemplateKey] = useState(fallbackTemplateKey);
   const [inReplyTo, setInReplyTo] = useState<string | undefined>();
   const [references, setReferences] = useState<string | undefined>();
   const [sending, setSending] = useState(false);
@@ -58,7 +59,7 @@ export function MailPage() {
     try { setMessages(await api.messages(accountId, name)); } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   }, []);
   useEffect(() => { void api.accounts().then((rows) => { setAccounts(rows); if (rows[0]) { setAccount(rows[0]); void loadFolder(rows[0].id, "Inbox"); } }).catch((err) => setError(err instanceof Error ? err.message : String(err))); }, [loadFolder]);
-  useEffect(() => { void api.settings().then((settings) => { setSignature(settings.signature); setProfileImageUrl(typeof settings.general.profileImageUrl === "string" ? settings.general.profileImageUrl : ""); }).catch(() => undefined); }, []);
+  useEffect(() => { void api.settings().then((settings) => { setSignature(settings.signature); setProfileImageUrl(typeof settings.general.profileImageUrl === "string" ? settings.general.profileImageUrl : ""); setTemplateKey(settings.general.templateKey === "bible_reader" ? "bible_reader" : fallbackTemplateKey); }).catch(() => undefined); }, []);
   useEffect(() => () => readTimers.current.forEach((timer) => window.clearTimeout(timer)), []);
 
   const signatureFor = (mode: ComposeMode) => {
@@ -95,11 +96,11 @@ export function MailPage() {
     else { const replyTo = uniqueRecipients([message.from?.email || "", ...(message.to ?? []).map((item) => item.email)], account?.address ?? ""); const replyCc = uniqueRecipients((message.cc ?? []).map((item) => item.email), account?.address ?? ""); const quote = `<div>On ${new Date(message.date).toLocaleString()}, ${message.from?.email || "the sender"} wrote:</div><blockquote>${plainTextToHtml(messageBody(message))}</blockquote>`; setTo((mode === "replyAll" ? replyTo : [message.from?.email || ""]).filter(Boolean).join(", ")); setCc(mode === "replyAll" ? replyCc.join(", ") : ""); setBcc(""); setSubject(subjectWithPrefix(message.subject || "(no subject)", "Re")); setHtml(signature?.position === "afterQuotedText" ? `${quote}${signatureFor(mode)}` : `${signatureFor(mode)}${quote}`); }
   };
 
-  const draftPayload = useCallback((): import("../api").DraftInput | null => account ? { accountId: account.id, to: parseRecipients(to), cc: parseRecipients(cc), bcc: parseRecipients(bcc), subject, textBody: richTextToText(html), htmlBody: html, inReplyTo, references, mode: composeMode, templateKey: defaultTemplateKey } : null, [account, bcc, cc, composeMode, html, inReplyTo, references, subject, to]);
+   const draftPayload = useCallback((): import("../api").DraftInput | null => account ? { accountId: account.id, to: parseRecipients(to), cc: parseRecipients(cc), bcc: parseRecipients(bcc), subject, textBody: richTextToText(html), htmlBody: html, inReplyTo, references, mode: composeMode, templateKey } : null, [account, bcc, cc, composeMode, html, inReplyTo, references, subject, templateKey, to]);
   const saveDraft = useCallback(async (force = false): Promise<string | null> => { if (!account || !compose || (!draftDirty && !force)) return draftId; const payload = draftPayload(); if (!payload) return draftId; setDraftStatus("saving"); try { const savedId = draftId ? (await api.updateDraft(draftId, payload)).engineId : (await api.createDraft(payload)).engineId; localStorage.removeItem(localDraftKey(account.id)); setDraftId(savedId); setDraftDirty(false); setDraftSaveBlocked(false); setDraftStatus("saved"); return savedId; } catch { localStorage.setItem(localDraftKey(account.id), JSON.stringify({ mode: composeMode, to, cc, bcc, subject, html, inReplyTo, references })); setDraftSaveBlocked(true); setDraftStatus("notSaved"); return null; } }, [account, bcc, cc, compose, composeMode, draftDirty, draftId, draftPayload, html, inReplyTo, references, subject, to]);
   useEffect(() => { if (!compose || !draftDirty || draftSaveBlocked) return; const timer = window.setTimeout(() => { void saveDraft(); }, 1500); return () => window.clearTimeout(timer); }, [compose, draftDirty, draftSaveBlocked, to, cc, bcc, subject, html, saveDraft]);
   useEffect(() => { const saveOnHide = () => { if (document.visibilityState === "hidden") void saveDraft(); }; document.addEventListener("visibilitychange", saveOnHide); return () => document.removeEventListener("visibilitychange", saveOnHide); }, [saveDraft]);
-  const runSend = async () => { if (!account) return; try { setError(null); setSendError(null); setSending(true); const clientRequestId = sendRequestId ?? crypto.randomUUID(); setSendRequestId(clientRequestId); const savedId = await saveDraft(true); const result = savedId ? await api.sendDraft(savedId, account.id, clientRequestId, composeMode, defaultTemplateKey) : await api.send(account.id, parseRecipients(to), { cc: parseRecipients(cc), bcc: parseRecipients(bcc), subject, textBody: richTextToText(html), htmlBody: html, inReplyTo, references, mode: composeMode, clientRequestId, templateKey: defaultTemplateKey }); setLastSend(result); setSendError(null); setCompose(false); setComposeMinimized(false); setDraftId(null); setDraftDirty(false); setDraftSaveBlocked(false); setSendRequestId(null); localStorage.removeItem(localDraftKey(account.id)); setTo(""); setCc(""); setBcc(""); setSubject(""); setHtml(""); setInReplyTo(undefined); setReferences(undefined); } catch (err) { const message = err instanceof Error ? err.message : String(err); setSendError(message); setError(message); } finally { setSending(false); } };
+   const runSend = async () => { if (!account) return; try { setError(null); setSendError(null); setSending(true); const clientRequestId = sendRequestId ?? crypto.randomUUID(); setSendRequestId(clientRequestId); const savedId = await saveDraft(true); const result = savedId ? await api.sendDraft(savedId, account.id, clientRequestId, composeMode, templateKey) : await api.send(account.id, parseRecipients(to), { cc: parseRecipients(cc), bcc: parseRecipients(bcc), subject, textBody: richTextToText(html), htmlBody: html, inReplyTo, references, mode: composeMode, clientRequestId, templateKey }); setLastSend(result); setSendError(null); setCompose(false); setComposeMinimized(false); setDraftId(null); setDraftDirty(false); setDraftSaveBlocked(false); setSendRequestId(null); localStorage.removeItem(localDraftKey(account.id)); setTo(""); setCc(""); setBcc(""); setSubject(""); setHtml(""); setInReplyTo(undefined); setReferences(undefined); } catch (err) { const message = err instanceof Error ? err.message : String(err); setSendError(message); setError(message); } finally { setSending(false); } };
   const runUndo = async () => { if (!lastSend) return; try { const result = await api.cancelSend(lastSend.sendId); setLastSend({ ...lastSend, status: result.status }); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
 
   const unreadCount = messages.filter((message) => !message.read).length;

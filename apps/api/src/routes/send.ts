@@ -52,6 +52,7 @@ export default async (app: FastifyInstance) => {
         textBody: input.textBody,
          htmlBody: input.htmlBody,
          templateKey: input.templateKey,
+         mode: input.mode,
         replyTo: input.replyTo,
         inReplyTo: input.inReplyTo,
         references: input.references,
