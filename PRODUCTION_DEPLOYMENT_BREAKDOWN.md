@@ -340,9 +340,10 @@ OUTBOUND_RELAY=resend
 RESEND_API_KEY=<secret>
 DELIVERY_WEBHOOK_SECRET=<secret>
 
-JWT_ISSUER=<identity issuer>
-JWKS_URL=<identity JWKS URL>
-JWT_AUDIENCE=<mail audience>
+OIDC_ISSUER=https://mx1.guidedstepswellness.com
+OIDC_CLIENT_ID=gsw-mail-web
+OIDC_INTROSPECTION_CLIENT_ID=gsw-mail-api
+OIDC_INTROSPECTION_CLIENT_SECRET=<server-only secret>
 
 SEND_DELAY_SECONDS=5
 ```

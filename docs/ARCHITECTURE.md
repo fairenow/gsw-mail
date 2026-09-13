@@ -80,13 +80,21 @@ The mail server is critical infrastructure and is **not** exposed directly to ev
 application. Only the internal API reaches it (via JMAP/imap with controlled
 credentials). Administration endpoints require elevated authorization.
 
-Authentication: the API verifies a signed JWT against the Identity Provider's
-JWKS (`JWT_ISSUER`, `JWKS_URL`, `JWT_AUDIENCE`) and resolves the canonical
-`sub` to a `users` row keyed by `(identityProvider, identitySubject)`.
+Authentication: the web app signs in with Stalwart's OAuth authorization server
+via PKCE (public client `gsw-mail-web`, no secret). The browser never talks to the
+authorization server directly: the token exchange runs server-side through the
+API's `POST /auth/exchange` route, so `mail.guidedstepswellness.com` never needs
+Stalwart CORS. The API verifies bearer access tokens by calling Stalwart's
+`/auth/introspect` authenticated as a confidential backend client
+(`OIDC_INTROSPECTION_CLIENT_ID`/`_SECRET`), never with the caller's token, and
+resolves the canonical `sub` to a `users` row keyed by
+`(identityProvider, identitySubject)`.
 Authorization is role-based: org memberships (owner/admin/member) gate admin
 operations; mail-account memberships (owner/delegate/read_only) gate mail
-actions via read/send/manage permissions. No infra credentials are ever sent
-to the browser; dev-only fallbacks are disabled in production.
+actions via read/send/manage permissions. `/health` and `/auth/exchange` are
+public; `/mail/*` and `/admin/*` require an authenticated user. No infra
+credentials are ever sent to the browser; dev-only fallbacks are disabled in
+production.
 
 ## 5. Responsibilities
 

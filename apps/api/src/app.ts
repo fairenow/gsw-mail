@@ -7,6 +7,7 @@ import { HttpError } from "./lib/errors.js";
 import accounts from "./routes/accounts.js";
 import admin from "./routes/admin.js";
 import aliases from "./routes/aliases.js";
+import auth from "./routes/auth.js";
 import drafts from "./routes/drafts.js";
 import messages from "./routes/messages.js";
 import search from "./routes/search.js";
@@ -35,6 +36,7 @@ export function buildApp() {
 
   app.register(requireUser, { optional: true }).register(async (anon) => {
     anon.get("/health", async () => ({ ok: true, service: "gsw-mail-api" }));
+    anon.register(auth);
   });
 
   app.register(accounts);

@@ -44,12 +44,12 @@ async function exchangeCode() {
   if (!transaction.state || params.get("state") !== transaction.state || typeof transaction.created !== "number" || Date.now() - transaction.created > 600000 || typeof transaction.verifier !== "string") throw new Error("Sign-in session invalid or expired. Please try again.");
   if (params.has("iss") && params.get("iss") !== issuer) throw new Error("Unexpected sign-in issuer.");
   if (params.has("error") || !params.get("code")) throw new Error("Sign-in was not completed. Please try again.");
-  const response = await fetch(`${issuer}/auth/token`, {
+  const response = await fetch("/auth/exchange", {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "authorization_code", client_id: clientId, redirect_uri: redirectUri, code: params.get("code")!, code_verifier: transaction.verifier }),
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code: params.get("code"), codeVerifier: transaction.verifier, redirectUri }),
     redirect: "error",
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(20000),
   });
   if (!response.ok) throw new Error("Could not complete sign-in. Please try again.");
   const result = await response.json();

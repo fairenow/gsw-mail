@@ -20,9 +20,10 @@ export class IdentityError extends Error {
 
 export async function verifyAccessToken(token: string, request: typeof fetch = fetch): Promise<VerifiedClaims | null> {
   if (!token || token.length > 8192) return null;
+  const basic = Buffer.from(`${config.auth.introspectionClientId}:${config.auth.introspectionClientSecret ?? ""}`).toString("base64");
   const response = await request(config.auth.introspectUrl, {
     method: "POST",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/x-www-form-urlencoded" },
+    headers: { authorization: `Basic ${basic}`, "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ token, token_type_hint: "access_token" }),
     redirect: "error",
     signal: AbortSignal.timeout(5000),

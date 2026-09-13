@@ -8,6 +8,7 @@ export default defineConfig({
     proxy: {
       "/mail": "http://localhost:4000",
       "/admin": "http://localhost:4000",
+      "/auth": "http://localhost:4000",
       "/health": "http://localhost:4000",
     },
   },

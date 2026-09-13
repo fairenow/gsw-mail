@@ -24,7 +24,9 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 - [x] Account lifecycle (create/disable) + quota
 - [x] Aliases (`hello@...` → `ramon@...`)
 - [x] Multi-user auth + authorization model: `users` keyed by
-      `(identityProvider, identitySubject)` from a signed JWT (issuer/audience/JWKS),
+      `(identityProvider, identitySubject)` from Stalwart OAuth bearer tokens
+      (PKCE public client `gsw-mail-web`; introspection as a confidential
+      `OIDC_INTROSPECTION_CLIENT_ID` client),
       org memberships (owner/admin/member), mail-account memberships
       (owner/delegate/read_only) with permissions read/send/manage. No infra secrets
       are exposed to the browser; dev-only fallbacks are disabled in production.

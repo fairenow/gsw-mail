@@ -1,10 +1,12 @@
 # Guided Steps Mail API
 
-Base path: `/mail`. Admin: `/admin`. Auth: `Authorization: Bearer <JWT>`. In
-production the JWT is verified against the Identity Provider JWKS
-(`JWT_ISSUER`/`JWKS_URL`/`JWT_AUDIENCE`) and resolved to a `users` row keyed by
-`(identityProvider, identitySubject)`. Development only: `X-GSW-User-Id` /
-`DEV_USER_ID`.
+Base path: `/mail`. Admin: `/admin`. Auth: `Authorization: Bearer <token>`. In
+production the token is verified against Stalwart's `/auth/introspect`
+(authenticated as the confidential `OIDC_INTROSPECTION_CLIENT_ID` client) and
+resolved to a `users` row keyed by `(identityProvider, identitySubject)`.
+`POST /auth/exchange` is the public, unauthenticated PKCE token-exchange route
+that proxies the browser's OAuth code to Stalwart. Development only:
+`X-GSW-User-Id` / `DEV_USER_ID`.
 
 Authorization: org memberships (owner/admin/member) gate admin operations;
 mail-account memberships (owner/delegate/read_only) gate mail actions:
