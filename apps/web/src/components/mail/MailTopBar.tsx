@@ -25,7 +25,7 @@ export function MailTopBar({ account, accounts, search, onSearchChange, onSearch
         <span className="gsw-search-icon" aria-hidden="true">⌕</span>
         <input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Search mail" aria-label="Search mail" />
       </form>
-      <div className="gsw-topnav-end"><a className="gsw-product-link" href="/contacts">Contacts</a><a className="gsw-product-link" href="/settings">Settings</a><AccountMenu account={account} accounts={accounts} onSelect={onSelectAccount} /></div>
+      <div className="gsw-topnav-end"><AccountMenu account={account} accounts={accounts} onSelect={onSelectAccount} /></div>
     </header>
   );
 }

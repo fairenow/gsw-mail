@@ -20,6 +20,9 @@ export function AccountMenu({ account, accounts, onSelect }: { account: Account 
             <SenderAvatar name={account.displayName ?? undefined} email={account.address} />
             <div><strong>{account.displayName || "GSW Mail account"}</strong><span>{account.address}</span></div>
           </div>
+          <div className="gsw-account-menu-rule" />
+          <a className="gsw-menu-action" href="/contacts" onClick={() => setOpen(false)}>Contacts</a>
+          <a className="gsw-menu-action" href="/settings" onClick={() => setOpen(false)}>Settings</a>
           {accounts.length > 1 && <div className="gsw-account-menu-rule" />}
           {accounts.length > 1 && accounts.map((item) => (
             <button key={item.id} className={`gsw-account-menu-item ${item.id === account.id ? "current" : ""}`} onClick={() => { onSelect(item.id); setOpen(false); }}>
