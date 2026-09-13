@@ -15,6 +15,7 @@
 - Outbound sends are never synchronous: always through the outbound queue.
 - Product DB = metadata/index only. Full mail state lives in Stalwart.
 - Keep the docs in sync when behavior changes (ARCHITECTURE.md, PHASES.md, DECISIONS.md).
+- Always run `npm run db:migrate` after generating a new migration; report clearly if the configured database is unavailable.
 
 ## Status
 Phase 0/1 foundation scaffold. Verify with `npm run typecheck` in both apps before
