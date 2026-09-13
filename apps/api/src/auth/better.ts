@@ -4,7 +4,8 @@ import { emailOTP } from "better-auth/plugins/email-otp";
 import { Resend } from "resend";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
-import { authAccounts, authSessions, authUsers, authVerifications } from "../db/schema.js";
+import { authAccounts, authSessions, authUsers, authVerifications, domains, emailAccounts, organizationMemberships, users } from "../db/schema.js";
+import { and, eq } from "drizzle-orm";
 import { renderGswAuthEmail } from "./email.js";
 
 const resend = config.outbound.resendApiKey ? new Resend(config.outbound.resendApiKey) : null;
@@ -16,6 +17,19 @@ export async function sendAuthEmail(to: string, subject: string, content: { text
     return;
   }
   await resend.emails.send({ from: config.authEmail.from, to, subject, text: content.text, html: content.html });
+}
+
+async function recoveryEmailForMailbox(email: string): Promise<string | null> {
+  const [owner] = await db
+    .select({ email: authUsers.email })
+    .from(emailAccounts)
+    .innerJoin(domains, eq(emailAccounts.domainId, domains.id))
+    .innerJoin(organizationMemberships, and(eq(organizationMemberships.organizationId, domains.organizationId), eq(organizationMemberships.role, "owner"), eq(organizationMemberships.status, "active")))
+    .innerJoin(users, eq(organizationMemberships.userId, users.id))
+    .innerJoin(authUsers, eq(users.authUserId, authUsers.id))
+    .where(eq(emailAccounts.address, email.toLowerCase()))
+    .limit(1);
+  return owner?.email ?? null;
 }
 
 export const auth = betterAuth({
@@ -36,7 +50,12 @@ export const auth = betterAuth({
     sendVerificationEmail: async ({ user, url }) => sendAuthEmail(user.email, "Verify your GSW Account", renderGswAuthEmail({ title: "Verify your email", message: "Confirm your email address to continue to GSW.", ctaUrl: url, ctaLabel: "Verify email" })),
   },
   plugins: [emailOTP({
-    sendVerificationOTP: async ({ email, otp, type }) => sendAuthEmail(email, `Your GSW ${type === "sign-in" ? "sign-in" : type === "forget-password" ? "password reset" : "verification"} code`, renderGswAuthEmail({ title: type === "sign-in" ? "Your sign-in code" : type === "forget-password" ? "Reset your password" : "Your verification code", message: type === "forget-password" ? "Use this one-time code to reset your GSW password." : "Use this one-time code to continue to GSW Mail.", code: otp, expiryMinutes: 10 })),
+    sendVerificationOTP: async ({ email, otp, type }) => {
+      const recoveryEmail = type === "forget-password" ? await recoveryEmailForMailbox(email) : null;
+      const destination = recoveryEmail ?? email;
+      const mailboxMessage = recoveryEmail ? `Use this one-time code to reset the password for ${email}. This code was sent to the workspace recovery email.` : "Use this one-time code to reset your GSW password.";
+      return sendAuthEmail(destination, `Your GSW ${type === "sign-in" ? "sign-in" : type === "forget-password" ? "password reset" : "verification"} code`, renderGswAuthEmail({ title: type === "sign-in" ? "Your sign-in code" : type === "forget-password" ? "Reset your password" : "Your verification code", message: type === "forget-password" ? mailboxMessage : "Use this one-time code to continue to GSW Mail.", code: otp, expiryMinutes: 10 }));
+    },
     sendVerificationOnSignUp: false,
     overrideDefaultEmailVerification: true,
     otpLength: 6,
