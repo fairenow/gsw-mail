@@ -4,6 +4,7 @@ import { z } from "zod";
 import { auth } from "../auth/better.js";
 import { db } from "../db/client.js";
 import { authUsers, domains, emailAccounts, organizationMemberships, users } from "../db/schema.js";
+import { badRequest } from "../lib/errors.js";
 
 const requestSchema = z.object({ email: z.string().trim().toLowerCase().email() });
 const completeSchema = z.object({ email: z.string().trim().toLowerCase().email(), otp: z.string().regex(/^\d{6}$/), newPassword: z.string().min(8).max(200) });
@@ -32,7 +33,12 @@ export default async function recoveryRoutes(app: FastifyInstance) {
   app.post("/api/account/complete-password-reset", async (req) => {
     const input = completeSchema.parse(req.body);
     req.log.info({ targetEmail: input.email }, "password reset completed");
-    await auth.api.resetPasswordEmailOTP({ body: { email: input.email, otp: input.otp, password: input.newPassword } });
+    try {
+      await auth.api.resetPasswordEmailOTP({ body: { email: input.email, otp: input.otp, password: input.newPassword } });
+    } catch (error) {
+      req.log.info({ targetEmail: input.email, error: error instanceof Error ? error.message : "reset failed" }, "password reset rejected");
+      throw badRequest("invalid or expired password reset code");
+    }
     return { success: true };
   });
 }
