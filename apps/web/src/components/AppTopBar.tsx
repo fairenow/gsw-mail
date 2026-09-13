@@ -25,12 +25,19 @@ export function AppTopBar({ account, accounts, profileImageUrl, search, searchPl
     <header className="gsw-topnav">
       <div className="gsw-topnav-brand">
         {onToggleSidebar ? (
-          <button className="gsw-logo-toggle" onClick={onToggleSidebar} aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"} title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}>
+          <>
+            <button className="gsw-logo-toggle" onClick={onToggleSidebar} aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"} title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}>
+              <img className="gsw-wordmark-mark" src="/logo.png" alt="" aria-hidden="true" />
+              <span className="gsw-logo-toggle-icon" aria-hidden="true">{sidebarCollapsed ? <ChevronRight size={20} strokeWidth={1.75} /> : <ChevronLeft size={20} strokeWidth={1.75} />}</span>
+            </button>
+            <a className="gsw-wordmark" href="/">GSW Mail</a>
+          </>
+        ) : (
+          <a className="gsw-topnav-brand-link" href="/">
             <img className="gsw-wordmark-mark" src="/logo.png" alt="" aria-hidden="true" />
-            <span className="gsw-logo-toggle-icon" aria-hidden="true">{sidebarCollapsed ? <ChevronRight size={20} strokeWidth={1.75} /> : <ChevronLeft size={20} strokeWidth={1.75} />}</span>
-          </button>
-        ) : <img className="gsw-wordmark-mark" src="/logo.png" alt="" aria-hidden="true" />}
-        <a className="gsw-wordmark" href="/">GSW Mail</a>
+            <span className="gsw-wordmark">GSW Mail</span>
+          </a>
+        )}
       </div>
       <form className="gsw-topnav-search" onSubmit={submit} role="search">
         <span className="gsw-search-icon" aria-hidden="true"><Search size={18} strokeWidth={1.75} /></span>

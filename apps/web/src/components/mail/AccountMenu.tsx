@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LogOut, Settings, Users, ChevronDown } from "lucide-react";
+import { ChevronDown, LogOut, Mail, Settings, Users } from "lucide-react";
 import { logout } from "../../auth";
 import type { Account } from "../../api";
 import { SenderAvatar } from "./SenderAvatar";
@@ -22,6 +22,7 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
             <div><strong>{account.displayName || "GSW Mail account"}</strong><span>{account.address}</span></div>
           </div>
           <div className="gsw-account-menu-rule" />
+           <a className="gsw-menu-action" href="/" onClick={() => setOpen(false)}><Mail size={16} strokeWidth={1.75} aria-hidden="true" />Mailbox</a>
            <a className="gsw-menu-action" href="/contacts" onClick={() => setOpen(false)}><Users size={16} strokeWidth={1.75} aria-hidden="true" />Contacts</a>
            <a className="gsw-menu-action" href="/settings" onClick={() => setOpen(false)}><Settings size={16} strokeWidth={1.75} aria-hidden="true" />Settings</a>
           {accounts.length > 1 && <div className="gsw-account-menu-rule" />}

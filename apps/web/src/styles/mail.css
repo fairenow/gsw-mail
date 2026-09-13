@@ -48,6 +48,14 @@
   text-decoration: none;
 }
 
+.gsw-topnav-brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
 .gsw-logo-toggle {
   position: relative;
   width: 48px;
