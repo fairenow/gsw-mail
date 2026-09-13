@@ -13,6 +13,7 @@
     "db:seed:prod": "tsx --env-file-if-exists=.env src/db/prod-seed.ts",
     "db:backfill:prod": "tsx --env-file-if-exists=.env src/db/prod-backfill.ts",
     "db:normalize:workspace": "tsx --env-file-if-exists=.env src/db/normalize-workspace.ts",
+    "db:change-control-email": "tsx --env-file-if-exists=.env src/db/change-control-email.ts",
     "test:integration": "node --import tsx --test src/integration.test.ts",
     "build": "tsc --noEmit false --outDir dist --rootDir src --project tsconfig.build.json",
     "start": "node dist/index.js",
