@@ -1,16 +1,17 @@
 :root {
-  --gsw-bg: #fafaf4;
+  --gsw-bg: #f7f3ea;
   --gsw-surface: #ffffff;
-  --gsw-surface-tint: #fef9edbe;
-  --gsw-accent: #e19c22;
+  --gsw-surface-soft: #fbf8f1;
+  --gsw-surface-tint: #fbf8f1;
+  --gsw-accent: #e89a12;
   --gsw-accent-light: #f5c873;
-  --gsw-accent-dark: #a06b14;
-  --gsw-accent-soft: #fdf3dd40;
-  --gsw-text-heading: #27251f;
-  --gsw-text-body: #484b45;
-  --gsw-text-muted: #878b8b;
-  --gsw-border: #d6d5cd;
-  --gsw-border-soft: #e9e7de;
+  --gsw-accent-dark: #bd7608;
+  --gsw-accent-soft: #fff3d8;
+  --gsw-text-heading: #292824;
+  --gsw-text-body: #484640;
+  --gsw-text-muted: #77756f;
+  --gsw-border: #e8e1d4;
+  --gsw-border-soft: #eee9df;
 
   --font-display: "Playfair Display", "Iowan Old Style", Georgia, serif;
   --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -22,7 +23,7 @@
 
   --shadow-1: 0 1px 2px rgba(39, 37, 31, 0.05);
   --shadow-2: 0 2px 6px rgba(39, 37, 31, 0.06), 0 8px 24px rgba(39, 37, 31, 0.07);
-  --shadow-3: 0 8px 18px rgba(39, 37, 31, 0.14), 0 24px 48px rgba(39, 37, 31, 0.16Monthly);
+  --shadow-3: 0 8px 18px rgba(39, 37, 31, 0.14), 0 24px 48px rgba(39, 37, 31, 0.16);
 
   --dur-fast: 150ms;
   --dur-row: 180ms;

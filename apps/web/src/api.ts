@@ -16,6 +16,8 @@ export interface MessageSummary {
   snippet?: string;
   date: string;
   from?: { name?: string; email: string };
+  to?: { name?: string; email: string }[];
+  cc?: { name?: string; email: string }[];
   read: boolean;
   flagged: boolean;
   hasAttachments: boolean;
@@ -25,6 +27,8 @@ export interface MessageSummary {
 export interface FullMessage extends MessageSummary {
   textBody?: string;
   htmlBody?: string;
+  attachments?: { engineId: string; filename: string; contentType: string; size: number; inline: boolean }[];
+  headers?: Record<string, string>;
 }
 
 export interface SendResult {
@@ -75,7 +79,7 @@ export const api = {
   archive: (accountId: string, engineId: string) => post(`/mail/messages/${engineId}/archive`, { accountId }),
   trash: (accountId: string, engineId: string) => post(`/mail/messages/${engineId}/trash`, { accountId }),
   search: (accountId: string, q: string) => get<MessagesResponse>(`/mail/search?accountId=${accountId}&q=${encodeURIComponent(q)}`).then((r) => r.messages),
-  send: (accountId: string, to: string[], body: { subject?: string; textBody?: string; clientRequestId?: string }) =>
+  send: (accountId: string, to: string[], body: { cc?: string[]; subject?: string; textBody?: string; inReplyTo?: string; references?: string; clientRequestId?: string }) =>
     post<SendResult>("/mail/send", { accountId, to, ...body }),
   sendStatus: (sendId: string) => get<never>("/mail/sends/" + sendId),
   cancelSend: (sendId: string) => post<{ status: string }>(`/mail/sends/${sendId}/cancel`),

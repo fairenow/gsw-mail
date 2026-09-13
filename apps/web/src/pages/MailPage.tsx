@@ -1,28 +1,28 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import {
-  api,
-  type Account,
-  type FullMessage,
-  type MessageSummary,
-  type SendResult,
-} from "../api";
+import { useCallback, useEffect, useState } from "react";
+import { api, type Account, type FullMessage, type MessageSummary, type SendResult } from "../api";
 import { type Folder } from "../components/folders";
-import { MessageRow } from "../components/MessageRow";
-import { Sidebar } from "../components/Sidebar";
+import { ComposeWindow, type ComposeMode } from "../components/mail/ComposeWindow";
+import { EmptyReader } from "../components/mail/EmptyReader";
+import { MailSidebar } from "../components/mail/MailSidebar";
+import { MailTopBar } from "../components/mail/MailTopBar";
+import { MessageListHeader } from "../components/mail/MessageListHeader";
+import { MessageReader } from "../components/mail/MessageReader";
+import { MessageRow } from "../components/mail/MessageRow";
 
-const fmtTime = (value: string) => new Date(value).toLocaleString();
+type MobileView = "folders" | "messages" | "reader";
 
-const sx: { [k: string]: React.CSSProperties } = {
-  shell: { display: "flex", minHeight: "100vh", fontFamily: "system-ui, sans-serif" },
-  listPane: { width: 400, borderRight: "1px solid #eee", overflow: "auto", flexShrink: 0 },
-  compose: { padding: 12, borderBottom: "1px solid #eee", display: "flex", flexDirection: "column", gap: 8 },
-  sendNote: { fontSize: 12, color: "#444" },
-  error: { color: "#b00020", padding: 10 },
-  readPane: { flex: 1, padding: 20, overflow: "auto" },
-  actions: { display: "flex", gap: 8, margin: "12px 0" },
-  body: { whiteSpace: "pre-wrap", fontFamily: "inherit", marginTop: 12 },
-  placeholder: { color: "#888" },
+const parseRecipients = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
+const uniqueRecipients = (values: string[], accountAddress: string) => {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const normalized = value.toLowerCase();
+    if (!normalized || normalized === accountAddress.toLowerCase() || seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
 };
+const subjectWithPrefix = (subject: string, prefix: "Re" | "Fwd") => subject.match(new RegExp(`^${prefix}:`, "i")) ? subject : `${prefix}: ${subject}`;
+const messageBody = (message: FullMessage) => message.textBody?.trim() || message.htmlBody?.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>|<[^>]+>/gi, "").trim() || "";
 
 export function MailPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -31,159 +31,121 @@ export function MailPage() {
   const [messages, setMessages] = useState<MessageSummary[]>([]);
   const [open, setOpen] = useState<FullMessage | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [mobileView, setMobileView] = useState<MobileView>("folders");
 
   const [compose, setCompose] = useState(false);
+  const [composeMode, setComposeMode] = useState<ComposeMode>("new");
   const [to, setTo] = useState("");
+  const [cc, setCc] = useState("");
   const [subject, setSubject] = useState("");
   const [text, setText] = useState("");
+  const [inReplyTo, setInReplyTo] = useState<string | undefined>();
+  const [references, setReferences] = useState<string | undefined>();
+  const [sending, setSending] = useState(false);
   const [lastSend, setLastSend] = useState<SendResult | null>(null);
 
   const loadFolder = useCallback(async (accountId: string, name: Folder) => {
     setError(null);
-    try {
-      setMessages(await api.messages(accountId, name));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
+    try { setMessages(await api.messages(accountId, name)); }
+    catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   }, []);
 
   useEffect(() => {
-    api
-      .accounts()
-      .then((rows) => {
-        setAccounts(rows);
-        if (rows[0]) {
-          setAccount(rows[0]);
-          void loadFolder(rows[0].id, "Inbox");
-        }
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+    api.accounts().then((rows) => {
+      setAccounts(rows);
+      if (rows[0]) { setAccount(rows[0]); void loadFolder(rows[0].id, "Inbox"); }
+    }).catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, [loadFolder]);
 
   const selectAccount = (id: string) => {
-    const next = accounts.find((a) => a.id === id);
+    const next = accounts.find((item) => item.id === id);
     if (!next) return;
-    setAccount(next);
-    setOpen(null);
-    setLastSend(null);
-    void loadFolder(next.id, folder);
+    setAccount(next); setOpen(null); setLastSend(null); setMobileView("folders"); void loadFolder(next.id, folder);
   };
 
   const selectFolder = (name: Folder) => {
-    setFolder(name);
-    setOpen(null);
+    setFolder(name); setOpen(null); setMobileView("messages");
     if (account) void loadFolder(account.id, name);
+  };
+
+  const refresh = () => { if (account) void loadFolder(account.id, folder); };
+
+  const runSearch = async () => {
+    if (!account) return;
+    if (!search.trim()) { refresh(); return; }
+    try { setError(null); setMessages(await api.search(account.id, search.trim())); setOpen(null); setMobileView("messages"); }
+    catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   };
 
   const selectMessage = async (message: MessageSummary) => {
     if (!account) return;
-    const full = await api.message(account.id, message.engineId);
-    setOpen(full);
-    if (!message.read) {
-      await api.read(account.id, message.engineId, true);
-      setMessages((prev) => prev.map((m) => (m.engineId === message.engineId ? { ...m, read: true } : m)));
-    }
+    try {
+      const full = await api.message(account.id, message.engineId);
+      setOpen(full); setMobileView("reader");
+      if (!message.read) {
+        await api.read(account.id, message.engineId, true);
+        setMessages((prev) => prev.map((item) => item.engineId === message.engineId ? { ...item, read: true } : item));
+      }
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   };
 
   const runAction = async (action: "archive" | "trash", engineId: string) => {
     if (!account) return;
-    await (action === "archive" ? api.archive(account.id, engineId) : api.trash(account.id, engineId));
-    setOpen(null);
-    await loadFolder(account.id, folder);
+    try { await (action === "archive" ? api.archive(account.id, engineId) : api.trash(account.id, engineId)); setOpen(null); setMobileView("messages"); await loadFolder(account.id, folder); }
+    catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+  };
+
+  const openCompose = (mode: ComposeMode = "new", message?: FullMessage) => {
+    setComposeMode(mode); setLastSend(null); setCompose(true);
+    if (!message) { setTo(""); setCc(""); setSubject(""); setText(""); setInReplyTo(undefined); setReferences(undefined); return; }
+    const messageId = message.headers?.["Message-ID"];
+    const priorReferences = message.headers?.References?.trim();
+    setInReplyTo(mode === "forward" ? undefined : messageId);
+    setReferences(mode === "forward" ? undefined : [priorReferences, messageId].filter(Boolean).join(" ") || undefined);
+    if (mode === "forward") {
+      setTo(""); setCc(""); setSubject(subjectWithPrefix(message.subject || "(no subject)", "Fwd"));
+      setText(`---------- Forwarded message ----------\nFrom: ${message.from?.name || ""} <${message.from?.email || ""}>\nDate: ${new Date(message.date).toLocaleString()}\nSubject: ${message.subject || "(no subject)"}\nTo: ${message.to?.map((item) => item.email).join(", ") || ""}\n\n${messageBody(message)}`);
+    } else {
+      const replyTo = uniqueRecipients([message.from?.email || "", ...(message.to ?? []).map((item) => item.email)], account?.address ?? "");
+      const replyCc = uniqueRecipients((message.cc ?? []).map((item) => item.email), account?.address ?? "");
+      setTo((mode === "replyAll" ? replyTo : [message.from?.email || ""]).filter(Boolean).join(", "));
+      setCc(mode === "replyAll" ? replyCc.join(", ") : "");
+      setSubject(subjectWithPrefix(message.subject || "(no subject)", "Re"));
+      setText(`\n\nOn ${new Date(message.date).toLocaleString()}, ${message.from?.email || "the sender"} wrote:\n> ${messageBody(message).split("\n").join("\n> ")}`);
+    }
   };
 
   const runSend = async () => {
     if (!account) return;
-    setError(null);
     try {
-      const recipients = to.split(",").map((r) => r.trim()).filter(Boolean);
-      const result = await api.send(account.id, recipients, { subject, textBody: text, clientRequestId: crypto.randomUUID() });
-      setLastSend(result);
-      setCompose(false);
-      setTo("");
-      setSubject("");
-      setText("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
+      setError(null); setSending(true);
+      const result = await api.send(account.id, parseRecipients(to), { cc: parseRecipients(cc), subject, textBody: text, inReplyTo, references, clientRequestId: crypto.randomUUID() });
+      setLastSend(result); setCompose(false); setSending(false);
+      setTo(""); setCc(""); setSubject(""); setText(""); setInReplyTo(undefined); setReferences(undefined);
+    } catch (err) { setSending(false); setError(err instanceof Error ? err.message : String(err)); }
   };
 
   const runUndo = async () => {
     if (!lastSend) return;
-    try {
-      const result = await api.cancelSend(lastSend.sendId);
-      setLastSend({ ...lastSend, status: result.status });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
+    try { const result = await api.cancelSend(lastSend.sendId); setLastSend({ ...lastSend, status: result.status }); }
+    catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   };
 
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!compose) return;
-    void runSend();
-  };
-
-  return (
-    <div style={sx.shell}>
-      <Sidebar
-        accountId={account?.id ?? ""}
-        accounts={accounts}
-        folder={folder}
-        onSelectAccount={selectAccount}
-        onSelectFolder={selectFolder}
-        onToggleCompose={() => setCompose((v) => !v)}
-        composeOpen={compose}
-      />
-
-      <section style={sx.listPane}>
-        {error && <p style={sx.error}>{error}</p>}
-        {compose && account ? (
-          <form style={sx.compose} onSubmit={onSubmit}>
-            <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="To (comma separated)" />
-            <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" />
-            <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} placeholder="Body" />
-            <button type="submit">Send</button>
-            {lastSend && (
-              <p style={sx.sendNote}>
-                sent <strong>{lastSend.sendId}</strong> · status {lastSend.status}
-                {lastSend.undoUntil && (
-                  <>
-                    {" · "}undo before {fmtTime(lastSend.undoUntil)}{" "}
-                    <button type="button" onClick={() => void runUndo()}>Cancel</button>
-                  </>
-                )}
-              </p>
-            )}
-          </form>
-        ) : null}
-        {!compose &&
-          messages.map((m) => (
-            <MessageRow
-              key={m.engineId}
-              message={m}
-              onOpen={() => void selectMessage(m)}
-            />
-          ))}
+  const unreadCount = messages.filter((message) => !message.read).length;
+  return <div className="gsw-mail-shell">
+    <MailTopBar account={account} accounts={accounts} search={search} onSearchChange={setSearch} onSearch={() => void runSearch()} onSelectAccount={selectAccount} />
+    <main className="gsw-mail-body">
+      <MailSidebar account={account} folder={folder} unreadCount={unreadCount} composeOpen={compose} mobileHidden={mobileView !== "folders"} onSelectFolder={selectFolder} onToggleCompose={() => openCompose()} />
+      <section className={`gsw-message-list ${mobileView !== "messages" ? "" : "mobile-open"}`} aria-label={`${folder} messages`}>
+        <MessageListHeader folder={folder} count={messages.length} onRefresh={refresh} />
+        {error && <p className="gsw-errors">{error}</p>}
+        {messages.length ? messages.map((message) => <MessageRow key={message.engineId} message={message} active={open?.engineId === message.engineId} onOpen={() => void selectMessage(message)} />) : <div className="gsw-list-empty"><span aria-hidden="true">✉</span><strong>No messages here</strong><p>Your {folder.toLowerCase()} is clear.</p></div>}
       </section>
-
-      <section style={sx.readPane}>
-        {open ? (
-          <>
-            <h2>{open.subject}</h2>
-            <p>
-              From {open.from?.name ?? ""} &lt;{open.from?.email}&gt; · {fmtTime(open.date)}
-            </p>
-            <div style={sx.actions}>
-              <button onClick={() => void runAction("archive", open.engineId)}>Archive</button>
-              <button onClick={() => void runAction("trash", open.engineId)}>Delete</button>
-            </div>
-            <pre style={sx.body}>{open.textBody ?? open.htmlBody?.replace(/<[^>]+>/g, "") ?? ""}</pre>
-          </>
-        ) : (
-          <p style={sx.placeholder}>Select a message</p>
-        )}
+      <section className={`gsw-reading-pane ${mobileView === "reader" ? "mobile-open" : ""}`} aria-label="Message reader">
+        {open ? <MessageReader message={open} accountAddress={account?.address} onBack={() => setMobileView("messages")} onReply={() => openCompose("reply", open)} onReplyAll={() => openCompose("replyAll", open)} onForward={() => openCompose("forward", open)} onArchive={() => void runAction("archive", open.engineId)} onTrash={() => void runAction("trash", open.engineId)} /> : <EmptyReader />}
       </section>
-    </div>
-  );
+    </main>
+    {compose && <ComposeWindow mode={composeMode} to={to} cc={cc} subject={subject} text={text} sending={sending} sendNote={lastSend ? `Sent · ${lastSend.status}` : undefined} onToChange={setTo} onCcChange={setCc} onSubjectChange={setSubject} onTextChange={setText} onClose={() => setCompose(false)} onSubmit={() => void runSend()} onUndo={lastSend ? () => void runUndo() : undefined} />}
+  </div>;
 }

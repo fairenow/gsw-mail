@@ -1,0 +1,28 @@
+import type { FormEvent } from "react";
+import type { Account } from "../../api";
+import { AccountMenu } from "./AccountMenu";
+
+export function MailTopBar({ account, accounts, search, onSearchChange, onSearch, onSelectAccount }: {
+  account: Account | null;
+  accounts: Account[];
+  search: string;
+  onSearchChange: (value: string) => void;
+  onSearch: () => void;
+  onSelectAccount: (id: string) => void;
+}) {
+  const submit = (event: FormEvent) => { event.preventDefault(); onSearch(); };
+
+  return (
+    <header className="gsw-topnav">
+      <a className="gsw-topnav-brand" href="/">
+        <span className="gsw-wordmark-mark" aria-hidden="true"><i className="gsw-step gsw-step-1" /><i className="gsw-step gsw-step-2" /><i className="gsw-step gsw-step-3" /></span>
+        <span className="gsw-wordmark">GSW Mail</span>
+      </a>
+      <form className="gsw-topnav-search" onSubmit={submit} role="search">
+        <span className="gsw-search-icon" aria-hidden="true">⌕</span>
+        <input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Search mail" aria-label="Search mail" />
+      </form>
+      <div className="gsw-topnav-end"><AccountMenu account={account} accounts={accounts} onSelect={onSelectAccount} /></div>
+    </header>
+  );
+}

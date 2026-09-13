@@ -43,6 +43,14 @@ button {
   cursor: pointer;
 }
 
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(232, 154, 18, 0.32);
+  outline-offset: 2px;
+}
+
 input,
 textarea {
   font-family: var(--font-body);
