@@ -19,6 +19,14 @@
     {
       "source": "/auth/callback",
       "destination": "/index.html"
+    },
+    {
+      "source": "/settings",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/contacts",
+      "destination": "/index.html"
     }
   ]
 }
