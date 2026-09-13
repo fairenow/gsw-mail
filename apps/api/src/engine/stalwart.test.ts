@@ -131,9 +131,16 @@ const mailstore = (methodCalls: { name: string; args: Record<string, unknown>; i
         "Mailbox/get",
         {
           accountId: args.accountId,
-          list: (args.ids ?? null)
-            ? MAILBOXES.filter((m) => (args.ids as string[]).includes(m.id))
-            : MAILBOXES,
+             list: ((args.ids ?? null)
+             ? MAILBOXES.filter((m) => (args.ids as string[]).includes(m.id))
+             : MAILBOXES).map((mailbox) => {
+               const mailboxEmails = [...emails.values()].filter((email) => email.mailboxIds[mailbox.id]);
+               return {
+                 ...mailbox,
+                 totalEmails: mailboxEmails.length,
+                 unreadEmails: mailboxEmails.filter((email) => !email.keywords.$seen).length,
+               };
+             }),
         },
         call.id,
       ]);
@@ -365,6 +372,23 @@ test("listMailboxes does not classify custom folders as archive", async () => {
   assert.equal(boxes.find((b) => b.engineId === "mbox-archive")?.role, "archive");
   assert.equal(boxes.find((b) => b.engineId === "mbox-custom")?.role, null);
   assert.equal(boxes.find((b) => b.engineId === "mbox-unknown")?.role, null);
+});
+
+test("listMailboxStats reads counts from Mailbox/get metadata", async () => {
+  requestLog.length = 0;
+  const statsEngine = new StalwartEngine({
+    jmapUrl: BASE,
+    accessToken: "user-token",
+    sessionTtlMs: 10_000,
+    fetchImpl: makeFetch(),
+  });
+  const stats = await statsEngine.listMailboxStats("ramon@gs.com");
+  assert.deepEqual(stats.find((item) => item.role === "inbox"), { role: "inbox", total: 3, unread: 2 });
+  assert.equal(stats.some((item) => item.role === "archive"), true);
+  const jmapCall = requestLog.find((request) => request.url === `${BASE}/jmap`);
+  const body = JSON.parse(jmapCall!.body!) as { methodCalls: [string, Record<string, unknown>, string][] };
+  assert.deepEqual(body.methodCalls.map(([name]) => name), ["Mailbox/get"]);
+  assert.deepEqual(body.methodCalls[0]?.[1].properties, ["id", "name", "role", "sortOrder", "totalEmails", "unreadEmails"]);
 });
 
 test("listMessages returns summaries with names", async () => {

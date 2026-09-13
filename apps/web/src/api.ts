@@ -88,6 +88,15 @@ interface MessagesResponse {
   messages: MessageSummary[];
 }
 
+export interface MailboxFolderStats {
+  total: number;
+  unread: number;
+}
+
+interface MailboxStatsResponse {
+  folders: Record<string, MailboxFolderStats>;
+}
+
 export interface DraftInput {
   accountId: string;
   to?: string[];
@@ -147,6 +156,7 @@ const interactiveTimeout = 20_000;
 export const api = {
   accounts: () => get<AccountsResponse>("/mail/accounts").then((r) => r.accounts),
   messages: (accountId: string, mailbox: string, limit = 50) => get<MessagesResponse>(`/mail/messages?accountId=${accountId}&mailbox=${mailbox}&limit=${limit}`).then((r) => r.messages),
+  mailboxStats: (accountId: string) => get<MailboxStatsResponse>(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`).then((r) => r.folders),
   message: (accountId: string, engineId: string) => get<FullMessage>(`/mail/messages/${engineId}?accountId=${accountId}`),
   read: (accountId: string, engineId: string, seen: boolean) =>
     post(`/mail/messages/${engineId}/read`, { accountId, seen }),

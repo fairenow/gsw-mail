@@ -7,6 +7,7 @@ import type {
   EngineThreadId,
   FullMessage,
   MailboxName,
+  MailboxStats,
   MailEngine,
   MailEngineStatus,
   MessageAddress,
@@ -31,6 +32,8 @@ interface JmapMailbox {
   name: string;
   role?: string | null;
   sortOrder?: number;
+  totalEmails?: number;
+  unreadEmails?: number;
 }
 
 interface JmapEmailAddress {
@@ -201,6 +204,7 @@ export class StalwartEngine implements MailEngine {
   readonly name = "stalwart";
   private readonly client: JmapClient;
   private readonly mailboxes = new Map<EngineAccountId, MailboxName[]>();
+  private readonly mailboxStats = new Map<EngineAccountId, MailboxStats[]>();
 
   constructor(private readonly opts: StalwartOptions) {
     this.client = new JmapClient({
@@ -227,7 +231,7 @@ export class StalwartEngine implements MailEngine {
         {
           accountId,
           ids: null,
-          properties: ["id", "name", "role", "sortOrder"],
+          properties: ["id", "name", "role", "sortOrder", "totalEmails", "unreadEmails"],
         },
         "m1",
       ],
@@ -241,8 +245,18 @@ export class StalwartEngine implements MailEngine {
         role: m.role ? (ROLE_TO_ENGINE[m.role.toLowerCase()] ?? null) : null,
         engineName: m.name,
       }));
+    const stats = list.flatMap<MailboxStats>((m) => {
+      const role = m.role ? ROLE_TO_ENGINE[m.role.toLowerCase()] : undefined;
+      return role ? [{ role, total: m.totalEmails ?? 0, unread: m.unreadEmails ?? 0 }] : [];
+    });
     this.mailboxes.set(engineAccountId, mailboxes);
+    this.mailboxStats.set(engineAccountId, stats);
     return mailboxes;
+  }
+
+  async listMailboxStats(engineAccountId: EngineAccountId): Promise<MailboxStats[]> {
+    await this.ensureMailboxes(engineAccountId);
+    return this.mailboxStats.get(engineAccountId) ?? [];
   }
 
   private async ensureMailboxes(engineAccountId: EngineAccountId): Promise<MailboxName[]> {

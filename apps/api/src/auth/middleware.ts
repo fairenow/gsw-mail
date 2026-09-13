@@ -23,10 +23,17 @@ export const requireUser = async (app: FastifyInstance, opts: { optional?: boole
       if (token) {
         const claims = await verifyAccessToken(token).catch(() => null);
         if (claims) {
-          const user = await provisionUserFromIdentity(config.auth.identityProvider, claims.sub).catch(() => null);
+          const user = await provisionUserFromIdentity(config.auth.identityProvider, claims.sub).catch((error: unknown) => {
+            req.log.warn({
+              identitySubject: claims.sub,
+              error: error instanceof Error ? error.message : String(error),
+            }, "authenticated identity provisioning failed");
+            return null;
+          });
           if (user) {
             req.user = user;
             req.accessToken = token;
+            req.log.info({ identitySubject: claims.sub, userId: user.id, userEmail: user.email }, "authenticated identity resolved");
           }
         }
       }

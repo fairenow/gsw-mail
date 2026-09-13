@@ -9,6 +9,7 @@ import { getEngine } from "../engine/index.js";
 import { badRequest, notFound } from "../lib/errors.js";
 
 type MailboxRole = (typeof mailboxRole.enumValues)[number];
+type StandardMailboxRole = Exclude<MailboxRole, null>;
 
 interface Params {
   id: string;
@@ -22,11 +23,23 @@ interface Query {
   threadId?: string;
 }
 
+interface StatsQuery {
+  accountId: string;
+}
+
 type ActionBody = { accountId?: string; seen?: boolean; flagged?: boolean; mailbox?: string };
 
 const seenSchema = z.object({ accountId: z.string(), seen: z.boolean() });
 const flagSchema = z.object({ accountId: z.string(), flagged: z.boolean() });
 const moveSchema = z.object({ accountId: z.string(), mailbox: z.string() });
+const folderNames: Record<StandardMailboxRole, string> = {
+  inbox: "Inbox",
+  sent: "Sent",
+  drafts: "Drafts",
+  spam: "Spam",
+  trash: "Trash",
+  archive: "Archive",
+};
 
 const roleFromName = (name: string): MailboxRole | null => {
   const found = mailboxRole.enumValues.find((r) => r === name.toLowerCase());
@@ -35,6 +48,18 @@ const roleFromName = (name: string): MailboxRole | null => {
 
 export default async (app: FastifyInstance) => {
   await requireUser(app, { optional: false });
+
+  app.get<{ Querystring: StatsQuery }>("/mail/mailboxes/stats", async (req) => {
+    if (!req.query.accountId) throw badRequest("accountId is required");
+    await requireAccountPermission(req.user!.id, req.query.accountId, "read");
+    const folders = Object.fromEntries(
+      Object.values(folderNames).map((name) => [name, { total: 0, unread: 0 }]),
+    ) as Record<string, { total: number; unread: number }>;
+    for (const stats of await getEngine(req.accessToken).listMailboxStats(req.query.accountId)) {
+      folders[folderNames[stats.role]] = { total: stats.total, unread: stats.unread };
+    }
+    return { folders };
+  });
 
   app.get<{ Querystring: Query }>("/mail/messages", async (req) => {
     const { query, user } = req;
@@ -48,8 +73,10 @@ export default async (app: FastifyInstance) => {
     const matched = mailboxes.find((m) => m.role === requested) ?? mailboxes.find((m) => m.engineName.toLowerCase() === requested);
     const mailbox = matched?.engineName ?? query.mailbox ?? "Inbox";
 
-    const limit = query.limit ? Number(query.limit) : 50;
-    const offset = query.offset ? Number(query.offset) : 0;
+    const requestedLimit = query.limit ? Number(query.limit) : 50;
+    const requestedOffset = query.offset ? Number(query.offset) : 0;
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 100) : 50;
+    const offset = Number.isFinite(requestedOffset) ? Math.max(Math.trunc(requestedOffset), 0) : 0;
     const messages = await engine.listMessages(accountId, {
       mailbox,
       limit,

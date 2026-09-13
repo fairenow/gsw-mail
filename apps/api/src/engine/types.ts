@@ -9,6 +9,12 @@ export interface MailboxName {
   engineId?: EngineMailboxId;
 }
 
+export interface MailboxStats {
+  role: Exclude<MailboxName["role"], null>;
+  total: number;
+  unread: number;
+}
+
 export interface MessageAddress {
   name?: string;
   email: string;
@@ -108,6 +114,8 @@ export interface MailEngine {
   readonly name: string;
 
   listMailboxes(accountId: EngineAccountId): Promise<MailboxName[]>;
+
+  listMailboxStats(accountId: EngineAccountId): Promise<MailboxStats[]>;
 
   listMessages(accountId: EngineAccountId, query: MessageQuery): Promise<MessageSummary[]>;
 

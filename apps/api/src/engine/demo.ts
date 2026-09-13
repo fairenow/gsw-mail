@@ -6,6 +6,7 @@ import type {
   EngineThreadId,
   FullMessage,
   MailboxName,
+  MailboxStats,
   MailEngine,
   MailEngineStatus,
   MessageQuery,
@@ -110,6 +111,15 @@ export class DemoEngine implements MailEngine {
 
   async listMailboxes(_accountId: EngineAccountId): Promise<MailboxName[]> {
     return MAILBOXES;
+  }
+
+  async listMailboxStats(accountId: EngineAccountId): Promise<MailboxStats[]> {
+    const all = this.store(accountId);
+    return MAILBOXES.map((mailbox) => ({
+      role: mailbox.role!,
+      total: all.filter((message) => message.mailbox === mailbox.engineName).length,
+      unread: all.filter((message) => message.mailbox === mailbox.engineName && !message.read).length,
+    }));
   }
 
   async listMessages(accountId: EngineAccountId, query: MessageQuery): Promise<MessageSummary[]> {

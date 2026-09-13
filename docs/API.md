@@ -53,7 +53,8 @@ quotaBytes, usedBytes`. List responses add `role` and `permissions`.
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/mail/messages?accountId&mailbox=Inbox&limit&offset&threadId` | list |
+| GET | `/mail/mailboxes/stats?accountId` | standard mailbox total/unread counts from mailbox metadata |
+| GET | `/mail/messages?accountId&mailbox=Inbox&limit&offset&threadId` | paginated list; `limit` is capped at 100 |
 | GET | `/mail/messages/:id?accountId` | full message |
 | POST | `/mail/messages/:id/read` | `{accountId, seen}` |
 | POST | `/mail/messages/:id/flag` | `{accountId, flagged}` |

@@ -20,6 +20,15 @@ const uniqueRecipients = (values: string[], accountAddress: string) => {
   return values.filter((value) => { const normalized = value.toLowerCase(); if (!normalized || normalized === accountAddress.toLowerCase() || seen.has(normalized)) return false; seen.add(normalized); return true; });
 };
 const subjectWithPrefix = (subject: string, prefix: "Re" | "Fwd") => subject.match(new RegExp(`^${prefix}:`, "i")) ? subject : `${prefix}: ${subject}`;
+const timedMailRequest = async <T,>(label: string, request: () => Promise<T>): Promise<T> => {
+  const started = performance.now();
+  try {
+    return await request();
+  } finally {
+    const elapsed = performance.now() - started;
+    if (elapsed > 500) console.warn(`[mail] ${label} took ${Math.round(elapsed)}ms`);
+  }
+};
 const messageBody = (message: FullMessage) => message.textBody?.trim() || message.htmlBody?.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>|<[^>]+>/gi, "").trim() || "";
 const localDraftKey = (accountId: string) => `gsw-mail-draft:${accountId}`;
 const emptyFolderCounts = (): Record<Folder, { total: number; unread: number }> => Object.fromEntries(FOLDERS.map((name) => [name, { total: 0, unread: 0 }])) as Record<Folder, { total: number; unread: number }>;
@@ -58,13 +67,18 @@ export function MailPage() {
 
   const loadFolder = useCallback(async (accountId: string, name: Folder) => {
     setError(null);
-    try { setMessages(await api.messages(accountId, name)); } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    try { setMessages(await timedMailRequest(`folder:${name}`, () => api.messages(accountId, name))); } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   }, []);
   const loadFolderCounts = useCallback(async (accountId: string) => {
-    const results = await Promise.all(FOLDERS.map(async (name) => [name, await api.messages(accountId, name, 10_000)] as const));
-    setFolderCounts(Object.fromEntries(results.map(([name, rows]) => [name, { total: rows.length, unread: rows.filter((row) => !row.read).length }])) as Record<Folder, { total: number; unread: number }>);
+    try {
+      const stats = await timedMailRequest("mailbox-stats", () => api.mailboxStats(accountId));
+      setFolderCounts(Object.fromEntries(FOLDERS.map((name) => [name, stats[name] ?? { total: 0, unread: 0 }])) as Record<Folder, { total: number; unread: number }>);
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   }, []);
-  useEffect(() => { if (account) { void loadFolder(account.id, "Inbox"); void loadFolderCounts(account.id); } }, [account, loadFolder, loadFolderCounts]);
+  const loadAccount = useCallback(async (accountId: string, name: Folder) => {
+    await timedMailRequest("account-load", async () => { await Promise.all([loadFolder(accountId, name), loadFolderCounts(accountId)]); });
+  }, [loadFolder, loadFolderCounts]);
+  useEffect(() => { if (account) void loadAccount(account.id, "Inbox"); }, [account, loadAccount]);
   useEffect(() => { void api.settings().then((settings) => { setSignature(settings.signature); setTemplateKey(settings.general.templateKey === "bible_reader" ? "bible_reader" : fallbackTemplateKey); }).catch(() => undefined); }, []);
   useEffect(() => () => readTimers.current.forEach((timer) => window.clearTimeout(timer)), []);
 
@@ -72,7 +86,7 @@ export function MailPage() {
     if (!signature?.enabled || (mode === "new" && !signature.onNew) || ((mode === "reply" || mode === "replyAll") && !signature.onReply) || (mode === "forward" && !signature.onForward)) return "";
     return signature.signatureHtml ? `<div class="gsw-signature">${signature.signatureHtml}</div><div><br></div>` : "";
   };
-  const selectAccount = useCallback((id: string) => { const next = accounts.find((item) => item.id === id); if (!next) return; shellSelectAccount(id); setOpen(null); setLastSend(null); setMobileView("folders"); void loadFolder(next.id, folder); void loadFolderCounts(next.id); }, [accounts, folder, loadFolder, loadFolderCounts, shellSelectAccount]);
+  const selectAccount = useCallback((id: string) => { const next = accounts.find((item) => item.id === id); if (!next) return; shellSelectAccount(id); setFolder("Inbox"); setOpen(null); setLastSend(null); setMobileView("folders"); }, [accounts, shellSelectAccount]);
   const selectFolder = (name: Folder) => { setFolder(name); setOpen(null); setMobileView("messages"); if (account) void loadFolder(account.id, name); };
   const refresh = useCallback(() => { if (account) { void loadFolder(account.id, folder); void loadFolderCounts(account.id); } }, [account, folder, loadFolder, loadFolderCounts]);
   const toggleSidebar = useCallback(() => { if (window.matchMedia("(max-width: 699px)").matches) { setMobileView((current) => current === "folders" ? "messages" : "folders"); return; } setSidebarCollapsed((current) => { const next = !current; localStorage.setItem("gsw-mail-sidebar-collapsed", String(next)); return next; }); }, []);
