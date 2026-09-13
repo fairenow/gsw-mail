@@ -965,6 +965,11 @@
   resize: vertical;
 }
 
+.gsw-signature {
+  color: var(--gsw-text-muted);
+  font-size: 12px;
+}
+
 .gsw-compose-actions {
   display: flex;
   align-items: center;
