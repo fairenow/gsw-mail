@@ -9,6 +9,7 @@ export default defineConfig({
       "/mail": "http://localhost:4000",
       "/admin": "http://localhost:4000",
       "/auth": "http://localhost:4000",
+      "/api": "http://localhost:4000",
       "/health": "http://localhost:4000",
     },
   },

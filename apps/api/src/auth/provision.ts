@@ -24,6 +24,33 @@ export interface ProvisionedUser {
   email: string;
 }
 
+export async function provisionControlPlaneUser(identitySubject: string, email: string, name?: string): Promise<ProvisionedUser> {
+  const normalizedEmail = email.trim().toLowerCase();
+  const displayName = name?.trim() || displayNameFromAddress(normalizedEmail);
+  return db.transaction(async (tx) => {
+    const id = `better-auth-${identitySubject}`;
+    const existingUser = (await tx.select({ id: users.id }).from(users).where(eq(users.authUserId, identitySubject)).limit(1))[0]
+      ?? (await tx.select({ id: users.id }).from(users).where(eq(users.id, id)).limit(1))[0];
+    let organizationId: string | undefined;
+    if (existingUser) {
+      organizationId = (await tx.select({ organizationId: organizationMemberships.organizationId }).from(organizationMemberships).where(eq(organizationMemberships.userId, id)).limit(1))[0]?.organizationId;
+    } else {
+      const workspaceSlug = `${config.provisioning.organizationSlug}-${createHash("sha256").update(identitySubject).digest("hex").slice(0, 12)}`;
+      const [organization] = await tx.insert(organizations).values({ name: config.provisioning.organizationName, slug: workspaceSlug }).returning({ id: organizations.id });
+      organizationId = organization?.id;
+    }
+    if (!organizationId) throw new Error("failed to provision workspace");
+    const [user] = await tx
+      .insert(users)
+      .values({ id: existingUser?.id ?? id, authUserId: identitySubject, identityProvider: "better-auth", identitySubject, email: normalizedEmail, emailVerified: true, name: displayName, lastLoginAt: new Date() })
+      .onConflictDoUpdate({ target: users.id, set: { authUserId: identitySubject, email: normalizedEmail, name: displayName, emailVerified: true, lastLoginAt: new Date() } })
+      .returning({ id: users.id });
+    if (!user) throw new Error("failed to provision control-plane user");
+    await tx.insert(organizationMemberships).values({ organizationId, userId: user.id, role: "owner", status: "active" }).onConflictDoUpdate({ target: [organizationMemberships.organizationId, organizationMemberships.userId], set: { role: "owner", status: "active" } });
+    return { id: user.id, email: normalizedEmail };
+  });
+}
+
 export function normalizeIdentitySubject(subject: string): string {
   const normalized = subject.trim().toLowerCase();
   if (!normalized || !normalized.includes("@") || normalized.startsWith("@") || normalized.endsWith("@")) throw new Error("Stalwart identity is not an email address");
@@ -83,7 +110,7 @@ export async function provisionUserFromIdentity(identityProvider: string, subjec
       if (existingOwner[0] && existingOwner[0].userId !== userId) throw new Error(`mailbox ${address} is already owned by another user`);
       await tx.update(emailAccounts).set({ userId, status: "active", displayName: existingAccount?.displayName ?? displayName }).where(eq(emailAccounts.id, accountId));
     } else {
-      const [account] = await tx.insert(emailAccounts).values({ domainId, userId, localPart: address.slice(0, address.lastIndexOf("@")), address, displayName, status: "active", quotaBytes: config.provisioning.defaultQuotaBytes }).returning({ id: emailAccounts.id });
+      const [account] = await tx.insert(emailAccounts).values({ workspaceId: organizationId, domainId, userId, localPart: address.slice(0, address.lastIndexOf("@")), address, displayName, status: "active", quotaBytes: config.provisioning.defaultQuotaBytes }).returning({ id: emailAccounts.id });
       accountId = account?.id;
       if (!accountId) throw new Error("failed to provision mailbox account");
     }

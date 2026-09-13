@@ -7,7 +7,6 @@ import { HttpError } from "./lib/errors.js";
 import accounts from "./routes/accounts.js";
 import admin from "./routes/admin.js";
 import aliases from "./routes/aliases.js";
-import auth from "./routes/auth.js";
 import drafts from "./routes/drafts.js";
 import messages from "./routes/messages.js";
 import search from "./routes/search.js";
@@ -17,12 +16,19 @@ import suppressions from "./routes/suppressions.js";
 import threads from "./routes/threads.js";
 import webhooks from "./routes/webhooks.js";
 import product from "./routes/product.js";
+import setup from "./routes/setup.js";
+import { toNodeHandler } from "better-auth/node";
+import { auth as betterAuth } from "./auth/better.js";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
 
   app.register(cors, { origin: true });
   app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
+  app.all("/api/auth/*", async (req, reply) => {
+    await toNodeHandler(betterAuth)(req.raw, reply.raw);
+    reply.sent = true;
+  });
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof HttpError) {
@@ -37,7 +43,6 @@ export function buildApp() {
 
   app.register(requireUser, { optional: true }).register(async (anon) => {
     anon.get("/health", async () => ({ ok: true, service: "gsw-mail-api" }));
-    anon.register(auth);
   });
 
   app.register(accounts);
@@ -52,6 +57,7 @@ export function buildApp() {
   app.register(suppressions);
   app.register(webhooks);
   app.register(product);
+  app.register(setup);
 
   return app;
 }

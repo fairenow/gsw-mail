@@ -83,18 +83,20 @@ require elevated authorization.
 Authentication: the web app signs in with Stalwart's OAuth authorization server
 via PKCE (public client `gsw-mail-web`, no secret). The browser never talks to the
 authorization server directly: the token exchange runs server-side through the
-API's `POST /auth/exchange` route, so `mail.guidedstepswellness.com` never needs
-Stalwart CORS. The API verifies bearer access tokens by calling Stalwart's
-`/auth/introspect` authenticated as the trusted Stalwart service account
-(`STALWART_MAIL_USERNAME`/`STALWART_MAIL_PASSWORD`), then resolves the canonical
-`sub` to a `users` row keyed by `(identityProvider, identitySubject)`. After
-authentication, normal mailbox operations create a request-scoped JMAP client with
-the caller's OAuth bearer token. The service credential is not used to read the
-caller's mailbox. Background recovery jobs may use the explicitly named service
-engine and require matching Stalwart delegation.
+Better Auth's `/api/auth/*` routes, so `mail.guidedstepswellness.com` never needs
+Stalwart CORS. The API verifies bearer access tokens through a short-lived,
+expiry-bounded cache backed by Stalwart's `/auth/introspect`, authenticated as the
+trusted Stalwart service account (`STALWART_MAIL_USERNAME`/`STALWART_MAIL_PASSWORD`).
+It then resolves the canonical `sub` to a `users` row keyed by
+`(identityProvider, identitySubject)`. Existing users take the lookup path;
+JIT provisioning runs only when the identity is not present. Normal mailbox
+operations reuse a bounded request-token JMAP engine cache, whose client retains
+the JMAP session and mailbox metadata caches. The service credential is not used
+to read the caller's mailbox. Background recovery jobs may use the explicitly
+named service engine and require matching Stalwart delegation.
 Authorization is role-based: org memberships (owner/admin/member) gate admin
 operations; mail-account memberships (owner/delegate/read_only) gate mail
-actions via read/send/manage permissions. `/health` and `/auth/exchange` are
+actions via read/send/manage permissions. `/health` and `/api/auth/*` are
 public; `/mail/*` and `/admin/*` require an authenticated user. No infra
 credentials are ever sent to the browser; dev-only fallbacks are disabled in
 production.
@@ -120,8 +122,11 @@ production.
 
 ### Database (Postgres)
 - Product-level metadata only (organizations, domains, accounts, aliases,
+  workspace setup progress and authorization memberships,
   outbound queue + recipients + attachment refs, delivery events,
   inbound-message index).
+- Better Auth user, session, account, and verification records are Neon-owned
+  control-plane data. They are separate from mailbox accounts and memberships.
 - The mail server's complete internal state is **not** duplicated in Postgres.
 - Stalwart is authoritative for standard contact identity and address-book membership
   through JMAP Contacts/JSContact. Neon stores the link plus GSW enrichment: tags,

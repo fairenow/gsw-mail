@@ -49,6 +49,7 @@ async function ensureUser(id: string, identitySubject: string, email: string, na
 }
 
 async function ensureAccount(
+  organizationId: string,
   domainId: string,
   localPart: string,
   address: string,
@@ -58,6 +59,7 @@ async function ensureAccount(
   const [account] = await db
     .insert(emailAccounts)
     .values({
+      workspaceId: organizationId,
       domainId,
       userId: ownerUserId,
       localPart,
@@ -113,7 +115,7 @@ async function ensureSeed() {
     const ownerUserId = await ensureUser(OWNER_USER_ID, OWNER_IDENTITY_SUBJECT, OWNER_EMAIL, OWNER_NAME);
     await ensureOrgMembership(organizationId, ownerUserId, "owner");
 
-    const ownerAccountId = await ensureAccount(domainId, MAILBOX_LOCAL_PART, OWNER_ADDRESS, MAILBOX_DISPLAY_NAME ?? OWNER_NAME, ownerUserId);
+    const ownerAccountId = await ensureAccount(organizationId, domainId, MAILBOX_LOCAL_PART, OWNER_ADDRESS, MAILBOX_DISPLAY_NAME ?? OWNER_NAME, ownerUserId);
     await ensureMembership(ownerAccountId, ownerUserId, "owner");
 
     await db

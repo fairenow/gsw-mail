@@ -1,13 +1,26 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { config } from "../config.js";
-import { provisionUserFromIdentity } from "./provision.js";
-import { resolveUser, verifyAccessToken, type AuthenticatedUser } from "./identity.js";
+import { provisionControlPlaneUser, provisionUserFromIdentity } from "./provision.js";
+import { auth } from "./better.js";
+import { fromNodeHeaders } from "better-auth/node";
+import { resolveUser, type AuthenticatedUser } from "./identity.js";
 
 declare module "fastify" {
   interface FastifyRequest {
     user?: AuthenticatedUser;
     accessToken?: string;
   }
+}
+
+interface IdentityOperations {
+  resolve: typeof resolveUser;
+  provision: typeof provisionUserFromIdentity;
+}
+
+export async function resolveOrProvisionUser(identityProvider: string, subject: string, operations: IdentityOperations = { resolve: resolveUser, provision: provisionUserFromIdentity }): Promise<{ user: AuthenticatedUser; provisioned: boolean }> {
+  const existing = await operations.resolve(identityProvider, subject);
+  if (existing) return { user: existing, provisioned: false };
+  return { user: await operations.provision(identityProvider, subject), provisioned: true };
 }
 
 const bearer = (req: FastifyRequest): string | null => {
@@ -19,35 +32,30 @@ const bearer = (req: FastifyRequest): string | null => {
 export const requireUser = async (app: FastifyInstance, opts: { optional?: boolean }): Promise<void> => {
   app.addHook("onRequest", async (req: FastifyRequest, reply: FastifyReply) => {
     if (config.env === "production") {
-      const token = bearer(req);
-      if (token) {
-        const claims = await verifyAccessToken(token).catch(() => null);
-        if (claims) {
-          const user = await provisionUserFromIdentity(config.auth.identityProvider, claims.sub).catch((error: unknown) => {
-            req.log.warn({
-              identitySubject: claims.sub,
-              error: error instanceof Error ? error.message : String(error),
-            }, "authenticated identity provisioning failed");
-            return null;
-          });
-          if (user) {
-            req.user = user;
-            req.accessToken = token;
-            req.log.info({ identitySubject: claims.sub, userId: user.id, userEmail: user.email }, "authenticated identity resolved");
-          }
-        }
+      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) }).catch(() => null);
+      if (session) {
+        const result = await provisionControlPlaneUser(session.user.id, session.user.email, session.user.name).catch((error: unknown) => {
+          req.log.warn({ error: error instanceof Error ? error.message : String(error) }, "authenticated Better Auth identity provisioning failed");
+          return null;
+        });
+        if (result) req.user = result;
       }
     } else {
+      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) }).catch(() => null);
+      if (session) {
+        const controlUser = await provisionControlPlaneUser(session.user.id, session.user.email, session.user.name).catch(() => null);
+        if (controlUser) req.user = controlUser;
+      }
       const token = bearer(req);
       let userId: string | undefined;
-      if (token) {
+      if (!req.user && token) {
         userId = token;
-      } else if (req.headers["x-gsw-user-id"]) {
+      } else if (!req.user && req.headers["x-gsw-user-id"]) {
         userId = String(req.headers["x-gsw-user-id"]);
-      } else if (config.dev.userId) {
+      } else if (!req.user && config.dev.userId) {
         userId = config.dev.userId;
       }
-      if (userId) {
+      if (userId && !req.user) {
         const user = await resolveUser(config.auth.identityProvider, userId).catch(() => null);
         req.user = user ?? { id: userId };
         if (user && token) req.accessToken = token;

@@ -29,6 +29,7 @@ export interface StalwartOptions {
   servicePassword?: string;
   sessionTtlMs?: number;
   fetchImpl?: typeof fetch;
+  onSlowOperation?: (operation: string, durationMs: number) => void;
 }
 
 interface JmapMailbox {
@@ -301,6 +302,7 @@ export class StalwartEngine implements MailEngine {
       ...(opts.servicePassword ? { password: opts.servicePassword } : {}),
       sessionTtlMs: opts.sessionTtlMs ?? 60_000,
       ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+      ...(opts.onSlowOperation ? { onSlowOperation: opts.onSlowOperation } : {}),
     });
   }
 

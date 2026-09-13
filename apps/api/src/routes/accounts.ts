@@ -108,6 +108,7 @@ export default async (app: FastifyInstance) => {
       const [created] = await tx
         .insert(emailAccounts)
         .values({
+          workspaceId: domain.organizationId,
           domainId: input.domainId,
           userId: input.ownerUserId,
           localPart: input.localPart,
@@ -125,9 +126,11 @@ export default async (app: FastifyInstance) => {
         { accountId: created.id, role: "trash", engineName: "Trash" },
         { accountId: created.id, role: "archive", engineName: "Archive" },
       ]);
+      const [owner] = await tx.select({ id: users.id, authUserId: users.authUserId }).from(users).where(eq(users.id, input.ownerUserId ?? req.user!.id)).limit(1);
       await tx.insert(mailAccountMemberships).values({
         accountId: created.id,
         userId: input.ownerUserId ?? req.user!.id,
+        ...(owner?.authUserId ? { authUserId: owner.authUserId } : {}),
         role: "owner",
       });
       return created;

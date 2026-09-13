@@ -66,6 +66,53 @@ export const deliveryEventType = pgEnum("delivery_event_type", [
 ]);
 export const signaturePosition = pgEnum("signature_position", ["beforeQuotedText", "afterQuotedText"]);
 export const contactImportDuplicateBehavior = pgEnum("contact_import_duplicate_behavior", ["skip", "merge", "overwrite"]);
+export const setupStep = pgEnum("setup_step", ["email_verified", "workspace_created", "domain_added", "domain_verified", "first_mailbox_created", "complete"]);
+
+export const authUsers = pgTable("auth_users", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").default(false).notNull(),
+  image: text("image"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const authSessions = pgTable("auth_sessions", {
+  id: text("id").primaryKey(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  token: text("token").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+});
+
+export const authAccounts = pgTable("auth_accounts", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").notNull(),
+  providerId: text("provider_id").notNull(),
+  userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  idToken: text("id_token"),
+  accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
+  refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { withTimezone: true }),
+  scope: text("scope"),
+  password: text("password"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const authVerifications = pgTable("auth_verifications", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
 
 export const organizations = pgTable(
   "organizations",
@@ -78,10 +125,24 @@ export const organizations = pgTable(
   (t) => [uniqueIndex("organizations_slug_idx").on(t.slug)],
 );
 
+export const workspaceSetupStates = pgTable(
+  "workspace_setup_states",
+  {
+    organizationId: uuid("organization_id")
+      .primaryKey()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    currentStep: setupStep("current_step").default("email_verified").notNull(),
+    migratedFromExisting: boolean("migrated_from_existing").default(false).notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    ...timestamps,
+  },
+);
+
 export const users = pgTable(
   "users",
   {
     id: text("id").primaryKey(),
+    authUserId: text("auth_user_id").references(() => authUsers.id, { onDelete: "set null" }),
     identityProvider: text("identity_provider").default("gsw").notNull(),
     identitySubject: text("identity_subject").notNull(),
     email: text("email").notNull(),
@@ -94,6 +155,7 @@ export const users = pgTable(
   (t) => [
     uniqueIndex("users_identity_idx").on(t.identityProvider, t.identitySubject),
     index("users_email_idx").on(t.email),
+    uniqueIndex("users_auth_user_idx").on(t.authUserId),
   ],
 );
 
@@ -143,12 +205,16 @@ export const emailAccounts = pgTable(
   "email_accounts",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
     domainId: uuid("domain_id")
       .notNull()
       .references(() => domains.id, { onDelete: "restrict" }),
     userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
     localPart: text("local_part").notNull(),
     address: text("address").notNull(),
+    stalwartPrincipalId: text("stalwart_principal_id"),
     displayName: text("display_name"),
     status: accountStatus("account_status").default("pending").notNull(),
     quotaBytes: bigint("quota_bytes", { mode: "number" }),
@@ -159,6 +225,7 @@ export const emailAccounts = pgTable(
     uniqueIndex("email_accounts_address_idx").on(t.address),
     index("email_accounts_user_idx").on(t.userId),
     index("email_accounts_domain_idx").on(t.domainId),
+    index("email_accounts_workspace_idx").on(t.workspaceId),
   ],
 );
 
@@ -172,12 +239,14 @@ export const mailAccountMemberships = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    authUserId: text("auth_user_id").references(() => authUsers.id, { onDelete: "set null" }),
     role: accountMembershipRole("account_membership_role").default("delegate").notNull(),
     ...timestamps,
   },
   (t) => [
     uniqueIndex("account_memberships_account_user_idx").on(t.accountId, t.userId),
     index("account_memberships_user_idx").on(t.userId),
+    index("account_memberships_auth_user_idx").on(t.authUserId),
   ],
 );
 

@@ -20,14 +20,14 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 
 ## Phase 2 — Account and mailbox system
 - [x] `organizations`, `domains`, `users`, `emailAccounts`, `aliases` in schema
+- [x] Persisted control-plane workspace setup state and resumable setup endpoints
+- [x] Better Auth branded signup, verification, password, magic-link, and session boundary
 - [x] Mailboxes: Inbox, Sent, Drafts, Spam, Trash, Archive
 - [x] Account lifecycle (create/disable) + quota
 - [x] Aliases (`hello@...` → `ramon@...`)
 - [x] Multi-user auth + authorization model: `users` keyed by
-      `(identityProvider, identitySubject)` from Stalwart OAuth bearer tokens
-      (PKCE public client `gsw-mail-web`; introspection uses the server-only
-      `STALWART_MAIL_USERNAME`/`STALWART_MAIL_PASSWORD` credential, while normal
-      JMAP calls use the authenticated user's bearer token),
+      `(identityProvider, identitySubject)` from Better Auth sessions;
+      Stalwart is no longer a user-facing identity provider,
       org memberships (owner/admin/member), mail-account memberships
       (owner/delegate/read_only) with permissions read/send/manage. No infra secrets
       are exposed to the browser; dev-only fallbacks are disabled in production.

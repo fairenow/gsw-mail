@@ -24,6 +24,7 @@ export interface JmapClientOptions {
   password?: string;
   sessionTtlMs: number;
   fetchImpl?: typeof fetch;
+  onSlowOperation?: (operation: string, durationMs: number) => void;
 }
 
 const abs = (base: string, url: string): string => {
@@ -54,6 +55,7 @@ export class JmapClient {
 
   async session(force = false): Promise<JmapSession> {
     const now = Date.now();
+    const started = performance.now();
     if (!force && this.sessionCache && now - this.sessionCache.at < this.opts.sessionTtlMs) {
       return this.sessionCache.session;
     }
@@ -61,6 +63,7 @@ export class JmapClient {
       method: "GET",
       headers: { Accept: "application/json", Authorization: authorizationHeader(this.opts) },
     });
+    this.reportSlow("JMAP session", started);
     if (!res.ok) {
       throw new JmapError(`JMAP session request failed: HTTP ${res.status} ${res.statusText}`, "session_failed");
     }
@@ -87,6 +90,7 @@ export class JmapClient {
 
   async call(methods: JmapMethodCall[]): Promise<[string, Record<string, unknown>, string | null][]> {
     const session = await this.session();
+    const started = performance.now();
     const res = await this.fetchImpl(session.apiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: authorizationHeader(this.opts) },
@@ -95,6 +99,7 @@ export class JmapClient {
         methodCalls: methods,
       }),
     });
+    this.reportSlow(methods.map(([name]) => name).join(", "), started);
     if (!res.ok) {
       throw new JmapError(`JMAP request failed: HTTP ${res.status} ${res.statusText}`, "request_failed");
     }
@@ -112,5 +117,10 @@ export class JmapClient {
       }
     }
     return responses;
+  }
+
+  private reportSlow(operation: string, started: number): void {
+    const durationMs = performance.now() - started;
+    if (durationMs > 250) this.opts.onSlowOperation?.(operation, durationMs);
   }
 }

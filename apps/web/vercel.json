@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://gsw-mail-production.up.railway.app/api/:path*"
+    },
+    {
       "source": "/mail/:path*",
       "destination": "https://gsw-mail-production.up.railway.app/mail/:path*"
     },
@@ -22,6 +26,18 @@
     },
     {
       "source": "/auth/callback",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/sign-up",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/create-password",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/setup",
       "destination": "/index.html"
     },
     {

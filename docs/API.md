@@ -1,14 +1,9 @@
 # Guided Steps Mail API
 
-Base path: `/mail`. Admin: `/admin`. Auth: `Authorization: Bearer <token>`. In
-production the token is verified against Stalwart's `/auth/introspect` using the
-server-only `STALWART_MAIL_USERNAME`/`STALWART_MAIL_PASSWORD` credential and resolved
-to a `users` row keyed by `(identityProvider, identitySubject)`. Mailbox operations
-then use the caller's bearer token for JMAP; the server credential is not used for
-normal user reads or writes.
-`POST /auth/exchange` is the public, unauthenticated PKCE token-exchange route
-that proxies the browser's OAuth code to Stalwart. Development only:
-`X-GSW-User-Id` / `DEV_USER_ID`.
+Base path: `/mail`. Admin: `/admin`. Better Auth owns user-facing signup,
+verification, password, magic-link, and cookie sessions at `/api/auth/*`.
+Stalwart is infrastructure only; the browser never redirects to its login page.
+Development only: `X-GSW-User-Id` / `DEV_USER_ID`.
 
 Authorization: org memberships (owner/admin/member) gate admin operations;
 mail-account memberships (owner/delegate/read_only) gate mail actions:
@@ -25,6 +20,19 @@ returns 400 with a Zod `issues` list.
 Product routes use the same authenticated user but are intentionally separate from
 the mail engine: settings, signatures, contacts, and import history are Neon/Postgres
 metadata and never Stalwart mailbox state.
+
+## Workspace Setup
+
+Setup is resumable and persisted against the workspace. The control-plane identity
+can configure the workspace and domain without receiving mailbox content access.
+`email_accounts` is the current additive mailbox resource. Each row has an explicit
+`workspace_id`, and the database enforces that it matches the workspace owning its domain.
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/setup` | current workspace, domain, mailbox, and setup step |
+| PATCH | `/api/setup/workspace` | workspace owner/admin; `{name}` |
+| POST | `/api/setup/domain` | workspace owner/admin; `{domain}` |
 
 ## Accounts
 

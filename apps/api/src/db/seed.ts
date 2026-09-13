@@ -38,6 +38,7 @@ async function ensureUser(id: string, identitySubject: string, email: string, na
 }
 
 async function ensureAccount(
+  organizationId: string,
   domainId: string,
   localPart: string,
   address: string,
@@ -47,6 +48,7 @@ async function ensureAccount(
   const [account] = await db
     .insert(emailAccounts)
     .values({
+      workspaceId: organizationId,
       domainId,
       userId: ownerUserId,
       localPart,
@@ -111,9 +113,9 @@ async function ensureSeed() {
   await ensureOrgMembership(organizationId, ramonId, "owner");
   await ensureOrgMembership(organizationId, alyssaId, "member");
 
-  const ramonAccountId = await ensureAccount(domainId, "ramon", "ramon@guidedstepswellness.com", "Ramon Williams", ramonId);
-  const alyssaAccountId = await ensureAccount(domainId, "alyssa", "alyssa@guidedstepswellness.com", "Alyssa Morgan", alyssaId);
-  const communityAccountId = await ensureAccount(domainId, "community", "community@guidedstepswellness.com", "Community", ramonId);
+  const ramonAccountId = await ensureAccount(organizationId, domainId, "ramon", "ramon@guidedstepswellness.com", "Ramon Williams", ramonId);
+  const alyssaAccountId = await ensureAccount(organizationId, domainId, "alyssa", "alyssa@guidedstepswellness.com", "Alyssa Morgan", alyssaId);
+  const communityAccountId = await ensureAccount(organizationId, domainId, "community", "community@guidedstepswellness.com", "Community", ramonId);
 
   const memberships = [
     [ramonAccountId, ramonId, "owner"],

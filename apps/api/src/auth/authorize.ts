@@ -36,7 +36,7 @@ export async function getAccessibleAccounts(userId: string): Promise<AccessibleA
   const membershipRows = await db
     .select({
       account: emailAccounts,
-      organizationId: domains.organizationId,
+       organizationId: emailAccounts.workspaceId,
       role: mailAccountMemberships.role,
     })
     .from(mailAccountMemberships)
@@ -60,7 +60,7 @@ export async function getAccessibleAccounts(userId: string): Promise<AccessibleA
 
   if (config.env !== "production") {
     const ownedRows = await db
-      .select({ account: emailAccounts, organizationId: domains.organizationId })
+       .select({ account: emailAccounts, organizationId: emailAccounts.workspaceId })
       .from(emailAccounts)
       .innerJoin(domains, eq(emailAccounts.domainId, domains.id))
       .where(eq(emailAccounts.userId, userId));
@@ -88,7 +88,7 @@ export async function requireAccountPermission(
   permission: AccountPermission,
 ): Promise<AccessibleAccount> {
   const accountRows = await db
-    .select({ account: emailAccounts, organizationId: domains.organizationId })
+    .select({ account: emailAccounts, organizationId: emailAccounts.workspaceId })
     .from(emailAccounts)
     .innerJoin(domains, eq(emailAccounts.domainId, domains.id))
     .where(eq(emailAccounts.id, accountId))

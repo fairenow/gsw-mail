@@ -62,8 +62,8 @@ gsw-mail/
 cp infra/.env.example infra/.env
 docker compose -f infra/docker-compose.yml up -d
 #   → Stalwart writes its bootstrap config to /etc/stalwart on first boot and
-#     prints the admin account + password via `docker logs stalwart`.
-#     Log in at http://localhost:8080 to create the domain and the first account.
+#     prints the admin account + password via `docker logs stalwart`. It is
+#     infrastructure only; users sign up through the branded GSW application.
 
 # 2. API
 cd apps/api

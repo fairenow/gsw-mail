@@ -19,6 +19,7 @@ const runProductionConfig = (overrides: Record<string, string>): { code: number;
     "DELIVERY_WEBHOOK_SECRET",
     "OIDC_ISSUER",
     "OIDC_CLIENT_ID",
+    "BETTER_AUTH_SECRET",
     "RESEND_API_KEY",
   ]) {
     delete env[key];
@@ -44,6 +45,7 @@ const prodOkVars = {
   DELIVERY_WEBHOOK_SECRET: "whsec_3f4a9c1b8e7d2f6a",
   OIDC_ISSUER: "https://identity.guidedstepswellness.com",
   OIDC_CLIENT_ID: "gsw-mail-web",
+  BETTER_AUTH_SECRET: "prod-better-auth-9f4a2c7e-2026",
   OUTBOUND_RELAY: "resend",
   RESEND_API_KEY: "re_prod_9f2k8a1cb",
 };

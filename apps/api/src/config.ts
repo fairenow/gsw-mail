@@ -31,7 +31,10 @@ const config = {
     resendApiKey: process.env.RESEND_API_KEY,
   },
   auth: {
-    identityProvider: env("IDENTITY_PROVIDER", "stalwart"),
+    identityProvider: env("IDENTITY_PROVIDER", "better-auth"),
+    baseUrl: env("BETTER_AUTH_URL", "http://localhost:4000"),
+    trustedOrigin: env("BETTER_AUTH_TRUSTED_ORIGIN", "http://localhost:3000"),
+    secret: env("BETTER_AUTH_SECRET", "development-only-better-auth-secret-change-me"),
     clientId: env("OIDC_CLIENT_ID", "gsw-mail-web"),
     issuer: stalwartIssuer,
     introspectUrl: process.env.STALWART_INTROSPECT_URL ?? `${stalwartIssuer}/auth/introspect`,
@@ -51,6 +54,9 @@ const config = {
     defaultQuotaBytes: Number(env("PROVISIONING_DEFAULT_QUOTA_BYTES", "5000000000")),
   },
   deliveryWebhookSecret: process.env.DELIVERY_WEBHOOK_SECRET,
+  authEmail: {
+    from: env("AUTH_EMAIL_FROM", "GSW <no-reply@localhost>"),
+  },
   dev: {
     userId: process.env.DEV_USER_ID ?? "ramon-dev",
   },
@@ -85,14 +91,8 @@ if (isProduction) {
   assertNotPlaceholder("STALWART_MAIL_PASSWORD", config.stalwart.mailPassword!);
   assertExplicit("DELIVERY_WEBHOOK_SECRET", explicit("DELIVERY_WEBHOOK_SECRET"));
   assertNotPlaceholder("DELIVERY_WEBHOOK_SECRET", config.deliveryWebhookSecret!);
-  assertExplicit("OIDC_ISSUER", explicit("OIDC_ISSUER"));
-  for (const endpoint of [config.auth.issuer, config.auth.introspectUrl]) {
-    const url = new URL(endpoint);
-    if (url.protocol !== "https:" || url.username || url.password || url.hash) throw new Error("[config] OIDC endpoints must use HTTPS without credentials or fragments");
-  }
-  if (new URL(config.auth.introspectUrl).origin !== new URL(config.auth.issuer).origin) throw new Error("[config] introspection must use the OIDC issuer origin");
-  assertExplicit("OIDC_CLIENT_ID", explicit("OIDC_CLIENT_ID"));
-  assertNotPlaceholder("OIDC_CLIENT_ID", config.auth.clientId);
+  assertExplicit("BETTER_AUTH_SECRET", explicit("BETTER_AUTH_SECRET"));
+  assertNotPlaceholder("BETTER_AUTH_SECRET", config.auth.secret);
   assertNotPlaceholder("DATABASE_URL", config.databaseUrl);
   if (config.send.delaySeconds < 0 || config.send.maxRecipients < 1) {
     throw new Error("[config] invalid send settings: SEND_DELAY_SECONDS must be >= 0 and MAX_RECIPIENTS >= 1");

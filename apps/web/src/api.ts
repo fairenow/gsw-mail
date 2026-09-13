@@ -1,4 +1,4 @@
-import { accessToken, logout } from "./auth";
+import { logout } from "./auth";
 
 export interface Account {
   id: string;
@@ -83,6 +83,15 @@ export interface SendResult {
   idempotentReplay?: boolean;
 }
 
+export interface SetupState {
+  workspace: { id: string; name: string; role: "owner" | "admin" | "member" };
+  domain: { id: string; name: string; status: string } | null;
+  mailbox: { id: string; address: string } | null;
+  currentStep: "email_verified" | "workspace_created" | "domain_added" | "domain_verified" | "first_mailbox_created" | "complete";
+  onboardingComplete: boolean;
+  migratedFromExisting: boolean;
+}
+
 interface AccountsResponse {
   accounts: Account[];
 }
@@ -115,15 +124,13 @@ export interface DraftInput {
 }
 
 const headers = (jsonBody = false): Record<string, string> => {
-  const token = accessToken();
   return {
-    ...(token ? { authorization: `Bearer ${token}` } : {}),
     ...(jsonBody ? { "content-type": "application/json" } : {}),
   };
 };
 
 const json = async <T,>(res: Response): Promise<T> => {
-  if (res.status === 401) logout();
+  if (res.status === 401) void logout();
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const details = body as { message?: string; error?: string };
@@ -133,13 +140,13 @@ const json = async <T,>(res: Response): Promise<T> => {
   return (await res.json()) as T;
 };
 
-const get = <T,>(url: string) => fetch(url, { headers: headers() }).then((res) => json<T>(res));
+const get = <T,>(url: string) => fetch(url, { headers: headers(), credentials: "include" }).then((res) => json<T>(res));
 
 const request = async (url: string, init: RequestInit, timeoutMs?: number): Promise<Response> => {
   const controller = timeoutMs ? new AbortController() : undefined;
   const timeout = timeoutMs ? window.setTimeout(() => controller?.abort(), timeoutMs) : undefined;
   try {
-    return await fetch(url, { ...init, ...(controller ? { signal: controller.signal } : {}) });
+    return await fetch(url, { ...init, credentials: "include", ...(controller ? { signal: controller.signal } : {}) });
   } catch (error) {
     if (controller?.signal.aborted) throw new Error(`request timed out after ${timeoutMs}ms`);
     throw error;
@@ -157,6 +164,9 @@ const patch = async <T,>(url: string, body: unknown, timeoutMs?: number): Promis
 const interactiveTimeout = 20_000;
 
 export const api = {
+  setup: () => get<SetupState>("/api/setup"),
+  updateWorkspace: (name: string) => patch<Pick<SetupState, "workspace" | "currentStep">>("/api/setup/workspace", { name }),
+  addSetupDomain: (domain: string) => post<Pick<SetupState, "domain" | "currentStep">>("/api/setup/domain", { domain }),
   accounts: () => get<AccountsResponse>("/mail/accounts").then((r) => r.accounts),
   messages: (accountId: string, mailbox: string, limit = 50) => get<MessagesResponse>(`/mail/messages?accountId=${accountId}&mailbox=${mailbox}&limit=${limit}`).then((r) => r.messages),
   mailboxStats: (accountId: string) => get<MailboxStatsResponse>(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`).then((r) => r.folders),

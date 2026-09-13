@@ -65,6 +65,7 @@ async function seed() {
     const [acc] = await db
       .insert(schema.emailAccounts)
       .values({
+        workspaceId: organizationId,
         domainId,
         userId: owner,
         localPart,
