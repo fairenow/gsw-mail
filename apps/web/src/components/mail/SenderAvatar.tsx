@@ -1,4 +1,7 @@
-export function SenderAvatar({ name, email, size = "normal" }: { name?: string; email?: string; size?: "normal" | "large" }) {
+import { useState } from "react";
+
+export function SenderAvatar({ name, email, imageUrl, size = "normal" }: { name?: string; email?: string; imageUrl?: string; size?: "normal" | "large" }) {
+  const [imageFailed, setImageFailed] = useState(false);
   const label = (name || email || "?")
     .split(/\s+/)
     .filter(Boolean)
@@ -7,5 +10,5 @@ export function SenderAvatar({ name, email, size = "normal" }: { name?: string; 
     .join("")
     .toUpperCase();
 
-  return <span className={`gsw-avatar ${size === "large" ? "gsw-avatar-large" : ""}`} aria-hidden="true">{label}</span>;
+  return <span className={`gsw-avatar ${size === "large" ? "gsw-avatar-large" : ""}`} aria-hidden="true">{imageUrl && !imageFailed ? <img src={imageUrl} alt="" onError={() => setImageFailed(true)} /> : label}</span>;
 }

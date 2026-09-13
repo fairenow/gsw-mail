@@ -41,6 +41,7 @@ export function MailPage() {
   const [subject, setSubject] = useState("");
   const [html, setHtml] = useState("");
   const [signature, setSignature] = useState<ProductSettings["signature"] | null>(null);
+  const [profileImageUrl, setProfileImageUrl] = useState("");
   const [inReplyTo, setInReplyTo] = useState<string | undefined>();
   const [references, setReferences] = useState<string | undefined>();
   const [sending, setSending] = useState(false);
@@ -57,7 +58,7 @@ export function MailPage() {
     try { setMessages(await api.messages(accountId, name)); } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   }, []);
   useEffect(() => { void api.accounts().then((rows) => { setAccounts(rows); if (rows[0]) { setAccount(rows[0]); void loadFolder(rows[0].id, "Inbox"); } }).catch((err) => setError(err instanceof Error ? err.message : String(err))); }, [loadFolder]);
-  useEffect(() => { void api.settings().then((settings) => setSignature(settings.signature)).catch(() => undefined); }, []);
+  useEffect(() => { void api.settings().then((settings) => { setSignature(settings.signature); setProfileImageUrl(typeof settings.general.profileImageUrl === "string" ? settings.general.profileImageUrl : ""); }).catch(() => undefined); }, []);
   useEffect(() => () => readTimers.current.forEach((timer) => window.clearTimeout(timer)), []);
 
   const signatureFor = (mode: ComposeMode) => {
@@ -103,9 +104,9 @@ export function MailPage() {
 
   const unreadCount = messages.filter((message) => !message.read).length;
   return <div className="gsw-mail-shell">
-    <MailTopBar account={account} accounts={accounts} search={search} onSearchChange={setSearch} onSearch={() => void runSearch()} onSelectAccount={selectAccount} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={toggleSidebar} />
+    <MailTopBar account={account} accounts={accounts} profileImageUrl={profileImageUrl} search={search} onSearchChange={setSearch} onSearch={() => void runSearch()} onSelectAccount={selectAccount} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={toggleSidebar} />
     <main className={`gsw-mail-body ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
-      <MailSidebar account={account} folder={folder} unreadCount={unreadCount} composeOpen={compose} mobileHidden={mobileView !== "folders"} collapsed={sidebarCollapsed} onSelectFolder={selectFolder} onToggleCompose={() => openCompose()} />
+      <MailSidebar account={account} profileImageUrl={profileImageUrl} folder={folder} unreadCount={unreadCount} composeOpen={compose} mobileHidden={mobileView !== "folders"} collapsed={sidebarCollapsed} onSelectFolder={selectFolder} onToggleCompose={() => openCompose()} />
       <section className={`gsw-message-list ${mobileView !== "messages" ? "" : "mobile-open"}`} aria-label={`${folder} messages`}><MessageListHeader folder={folder} count={messages.length} onRefresh={refresh} />{error && <p className="gsw-errors">{error}</p>}{messages.length ? messages.map((message) => <MessageRow key={message.engineId} message={message} active={open?.engineId === message.engineId} onOpen={() => void selectMessage(message)} onToggleRead={() => void toggleRead(message)} />) : <div className="gsw-list-empty"><span aria-hidden="true">✉</span><strong>No messages here</strong><p>Your {folder.toLowerCase()} is clear.</p></div>}</section>
       <section className={`gsw-reading-pane ${mobileView === "reader" ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} aria-label="Message reader">{open ? <MessageReader message={open} accountAddress={account?.address} onBack={() => setMobileView("messages")} onReply={() => openCompose("reply", open)} onReplyAll={() => openCompose("replyAll", open)} onForward={() => openCompose("forward", open)} onArchive={() => void runAction("archive", open.engineId)} onTrash={() => void runAction("trash", open.engineId)} onToggleRead={() => void toggleRead(open)} /> : <EmptyReader />}</section>
     </main>

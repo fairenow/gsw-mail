@@ -3,21 +3,21 @@ import { logout } from "../../auth";
 import type { Account } from "../../api";
 import { SenderAvatar } from "./SenderAvatar";
 
-export function AccountMenu({ account, accounts, onSelect }: { account: Account | null; accounts: Account[]; onSelect: (id: string) => void }) {
+export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { account: Account | null; accounts: Account[]; profileImageUrl?: string; onSelect: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   if (!account) return null;
 
   return (
     <div className="gsw-avatar-wrap">
       <button className="gsw-account-trigger" onClick={() => setOpen((value) => !value)} aria-label="Open account menu" aria-expanded={open}>
-        <SenderAvatar name={account.displayName ?? undefined} email={account.address} />
+        <SenderAvatar name={account.displayName ?? undefined} email={account.address} imageUrl={profileImageUrl} />
         <span className="gsw-account-trigger-copy"><strong>{account.displayName || account.address}</strong><span>{account.address}</span></span>
         <span className="gsw-account-chevron" aria-hidden="true">⌄</span>
       </button>
       {open && (
         <div className="gsw-account-menu">
           <div className="gsw-account-summary">
-            <SenderAvatar name={account.displayName ?? undefined} email={account.address} />
+            <SenderAvatar name={account.displayName ?? undefined} email={account.address} imageUrl={profileImageUrl} />
             <div><strong>{account.displayName || "GSW Mail account"}</strong><span>{account.address}</span></div>
           </div>
           <div className="gsw-account-menu-rule" />

@@ -53,8 +53,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(41, 40, 36, 0.62);
-  color: #fff;
+  background: #fff;
+  color: var(--gsw-text-heading);
   font-size: 30px;
   font-weight: 400;
   line-height: 1;
@@ -166,6 +166,14 @@
   border: 2px solid var(--gsw-surface);
   box-shadow: var(--shadow-2);
   cursor: pointer;
+}
+
+.gsw-avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .gsw-account-trigger {

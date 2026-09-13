@@ -17,7 +17,16 @@ const contactInput = z.object({
   phones: z.array(z.object({ phone: z.string(), label: z.string().optional(), isPrimary: z.boolean().optional() })).optional(),
   tags: z.array(z.string()).optional(), customFields: z.record(z.string(), customValue).optional(), source: z.string().optional(), sourceFile: z.string().optional(),
 });
-const settingsSchema = z.object({ general: z.record(z.string(), customValue).optional(), compose: z.record(z.string(), customValue).optional(), contacts: z.record(z.string(), customValue).optional() });
+const profileImageUrl = z.string().max(2_048).refine((value) => {
+  if (!value) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}, "profile image URL must use http or https");
+const settingsSchema = z.object({ general: z.object({ profileImageUrl: profileImageUrl.optional() }).catchall(customValue).optional(), compose: z.record(z.string(), customValue).optional(), contacts: z.record(z.string(), customValue).optional() });
 const signatureSchema = z.object({ signatureHtml: z.string().max(100_000), enabled: z.boolean(), onNew: z.boolean(), onReply: z.boolean(), onForward: z.boolean(), position: z.enum(["beforeQuotedText", "afterQuotedText"]) });
 const importSchema = z.object({ filename: z.string().min(1).max(255), headers: z.array(z.string()).min(1), rows: z.array(z.record(z.string(), z.string())).max(10_000), mapping: z.record(z.string(), z.string()), duplicateBehavior: z.enum(["skip", "merge", "overwrite"]).default("merge") });
 
