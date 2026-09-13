@@ -16,6 +16,7 @@ export function MessageReader({ message, accountAddress, onBack, onReply, onRepl
 }) {
   const body = message.textBody?.trim() || (message.htmlBody ? stripHtml(message.htmlBody) : "");
   const recipientLabel = message.to?.map((recipient) => recipient.name || recipient.email).join(", ") || accountAddress || "your mailbox";
+  const bodyLines = body.split("\n");
 
   return (
     <article className="gsw-reading-inner">
@@ -31,7 +32,7 @@ export function MessageReader({ message, accountAddress, onBack, onReply, onRepl
         <button onClick={onTrash}>⌫ <span>Delete</span></button>
         <button aria-label="More message actions">⋯</button>
       </div>
-      <div className="gsw-reading-body">{body || <span className="gsw-body-empty">This message has no readable body.</span>}</div>
+      <div className="gsw-reading-body">{body ? bodyLines.map((line, index) => <span className={/^\s*>/.test(line) ? "gsw-quoted-line" : undefined} key={`${index}-${line}`}>{line || "\u00a0"}</span>) : <span className="gsw-body-empty">This message has no readable body.</span>}</div>
       {!!message.attachments?.length && <div className="gsw-attachments"><h3>Attachments</h3>{message.attachments.map((attachment) => <div className="gsw-attachment" key={attachment.engineId}><span className="gsw-att-icon" aria-hidden="true">▤</span><div><strong>{attachment.filename}</strong><span>{formatBytes(attachment.size)} · {attachment.contentType}</span></div><span className="gsw-attachment-action">Download</span></div>)}</div>}
       <div className="gsw-reader-bottom-actions"><button className="gsw-secondary-btn" onClick={onReply}>↩ Reply</button><button className="gsw-secondary-btn" onClick={onForward}>↪ Forward</button></div>
     </article>

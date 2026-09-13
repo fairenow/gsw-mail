@@ -9,8 +9,10 @@ export function AccountMenu({ account, accounts, onSelect }: { account: Account 
 
   return (
     <div className="gsw-avatar-wrap">
-      <button className="gsw-avatar" onClick={() => setOpen((value) => !value)} aria-label="Open account menu" aria-expanded={open}>
-        {(account.displayName || account.address).slice(0, 1).toUpperCase()}
+      <button className="gsw-account-trigger" onClick={() => setOpen((value) => !value)} aria-label="Open account menu" aria-expanded={open}>
+        <SenderAvatar name={account.displayName ?? undefined} email={account.address} />
+        <span className="gsw-account-trigger-copy"><strong>{account.displayName || account.address}</strong><span>{account.address}</span></span>
+        <span className="gsw-account-chevron" aria-hidden="true">⌄</span>
       </button>
       {open && (
         <div className="gsw-account-menu">

@@ -71,15 +71,35 @@ const json = async <T,>(res: Response): Promise<T> => {
   if (res.status === 401) logout();
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error((body as { error?: string }).error ?? `request failed: ${res.status}`);
+    const details = body as { message?: string; error?: string };
+    throw new Error(details.message ?? details.error ?? `request failed: ${res.status}`);
   }
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 };
 
 const get = <T,>(url: string) => fetch(url, { headers: headers() }).then((res) => json<T>(res));
 
-const post = async <T,>(url: string, body?: unknown): Promise<T> =>
-  fetch(url, { method: "POST", headers: headers(!!body), body: body ? JSON.stringify(body) : undefined }).then((res) => json<T>(res));
+const request = async (url: string, init: RequestInit, timeoutMs?: number): Promise<Response> => {
+  const controller = timeoutMs ? new AbortController() : undefined;
+  const timeout = timeoutMs ? window.setTimeout(() => controller?.abort(), timeoutMs) : undefined;
+  try {
+    return await fetch(url, { ...init, ...(controller ? { signal: controller.signal } : {}) });
+  } catch (error) {
+    if (controller?.signal.aborted) throw new Error(`request timed out after ${timeoutMs}ms`);
+    throw error;
+  } finally {
+    if (timeout !== undefined) window.clearTimeout(timeout);
+  }
+};
+
+const post = async <T,>(url: string, body?: unknown, timeoutMs?: number): Promise<T> =>
+  request(url, { method: "POST", headers: headers(!!body), body: body ? JSON.stringify(body) : undefined }, timeoutMs).then((res) => json<T>(res));
+
+const patch = async <T,>(url: string, body: unknown, timeoutMs?: number): Promise<T> =>
+  request(url, { method: "PATCH", headers: headers(true), body: JSON.stringify(body) }, timeoutMs).then((res) => json<T>(res));
+
+const interactiveTimeout = 20_000;
 
 export const api = {
   accounts: () => get<AccountsResponse>("/mail/accounts").then((r) => r.accounts),
@@ -91,10 +111,10 @@ export const api = {
   trash: (accountId: string, engineId: string) => post(`/mail/messages/${engineId}/trash`, { accountId }),
   search: (accountId: string, q: string) => get<MessagesResponse>(`/mail/search?accountId=${accountId}&q=${encodeURIComponent(q)}`).then((r) => r.messages),
   send: (accountId: string, to: string[], body: { cc?: string[]; subject?: string; textBody?: string; inReplyTo?: string; references?: string; mode?: "new" | "reply" | "replyAll" | "forward"; clientRequestId?: string }) =>
-    post<SendResult>("/mail/send", { accountId, to, ...body }),
-  createDraft: (body: DraftInput) => post<{ engineId: string }>("/mail/drafts", body),
-  updateDraft: (id: string, body: DraftInput) => fetch(`/mail/drafts/${id}`, { method: "PATCH", headers: headers(true), body: JSON.stringify(body) }).then(async (res) => { if (res.status === 401) logout(); if (!res.ok) throw new Error(`draft save failed: ${res.status}`); return (await res.json()) as { engineId: string }; }),
-  sendDraft: (id: string, accountId: string, clientRequestId?: string, mode?: "new" | "reply" | "replyAll" | "forward") => post<SendResult>(`/mail/drafts/${id}/send`, { accountId, ...(clientRequestId ? { clientRequestId } : {}), ...(mode ? { mode } : {}) }),
+    post<SendResult>("/mail/send", { accountId, to, ...body }, interactiveTimeout),
+  createDraft: (body: DraftInput) => post<{ engineId: string }>("/mail/drafts", body, interactiveTimeout),
+  updateDraft: (id: string, body: DraftInput) => patch<{ engineId: string }>(`/mail/drafts/${id}`, body, interactiveTimeout).then((result) => result ?? { engineId: id }),
+  sendDraft: (id: string, accountId: string, clientRequestId?: string, mode?: "new" | "reply" | "replyAll" | "forward") => post<SendResult>(`/mail/drafts/${id}/send`, { accountId, ...(clientRequestId ? { clientRequestId } : {}), ...(mode ? { mode } : {}) }, interactiveTimeout),
   sendStatus: (sendId: string) => get<never>("/mail/sends/" + sendId),
   cancelSend: (sendId: string) => post<{ status: string }>(`/mail/sends/${sendId}/cancel`),
   retrySend: (sendId: string, accountId: string) => post<{ status: string }>(`/mail/sends/${sendId}/retry`, { accountId }),

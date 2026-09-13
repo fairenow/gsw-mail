@@ -19,3 +19,5 @@ infra/hetzner/keys/
 coverage/
 infra/api.env
 !infra/api.env.example
+.vercel
+.env*
