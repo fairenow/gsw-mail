@@ -242,7 +242,7 @@ export class StalwartEngine implements MailEngine {
         "Email/get",
         {
           accountId,
-          ids: ["#q1"],
+          "#ids": { resultOf: "q1", name: "Email/query", path: "/ids" },
           properties: GET_PROPERTIES as unknown as string[],
           fetchTextBodyValues: true,
           fetchHTMLBodyValues: true,
@@ -373,7 +373,7 @@ export class StalwartEngine implements MailEngine {
         "Email/get",
         {
           accountId,
-          ids: ["#t1.emailIds"],
+          "#ids": { resultOf: "t1", name: "Thread/get", path: "/list/*/emailIds" },
           properties: GET_PROPERTIES as unknown as string[],
           fetchTextBodyValues: true,
           fetchHTMLBodyValues: true,
@@ -574,7 +574,7 @@ export class StalwartEngine implements MailEngine {
         "Email/get",
         {
           accountId,
-          ids: ["#q1"],
+          "#ids": { resultOf: "q1", name: "Email/query", path: "/ids" },
           properties: ["id", "threadId"],
         },
         "g1",

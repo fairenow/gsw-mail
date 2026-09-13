@@ -105,8 +105,23 @@ function mapload(records: EmailRecord[]) {
 const requestLog: { url: string; method: string; body?: string }[] = [];
 const capturedAuth = new Map<number, string>();
 
-const mailstore = (methodCalls: { name: string; args: Record<string, unknown> }[]) => {
-  const responses: [string, Record<string, unknown>, string | null][] = [];
+const deref = (root: unknown, path: string): unknown[] => {
+  const steps = path.replace(/^\//, "").split("/").filter((s) => s.length > 0);
+  const resolve = (node: unknown, i: number): unknown[] => {
+    const step = steps[i];
+    if (step === undefined) return [node];
+    if (step === "*") {
+      if (!Array.isArray(node)) return [];
+      return node.flatMap((child) => resolve(child, i + 1));
+    }
+    if (node === null || typeof node !== "object") return [];
+    return resolve((node as Record<string, unknown>)[step], i + 1);
+  };
+  return resolve(root, 0);
+};
+
+const mailstore = (methodCalls: { name: string; args: Record<string, unknown>; id: string }[]) => {
+  const responses: [string, Record<string, unknown>, string][] = [];
   for (const call of methodCalls) {
     const args = call.args;
     if (call.name === "Mailbox/get") {
@@ -118,7 +133,7 @@ const mailstore = (methodCalls: { name: string; args: Record<string, unknown> }[
             ? MAILBOXES.filter((m) => (args.ids as string[]).includes(m.id))
             : MAILBOXES,
         },
-        null,
+        call.id,
       ]);
     } else if (call.name === "Email/query") {
       const filter = (args.filter ?? {}) as Record<string, unknown>;
@@ -141,27 +156,42 @@ const mailstore = (methodCalls: { name: string; args: Record<string, unknown> }[
       ids = ids.sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
       const position = (args.position as number) ?? 0;
       const limit = (args.limit as number) ?? 50;
-      responses.push(["Email/query", { accountId: args.accountId, ids: ids.slice(position, position + limit).map((e) => e.id) }, null]);
+      responses.push(["Email/query", { accountId: args.accountId, ids: ids.slice(position, position + limit).map((e) => e.id) }, call.id]);
     } else if (call.name === "Email/get") {
-      const ids = (args.ids as string[]) ?? [];
-      const resolveId = (raw: string): EmailRecord[] => {
-        if (raw.startsWith("#q1")) {
-          const q = responses.find((r) => r[0] === "Email/query")?.[1] as { ids?: string[] } | undefined;
-          return (q?.ids ?? []).map((id) => emails.get(id)).filter((e): e is EmailRecord => Boolean(e));
+      const ref = (args["#ids"] ?? null) as { resultOf?: string; name?: string; path?: string } | null;
+      let wanted: string[] = [];
+      if (ref) {
+        const refResponse = responses.find((r) => r[0] === ref.name && r[2] === ref.resultOf);
+        if (!refResponse) {
+          responses.push([
+            "error",
+            { type: "invalidResultReference", description: `Id reference "${ref.resultOf}" does not exist or is invalid.` },
+            call.id,
+          ]);
+          continue;
         }
-        if (raw.startsWith("#t1.emailIds")) {
-          return threads.get("t1") ?? [];
+        const resolved = deref(refResponse[1], ref.path ?? "");
+        const value = (ref.path ?? "").includes("*") ? resolved.flat() : resolved[0];
+        wanted = Array.isArray(value) ? (value as unknown[]).filter((x): x is string => typeof x === "string") : [];
+      } else {
+        const ids = (args.ids as string[]) ?? [];
+        if (ids.some((raw) => raw.startsWith("#"))) {
+          responses.push([
+            "error",
+            { type: "invalidResultReference", description: `Id reference "${ids.find((r) => r.startsWith("#"))}" does not exist or is invalid.` },
+            call.id,
+          ]);
+          continue;
         }
-        const e = emails.get(raw);
-        return e ? [e] : [];
-      };
+        wanted = ids;
+      }
       responses.push([
         "Email/get",
         {
           accountId: args.accountId,
-          list: ids.map(resolveId).flat().map((e) => ({ ...e })),
+          list: wanted.map((id) => emails.get(id)).filter((e): e is EmailRecord => Boolean(e)).map((e) => ({ ...e })),
         },
-        null,
+        call.id,
       ]);
     } else if (call.name === "Email/set") {
       const created = (args.create ?? {}) as Record<string, Record<string, unknown>>;
@@ -207,22 +237,19 @@ const mailstore = (methodCalls: { name: string; args: Record<string, unknown> }[
           }
         }
       }
-      responses.push(["Email/set", { accountId: args.accountId, created: createdIds, updated: Object.keys(update) }, null]);
+      responses.push(["Email/set", { accountId: args.accountId, created: createdIds, updated: Object.keys(update) }, call.id]);
     } else if (call.name === "Thread/get") {
       const ids = (args.ids as string[]) ?? [];
       const list = ids
         .map((id) => ({ id, emailIds: [...emails.values()].filter((e) => e.threadId === id).map((e) => e.id) }))
         .filter((t) => t.emailIds.length > 0);
-      responses.push(["Thread/get", { accountId: args.accountId, list }, null]);
+      responses.push(["Thread/get", { accountId: args.accountId, list }, call.id]);
     } else {
-      responses.push([call.name, {}, null]);
+      responses.push([call.name, {}, call.id]);
     }
   }
   return responses;
 };
-
-const threads = new Map<string, EmailRecord[]>();
-threads.set("t1", full.slice(0, 2));
 
 const blobs = new Map<string, Buffer>();
 
@@ -254,7 +281,7 @@ function makeFetch() {
     }
     if (url.endsWith("/jmap")) {
       const payload = JSON.parse(String(init?.body)) as { methodCalls: [string, Record<string, unknown>, string][] };
-      const responses = mailstore(payload.methodCalls.map(([name, args]) => ({ name, args })));
+      const responses = mailstore(payload.methodCalls.map(([name, args, id]) => ({ name, args, id })));
       return Response.json({ methodResponses: responses, sessionState: "s" });
     }
     const upload = url.match(/\/jmap\/upload\/(.+)$/);
@@ -313,6 +340,7 @@ test("listMailboxes maps roles", async () => {
 });
 
 test("listMessages returns summaries with names", async () => {
+  requestLog.length = 0;
   const rows = await engine.listMessages("ramon@gs.com", { mailbox: "Inbox", limit: 50 });
   assert.equal(rows.length, 3);
   assert.equal(rows[0]?.mailbox, "Inbox");
@@ -320,6 +348,11 @@ test("listMessages returns summaries with names", async () => {
   assert.equal(rows[0]?.subject, "Invoice with file");
   const seen = rows.find((r) => r.engineId === "e2");
   assert.equal(seen?.read, true);
+  const jmapCall = requestLog.find((l) => l.url.endsWith("/jmap"));
+  const body = JSON.parse(jmapCall!.body!) as { methodCalls: [string, Record<string, unknown>, string][] };
+  const emailGet = body.methodCalls.find(([name]) => name === "Email/get");
+  assert.deepEqual(emailGet![1]["#ids"], { resultOf: "q1", name: "Email/query", path: "/ids" });
+  assert.equal(emailGet![1].ids, undefined);
 });
 
 test("getMessage returns bodies, attachments, and headers", async () => {
@@ -336,9 +369,15 @@ test("getMessage returns bodies, attachments, and headers", async () => {
 });
 
 test("getThread returns all thread emails", async () => {
+  requestLog.length = 0;
   const rows = await engine.getThread("ramon@gs.com", "t1");
   assert.equal(rows.length, 2);
   assert.ok(rows.every((r) => r.threadId === "t1"));
+  const jmapCall = requestLog.find((l) => l.url.endsWith("/jmap"));
+  const body = JSON.parse(jmapCall!.body!) as { methodCalls: [string, Record<string, unknown>, string][] };
+  const emailGet = body.methodCalls.find(([name]) => name === "Email/get");
+  assert.deepEqual(emailGet![1]["#ids"], { resultOf: "t1", name: "Thread/get", path: "/list/*/emailIds" });
+  assert.equal(emailGet![1].ids, undefined);
 });
 
 test("setSeen and setFlagged update keywords", async () => {
@@ -409,6 +448,18 @@ test("saveSent without content throws", async () => {
 test("findMessageByRfcMessageId locates by header filter", async () => {
   const hit = await engine.findMessageByRfcMessageId("ramon@gs.com", "<m3@vendor.net>");
   assert.deepEqual(hit, { engineMessageId: "e3", engineThreadId: "t3" });
+});
+
+test("listMessages rejects a pseudo reference instead of the standard result reference", async () => {
+  requestLog.length = 0;
+  await engine.listMessages("ramon@gs.com", { mailbox: "Inbox", limit: 50 });
+  const jmapCall = requestLog.find((l) => l.url.endsWith("/jmap"));
+  const body = JSON.parse(jmapCall!.body!) as { methodCalls: [string, Record<string, unknown>, string][] };
+  const emailGet = body.methodCalls.find(([name]) => name === "Email/get");
+  assert.ok(emailGet, "engine sent Email/get");
+  const argIds = (emailGet![1].ids as string[] | undefined) ?? [];
+  assert.ok(argIds.every((raw) => !raw.startsWith("#")), "no # pseudo-ids in Email/get ids");
+  assert.ok(emailGet![1]["#ids"], "uses the object result reference form");
 });
 
 test("search with text filter", async () => {
