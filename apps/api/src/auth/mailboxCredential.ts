@@ -17,7 +17,7 @@ export async function upsertMailboxCredential(
   if (account) await tx.update(authAccounts).set({ password, accountId: input.address }).where(eq(authAccounts.id, account.id));
   else await tx.insert(authAccounts).values({ id: randomUUID(), accountId: input.address, providerId: "credential", userId: authUserId, password });
   await tx.update(users).set({ authUserId, identityProvider: "better-auth", identitySubject: authUserId, email: input.address, emailVerified: true }).where(eq(users.id, input.productUserId));
-  await tx.update(mailAccountMemberships).set({ authUserId }).where(eq(mailAccountMemberships.accountId, input.accountId));
+  await tx.update(mailAccountMemberships).set({ authUserId }).where(and(eq(mailAccountMemberships.accountId, input.accountId), eq(mailAccountMemberships.userId, input.productUserId)));
   await tx.update(emailAccounts).set({ authSetupStatus: "ready" }).where(eq(emailAccounts.id, input.accountId));
   return authUserId;
 }

@@ -17,6 +17,7 @@ async function authRequest<T>(path: string, body?: unknown): Promise<T> {
     method: body ? "POST" : "GET",
     headers: body ? { "content-type": "application/json" } : undefined,
     credentials: "include",
+    signal: AbortSignal.timeout(15000),
     body: body ? JSON.stringify(body) : undefined,
   });
   const result = await response.json().catch(() => ({}));
@@ -25,11 +26,11 @@ async function authRequest<T>(path: string, body?: unknown): Promise<T> {
 }
 
 export function getSession(): Promise<AuthSession | null> {
-  return authRequest<AuthSession | null>("/get-session");
+  return authRequest<AuthSession | null>("/get-session?disableCookieCache=true");
 }
 
 export function getAccountContext(): Promise<AccountContext> {
-  return fetch("/api/account/context", { credentials: "include" }).then(async (response) => {
+  return fetch("/api/account/context", { credentials: "include", signal: AbortSignal.timeout(15000) }).then(async (response) => {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? "Could not load account context.");
     return result as AccountContext;

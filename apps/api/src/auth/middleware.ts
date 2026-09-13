@@ -31,21 +31,24 @@ const bearer = (req: FastifyRequest): string | null => {
 
 export const requireUser = async (app: FastifyInstance, opts: { optional?: boolean }): Promise<void> => {
   app.addHook("onRequest", async (req: FastifyRequest, reply: FastifyReply) => {
-    if (config.env === "production") {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) }).catch(() => null);
-      if (session) {
-        const result = await provisionControlPlaneUser(session.user.id, session.user.email, session.user.name).catch((error: unknown) => {
-          req.log.warn({ error: error instanceof Error ? error.message : String(error) }, "authenticated Better Auth identity provisioning failed");
-          return null;
-        });
-        if (result) req.user = result;
+    const startedAt = Date.now();
+    let session;
+    try {
+      session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers), query: { disableCookieCache: true } });
+    } catch {
+      req.log.warn({ durationMs: Date.now() - startedAt }, "Better Auth session resolution unavailable");
+      return reply.code(503).send({ error: "session_resolution_unavailable" });
+    }
+    if (session) {
+      req.log.info({ authUserId: session.user.id, durationMs: Date.now() - startedAt }, "Better Auth session confirmed");
+      try {
+        req.user = await provisionControlPlaneUser(session.user.id, session.user.email, session.user.name);
+        req.log.info({ authUserId: session.user.id, userId: req.user.id, durationMs: Date.now() - startedAt }, "product identity resolved");
+      } catch {
+        req.log.warn({ authUserId: session.user.id, durationMs: Date.now() - startedAt }, "product identity resolution failed");
+        return reply.code(409).send({ error: "account_resolution_failed" });
       }
-    } else {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) }).catch(() => null);
-      if (session) {
-        const controlUser = await provisionControlPlaneUser(session.user.id, session.user.email, session.user.name).catch(() => null);
-        if (controlUser) req.user = controlUser;
-      }
+    } else if (config.env !== "production") {
       const token = bearer(req);
       let userId: string | undefined;
       if (!req.user && token) {

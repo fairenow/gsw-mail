@@ -1,9 +1,11 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { getAccountContext, getSession, requestOneTimeCode, requestPasswordResetCode, resetPasswordWithCode, setPassword, signInWithCode, signInWithPassword, type AuthSession } from "./auth";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { getAccountContext, getSession, logout, requestOneTimeCode, requestPasswordResetCode, resetPasswordWithCode, setPassword, signInWithCode, signInWithPassword, type AuthSession } from "./auth";
 import { AuthCard } from "./components/auth/AuthCard";
 import { AuthError } from "./components/auth/AuthError";
 import { AuthPage } from "./components/auth/AuthPage";
 import { BrandMark } from "./components/auth/BrandMark";
+
+import { AccountResolutionLoader, type ResolutionState } from "./components/auth/AccountResolutionLoader";
 
 type Mode = "sign-in" | "sign-up";
 
@@ -18,27 +20,59 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [error, setError] = useState("");
   const [otpRequested, setOtpRequested] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [routing, setRouting] = useState(false);
+  const [resolution, setResolution] = useState<ResolutionState>("idle");
+  const [resolutionError, setResolutionError] = useState("");
+  const generation = useRef(0);
   const [resetMode, setResetMode] = useState(false);
   const [resetRequested, setResetRequested] = useState(false);
   const [resetPassword, setResetPasswordValue] = useState("");
   const [resetConfirm, setResetConfirm] = useState("");
   const [resetDestination, setResetDestination] = useState("");
 
-  const refresh = () => void getSession().then(setSession).catch(() => setSession(null)).finally(() => setLoading(false));
-  useEffect(() => { refresh(); window.addEventListener("gsw-auth-change", refresh); return () => window.removeEventListener("gsw-auth-change", refresh); }, []);
+  const refresh = async () => {
+    const attempt = ++generation.current;
+    setLoading(true);
+    setResolutionError("");
+    setResolution("resolving");
+    try {
+      const current = await getSession();
+      if (attempt !== generation.current) return;
+      setSession(current);
+      if (!current) { setLoading(false); return; }
+      if (window.location.pathname === "/create-password") { setLoading(false); return; }
+      setResolution("connecting");
+      const context = await getAccountContext();
+      if (attempt !== generation.current) return;
+      setResolution("resolved");
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      if (attempt !== generation.current) return;
+      const destination = `/${context.defaultDestination}`;
+      const path = window.location.pathname;
+      const mailPath = ["/mail", "/contacts", "/settings"].includes(path);
+      if ((mailPath && context.mailboxMemberships.length === 0) || ["/", "/sign-in", "/sign-up"].includes(path) || (path === "/control-center" && context.defaultDestination !== "control-center")) {
+        window.location.replace(destination);
+      } else setLoading(false);
+    } catch {
+      if (attempt !== generation.current) return;
+      setResolutionError("Your login is ready, but we couldn't connect it to your mailbox.");
+      setLoading(false);
+    }
+  };
   useEffect(() => {
-    if (!session || !["/", "/mail", "/control-center"].includes(window.location.pathname)) return;
-    setRouting(true);
-    void getAccountContext().then((context) => {
-      const destination = context.defaultDestination === "control-center" ? "/control-center" : context.defaultDestination === "mail" ? "/mail" : "/setup";
-      if (window.location.pathname !== destination) window.location.replace(destination);
-      else setRouting(false);
-    }).catch(() => setRouting(false));
-  }, [session]);
+    const change = () => { void refresh(); };
+    const failed = () => {
+      generation.current++;
+      setLoading(false);
+      setResolutionError("Your account access needs to be resolved before continuing.");
+    };
+    change();
+    window.addEventListener("gsw-auth-change", change);
+    window.addEventListener("gsw-account-error", failed);
+    return () => { generation.current++; window.removeEventListener("gsw-auth-change", change); window.removeEventListener("gsw-account-error", failed); };
+  }, []);
 
-  if (loading) return <AuthPage><AuthCard><p className="gsw-login-hint">Loading GSW…</p></AuthCard></AuthPage>;
-  if (routing) return <AuthPage><AuthCard><p className="gsw-login-hint">Opening your GSW workspace…</p></AuthCard></AuthPage>;
+  if (resolutionError) return <AuthPage><AuthCard><BrandMark size={96} /><h1 className="gsw-login-title">We're finishing your account setup.</h1><AuthError>{resolutionError}</AuthError><button className="gsw-btn gsw-btn-primary gsw-btn-block" onClick={() => void refresh()}>Try again</button><button className="gsw-btn gsw-btn-quiet gsw-btn-block" onClick={() => void logout()}>Sign out</button></AuthCard></AuthPage>;
+  if (loading) return <AuthPage><AuthCard><AccountResolutionLoader state={resolution} /></AuthCard></AuthPage>;
   if (session && window.location.pathname === "/create-password") return <PasswordSetup session={session} onComplete={() => window.location.assign("/setup")} />;
   if (session) return children;
 

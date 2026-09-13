@@ -1,4 +1,4 @@
-import { logout } from "./auth";
+
 
 export interface Account {
   id: string;
@@ -130,7 +130,7 @@ const headers = (jsonBody = false): Record<string, string> => {
 };
 
 const json = async <T,>(res: Response): Promise<T> => {
-  if (res.status === 401) void logout();
+  if (res.status === 401) window.dispatchEvent(new Event("gsw-account-error"));
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const details = body as { message?: string; error?: string };
