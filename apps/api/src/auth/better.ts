@@ -36,7 +36,7 @@ export const auth = betterAuth({
     sendVerificationEmail: async ({ user, url }) => sendAuthEmail(user.email, "Verify your GSW Account", renderGswAuthEmail({ title: "Verify your email", message: "Confirm your email address to continue to GSW.", ctaUrl: url, ctaLabel: "Verify email" })),
   },
   plugins: [emailOTP({
-    sendVerificationOTP: async ({ email, otp, type }) => sendAuthEmail(email, `Your GSW ${type === "sign-in" ? "sign-in" : "verification"} code`, renderGswAuthEmail({ title: type === "sign-in" ? "Your sign-in code" : "Your verification code", message: "Use this one-time code to continue to GSW Mail.", code: otp, expiryMinutes: 10 })),
+    sendVerificationOTP: async ({ email, otp, type }) => sendAuthEmail(email, `Your GSW ${type === "sign-in" ? "sign-in" : type === "forget-password" ? "password reset" : "verification"} code`, renderGswAuthEmail({ title: type === "sign-in" ? "Your sign-in code" : type === "forget-password" ? "Reset your password" : "Your verification code", message: type === "forget-password" ? "Use this one-time code to reset your GSW password." : "Use this one-time code to continue to GSW Mail.", code: otp, expiryMinutes: 10 })),
     sendVerificationOnSignUp: false,
     overrideDefaultEmailVerification: true,
     otpLength: 6,

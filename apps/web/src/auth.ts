@@ -48,6 +48,14 @@ export function signInWithCode(email: string, otp: string, name?: string): Promi
   return authRequest("/sign-in/email-otp", { email, otp, ...(name ? { name } : {}) });
 }
 
+export function requestPasswordResetCode(email: string): Promise<unknown> {
+  return authRequest("/email-otp/request-password-reset", { email });
+}
+
+export function resetPasswordWithCode(email: string, otp: string, password: string): Promise<unknown> {
+  return authRequest("/email-otp/reset-password", { email, otp, password });
+}
+
 export function setPassword(password: string): Promise<unknown> {
   return authRequest("/set-password", { newPassword: password });
 }
