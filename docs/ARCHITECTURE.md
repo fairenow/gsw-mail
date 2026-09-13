@@ -113,6 +113,7 @@ production.
 
 ### Guided Steps product layer (this repo)
 - User experience, organizations, accounts, permissions
+- Managed mailbox recovery orchestration: GSW issues hashed recovery codes and sends them to the verified workspace owner; Better Auth remains the resulting credential store
 - Mail workflows (compose, reply, forward, archive, trash)
 - Outbound queue and delivery-event ownership
 - Search indexing at the product layer

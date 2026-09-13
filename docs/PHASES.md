@@ -22,6 +22,7 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 - [x] `organizations`, `domains`, `users`, `emailAccounts`, `aliases` in schema
 - [x] Persisted control-plane workspace setup state and resumable setup endpoints
 - [x] Better Auth branded signup, verification, password, magic-link, and session boundary
+- [x] GSW-owned managed mailbox recovery for pending and ready mailbox identities
 - [x] Mailboxes: Inbox, Sent, Drafts, Spam, Trash, Archive
 - [x] Account lifecycle (create/disable) + quota
 - [x] Aliases (`hello@...` → `ramon@...`)

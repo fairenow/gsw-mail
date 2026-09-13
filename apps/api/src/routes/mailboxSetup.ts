@@ -1,15 +1,15 @@
-import { createHash, randomInt, randomUUID } from "node:crypto";
+import { createHash, randomInt } from "node:crypto";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { hashPassword } from "better-auth/crypto";
 import { z } from "zod";
 import { requireOrgPermission } from "../auth/authorize.js";
 import { sendAuthEmail } from "../auth/better.js";
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
-import { authAccounts, authUsers, domains, emailAccounts, mailboxAuthSetupTokens, mailAccountMemberships, users } from "../db/schema.js";
+import { domains, emailAccounts, mailboxAuthSetupTokens } from "../db/schema.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { renderGswAuthEmail } from "../auth/email.js";
+import { upsertMailboxCredential } from "../auth/mailboxCredential.js";
 
 const passwordSchema = z.object({ code: z.string().regex(/^\d{6}$/), password: z.string().min(8).max(200) });
 
@@ -45,17 +45,8 @@ export default async function mailboxSetupRoutes(app: FastifyInstance) {
       if (token) await db.update(mailboxAuthSetupTokens).set({ attempts: token.attempts + 1 }).where(eq(mailboxAuthSetupTokens.id, token.id));
       throw badRequest("invalid or expired mailbox setup code");
     }
-    const password = await hashPassword(input.password);
-    const [existingAuth] = await db.select({ id: authUsers.id }).from(authUsers).where(eq(authUsers.email, row.address)).limit(1);
-    const authUserId = existingAuth?.id ?? `mailbox-${randomUUID()}`;
     await db.transaction(async (tx) => {
-      await tx.insert(authUsers).values({ id: authUserId, name: row.displayName ?? row.address.split("@")[0]!, email: row.address, emailVerified: true }).onConflictDoUpdate({ target: authUsers.id, set: { emailVerified: true, name: row.displayName ?? row.address.split("@")[0]! } });
-      const [account] = await tx.select({ id: authAccounts.id }).from(authAccounts).where(and(eq(authAccounts.userId, authUserId), eq(authAccounts.providerId, "credential"))).limit(1);
-      if (account) await tx.update(authAccounts).set({ password, accountId: row.address }).where(eq(authAccounts.id, account.id));
-      else await tx.insert(authAccounts).values({ id: randomUUID(), accountId: row.address, providerId: "credential", userId: authUserId, password });
-      await tx.update(users).set({ authUserId, identityProvider: "better-auth", identitySubject: authUserId, email: row.address, emailVerified: true }).where(eq(users.id, productUserId));
-      await tx.update(mailAccountMemberships).set({ authUserId }).where(eq(mailAccountMemberships.accountId, row.accountId));
-      await tx.update(emailAccounts).set({ authSetupStatus: "ready" }).where(eq(emailAccounts.id, row.accountId));
+      await upsertMailboxCredential(tx, { accountId: row.accountId, address: row.address, displayName: row.displayName, productUserId, password: input.password });
       await tx.update(mailboxAuthSetupTokens).set({ usedAt: new Date() }).where(eq(mailboxAuthSetupTokens.id, token.id));
     });
     return { ready: true, address: row.address };

@@ -37,6 +37,7 @@ Status key: **adopted** · **proposed** · **revisit**
 | 31 | **Control-plane workspace setup is separate from mailbox access** | adopted | Workspace setup progress is persisted against the organization. Workspace administration can configure the workspace and domains, while mailbox content access remains governed by explicit mail-account memberships. |
 | 32 | **Better Auth owns user-facing authentication** | adopted | GSW signup, email verification, password, one-time email access, and sessions are branded application flows backed by Neon. Stalwart no longer serves normal user login pages or OAuth redirects; it remains the mail resource engine behind the API. |
 | 33 | **Additive tenancy normalization before table renames** | adopted | `organizations` remains the workspace parent and `email_accounts` remains the mailbox resource during migration. Explicit workspace and Better Auth foreign keys are added first; existing identifiers such as `ramon-prod` remain compatible until reads and writes are fully migrated. |
+| 34 | **GSW owns managed mailbox recovery** | adopted | Mailbox recovery issues and sends a hashed six-digit token to the verified workspace owner recovery email, then creates or updates the Better Auth credential. Better Auth self-service recovery remains for control accounts; mailbox recovery never depends on a pre-existing Better Auth mailbox identity. |
 
 ## Open questions
 

@@ -78,6 +78,13 @@
       "when": 1789321000000,
       "tag": "0010_mailbox_auth_setup_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1789322000000,
+      "tag": "0011_mailbox_recovery_tokens",
+      "breakpoints": true
     }
   ]
 }

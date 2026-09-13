@@ -247,6 +247,22 @@ export const mailboxAuthSetupTokens = pgTable(
   (t) => [index("mailbox_auth_setup_account_idx").on(t.accountId, t.createdAt)],
 );
 
+export const mailboxRecoveryTokens = pgTable(
+  "mailbox_recovery_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id").notNull().references(() => emailAccounts.id, { onDelete: "cascade" }),
+    targetEmail: text("target_email").notNull(),
+    recoveryEmail: text("recovery_email").notNull(),
+    codeHash: text("code_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    attempts: integer("attempts").default(0).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [index("mailbox_recovery_account_idx").on(t.accountId, t.createdAt)],
+);
+
 export const mailAccountMemberships = pgTable(
   "mail_account_memberships",
   {

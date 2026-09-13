@@ -10,13 +10,19 @@ import { renderGswAuthEmail } from "./email.js";
 
 const resend = config.outbound.resendApiKey ? new Resend(config.outbound.resendApiKey) : null;
 
-export async function sendAuthEmail(to: string, subject: string, content: { text: string; html: string }): Promise<void> {
+export async function sendAuthEmailWithResult(to: string, subject: string, content: { text: string; html: string }): Promise<string | undefined> {
   if (!resend) {
     if (config.env === "production") throw new Error("auth email delivery is not configured");
     console.info(`[auth email] ${to}: ${content.text}`);
-    return;
+    return undefined;
   }
-  await resend.emails.send({ from: config.authEmail.from, to, subject, text: content.text, html: content.html });
+  const result = await resend.emails.send({ from: config.authEmail.from, to, subject, text: content.text, html: content.html });
+  if (result.error) throw new Error(result.error.message);
+  return result.data?.id;
+}
+
+export async function sendAuthEmail(to: string, subject: string, content: { text: string; html: string }): Promise<void> {
+  await sendAuthEmailWithResult(to, subject, content);
 }
 
 async function recoveryEmailForMailbox(email: string): Promise<string | null> {

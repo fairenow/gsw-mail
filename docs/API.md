@@ -2,6 +2,12 @@
 
 Base path: `/mail`. Admin: `/admin`. Better Auth owns user-facing signup,
 verification, password, magic-link, and cookie sessions at `/api/auth/*`.
+
+Managed mailbox password recovery is handled by GSW at
+`/api/account/request-password-reset` and
+`/api/account/complete-password-reset`. GSW sends the six-digit code to the
+active workspace owner's verified recovery email, including for migrated
+mailboxes that do not yet have a Better Auth credential.
 Stalwart is infrastructure only; the browser never redirects to its login page.
 Development only: `X-GSW-User-Id` / `DEV_USER_ID`.
 
