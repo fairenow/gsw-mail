@@ -1,7 +1,20 @@
 {
   "rewrites": [
-    { "source": "/mail/:path*", "destination": "https://gsw-mail-production.up.railway.app/mail/:path*" },
-    { "source": "/admin/:path*", "destination": "https://gsw-mail-production.up.railway.app/admin/:path*" },
-    { "source": "/health", "destination": "https://gsw-mail-production.up.railway.app/health" }
+    {
+      "source": "/mail/:path*",
+      "destination": "https://gsw-mail-production.up.railway.app/mail/:path*"
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "https://gsw-mail-production.up.railway.app/admin/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "https://gsw-mail-production.up.railway.app/health"
+    },
+    {
+      "source": "/auth/callback",
+      "destination": "/index.html"
+    }
   ]
 }

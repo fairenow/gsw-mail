@@ -17,8 +17,8 @@ const runProductionConfig = (overrides: Record<string, string>): { code: number;
     "STALWART_MAIL_USERNAME",
     "STALWART_MAIL_PASSWORD",
     "DELIVERY_WEBHOOK_SECRET",
-    "JWT_ISSUER",
-    "JWKS_URL",
+    "OIDC_ISSUER",
+    "OIDC_CLIENT_ID",
     "RESEND_API_KEY",
   ]) {
     delete env[key];
@@ -42,8 +42,8 @@ const prodOkVars = {
   STALWART_MAIL_USERNAME: "test@team.guidedstepswellness.com",
   STALWART_MAIL_PASSWORD: "prod-mailbox-pass-2026",
   DELIVERY_WEBHOOK_SECRET: "whsec_3f4a9c1b8e7d2f6a",
-  JWT_ISSUER: "https://identity.guidedstepswellness.com",
-  JWKS_URL: "https://identity.guidedstepswellness.com/.well-known/jwks.json",
+  OIDC_ISSUER: "https://identity.guidedstepswellness.com",
+  OIDC_CLIENT_ID: "gsw-mail-web",
   OUTBOUND_RELAY: "resend",
   RESEND_API_KEY: "re_prod_9f2k8a1cb",
 };

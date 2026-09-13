@@ -1,3 +1,5 @@
+import { accessToken, logout } from "./auth";
+
 export interface Account {
   id: string;
   address: string;
@@ -42,14 +44,8 @@ interface MessagesResponse {
   messages: MessageSummary[];
 }
 
-const tokenStore = () => {
-  const token = sessionStorage.getItem("gsw_access_token") ?? new URLSearchParams(window.location.search).get("access_token");
-  if (token) sessionStorage.setItem("gsw_access_token", token);
-  return token;
-};
-
 const headers = (jsonBody = false): Record<string, string> => {
-  const token = tokenStore();
+  const token = accessToken();
   return {
     ...(token ? { authorization: `Bearer ${token}` } : {}),
     ...(jsonBody ? { "content-type": "application/json" } : {}),
@@ -57,6 +53,7 @@ const headers = (jsonBody = false): Record<string, string> => {
 };
 
 const json = async <T,>(res: Response): Promise<T> => {
+  if (res.status === 401) logout();
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error((body as { error?: string }).error ?? `request failed: ${res.status}`);

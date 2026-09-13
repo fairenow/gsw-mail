@@ -1,4 +1,3 @@
-import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 import { config } from "../config.js";
 
 export interface VerifiedClaims {
@@ -19,30 +18,17 @@ export class IdentityError extends Error {
   }
 }
 
-const jwks = config.auth.jwksUrl
-  ? createRemoteJWKSet(new URL(config.auth.jwksUrl), { cacheMaxAge: 600_000 })
-  : null;
-
-export async function verifyAccessToken(token: string): Promise<VerifiedClaims | null> {
-  if (!jwks) {
-    throw new IdentityError("JWKS_URL is not configured; cannot verify access tokens in production");
-  }
-  try {
-    const { payload } = await jwtVerify(token, jwks, {
-      issuer: config.auth.issuer,
-      audience: config.auth.audience,
-    });
-    const sub = payload.sub;
-    if (!sub) throw new IdentityError("token missing subject claim");
-    return {
-      sub,
-      email: typeof payload.email === "string" ? payload.email : undefined,
-      emailVerified: typeof payload.email_verified === "boolean" ? payload.email_verified : undefined,
-    };
-  } catch (err) {
-    if (err instanceof IdentityError) throw err;
-    return null;
-  }
+export async function verifyAccessToken(token: string, request: typeof fetch = fetch): Promise<VerifiedClaims | null> {
+  if (!token || token.length > 8192) return null;
+  const response = await request(config.auth.introspectUrl, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ token, token_type_hint: "access_token" }),
+    redirect: "error",
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) return null;
+  return identityClaims(await response.json());
 }
 
 export async function resolveUser(identityProvider: string, subject: string): Promise<AuthenticatedUser | null> {
@@ -60,11 +46,11 @@ export async function resolveUser(identityProvider: string, subject: string): Pr
   return { id: user.id, email: user.email };
 }
 
-export const identityClaims = (payload: JWTPayload): VerifiedClaims | null => {
-  if (!payload.sub) return null;
-  return {
-    sub: String(payload.sub),
-    email: typeof payload.email === "string" ? payload.email : undefined,
-    emailVerified: typeof payload.email_verified === "boolean" ? payload.email_verified : undefined,
-  };
+export const identityClaims = (payload: unknown): VerifiedClaims | null => {
+  if (!payload || typeof payload !== "object") return null;
+  const claims = payload as Record<string, unknown>;
+  if (claims.active !== true || typeof claims.username !== "string" || !claims.username.trim()) return null;
+  if (typeof claims.exp !== "number" || !Number.isFinite(claims.exp) || claims.exp <= Date.now() / 1000) return null;
+  if (typeof claims.token_type !== "string" || claims.token_type.toLowerCase() !== "bearer") return null;
+  return { sub: claims.username, email: undefined, emailVerified: undefined };
 };

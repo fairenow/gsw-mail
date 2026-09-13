@@ -9,6 +9,11 @@ const isProduction = nodeEnv === "production";
 
 const explicit = (key: string): string | undefined => process.env[key];
 
+const stalwartIssuer = (process.env.OIDC_ISSUER ?? "https://localhost:443").replace(
+  /\/+$/,
+  "",
+);
+
 const config = {
   env: nodeEnv,
   port: Number(env("PORT", "4000")),
@@ -26,10 +31,10 @@ const config = {
     resendApiKey: process.env.RESEND_API_KEY,
   },
   auth: {
-    issuer: env("JWT_ISSUER", "https://identity.guidedstepswellness.com"),
-    jwksUrl: env("JWKS_URL", ""),
-    audience: env("JWT_AUDIENCE", "gsw-mail"),
-    identityProvider: env("IDENTITY_PROVIDER", "gsw"),
+    identityProvider: env("IDENTITY_PROVIDER", "stalwart"),
+    clientId: env("OIDC_CLIENT_ID", "gsw-mail-web"),
+    issuer: stalwartIssuer,
+    introspectUrl: process.env.STALWART_INTROSPECT_URL ?? `${stalwartIssuer}/auth/introspect`,
   },
   send: {
     delaySeconds: Number(env("SEND_DELAY_SECONDS", "5")),
@@ -72,10 +77,15 @@ if (isProduction) {
   assertNotPlaceholder("STALWART_MAIL_PASSWORD", config.stalwart.mailPassword!);
   assertExplicit("DELIVERY_WEBHOOK_SECRET", explicit("DELIVERY_WEBHOOK_SECRET"));
   assertNotPlaceholder("DELIVERY_WEBHOOK_SECRET", config.deliveryWebhookSecret!);
-  assertExplicit("JWT_ISSUER", explicit("JWT_ISSUER"));
-  assertExplicit("JWKS_URL", explicit("JWKS_URL"));
+  assertExplicit("OIDC_ISSUER", explicit("OIDC_ISSUER"));
+  for (const endpoint of [config.auth.issuer, config.auth.introspectUrl]) {
+    const url = new URL(endpoint);
+    if (url.protocol !== "https:" || url.username || url.password || url.hash) throw new Error("[config] OIDC endpoints must use HTTPS without credentials or fragments");
+  }
+  if (new URL(config.auth.introspectUrl).origin !== new URL(config.auth.issuer).origin) throw new Error("[config] introspection must use the OIDC issuer origin");
+  assertExplicit("OIDC_CLIENT_ID", explicit("OIDC_CLIENT_ID"));
+  assertNotPlaceholder("OIDC_CLIENT_ID", config.auth.clientId);
   assertNotPlaceholder("DATABASE_URL", config.databaseUrl);
-  assertNotPlaceholder("JWT_ISSUER", config.auth.issuer);
   if (config.send.delaySeconds < 0 || config.send.maxRecipients < 1) {
     throw new Error("[config] invalid send settings: SEND_DELAY_SECONDS must be >= 0 and MAX_RECIPIENTS >= 1");
   }
