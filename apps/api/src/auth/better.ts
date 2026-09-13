@@ -1,7 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { emailOTP } from "better-auth/plugins/email-otp";
-import { magicLink } from "better-auth/plugins/magic-link";
 import { Resend } from "resend";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
@@ -35,11 +34,10 @@ export const auth = betterAuth({
   emailVerification: {
     sendVerificationEmail: async ({ user, url }) => sendAuthEmail(user.email, "Verify your GSW Account", `Verify your email address: ${url}`),
   },
-  plugins: [magicLink({
-    sendMagicLink: async ({ email, url }) => sendAuthEmail(email, "Your GSW sign-in link", `Continue to GSW: ${url}`),
-  }), emailOTP({
+  plugins: [emailOTP({
     sendVerificationOTP: async ({ email, otp, type }) => sendAuthEmail(email, `Your GSW ${type === "sign-in" ? "sign-in" : "verification"} code`, `Your one-time code is ${otp}. It expires in five minutes.`),
     sendVerificationOnSignUp: false,
+    overrideDefaultEmailVerification: true,
     storeOTP: "hashed",
   })],
 });
