@@ -20,7 +20,9 @@ export class IdentityError extends Error {
 
 export async function verifyAccessToken(token: string, request: typeof fetch = fetch): Promise<VerifiedClaims | null> {
   if (!token || token.length > 8192) return null;
-  const basic = Buffer.from(`${config.auth.introspectionClientId}:${config.auth.introspectionClientSecret ?? ""}`).toString("base64");
+  const username = config.stalwart.mailUsername;
+  if (!username) return null;
+  const basic = Buffer.from(`${username}:${config.stalwart.mailPassword ?? ""}`).toString("base64");
   const response = await request(config.auth.introspectUrl, {
     method: "POST",
     headers: { authorization: `Basic ${basic}`, "content-type": "application/x-www-form-urlencoded" },

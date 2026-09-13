@@ -19,8 +19,6 @@ const runProductionConfig = (overrides: Record<string, string>): { code: number;
     "DELIVERY_WEBHOOK_SECRET",
     "OIDC_ISSUER",
     "OIDC_CLIENT_ID",
-    "OIDC_INTROSPECTION_CLIENT_ID",
-    "OIDC_INTROSPECTION_CLIENT_SECRET",
     "RESEND_API_KEY",
   ]) {
     delete env[key];
@@ -46,8 +44,6 @@ const prodOkVars = {
   DELIVERY_WEBHOOK_SECRET: "whsec_3f4a9c1b8e7d2f6a",
   OIDC_ISSUER: "https://identity.guidedstepswellness.com",
   OIDC_CLIENT_ID: "gsw-mail-web",
-  OIDC_INTROSPECTION_CLIENT_ID: "gsw-mail-api",
-  OIDC_INTROSPECTION_CLIENT_SECRET: "k7t9p2m4q8w1x3z6",
   OUTBOUND_RELAY: "resend",
   RESEND_API_KEY: "re_prod_9f2k8a1cb",
 };
@@ -97,13 +93,4 @@ test("production refuses a placeholder delivery webhook secret", () => {
   const { code, stderr } = runProductionConfig({ ...prodOkVars, DELIVERY_WEBHOOK_SECRET: "change-me" });
   assert.notEqual(code, 0);
   assert.match(stderr, /DELIVERY_WEBHOOK_SECRET looks like a placeholder/);
-});
-
-test("production refuses a missing or placeholder introspection client secret", () => {
-  const missing = runProductionConfig({ ...prodOkVars, OIDC_INTROSPECTION_CLIENT_SECRET: "" });
-  assert.notEqual(missing.code, 0);
-  assert.match(missing.stderr, /OIDC_INTROSPECTION_CLIENT_SECRET must be set explicitly/);
-  const placeholder = runProductionConfig({ ...prodOkVars, OIDC_INTROSPECTION_CLIENT_SECRET: "change-me" });
-  assert.notEqual(placeholder.code, 0);
-  assert.match(placeholder.stderr, /OIDC_INTROSPECTION_CLIENT_SECRET looks like a placeholder/);
 });

@@ -2,8 +2,9 @@
 
 Base path: `/mail`. Admin: `/admin`. Auth: `Authorization: Bearer <token>`. In
 production the token is verified against Stalwart's `/auth/introspect`
-(authenticated as the confidential `OIDC_INTROSPECTION_CLIENT_ID` client) and
-resolved to a `users` row keyed by `(identityProvider, identitySubject)`.
+(authenticated as the trusted Stalwart mailbox service account
+`STALWART_MAIL_USERNAME`/`STALWART_MAIL_PASSWORD`, never with the caller's token)
+and resolved to a `users` row keyed by `(identityProvider, identitySubject)`.
 `POST /auth/exchange` is the public, unauthenticated PKCE token-exchange route
 that proxies the browser's OAuth code to Stalwart. Development only:
 `X-GSW-User-Id` / `DEV_USER_ID`.

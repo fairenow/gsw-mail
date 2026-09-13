@@ -35,8 +35,6 @@ const config = {
     clientId: env("OIDC_CLIENT_ID", "gsw-mail-web"),
     issuer: stalwartIssuer,
     introspectUrl: process.env.STALWART_INTROSPECT_URL ?? `${stalwartIssuer}/auth/introspect`,
-    introspectionClientId: env("OIDC_INTROSPECTION_CLIENT_ID", "gsw-mail-api"),
-    introspectionClientSecret: process.env.OIDC_INTROSPECTION_CLIENT_SECRET,
   },
   send: {
     delaySeconds: Number(env("SEND_DELAY_SECONDS", "5")),
@@ -87,10 +85,6 @@ if (isProduction) {
   if (new URL(config.auth.introspectUrl).origin !== new URL(config.auth.issuer).origin) throw new Error("[config] introspection must use the OIDC issuer origin");
   assertExplicit("OIDC_CLIENT_ID", explicit("OIDC_CLIENT_ID"));
   assertNotPlaceholder("OIDC_CLIENT_ID", config.auth.clientId);
-  assertExplicit("OIDC_INTROSPECTION_CLIENT_ID", explicit("OIDC_INTROSPECTION_CLIENT_ID"));
-  assertNotPlaceholder("OIDC_INTROSPECTION_CLIENT_ID", config.auth.introspectionClientId);
-  assertExplicit("OIDC_INTROSPECTION_CLIENT_SECRET", explicit("OIDC_INTROSPECTION_CLIENT_SECRET"));
-  assertNotPlaceholder("OIDC_INTROSPECTION_CLIENT_SECRET", config.auth.introspectionClientSecret!);
   assertNotPlaceholder("DATABASE_URL", config.databaseUrl);
   if (config.send.delaySeconds < 0 || config.send.maxRecipients < 1) {
     throw new Error("[config] invalid send settings: SEND_DELAY_SECONDS must be >= 0 and MAX_RECIPIENTS >= 1");

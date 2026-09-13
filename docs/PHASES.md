@@ -25,8 +25,8 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 - [x] Aliases (`hello@...` → `ramon@...`)
 - [x] Multi-user auth + authorization model: `users` keyed by
       `(identityProvider, identitySubject)` from Stalwart OAuth bearer tokens
-      (PKCE public client `gsw-mail-web`; introspection as a confidential
-      `OIDC_INTROSPECTION_CLIENT_ID` client),
+      (PKCE public client `gsw-mail-web`; introspection as the trusted Stalwart
+      mailbox service account `STALWART_MAIL_USERNAME`/`STALWART_MAIL_PASSWORD`),
       org memberships (owner/admin/member), mail-account memberships
       (owner/delegate/read_only) with permissions read/send/manage. No infra secrets
       are exposed to the browser; dev-only fallbacks are disabled in production.

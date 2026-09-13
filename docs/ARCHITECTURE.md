@@ -85,8 +85,8 @@ via PKCE (public client `gsw-mail-web`, no secret). The browser never talks to t
 authorization server directly: the token exchange runs server-side through the
 API's `POST /auth/exchange` route, so `mail.guidedstepswellness.com` never needs
 Stalwart CORS. The API verifies bearer access tokens by calling Stalwart's
-`/auth/introspect` authenticated as a confidential backend client
-(`OIDC_INTROSPECTION_CLIENT_ID`/`_SECRET`), never with the caller's token, and
+`/auth/introspect` authenticated as the trusted Stalwart mailbox service account
+(`STALWART_MAIL_USERNAME`/`STALWART_MAIL_PASSWORD`), never with the caller's token, and
 resolves the canonical `sub` to a `users` row keyed by
 `(identityProvider, identitySubject)`.
 Authorization is role-based: org memberships (owner/admin/member) gate admin

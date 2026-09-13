@@ -6,7 +6,8 @@ const ORG = "Guided Steps Wellness";
 const ORG_SLUG = "guided-steps-wellness";
 const MAIL_DOMAIN = process.env.PROD_SEED_DOMAIN ?? "team.guidedstepswellness.com";
 const OWNER_USER_ID = process.env.PROD_SEED_OWNER_ID ?? "ramon-prod";
-const OWNER_IDENTITY_SUBJECT = process.env.PROD_SEED_OWNER_SUBJECT ?? "ramon-prod";
+const OWNER_IDENTITY_PROVIDER = process.env.PROD_SEED_IDENTITY_PROVIDER ?? "stalwart";
+const OWNER_IDENTITY_SUBJECT = process.env.PROD_SEED_OWNER_SUBJECT ?? "test@team.guidedstepswellness.com";
 const OWNER_EMAIL = process.env.PROD_SEED_OWNER_EMAIL ?? "ramon@guidedstepswellness.com";
 const OWNER_NAME = process.env.PROD_SEED_OWNER_NAME ?? "Ramon Williams";
 const TEST_LOCAL_PART = "test";
@@ -38,8 +39,11 @@ async function ensureOrgAndDomain(): Promise<{ organizationId: string; domainId:
 async function ensureUser(id: string, identitySubject: string, email: string, name: string): Promise<string> {
   await db
     .insert(users)
-    .values({ id, identityProvider: "gsw", identitySubject, email, emailVerified: true, name })
-    .onConflictDoNothing({ target: users.id });
+    .values({ id, identityProvider: OWNER_IDENTITY_PROVIDER, identitySubject, email, emailVerified: true, name })
+    .onConflictDoUpdate({
+      target: users.id,
+      set: { identityProvider: OWNER_IDENTITY_PROVIDER, identitySubject, email, emailVerified: true, name },
+    });
   return id;
 }
 

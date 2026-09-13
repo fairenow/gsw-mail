@@ -344,8 +344,10 @@ DELIVERY_WEBHOOK_SECRET=<secret>
 
 OIDC_ISSUER=https://mx1.guidedstepswellness.com
 OIDC_CLIENT_ID=gsw-mail-web
-OIDC_INTROSPECTION_CLIENT_ID=gsw-mail-api
-OIDC_INTROSPECTION_CLIENT_SECRET=<server-only secret>
+
+# Stalwart /auth/introspect authenticates its caller as an account login, so the
+# API verifies bearer tokens as the trusted mailbox service account (server-only).
+IDENTITY_PROVIDER=stalwart
 
 SEND_DELAY_SECONDS=5
 ```
@@ -387,9 +389,13 @@ npm run db:seed:prod
 
 It creates the organization, the `team.guidedstepswellness.com` domain, the owner
 user, and the `test@team.guidedstepswellness.com` account with its mailboxes and
-postmaster/abuse aliases. Override identities with `PROD_SEED_DOMAIN`,
-`PROD_SEED_OWNER_ID`, `PROD_SEED_OWNER_SUBJECT`, `PROD_SEED_OWNER_EMAIL`,
-`PROD_SEED_OWNER_NAME` when the GSW identity subjects are known.
+postmaster/abuse aliases. The owner user's identity defaults to
+`identityProvider=stalwart`, `identitySubject=test@team.guidedstepswellness.com`
+(the Stalwart username returned by introspection for that account), and the seed
+reconciles these identity fields on an existing owner row. Override identities
+with `PROD_SEED_DOMAIN`, `PROD_SEED_OWNER_ID`, `PROD_SEED_IDENTITY_PROVIDER`,
+`PROD_SEED_OWNER_SUBJECT`, `PROD_SEED_OWNER_EMAIL`,
+`PROD_SEED_OWNER_NAME` when the GSW identity subjects differ.
 
 Once production is initialized, migrations should be append-only.
 
