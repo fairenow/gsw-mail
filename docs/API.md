@@ -22,6 +22,10 @@ mail-account memberships (owner/delegate/read_only) gate mail actions:
 Schema validation: Zod. Errors are `{ "error": message }` with 4xx/5xx; invalid body
 returns 400 with a Zod `issues` list.
 
+Product routes use the same authenticated user but are intentionally separate from
+the mail engine: settings, signatures, contacts, and import history are Neon/Postgres
+metadata and never Stalwart mailbox state.
+
 ## Accounts
 
 | Method | Path | Notes |
@@ -70,10 +74,10 @@ failed index sync logs a warning but does not fail the mail action.
 
 | Method | Path | Notes |
 |--------|------|-------|
-| POST | `/mail/send` | `{accountId, to[], cc?, bcc?, subject?, textBody?, htmlBody?, replyTo?, inReplyTo?, references?, mode?, clientRequestId?}` → **202** `{sendId, messageId, threadId, status: "queued", undoUntil}` |
+| POST | `/mail/send` | `{accountId, to[], cc?, bcc?, subject?, textBody?, htmlBody?, templateKey?, replyTo?, inReplyTo?, references?, mode?, clientRequestId?}` → **202** `{sendId, messageId, threadId, status: "queued", undoUntil}` |
 | POST | `/mail/drafts` | save draft → 201 `{engineId}` |
 | PATCH | `/mail/drafts/:id` | update the draft with the same draft body fields → `{engineId}`; Stalwart replaces the immutable message body and retires the previous draft |
-| POST | `/mail/drafts/:id/send` | `{accountId, mode?, clientRequestId?}` → **202**, same response as `/mail/send` |
+| POST | `/mail/drafts/:id/send` | `{accountId, mode?, templateKey?, clientRequestId?}` → **202**, same response as `/mail/send` |
 
 Requires the `send` permission on the account. Recipients are checked against the
 organization's suppression list (409 if suppressed) and `MAX_RECIPIENTS` /
@@ -127,6 +131,26 @@ GSW internal retry re-queues an `accepted`-before-claim failure with backoff
 hard bounces and complaints insert organization-scoped `delivery_suppressions`
 that block future sends. Delivery events append to `outbound_delivery_events`
 (provider-event-idempotent).
+
+## Settings and contacts
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/product/settings` | user settings and sanitized signature |
+| PATCH | `/product/settings` | merge general, compose, or contacts preferences |
+| PUT | `/product/signature` | sanitized HTML plus generated plaintext; new/reply/forward flags and quote placement |
+| GET | `/product/contacts?q=` | contact autocomplete/search, ranked by exact match, engagement, and recency |
+| GET | `/product/contacts/:id` | contact detail |
+| POST | `/product/contacts` | create normalized contact with emails, phones, tags, and custom fields |
+| PATCH | `/product/contacts/:id` | update contact and normalized child records |
+| GET | `/product/contact-imports` | import history counts |
+| GET | `/product/contact-imports/:id/rows` | raw and failed import rows |
+| POST | `/product/contact-imports` | mapped CSV rows with `skip`, `merge`, or `overwrite` duplicate behavior |
+
+Successful outbound sends asynchronously record each recipient in the caller's
+contact scope, creating a `sent_mail` contact or incrementing engagement on the
+matching normalized email. Contact tables, signatures, settings, and import batches
+are product metadata; Stalwart remains the canonical message engine.
 
 ## Engine switching
 

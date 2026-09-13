@@ -114,12 +114,19 @@ production.
 - Outbound queue and delivery-event ownership
 - Search indexing at the product layer
 - AI / automation / analytics / administration
+- User settings and sanitized rich-text signatures
+- Contacts, autocomplete metadata, engagement history, and CSV import history
 
 ### Database (Postgres)
 - Product-level metadata only (organizations, domains, accounts, aliases,
   outbound queue + recipients + attachment refs, delivery events,
   inbound-message index).
 - The mail server's complete internal state is **not** duplicated in Postgres.
+- Contacts normalize core identity data into `contacts`, `contact_emails`,
+  `contact_phones`, and `contact_tags`; flexible imported attributes live in
+  `contact_custom_fields`. `email_signatures` stores HTML and plaintext separately
+  from message bodies. Sent-recipient contact growth is best-effort product metadata
+  after Sent persistence and never blocks delivery.
 
 ### Object storage (future)
 - Large attachments, exports, backups.
@@ -132,6 +139,13 @@ production.
 
 A send is never synchronous. The request creates an outbound row, saves a copy to
 Sent in the engine, and returns 202 with an undo window:
+
+When no custom HTML body is supplied, the API renders the configured server-side
+mail template (`gsw_default` by default) into an email-safe HTML wrapper and keeps
+the plain-text body as the fallback. The registry also contains the opt-in
+`bible_reader` ministry template, but regular mail continues to use `gsw_default`.
+The selected template key is persisted with the outbound queue row for recovery
+and delivery observability.
 
 ```text
 POST /mail/send  (authorized: read/send + rate + suppression checks)

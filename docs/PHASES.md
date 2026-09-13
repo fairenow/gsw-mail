@@ -65,6 +65,15 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 - [ ] Indexed search (sender, recipient, subject, body, date, attachments, domain, thread)
 - [ ] Query syntax (`from:john@example.com`); natural-language search later (AI)
 
+## Settings and contacts foundation
+- [x] `/settings` sections for General, Signature, Compose, Contacts, and future Templates
+- [x] Sanitized rich-text signatures with HTML/plaintext storage and compose insertion
+- [x] Rich compose body with safe pasted HTML and restrained formatting toolbar
+- [x] Neon contacts with normalized emails/phones/tags, engagement counts, and custom fields
+- [x] Sent-recipient automatic contact creation/update and compose autocomplete
+- [x] CSV preview, mapping, duplicate merge/skip/overwrite, and import history
+- [ ] Contact enrichment from inbound mail and attachment/image upload workflow
+
 ## Phase 7 — Spam and security hardening
 - [ ] SPF/DKIM/DMARC validation metadata on inbound
 - [ ] Spam scoring, attachment restrictions, malware scanning

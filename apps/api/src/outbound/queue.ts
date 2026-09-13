@@ -23,6 +23,7 @@ export interface SendPayload {
   subject?: string | undefined;
   textBody?: string | undefined;
   htmlBody?: string | undefined;
+  templateKey?: string | undefined;
   replyTo?: string | undefined;
   inReplyTo?: string | undefined;
   references?: string | undefined;
@@ -53,6 +54,7 @@ export async function reserveSendOperation(input: ReserveInput): Promise<Reserve
       subject: input.subject,
       textBody: input.textBody,
       htmlBody: input.htmlBody,
+      templateKey: input.templateKey,
       replyTo: input.replyTo,
       inReplyTo: input.inReplyTo,
       references: input.references,
@@ -215,6 +217,7 @@ export async function loadJob(id: string): Promise<OutboundJob | null> {
     subject: row.subject ?? undefined,
     textBody: row.textBody ?? undefined,
     htmlBody: row.htmlBody ?? undefined,
+    templateKey: row.templateKey,
     replyTo: row.replyTo ?? undefined,
     inReplyTo: row.inReplyTo ?? undefined,
     references: row.references ?? undefined,

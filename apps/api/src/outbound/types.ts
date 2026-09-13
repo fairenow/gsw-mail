@@ -24,6 +24,7 @@ export interface OutboundJob {
   subject?: string | undefined;
   textBody?: string | undefined;
   htmlBody?: string | undefined;
+  templateKey?: string | undefined;
   replyTo?: string | undefined;
   inReplyTo?: string | undefined;
   references?: string | undefined;

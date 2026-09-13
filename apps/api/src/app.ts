@@ -16,6 +16,7 @@ import sends from "./routes/sends.js";
 import suppressions from "./routes/suppressions.js";
 import threads from "./routes/threads.js";
 import webhooks from "./routes/webhooks.js";
+import product from "./routes/product.js";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -50,6 +51,7 @@ export function buildApp() {
   app.register(admin);
   app.register(suppressions);
   app.register(webhooks);
+  app.register(product);
 
   return app;
 }

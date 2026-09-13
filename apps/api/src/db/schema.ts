@@ -64,6 +64,8 @@ export const deliveryEventType = pgEnum("delivery_event_type", [
   "complained",
   "failed",
 ]);
+export const signaturePosition = pgEnum("signature_position", ["beforeQuotedText", "afterQuotedText"]);
+export const contactImportDuplicateBehavior = pgEnum("contact_import_duplicate_behavior", ["skip", "merge", "overwrite"]);
 
 export const organizations = pgTable(
   "organizations",
@@ -229,6 +231,7 @@ export const outboundMessages = pgTable(
     subject: text("subject"),
     textBody: text("text_body"),
     htmlBody: text("html_body"),
+    templateKey: text("template_key").notNull().default("gsw_default"),
     replyTo: text("reply_to"),
     inReplyTo: text("in_reply_to"),
     references: text("references"),
@@ -409,4 +412,143 @@ export const inboundMessages = pgTable(
     index("inbound_thread_idx").on(t.engineThreadId),
     index("inbound_date_idx").on(t.date),
   ],
+);
+
+export const userSettings = pgTable(
+  "user_settings",
+  {
+    userId: text("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+    general: jsonb("general").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+    compose: jsonb("compose").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+    contacts: jsonb("contacts").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+    ...timestamps,
+  },
+);
+
+export const emailSignatures = pgTable(
+  "email_signatures",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    signatureHtml: text("signature_html").default("").notNull(),
+    signatureText: text("signature_text").default("").notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    onNew: boolean("on_new").default(true).notNull(),
+    onReply: boolean("on_reply").default(true).notNull(),
+    onForward: boolean("on_forward").default(true).notNull(),
+    position: signaturePosition("signature_position").default("beforeQuotedText").notNull(),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("email_signatures_user_idx").on(t.userId)],
+);
+
+export const contactImportBatches = pgTable(
+  "contact_import_batches",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ownerUserId: text("owner_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    filename: text("filename").notNull(),
+    rowCount: integer("row_count").default(0).notNull(),
+    createdCount: integer("created_count").default(0).notNull(),
+    updatedCount: integer("updated_count").default(0).notNull(),
+    skippedCount: integer("skipped_count").default(0).notNull(),
+    failedCount: integer("failed_count").default(0).notNull(),
+    ...timestamps,
+  },
+  (t) => [index("contact_import_batches_owner_idx").on(t.ownerUserId, t.createdAt)],
+);
+
+export const contacts = pgTable(
+  "contacts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ownerUserId: text("owner_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    firstName: text("first_name"),
+    middleName: text("middle_name"),
+    lastName: text("last_name"),
+    displayName: text("display_name"),
+    organization: text("organization"),
+    jobTitle: text("job_title"),
+    website: text("website"),
+    address: text("address"),
+    city: text("city"),
+    state: text("state"),
+    postalCode: text("postal_code"),
+    country: text("country"),
+    notes: text("notes"),
+    source: text("source").default("manual").notNull(),
+    sourceFile: text("source_file"),
+    importBatchId: uuid("import_batch_id").references(() => contactImportBatches.id, { onDelete: "set null" }),
+    lastContactedAt: timestamp("last_contacted_at", { withTimezone: true }),
+    firstContactedAt: timestamp("first_contacted_at", { withTimezone: true }),
+    timesEmailed: integer("times_emailed").default(0).notNull(),
+    ...timestamps,
+  },
+  (t) => [index("contacts_owner_idx").on(t.ownerUserId), index("contacts_search_idx").on(t.ownerUserId, t.displayName, t.organization)],
+);
+
+export const contactEmails = pgTable(
+  "contact_emails",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    normalizedEmail: text("normalized_email").notNull(),
+    label: text("label"),
+    isPrimary: boolean("is_primary").default(false).notNull(),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("contact_emails_contact_normalized_idx").on(t.contactId, t.normalizedEmail), index("contact_emails_normalized_idx").on(t.normalizedEmail)],
+);
+
+export const contactPhones = pgTable(
+  "contact_phones",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+    phone: text("phone").notNull(),
+    label: text("label"),
+    isPrimary: boolean("is_primary").default(false).notNull(),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("contact_phones_contact_phone_idx").on(t.contactId, t.phone)],
+);
+
+export const contactTags = pgTable(
+  "contact_tags",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+    tag: text("tag").notNull(),
+    normalizedTag: text("normalized_tag").notNull(),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("contact_tags_contact_normalized_idx").on(t.contactId, t.normalizedTag), index("contact_tags_search_idx").on(t.normalizedTag)],
+);
+
+export const contactCustomFields = pgTable(
+  "contact_custom_fields",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+    fieldKey: text("field_key").notNull(),
+    value: jsonb("value").$type<string | number | boolean | null>(),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("contact_custom_fields_contact_key_idx").on(t.contactId, t.fieldKey)],
+);
+
+export const contactImportRows = pgTable(
+  "contact_import_rows",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    batchId: uuid("batch_id").notNull().references(() => contactImportBatches.id, { onDelete: "cascade" }),
+    rowNumber: integer("row_number").notNull(),
+    raw: jsonb("raw").$type<Record<string, string>>().notNull(),
+    status: text("status").notNull(),
+    error: text("error"),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+    ...timestamps,
+  },
+  (t) => [index("contact_import_rows_batch_idx").on(t.batchId, t.rowNumber)],
 );

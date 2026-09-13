@@ -5,6 +5,9 @@ import { badRequest, conflict } from "../lib/errors.js";
 import { generateMessageId } from "../lib/messageId.js";
 import type { AccessibleAccount } from "../auth/authorize.js";
 import { checkSuppressions } from "./delivery.js";
+import { recordSentRecipients } from "../lib/contacts.js";
+import { DEFAULT_MAIL_TEMPLATE_KEY, renderMailTemplate } from "../mail/templates/index.js";
+import { richTextToPlainText, sanitizeRichText } from "../lib/richText.js";
 import {
   backfillOutboundAttachmentEngineIds,
   checkSendRate,
@@ -26,6 +29,7 @@ export interface SubmitSendInput {
   subject?: string | undefined;
   textBody?: string | undefined;
   htmlBody?: string | undefined;
+  templateKey?: string | undefined;
   replyTo?: string | undefined;
   inReplyTo?: string | undefined;
   references?: string | undefined;
@@ -61,6 +65,14 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
   const nextAttemptAt = new Date(now.getTime() + config.send.delaySeconds * 1000);
   const messageId = generateMessageId();
   const engine = getEngine(input.accessToken);
+  const templateKey = input.templateKey ?? DEFAULT_MAIL_TEMPLATE_KEY;
+  const safeHtml = input.htmlBody ? sanitizeRichText(input.htmlBody) : undefined;
+  const rendered = renderMailTemplate(templateKey, {
+    bodyHtml: safeHtml,
+    bodyText: input.textBody ?? (safeHtml ? richTextToPlainText(safeHtml) : undefined),
+    senderName: input.account.displayName ?? undefined,
+    senderEmail: input.account.address,
+  });
 
   const reserve = await reserveSendOperation({
     accountId: input.account.id,
@@ -69,8 +81,9 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
     cc: input.cc,
     bcc: input.bcc,
     subject: input.subject,
-    textBody: input.textBody,
-    htmlBody: input.htmlBody,
+    textBody: rendered.text,
+    htmlBody: rendered.html,
+    templateKey,
     replyTo: input.replyTo,
     inReplyTo: input.inReplyTo,
     references: input.references,
@@ -107,8 +120,8 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
       cc: input.cc,
       bcc: input.bcc,
       subject: input.subject,
-      textBody: input.textBody,
-      htmlBody: input.htmlBody,
+      textBody: rendered.text,
+      htmlBody: rendered.html,
       replyTo: input.replyTo,
       inReplyTo: input.inReplyTo,
       references: input.references,
@@ -128,6 +141,7 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
   }
 
   await finalizeSend(reserve.id, { engineMessageId: sent.engineMessageId, engineThreadId: sent.threadId }, nextAttemptAt);
+  void recordSentRecipients(input.userId, recipientEmails).catch(() => undefined);
 
   return {
     sendId: reserve.id,

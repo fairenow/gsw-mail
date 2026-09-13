@@ -42,6 +42,9 @@ const config = {
     perMinute: Number(env("SEND_PER_MINUTE", "30")),
     perHour: Number(env("SEND_PER_HOUR", "400")),
   },
+  mail: {
+    defaultTemplateKey: env("DEFAULT_MAIL_TEMPLATE_KEY", "gsw_default"),
+  },
   deliveryWebhookSecret: process.env.DELIVERY_WEBHOOK_SECRET,
   dev: {
     userId: process.env.DEV_USER_ID ?? "ramon-dev",

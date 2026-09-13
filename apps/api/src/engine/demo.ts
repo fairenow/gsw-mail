@@ -160,6 +160,7 @@ export class DemoEngine implements MailEngine {
       cc: (input.cc ?? []).map((email) => ({ email })),
       subject: input.subject ?? "",
       textBody: input.textBody,
+      htmlBody: input.htmlBody,
       snippet: input.textBody?.slice(0, 80),
       date: new Date(),
       size: (input.textBody ?? "").length,
@@ -180,6 +181,7 @@ export class DemoEngine implements MailEngine {
     draft.cc = (input.cc ?? []).map((email) => ({ email }));
     draft.subject = input.subject ?? "";
     draft.textBody = input.textBody;
+    draft.htmlBody = input.htmlBody;
     draft.snippet = input.textBody?.slice(0, 80);
     draft.size = (input.textBody ?? "").length;
     draft.date = new Date();
@@ -215,6 +217,7 @@ export class DemoEngine implements MailEngine {
       cc: (input.cc ?? []).map((email) => ({ email })),
       subject: input.subject ?? "",
       textBody: input.textBody,
+      htmlBody: input.htmlBody,
       snippet: input.textBody?.slice(0, 80),
       date: new Date(),
       size: (input.textBody ?? "").length,

@@ -29,6 +29,24 @@
   text-decoration: none;
 }
 
+.gsw-nav-toggle {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  color: var(--gsw-text-body);
+  font-size: 19px;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.gsw-nav-toggle:hover {
+  background: var(--gsw-bg);
+  color: var(--gsw-accent-dark);
+}
+
 .gsw-wordmark {
   display: inline-flex;
   align-items: center;
@@ -241,8 +259,13 @@
 .gsw-mail-body {
   display: grid;
   grid-template-columns: 240px 380px 1fr;
+  transition: grid-template-columns 200ms var(--ease);
   min-height: 0;
   overflow: hidden;
+}
+
+.gsw-mail-body.sidebar-collapsed {
+  grid-template-columns: 76px 380px 1fr;
 }
 
 .gsw-sidebar {
@@ -253,6 +276,22 @@
   border-right: 1px solid var(--gsw-border-soft);
   background: var(--gsw-bg);
   min-height: 0;
+  overflow: hidden;
+  transition: padding 200ms var(--ease), background 200ms var(--ease);
+}
+
+.gsw-sidebar.collapsed {
+  padding-inline: 10px;
+}
+
+.gsw-sidebar.collapsed .gsw-sidebar-identity {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.gsw-sidebar.collapsed .gsw-sidebar-identity div,
+.gsw-sidebar.collapsed .gsw-sidebar-label {
+  display: none;
 }
 
 .gsw-sidebar-identity,
@@ -317,6 +356,14 @@
     background var(--dur-row) var(--ease);
 }
 
+.gsw-sidebar.collapsed .gsw-compose-btn {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  margin-inline: auto;
+  border-radius: 16px;
+}
+
 .gsw-compose-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 6px 18px rgba(39, 37, 31, 0.14);
@@ -328,6 +375,7 @@
   align-items: center;
   gap: 10px;
   width: 100%;
+  position: relative;
   padding: 9px 12px;
   border-radius: var(--radius-sm);
   color: var(--gsw-text-body);
@@ -336,6 +384,29 @@
     background var(--dur-fast) var(--ease),
     color var(--dur-fast) var(--ease),
     transform var(--dur-fast) var(--ease);
+}
+
+.gsw-sidebar.collapsed .gsw-folder {
+  justify-content: center;
+  gap: 0;
+  padding-inline: 0;
+}
+
+.gsw-sidebar.collapsed .gsw-folder > span:not(.gsw-folder-icon) {
+  display: none;
+}
+
+.gsw-sidebar.collapsed .gsw-folder .gsw-folder-icon {
+  justify-content: center;
+}
+
+.gsw-sidebar.collapsed .gsw-folder .gsw-badge {
+  position: absolute;
+  right: 6px;
+  top: 3px;
+  display: inline-flex;
+  padding: 0 4px;
+  font-size: 10px;
 }
 
 .gsw-folder:hover {
@@ -870,7 +941,9 @@
 
 @media (max-width: 1099px) {
   .gsw-mail-body { grid-template-columns: 220px minmax(300px, 1fr); }
+  .gsw-mail-body.sidebar-collapsed { grid-template-columns: 76px minmax(300px, 1fr); }
   .gsw-reading-pane { position: fixed; inset: 72px 0 0 220px; z-index: 15; transform: translateX(100%); transition: transform var(--dur-pane) var(--ease); }
+  .gsw-reading-pane.sidebar-collapsed { left: 76px; }
   .gsw-reading-pane.mobile-open { transform: translateX(0); }
   .gsw-reader-back { display: inline-flex; margin-bottom: 14px; color: var(--gsw-accent-dark); font-weight: 600; }
 }
@@ -885,7 +958,16 @@
   .gsw-topnav-search .gsw-search-icon { display: none; }
   .gsw-topnav-search input::placeholder { color: transparent; }
   .gsw-mail-body { display: block; overflow: hidden; }
+  .gsw-mail-body.sidebar-collapsed { display: block; }
   .gsw-sidebar { position: absolute; inset: 58px 0 0; z-index: 10; padding: 18px; transform: translateX(0); transition: transform var(--dur-pane) var(--ease); }
+  .gsw-sidebar.collapsed { padding: 18px; }
+  .gsw-sidebar.collapsed .gsw-sidebar-identity div,
+  .gsw-sidebar.collapsed .gsw-sidebar-label { display: block; }
+  .gsw-sidebar.collapsed .gsw-sidebar-identity { justify-content: flex-start; padding-inline: 4px; }
+  .gsw-sidebar.collapsed .gsw-compose-btn { width: auto; height: auto; padding: 11px 14px; margin-inline: 0; border-radius: 999px; }
+  .gsw-sidebar.collapsed .gsw-folder { justify-content: flex-start; gap: 10px; padding-inline: 12px; }
+  .gsw-sidebar.collapsed .gsw-folder > span:not(.gsw-folder-icon) { display: inline; }
+  .gsw-sidebar.collapsed .gsw-folder .gsw-badge { position: static; padding: 1px 8px; font-size: 12px; }
   .gsw-sidebar.mobile-hidden { transform: translateX(-100%); }
   .gsw-message-list { position: absolute; inset: 58px 0 0; transform: translateX(100%); transition: transform var(--dur-pane) var(--ease); }
   .gsw-message-list.mobile-open { transform: translateX(0); }

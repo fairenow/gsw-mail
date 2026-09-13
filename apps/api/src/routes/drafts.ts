@@ -6,6 +6,8 @@ import { getEngine } from "../engine/index.js";
 import { describeJmapFailure } from "../lib/jmapError.js";
 import { notFound } from "../lib/errors.js";
 import { submitSend } from "../outbound/sendFlow.js";
+import { DEFAULT_MAIL_TEMPLATE_KEY } from "../mail/templates/index.js";
+import { sanitizeRichText } from "../lib/richText.js";
 
 const draftSchema = z.object({
   accountId: z.string().uuid(),
@@ -19,12 +21,14 @@ const draftSchema = z.object({
   inReplyTo: z.string().optional(),
   references: z.string().optional(),
   mode: z.enum(["new", "reply", "replyAll", "forward"]).optional(),
+  templateKey: z.string().optional(),
 });
 
 const sendDraftSchema = z.object({
   accountId: z.string().uuid(),
   clientRequestId: z.string().trim().min(1).max(200).optional(),
   mode: z.enum(["new", "reply", "replyAll", "forward"]).optional(),
+  templateKey: z.string().optional(),
 });
 
 export default async (app: FastifyInstance) => {
@@ -34,6 +38,7 @@ export default async (app: FastifyInstance) => {
     const input = draftSchema.parse(req.body);
     const account = await requireAccountPermission(req.user!.id, input.accountId, "send");
     const engine = getEngine(req.accessToken);
+    const htmlBody = input.htmlBody ? sanitizeRichText(input.htmlBody) : undefined;
     try {
       const engineId = await engine.saveDraft(account.id, {
         from: account.address,
@@ -42,7 +47,7 @@ export default async (app: FastifyInstance) => {
         bcc: input.bcc,
         subject: input.subject,
         textBody: input.textBody,
-        htmlBody: input.htmlBody,
+        htmlBody,
         replyTo: input.replyTo,
         inReplyTo: input.inReplyTo,
         references: input.references,
@@ -59,6 +64,7 @@ export default async (app: FastifyInstance) => {
     const input = draftSchema.parse(req.body);
     const account = await requireAccountPermission(req.user!.id, input.accountId, "send");
     const engine = getEngine(req.accessToken);
+    const htmlBody = input.htmlBody ? sanitizeRichText(input.htmlBody) : undefined;
     try {
       const engineId = await engine.updateDraft(account.id, req.params.id, {
         from: account.address,
@@ -67,7 +73,7 @@ export default async (app: FastifyInstance) => {
         bcc: input.bcc,
         subject: input.subject,
         textBody: input.textBody,
-        htmlBody: input.htmlBody,
+        htmlBody,
         replyTo: input.replyTo,
         inReplyTo: input.inReplyTo,
         references: input.references,
@@ -98,6 +104,7 @@ export default async (app: FastifyInstance) => {
         subject: draft.subject,
         textBody: draft.textBody,
         htmlBody: draft.htmlBody,
+        templateKey: body.templateKey ?? DEFAULT_MAIL_TEMPLATE_KEY,
         replyTo: draft.headers["Reply-To"],
         inReplyTo: draft.headers["In-Reply-To"],
         references: draft.headers["References"],
