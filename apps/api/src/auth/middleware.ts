@@ -9,6 +9,7 @@ declare module "fastify" {
   interface FastifyRequest {
     user?: AuthenticatedUser;
     accessToken?: string;
+    authUserId?: string;
   }
 }
 
@@ -40,6 +41,7 @@ export const requireUser = async (app: FastifyInstance, opts: { optional?: boole
       return reply.code(503).send({ error: "session_resolution_unavailable" });
     }
     if (session) {
+       req.authUserId = session.user.id;
       req.log.info({ authUserId: session.user.id, durationMs: Date.now() - startedAt }, "Better Auth session confirmed");
       try {
         req.user = await provisionControlPlaneUser(session.user.id, session.user.email, session.user.name);

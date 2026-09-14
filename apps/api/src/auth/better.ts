@@ -1,6 +1,8 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { emailOTP } from "better-auth/plugins/email-otp";
+import { jwt } from "better-auth/plugins";
+import { oauthProvider } from "@better-auth/oauth-provider";
 import { Resend } from "resend";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
@@ -55,7 +57,32 @@ export const auth = betterAuth({
   emailVerification: {
     sendVerificationEmail: async ({ user, url }) => sendAuthEmail(user.email, "Verify your GSW Account", renderGswAuthEmail({ title: "Verify your email", message: "Confirm your email address to continue to GSW.", ctaUrl: url, ctaLabel: "Verify email" })),
   },
-  plugins: [emailOTP({
+  plugins: [
+    jwt({
+      jwks: { keyPairConfig: { alg: "ES256" } },
+      jwt: {
+        issuer: config.auth.issuer,
+        audience: config.auth.stalwartAudience,
+        expirationTime: "15m",
+      },
+    }),
+    oauthProvider({
+      loginPage: "/sign-in",
+      consentPage: "/sign-in",
+      scopes: ["openid", "email"],
+      validAudiences: [config.auth.stalwartAudience],
+      accessTokenExpiresIn: config.auth.tokenTtlSeconds,
+      customUserInfoClaims: ({ user }) => ({
+        email: user.email,
+        email_verified: user.emailVerified,
+        name: user.name,
+        preferred_username: user.email,
+      }),
+      customAccessTokenClaims: ({ user, resource, scopes }) => resource === config.auth.stalwartAudience && user && scopes.includes("email")
+        ? { email: user.email, preferred_username: user.email, name: user.name }
+        : {},
+    }),
+    emailOTP({
     sendVerificationOTP: async ({ email, otp, type }) => {
       const recoveryEmail = type === "forget-password" ? await recoveryEmailForMailbox(email) : null;
       const destination = recoveryEmail ?? email;
@@ -69,5 +96,6 @@ export const auth = betterAuth({
     allowedAttempts: 5,
     resendStrategy: "reuse",
     storeOTP: "hashed",
-  })],
+    }),
+  ],
 });

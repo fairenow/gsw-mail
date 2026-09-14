@@ -14,8 +14,9 @@ const runProductionConfig = (overrides: Record<string, string>): { code: number;
     "MAIL_ENGINE",
     "STALWART_ADMIN_TOKEN",
     "STALWART_JMAP_URL",
-    "STALWART_MAIL_USERNAME",
-    "STALWART_MAIL_PASSWORD",
+     "BETTER_AUTH_STALWART_CLIENT_ID",
+     "BETTER_AUTH_STALWART_CLIENT_SECRET",
+     "BETTER_AUTH_URL",
     "DELIVERY_WEBHOOK_SECRET",
     "OIDC_ISSUER",
     "OIDC_CLIENT_ID",
@@ -40,8 +41,9 @@ const prodOkVars = {
   MAIL_ENGINE: "stalwart",
   STALWART_ADMIN_TOKEN: "prod-stalwart-key-2026",
   STALWART_JMAP_URL: "https://mx1.guidedstepswellness.com",
-  STALWART_MAIL_USERNAME: "test@team.guidedstepswellness.com",
-  STALWART_MAIL_PASSWORD: "prod-mailbox-pass-2026",
+   BETTER_AUTH_STALWART_CLIENT_ID: "stalwart-resource-client",
+   BETTER_AUTH_STALWART_CLIENT_SECRET: "prod-oauth-client-key-2026",
+   BETTER_AUTH_URL: "https://mail.guidedstepswellness.com",
   DELIVERY_WEBHOOK_SECRET: "whsec_3f4a9c1b8e7d2f6a",
   OIDC_ISSUER: "https://identity.guidedstepswellness.com",
   OIDC_CLIENT_ID: "gsw-mail-web",
@@ -73,16 +75,16 @@ test("production refuses a placeholder admin token", () => {
   assert.match(placeholder.stderr, /looks like a placeholder/);
 });
 
-test("production requires explicit mailbox credentials", () => {
-  const noUser = runProductionConfig({ ...prodOkVars, STALWART_MAIL_USERNAME: "" });
+test("production requires the Better Auth OAuth client", () => {
+  const noUser = runProductionConfig({ ...prodOkVars, BETTER_AUTH_STALWART_CLIENT_ID: "" });
   assert.notEqual(noUser.code, 0);
-  assert.match(noUser.stderr, /STALWART_MAIL_USERNAME must be set explicitly/);
-  const noPass = runProductionConfig({ ...prodOkVars, STALWART_MAIL_PASSWORD: "" });
+  assert.match(noUser.stderr, /BETTER_AUTH_STALWART_CLIENT_ID must be set explicitly/);
+  const noPass = runProductionConfig({ ...prodOkVars, BETTER_AUTH_STALWART_CLIENT_SECRET: "" });
   assert.notEqual(noPass.code, 0);
-  assert.match(noPass.stderr, /STALWART_MAIL_PASSWORD must be set explicitly/);
-  const placeholder = runProductionConfig({ ...prodOkVars, STALWART_MAIL_PASSWORD: "change-me" });
+  assert.match(noPass.stderr, /BETTER_AUTH_STALWART_CLIENT_SECRET must be set explicitly/);
+  const placeholder = runProductionConfig({ ...prodOkVars, BETTER_AUTH_STALWART_CLIENT_SECRET: "change-me" });
   assert.notEqual(placeholder.code, 0);
-  assert.match(placeholder.stderr, /STALWART_MAIL_PASSWORD looks like a placeholder/);
+  assert.match(placeholder.stderr, /BETTER_AUTH_STALWART_CLIENT_SECRET looks like a placeholder/);
 });
 
 test("production refuses the null relay", () => {

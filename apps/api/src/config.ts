@@ -9,11 +9,6 @@ const isProduction = nodeEnv === "production";
 
 const explicit = (key: string): string | undefined => process.env[key];
 
-const stalwartIssuer = (process.env.OIDC_ISSUER ?? "https://localhost:443").replace(
-  /\/+$/,
-  "",
-);
-
 const config = {
   env: nodeEnv,
   port: Number(env("PORT", "4000")),
@@ -22,8 +17,6 @@ const config = {
   stalwart: {
     jmapUrl: env("STALWART_JMAP_URL", "https://localhost:443"),
     adminToken: env("STALWART_ADMIN_TOKEN", "change-me-stalwart-admin"),
-    mailUsername: process.env.STALWART_MAIL_USERNAME,
-    mailPassword: process.env.STALWART_MAIL_PASSWORD,
     sessionTtlSeconds: Number(env("STALWART_SESSION_TTL_SECONDS", "60")),
   },
   outbound: {
@@ -35,9 +28,12 @@ const config = {
     baseUrl: env("BETTER_AUTH_URL", "http://localhost:4000"),
     trustedOrigin: env("BETTER_AUTH_TRUSTED_ORIGIN", "http://localhost:3000"),
     secret: env("BETTER_AUTH_SECRET", "development-only-better-auth-secret-change-me"),
-    clientId: env("OIDC_CLIENT_ID", "gsw-mail-web"),
-    issuer: stalwartIssuer,
-    introspectUrl: process.env.STALWART_INTROSPECT_URL ?? `${stalwartIssuer}/auth/introspect`,
+    oauthClientId: process.env.BETTER_AUTH_STALWART_CLIENT_ID,
+    oauthClientSecret: process.env.BETTER_AUTH_STALWART_CLIENT_SECRET,
+    oauthRedirectUri: env("BETTER_AUTH_STALWART_REDIRECT_URI", "http://localhost:4000/internal/oauth/stalwart/callback"),
+    stalwartAudience: "stalwart",
+    tokenTtlSeconds: 900,
+    issuer: `${env("BETTER_AUTH_URL", "http://localhost:4000")}/api/auth`,
   },
   send: {
     delaySeconds: Number(env("SEND_DELAY_SECONDS", "5")),
@@ -86,9 +82,9 @@ if (isProduction) {
   assertExplicit("STALWART_JMAP_URL", explicit("STALWART_JMAP_URL"));
   assertNotPlaceholder("STALWART_ADMIN_TOKEN", config.stalwart.adminToken);
   assertNotPlaceholder("STALWART_JMAP_URL", config.stalwart.jmapUrl);
-  assertExplicit("STALWART_MAIL_USERNAME", explicit("STALWART_MAIL_USERNAME"));
-  assertExplicit("STALWART_MAIL_PASSWORD", explicit("STALWART_MAIL_PASSWORD"));
-  assertNotPlaceholder("STALWART_MAIL_PASSWORD", config.stalwart.mailPassword!);
+   assertExplicit("BETTER_AUTH_STALWART_CLIENT_ID", explicit("BETTER_AUTH_STALWART_CLIENT_ID"));
+   assertExplicit("BETTER_AUTH_STALWART_CLIENT_SECRET", explicit("BETTER_AUTH_STALWART_CLIENT_SECRET"));
+   assertNotPlaceholder("BETTER_AUTH_STALWART_CLIENT_SECRET", config.auth.oauthClientSecret!);
   assertExplicit("DELIVERY_WEBHOOK_SECRET", explicit("DELIVERY_WEBHOOK_SECRET"));
   assertNotPlaceholder("DELIVERY_WEBHOOK_SECRET", config.deliveryWebhookSecret!);
   assertExplicit("BETTER_AUTH_SECRET", explicit("BETTER_AUTH_SECRET"));

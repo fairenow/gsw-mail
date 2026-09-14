@@ -44,6 +44,8 @@ export default async (app: FastifyInstance) => {
       const result = await submitSend({
         userId: req.user!.id,
         accessToken: req.accessToken,
+        authUserId: req.authUserId,
+        headers: req.headers as Record<string, string>,
         account,
         to: input.to,
         cc: input.cc,

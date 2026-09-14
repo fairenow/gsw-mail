@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { contactCustomFields, contactEmails, contactPhones, contactTags, contacts, emailAccounts, mailAccountMemberships } from "../db/schema.js";
-import { getEngine } from "../engine/index.js";
+import { getEngine, getUserEngine } from "../engine/index.js";
 import type { EngineContact, EngineContactInput, MailEngine } from "../engine/types.js";
 import { paginateContacts } from "./contactPaging.js";
 
@@ -32,10 +32,18 @@ export interface ContactEngineContext {
   engine: MailEngine;
 }
 
-export async function getContactEngineContext(ownerUserId: string, accessToken?: string): Promise<ContactEngineContext | undefined> {
+export async function getContactEngineContext(ownerUserId: string, accessToken?: string, authUserId?: string, headers?: Record<string, string>): Promise<ContactEngineContext | undefined> {
   let engine: MailEngine;
   try {
-    engine = getEngine(accessToken);
+    const [owned] = await db.select({ id: emailAccounts.id }).from(emailAccounts).where(eq(emailAccounts.userId, ownerUserId)).limit(1);
+    const account = owned ?? (await db.select({ id: emailAccounts.id }).from(mailAccountMemberships).innerJoin(emailAccounts, eq(mailAccountMemberships.accountId, emailAccounts.id)).where(eq(mailAccountMemberships.userId, ownerUserId)).limit(1))[0];
+    if (!account) {
+      engine = getEngine();
+    } else if (authUserId && headers) {
+      engine = await getUserEngine({ productUserId: ownerUserId, authUserId, accountId: account.id, headers });
+    } else {
+      throw new Error("user-scoped OAuth context required");
+    }
   } catch {
     return undefined;
   }

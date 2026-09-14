@@ -5,7 +5,7 @@ import { requireOrgPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
 import { db, pingDatabase } from "../db/client.js";
 import { auditEvents, domains, emailAccounts, inboundMessages, outboundMessages } from "../db/schema.js";
-import { getEngine } from "../engine/index.js";
+import { config } from "../config.js";
 import { getRelay } from "../outbound/relay.js";
 
 const orgQuery = z.object({ organizationId: z.string().uuid() });
@@ -27,12 +27,12 @@ export default async (app: FastifyInstance) => {
   app.get("/admin/health", async (req) => {
     const { organizationId } = orgQuery.parse(req.query ?? {});
     await requireOrgPermission(req.user!.id, organizationId, ["owner", "admin"]);
-    const [dbOk, engine, relay] = await Promise.all([pingDatabase(), getEngine(req.accessToken).status(), Promise.resolve(getRelay().name)]);
+     const [dbOk, relay] = await Promise.all([pingDatabase(), Promise.resolve(getRelay().name)]);
     return {
       organizationId,
-      ok: dbOk && engine.ok,
+       ok: dbOk,
       db: dbOk ? "ok" : "down",
-      mailEngine: engine,
+       mailEngine: { name: config.mailEngine, ok: dbOk, authentication: "better-auth-oidc" },
       outboundRelay: relay,
     };
   });

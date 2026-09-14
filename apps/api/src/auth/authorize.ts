@@ -26,6 +26,7 @@ export interface AccessibleAccount {
   address: string;
   displayName: string | null;
   status: string;
+  authSetupStatus: string;
   role: (typeof accountMembershipRole.enumValues)[number];
   permissions: AccountPermission[];
   domainId: string;
@@ -51,6 +52,7 @@ export async function getAccessibleAccounts(userId: string): Promise<AccessibleA
       address: row.account.address,
       displayName: row.account.displayName,
       status: row.account.status,
+      authSetupStatus: row.account.authSetupStatus,
       role: row.role,
       permissions: PERMISSIONS[row.role],
       domainId: row.account.domainId,
@@ -71,6 +73,7 @@ export async function getAccessibleAccounts(userId: string): Promise<AccessibleA
         address: row.account.address,
         displayName: row.account.displayName,
         status: row.account.status,
+        authSetupStatus: row.account.authSetupStatus,
         role: "owner",
         permissions: PERMISSIONS.owner,
         domainId: row.account.domainId,
@@ -118,6 +121,7 @@ export async function requireAccountPermission(
     address: account.address,
     displayName: account.displayName,
     status: account.status,
+    authSetupStatus: account.authSetupStatus,
     role,
     permissions,
     domainId: account.domainId,

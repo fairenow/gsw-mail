@@ -335,21 +335,16 @@ DATABASE_URL=<Neon connection>
 
 STALWART_JMAP_URL=https://mx1.guidedstepswellness.com
 STALWART_ADMIN_TOKEN=<secret>
-# Server-only credential for /auth/introspect and explicit background recovery;
-# normal request JMAP calls use the caller's OAuth bearer token.
-STALWART_MAIL_USERNAME=<dedicated-service-account>
-STALWART_MAIL_PASSWORD=<secret>
+BETTER_AUTH_URL=https://mail.guidedstepswellness.com
+BETTER_AUTH_STALWART_CLIENT_ID=<registered-confidential-oauth-client>
+BETTER_AUTH_STALWART_CLIENT_SECRET=<secret>
+BETTER_AUTH_STALWART_REDIRECT_URI=https://api.mail.guidedstepswellness.com/internal/oauth/stalwart/callback
 
 OUTBOUND_RELAY=resend
 RESEND_API_KEY=<secret>
 DELIVERY_WEBHOOK_SECRET=<secret>
 
-OIDC_ISSUER=https://mx1.guidedstepswellness.com
-OIDC_CLIENT_ID=gsw-mail-web
-
-# Stalwart /auth/introspect authenticates its caller as an account login. The
-# server-only credential above is not used for normal user mailbox operations.
-IDENTITY_PROVIDER=stalwart
+IDENTITY_PROVIDER=better-auth
 
 SEND_DELAY_SECONDS=5
 ```

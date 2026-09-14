@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
-import { getEngine } from "../engine/index.js";
+import { getUserEngine } from "../engine/index.js";
 import { describeJmapFailure } from "../lib/jmapError.js";
 import { notFound } from "../lib/errors.js";
 import { submitSend } from "../outbound/sendFlow.js";
@@ -37,7 +37,7 @@ export default async (app: FastifyInstance) => {
   app.post("/mail/drafts", async (req, reply) => {
     const input = draftSchema.parse(req.body);
     const account = await requireAccountPermission(req.user!.id, input.accountId, "send");
-    const engine = getEngine(req.accessToken);
+    const engine = await getUserEngine({ productUserId: req.user!.id, authUserId: req.authUserId ?? req.user!.id, accountId: account.id, headers: req.headers as Record<string, string>, permission: "send" });
     const htmlBody = input.htmlBody ? sanitizeRichText(input.htmlBody) : undefined;
     try {
       const engineId = await engine.saveDraft(account.id, {
@@ -63,7 +63,7 @@ export default async (app: FastifyInstance) => {
   app.patch<{ Params: { id: string } }>("/mail/drafts/:id", async (req, reply) => {
     const input = draftSchema.parse(req.body);
     const account = await requireAccountPermission(req.user!.id, input.accountId, "send");
-    const engine = getEngine(req.accessToken);
+    const engine = await getUserEngine({ productUserId: req.user!.id, authUserId: req.authUserId ?? req.user!.id, accountId: account.id, headers: req.headers as Record<string, string>, permission: "send" });
     const htmlBody = input.htmlBody ? sanitizeRichText(input.htmlBody) : undefined;
     try {
       const engineId = await engine.updateDraft(account.id, req.params.id, {
@@ -88,7 +88,7 @@ export default async (app: FastifyInstance) => {
   app.post<{ Params: { id: string } }>("/mail/drafts/:id/send", async (req, reply) => {
     const body = sendDraftSchema.parse(req.body);
     const account = await requireAccountPermission(req.user!.id, body.accountId, "send");
-    const engine = getEngine(req.accessToken);
+    const engine = await getUserEngine({ productUserId: req.user!.id, authUserId: req.authUserId ?? req.user!.id, accountId: account.id, headers: req.headers as Record<string, string>, permission: "send" });
 
     const draft = await engine.getMessage(body.accountId, req.params.id);
     if (!draft) throw notFound("draft not found");
@@ -97,7 +97,9 @@ export default async (app: FastifyInstance) => {
     try {
       result = await submitSend({
         userId: req.user!.id,
-        accessToken: req.accessToken,
+         accessToken: req.accessToken,
+         authUserId: req.authUserId,
+         headers: req.headers as Record<string, string>,
         account,
         to: draft.to.map((a) => a.email),
         cc: draft.cc.map((a) => a.email),

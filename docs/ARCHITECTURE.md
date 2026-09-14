@@ -80,20 +80,15 @@ The mail server is critical infrastructure and is **not** exposed directly to ev
 application. Only the internal API reaches it via JMAP. Administration endpoints
 require elevated authorization.
 
-Authentication: the web app signs in with Stalwart's OAuth authorization server
-via PKCE (public client `gsw-mail-web`, no secret). The browser never talks to the
-authorization server directly: the token exchange runs server-side through the
-Better Auth's `/api/auth/*` routes, so `mail.guidedstepswellness.com` never needs
-Stalwart CORS. The API verifies bearer access tokens through a short-lived,
-expiry-bounded cache backed by Stalwart's `/auth/introspect`, authenticated as the
-trusted Stalwart service account (`STALWART_MAIL_USERNAME`/`STALWART_MAIL_PASSWORD`).
-It then resolves the canonical `sub` to a `users` row keyed by
-`(identityProvider, identitySubject)`. Existing users take the lookup path;
-JIT provisioning runs only when the identity is not present. Normal mailbox
-operations reuse a bounded request-token JMAP engine cache, whose client retains
-the JMAP session and mailbox metadata caches. The service credential is not used
-to read the caller's mailbox. Background recovery jobs may use the explicitly
-named service engine and require matching Stalwart delegation.
+Authentication: Better Auth is the permanent OIDC issuer at
+`https://mail.guidedstepswellness.com/api/auth`, using the OAuth Provider and an
+asymmetric ES256 JWKS. Before mail access, the API authorizes the product user
+through an active mail-account membership and a ready mailbox, then obtains a
+short-lived Better Auth authorization-code token for the `stalwart` audience.
+The token's complete `email` claim is the Stalwart username; no username domain,
+shared mailbox credential, impersonation, or Stalwart login page is used. Normal
+JMAP operations use only that request's user token. Background jobs cannot create
+a service JMAP engine and must be redesigned around an authenticated user context.
 Authorization is role-based: org memberships (owner/admin/member) gate admin
 operations; mail-account memberships (owner/delegate/read_only) gate mail
 actions via read/send/manage permissions. `/health` and `/api/auth/*` are
@@ -273,3 +268,5 @@ Better Auth sessions resolve through the existing product user ID, including mig
 The exact `/mail` page rewrite must precede the `/mail/:path*` API proxy in Vercel. `/mail` and `/sign-in` serve the web entry point; nested mail resources continue to reach Railway. Deployment checks must verify the `/mail` HTML response as well as API health.
 
 Account resolution now displays the supplied `/loading-animation-1.gif` while session/context requests are pending. Status copy remains driven by real progress. Success and reduced-motion preferences use the static logo; navigation does not wait for the GIF to finish.
+
+### Mailbox-scoped service access (prepared, not activated)

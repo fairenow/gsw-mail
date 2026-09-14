@@ -5,7 +5,7 @@ import { requireAccountPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
 import { outboundMessages } from "../db/schema.js";
-import { getEngine } from "../engine/index.js";
+import { getUserEngine } from "../engine/index.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { cancelSend, getSendStatus, retrySend } from "../outbound/queue.js";
@@ -43,7 +43,7 @@ export default async (app: FastifyInstance) => {
     if (!cancelled) throw badRequest("send can only be cancelled while preparing or queued");
 
     if (row.engineMessageId) {
-      await getEngine(req.accessToken).move(row.accountId, [row.engineMessageId], "Drafts");
+      await (await getUserEngine({ productUserId: req.user!.id, authUserId: req.authUserId ?? req.user!.id, accountId: row.accountId, headers: req.headers as Record<string, string>, permission: "send" })).move(row.accountId, [row.engineMessageId], "Drafts");
     }
     await audit({
       actorUserId: req.user!.id,

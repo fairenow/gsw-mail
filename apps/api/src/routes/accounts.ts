@@ -5,7 +5,7 @@ import { getAccessibleAccounts, requireAccountPermission, requireOrgPermission }
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
 import { domains, emailAccounts, mailAccountMemberships, mailboxes, users } from "../db/schema.js";
-import { getEngine } from "../engine/index.js";
+import { getUserEngine } from "../engine/index.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound } from "../lib/errors.js";
 
@@ -83,7 +83,8 @@ export default async (app: FastifyInstance) => {
 
   app.get<{ Params: Params }>("/mail/accounts/:id/mailboxes", async (req) => {
     await requireAccountPermission(req.user!.id, req.params.id, "read");
-    return { mailboxes: await getEngine(req.accessToken).listMailboxes(req.params.id) };
+     const engine = await getUserEngine({ productUserId: req.user!.id, authUserId: req.authUserId ?? req.user!.id, accountId: req.params.id, headers: req.headers as Record<string, string> });
+     return { mailboxes: await engine.listMailboxes(req.params.id) };
   });
 
   app.post("/mail/accounts", async (req, reply) => {

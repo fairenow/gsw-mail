@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 export interface VerifiedClaims {
   sub: string;
@@ -19,33 +20,32 @@ export class IdentityError extends Error {
   }
 }
 
-const INTROSPECTION_CACHE_TTL_MS = 30_000;
+const TOKEN_CACHE_TTL_MS = 30_000;
 const USER_CACHE_TTL_MS = 30_000;
 const MAX_CACHE_ENTRIES = 512;
-const introspectionCache = new Map<string, { claims: VerifiedClaims; expiresAt: number }>();
+const tokenCache = new Map<string, { claims: VerifiedClaims; expiresAt: number }>();
 const userCache = new Map<string, { user: AuthenticatedUser; expiresAt: number }>();
 
 export async function verifyAccessToken(token: string, request: typeof fetch = fetch): Promise<VerifiedClaims | null> {
   if (!token || token.length > 8192) return null;
-  const cached = request === fetch ? introspectionCache.get(token) : undefined;
+  const cached = request === fetch ? tokenCache.get(token) : undefined;
   if (cached && cached.expiresAt > Date.now()) return cached.claims;
-  if (cached) introspectionCache.delete(token);
-  const username = config.stalwart.mailUsername;
-  if (!username) return null;
-  const basic = Buffer.from(`${username}:${config.stalwart.mailPassword ?? ""}`).toString("base64");
-  const response = await request(config.auth.introspectUrl, {
-    method: "POST",
-    headers: { authorization: `Basic ${basic}`, "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ token, token_type_hint: "access_token" }),
-    redirect: "error",
-    signal: AbortSignal.timeout(5000),
-  });
-  if (!response.ok) return null;
-  const claims = identityClaims(await response.json());
-  if (claims && request === fetch) {
-    remember(introspectionCache, token, { claims, expiresAt: Math.min(claims.expiresAt, Date.now() + INTROSPECTION_CACHE_TTL_MS) });
+  if (cached) tokenCache.delete(token);
+  try {
+    const jwks = createRemoteJWKSet(new URL(`${config.auth.issuer}/jwks`));
+    const verified = await jwtVerify(token, jwks, { issuer: config.auth.issuer, audience: config.auth.stalwartAudience });
+    if (typeof verified.payload.sub !== "string" || typeof verified.payload.exp !== "number") return null;
+    const claims: VerifiedClaims = {
+      sub: verified.payload.sub,
+      email: typeof verified.payload.email === "string" ? verified.payload.email : undefined,
+      emailVerified: verified.payload.email_verified === true,
+      expiresAt: verified.payload.exp * 1000,
+    };
+    if (request === fetch) remember(tokenCache, token, { claims, expiresAt: Math.min(claims.expiresAt, Date.now() + TOKEN_CACHE_TTL_MS) });
+    return claims;
+  } catch {
+    return null;
   }
-  return claims;
 }
 
 export async function resolveUser(identityProvider: string, subject: string): Promise<AuthenticatedUser | null> {

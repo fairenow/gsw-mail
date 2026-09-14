@@ -121,3 +121,5 @@ Live acceptance remains required: start with a migrated mailbox in `pending`, se
 The exact `/mail` page rewrite must precede the `/mail/:path*` API proxy in Vercel. `/mail` and `/sign-in` serve the web entry point; nested mail resources continue to reach Railway. Deployment checks must verify the `/mail` HTML response as well as API health.
 
 Account resolution now displays the supplied `/loading-animation-1.gif` while session/context requests are pending. Status copy remains driven by real progress. Success and reduced-motion preferences use the static logo; navigation does not wait for the GIF to finish.
+
+Mailbox access is now staged behind Better Auth OAuth Provider interoperability. Ramon and Alyssa tokens must resolve to their existing Stalwart principals before any production authentication-directory change. No shared mailbox credential or impersonation path is permitted; provisioning credentials remain limited to Stalwart lifecycle management.

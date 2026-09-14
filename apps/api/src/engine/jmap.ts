@@ -20,8 +20,6 @@ export type JmapMethodCall = [string, Record<string, unknown>, string];
 export interface JmapClientOptions {
   baseUrl: string;
   token?: string;
-  username?: string;
-  password?: string;
   sessionTtlMs: number;
   fetchImpl?: typeof fetch;
   onSlowOperation?: (operation: string, durationMs: number) => void;
@@ -36,10 +34,7 @@ const authorizationHeader = (opts: JmapClientOptions): string => {
   if (opts.token) {
     return `Bearer ${opts.token}`;
   }
-  if (opts.username && opts.password) {
-    return `Basic ${Buffer.from(`${opts.username}:${opts.password}`, "utf8").toString("base64")}`;
-  }
-  throw new Error("JMAP client requires either a service credential or a Bearer token");
+  throw new Error("JMAP client requires a user-scoped Bearer token");
 };
 
 export class JmapClient {

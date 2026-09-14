@@ -45,8 +45,33 @@ HOSTNAME=mx1.guidedstepswellness.com       # server hostname
 1. Settings → Server → Network: confirm hostname.
 2. Management → Directory → Domains: add `guidedstepswellness.com` — the UI prints the
    MX/SPF/DKIM/DMARC records to add (mirror `docs/DNS.md`).
-3. Management → Directory → Accounts/Groups: create accounts + passwords. These are the
-   JMAP/IMAP credentials the GSW Mail API uses to read/write mailboxes.
+3. Management → Directory → Accounts/Groups: preserve existing accounts and principals.
+   Provisioning credentials are for lifecycle management only and are never used for
+   normal JMAP mail access.
+
+## Better Auth OIDC directory
+
+Configure a separate OIDC directory only after the interoperability spike succeeds:
+
+```json
+{
+  "@type": "Oidc",
+  "description": "GSW Better Auth",
+  "issuerUrl": "https://mail.guidedstepswellness.com/api/auth",
+  "requireAudience": "stalwart",
+  "requireScopes": { "openid": true, "email": true },
+  "claimUsername": "email",
+  "claimName": "name"
+}
+```
+
+Do not configure `usernameDomain`. Validate discovery, JWKS, Ramon, and Alyssa
+JMAP sessions before switching the production authentication directory.
+
+Register the confidential Better Auth OAuth client through the Better Auth admin
+API with the callback URI in `BETTER_AUTH_STALWART_REDIRECT_URI`, scopes
+`openid email`, PKCE enabled, and consent skipped only for this first-party
+server client. Store its secret only in the API environment.
 
 ## Protocol/port map
 | Port | Service | Bind |

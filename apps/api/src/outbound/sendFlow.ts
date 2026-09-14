@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { getEngine } from "../engine/index.js";
+import { getUserEngine } from "../engine/index.js";
 import type { SendAttachment } from "../engine/types.js";
 import { badRequest, conflict } from "../lib/errors.js";
 import { generateMessageId } from "../lib/messageId.js";
@@ -25,6 +25,8 @@ import {
 export interface SubmitSendInput {
   userId: string;
   accessToken?: string | undefined;
+  authUserId?: string | undefined;
+  headers?: Record<string, string> | undefined;
   account: AccessibleAccount;
   to: string[];
   cc?: string[] | undefined;
@@ -68,7 +70,9 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
   const now = new Date();
   const nextAttemptAt = new Date(now.getTime() + config.send.delaySeconds * 1000);
   const messageId = generateMessageId();
-  const engine = getEngine(input.accessToken);
+  const engine = input.authUserId && input.headers
+    ? await getUserEngine({ productUserId: input.userId, authUserId: input.authUserId, accountId: input.account.id, headers: input.headers, permission: "send" })
+    : (() => { throw new Error("user-scoped OAuth context required for sending"); })();
   const templateKey = input.templateKey ?? DEFAULT_MAIL_TEMPLATE_KEY;
   const safeHtml = input.htmlBody ? sanitizeRichText(input.htmlBody) : undefined;
   const [signature] = await db.select().from(emailSignatures).where(eq(emailSignatures.userId, input.userId)).limit(1);
