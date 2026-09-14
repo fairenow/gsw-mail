@@ -41,9 +41,14 @@ export async function getStalwartAccessToken(input: StalwartTokenRequest, reques
   }).toString();
 
   const cookiePresent = Boolean(input.headers.cookie);
+  const authorizeHeaders: Record<string, string> = {
+    ...(input.headers.cookie ? { cookie: input.headers.cookie } : {}),
+    ...(input.headers["user-agent"] ? { "user-agent": input.headers["user-agent"] } : {}),
+    accept: "application/json",
+  };
   let sessionBeforeAuthorize: string | null = null;
   try {
-    const session = await auth.api.getSession({ headers: fromNodeHeaders(input.headers) });
+    const session = await auth.api.getSession({ headers: fromNodeHeaders(authorizeHeaders) });
     sessionBeforeAuthorize = session?.user.id ?? null;
   } catch {
     sessionBeforeAuthorize = null;
@@ -62,19 +67,32 @@ export async function getStalwartAccessToken(input: StalwartTokenRequest, reques
   const startedAt = Date.now();
   const authorizeResponse = await request(authorize, {
     redirect: "manual",
-    headers: input.headers,
+    headers: authorizeHeaders,
     signal: AbortSignal.timeout(10_000),
   });
   const contentType = authorizeResponse.headers.get("content-type");
-  const location = authorizeResponse.headers.get("location");
+  let callbackUrl = authorizeResponse.headers.get("location");
+  let jsonRedirectPresent = false;
+  let responseBody = "";
+  if (authorizeResponse.status === 200 && contentType?.includes("application/json")) {
+    const result = await authorizeResponse.json() as { redirect?: boolean; url?: string };
+    if (result.redirect === true && typeof result.url === "string") {
+      callbackUrl = result.url;
+      jsonRedirectPresent = true;
+    }
+  }
+  const responseMode = callbackUrl ? (jsonRedirectPresent ? "json_redirect" : "http_redirect") : "interactive";
   console.info("[oauth] authorize_response", {
     status: authorizeResponse.status,
     contentType,
-    locationPresent: Boolean(location),
+    responseMode,
+    locationPresent: Boolean(authorizeResponse.headers.get("location")),
+    jsonRedirectPresent,
     durationMs: Date.now() - startedAt,
   });
-  if (authorizeResponse.status < 300 || authorizeResponse.status >= 400) {
-    const body = (await authorizeResponse.text()).slice(0, 300).toLowerCase();
+  if (!callbackUrl) {
+    if (authorizeResponse.status !== 200 || !contentType?.includes("application/json")) responseBody = (await authorizeResponse.text()).slice(0, 300).toLowerCase();
+    const body = responseBody;
     const classification = body.includes("consent")
       ? "consent_required"
       : body.includes("sign in") || body.includes("login")
@@ -94,14 +112,15 @@ export async function getStalwartAccessToken(input: StalwartTokenRequest, reques
     if (authorizeResponse.status === 200) throw new Error("oauth_interaction_required");
     throw new Error(`Better Auth OAuth authorization failed: HTTP ${authorizeResponse.status}`);
   }
-  if (!location) throw new Error("Better Auth OAuth authorization did not return a callback");
-  const callback = new URL(location);
+  const callback = new URL(callbackUrl, config.auth.issuer);
   if (callback.searchParams.get("state") !== state) throw new Error("Better Auth OAuth state validation failed");
   const error = callback.searchParams.get("error");
   if (error) throw new Error(`Better Auth OAuth authorization denied: ${error}`);
   const code = callback.searchParams.get("code");
   if (!code) throw new Error("Better Auth OAuth authorization did not return a code");
+  console.info("[oauth] authorization_code_received", { authUserId: input.authUserId, accountId: input.accountId });
 
+  console.info("[oauth] token_exchange_start", { authUserId: input.authUserId, accountId: input.accountId });
   const tokenResponse = await request(`${config.auth.issuer}/oauth2/token`, {
     method: "POST",
     headers: {
@@ -120,6 +139,7 @@ export async function getStalwartAccessToken(input: StalwartTokenRequest, reques
   if (!tokenResponse.ok) throw new Error(`Better Auth OAuth token exchange failed: HTTP ${tokenResponse.status}`);
   const token = await tokenResponse.json() as { access_token?: string; expires_in?: number };
   if (!token.access_token) throw new Error("Better Auth OAuth token response was invalid");
+  console.info("[oauth] token_received", { authUserId: input.authUserId, accountId: input.accountId, expiresIn: token.expires_in ?? config.auth.tokenTtlSeconds });
   const expiresAt = Date.now() + Math.max(60, (token.expires_in ?? config.auth.tokenTtlSeconds) - 60) * 1000;
   cache.set(cacheKey, { token: token.access_token, expiresAt });
   if (cache.size > 1024) cache.delete(cache.keys().next().value!);
