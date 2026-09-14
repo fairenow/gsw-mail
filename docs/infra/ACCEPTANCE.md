@@ -18,4 +18,19 @@ Provision Ramon and Alyssa with separate identity subjects and private accounts.
 6. Supply organizationId explicitly for every admin request. Verify Alyssa cannot administer the organization and Ramon cannot read an unrelated organization.
 7. Inspect received headers for SPF, DKIM and DMARC results. Record timestamps, send IDs, relay IDs, recipients, failures and the deployed image digest.
 
+### Stalwart bearer-session acceptance
+
+After any Stalwart OIDC or JWKS configuration change, restart only the
+Stalwart service before this check. For each real identity, confirm the API
+records `jmap_session_start` followed by `jmap_session_success`, with safe
+metadata showing `tokenFormat: jwt`, issuer
+`https://mail.guidedstepswellness.com/api/auth`, audience `stalwart`, and the
+actual mailbox address. Confirm `GET /.well-known/jmap` returns HTTP 200 and
+that the session exposes only the user's own and explicitly delegated
+accounts.
+
+Run this with Ramon, then Alyssa, `support@`, `admin@`, and `test@` in
+separate browser profiles. Do not log bearer tokens, recreate principals, or
+use shared credentials.
+
 Live acceptance status: not run; requires a running Stalwart host, real identities, relay credentials and test recipients. Automated acceptance does not demonstrate Internet delivery.

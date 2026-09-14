@@ -74,6 +74,12 @@ metadata (`iss`, `aud`, `email`, `preferred_username`, `scope`, `exp`, `alg`,
 and `kid`) with this directory and verify that the issuer discovery and JWKS
 are reachable from the Stalwart host. Never log or paste the bearer token.
 
+After changing the OIDC directory, active authentication directory, issuer or
+JWKS settings, audience, scopes, or claim mappings, restart only the Stalwart
+service before validating JMAP bearer authentication. Runtime configuration
+and JWKS state may remain stale until restart; do not recreate mailboxes or
+change mailbox passwords as part of this validation.
+
 Register the confidential Better Auth OAuth client through the Better Auth admin
 API with the callback URI in `BETTER_AUTH_STALWART_REDIRECT_URI`, scopes
 `openid email`, PKCE enabled, and consent skipped only for this first-party
@@ -108,6 +114,19 @@ configured as a relay client later if GSW's queue is replaced.
 
 ## Health
 The API engine status discovers the authenticated JMAP session at `/.well-known/jmap`. Use `/admin/health?organizationId=<uuid>` with an administrator JWT for dependency monitoring. No curl-based healthcheck is assumed inside the Stalwart image.
+
+Production bearer acceptance requires all of the following:
+
+- `tokenFormat` is `jwt` and `alg` is `ES256`.
+- `iss` is `https://mail.guidedstepswellness.com/api/auth`.
+- `aud` includes `stalwart`.
+- `email` is the actual mailbox address.
+- `GET /.well-known/jmap` returns HTTP 200 and the API records `jmap_session_success`.
+
+Run this check for Ramon, Alyssa, `support@`, `admin@`, and `test@` using
+separate Better Auth identities. Confirm each identity sees only its own
+mailbox and explicitly delegated mailboxes; never use impersonation or shared
+credentials.
 
 ## Logs
 `docker compose -f infra/docker-compose.yml logs -f stalwart`
