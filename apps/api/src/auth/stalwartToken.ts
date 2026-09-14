@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { fromNodeHeaders } from "better-auth/node";
+import { decodeJwt, decodeProtectedHeader } from "jose";
 import { config } from "../config.js";
 import { auth } from "./better.js";
 
@@ -12,6 +13,46 @@ export interface StalwartTokenRequest {
 interface CachedToken {
   token: string;
   expiresAt: number;
+}
+
+export interface StalwartTokenMetadata {
+  alg?: string;
+  kid?: string;
+  iss?: string;
+  aud?: string | string[];
+  email?: string;
+  preferred_username?: string;
+  scope?: string | string[];
+  exp?: number;
+}
+
+export function decodeStalwartTokenMetadata(token: string): StalwartTokenMetadata | undefined {
+  try {
+    const header = decodeProtectedHeader(token);
+    const claims = decodeJwt(token);
+    const aud = typeof claims.aud === "string"
+      ? claims.aud
+      : Array.isArray(claims.aud) && claims.aud.every((value) => typeof value === "string")
+        ? claims.aud
+        : undefined;
+    const scope = typeof claims.scope === "string"
+      ? claims.scope
+      : Array.isArray(claims.scope) && claims.scope.every((value) => typeof value === "string")
+        ? claims.scope
+        : undefined;
+    return {
+      ...(typeof header.alg === "string" ? { alg: header.alg } : {}),
+      ...(typeof header.kid === "string" ? { kid: header.kid } : {}),
+      ...(typeof claims.iss === "string" ? { iss: claims.iss } : {}),
+      ...(aud ? { aud } : {}),
+      ...(typeof claims.email === "string" ? { email: claims.email } : {}),
+      ...(typeof claims.preferred_username === "string" ? { preferred_username: claims.preferred_username } : {}),
+      ...(scope ? { scope } : {}),
+      ...(typeof claims.exp === "number" ? { exp: claims.exp } : {}),
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 const cache = new Map<string, CachedToken>();
@@ -139,7 +180,20 @@ export async function getStalwartAccessToken(input: StalwartTokenRequest, reques
   if (!tokenResponse.ok) throw new Error(`Better Auth OAuth token exchange failed: HTTP ${tokenResponse.status}`);
   const token = await tokenResponse.json() as { access_token?: string; expires_in?: number };
   if (!token.access_token) throw new Error("Better Auth OAuth token response was invalid");
-  console.info("[oauth] token_received", { authUserId: input.authUserId, accountId: input.accountId, expiresIn: token.expires_in ?? config.auth.tokenTtlSeconds });
+  const tokenMetadata = decodeStalwartTokenMetadata(token.access_token);
+  console.info("[oauth] token_received", {
+    authUserId: input.authUserId,
+    accountId: input.accountId,
+    expiresIn: token.expires_in ?? config.auth.tokenTtlSeconds,
+    oauth_token_alg: tokenMetadata?.alg,
+    oauth_token_kid: tokenMetadata?.kid,
+    oauth_token_iss: tokenMetadata?.iss,
+    oauth_token_aud: tokenMetadata?.aud,
+    oauth_token_email: tokenMetadata?.email,
+    oauth_token_preferred_username: tokenMetadata?.preferred_username,
+    oauth_token_scope: tokenMetadata?.scope,
+    oauth_token_exp: tokenMetadata?.exp,
+  });
   const expiresAt = Date.now() + Math.max(60, (token.expires_in ?? config.auth.tokenTtlSeconds) - 60) * 1000;
   cache.set(cacheKey, { token: token.access_token, expiresAt });
   if (cache.size > 1024) cache.delete(cache.keys().next().value!);

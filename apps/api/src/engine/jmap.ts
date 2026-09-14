@@ -9,7 +9,7 @@ export interface JmapSession {
 }
 
 export class JmapError extends Error {
-  constructor(message: string, readonly type: string, readonly callId?: string, readonly response?: unknown) {
+  constructor(message: string, readonly type: string, readonly callId?: string, readonly response?: unknown, readonly status?: number) {
     super(message);
     this.name = "JmapError";
   }
@@ -60,7 +60,13 @@ export class JmapClient {
     });
     this.reportSlow("JMAP session", started);
     if (!res.ok) {
-      throw new JmapError(`JMAP session request failed: HTTP ${res.status} ${res.statusText}`, "session_failed");
+      throw new JmapError(
+        `JMAP session request failed: HTTP ${res.status} ${res.statusText}`,
+        res.status === 401 ? "mail_identity_rejected" : "session_failed",
+        undefined,
+        undefined,
+        res.status,
+      );
     }
     const body = (await res.json()) as JmapSession;
     if (!body.apiUrl || typeof body.apiUrl !== "string") {
@@ -96,7 +102,13 @@ export class JmapClient {
     });
     this.reportSlow(methods.map(([name]) => name).join(", "), started);
     if (!res.ok) {
-      throw new JmapError(`JMAP request failed: HTTP ${res.status} ${res.statusText}`, "request_failed");
+      throw new JmapError(
+        `JMAP request failed: HTTP ${res.status} ${res.statusText}`,
+        res.status === 401 ? "mail_identity_rejected" : "request_failed",
+        undefined,
+        undefined,
+        res.status,
+      );
     }
     const body = (await res.json()) as { methodResponses: [string, Record<string, unknown>, string | null][] };
     const responses = body.methodResponses ?? [];

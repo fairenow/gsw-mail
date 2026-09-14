@@ -24,6 +24,7 @@ import recovery from "./routes/recovery.js";
 import { auth as betterAuth } from "./auth/better.js";
 import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } from "@better-auth/oauth-provider";
 import { config } from "./config.js";
+import { JmapError } from "./engine/jmap.js";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -58,6 +59,9 @@ export function buildApp() {
     }
     if (error instanceof ZodError) {
       return reply.code(400).send({ error: "invalid request", issues: error.issues });
+    }
+    if (error instanceof JmapError && error.type === "mail_identity_rejected") {
+      return reply.code(401).send({ error: "mail_identity_rejected" });
     }
     if ((error as { code?: string }).code === "FST_ERR_CTP_INVALID_MEDIA_TYPE") {
       return reply.code(415).send({ error: "unsupported media type" });

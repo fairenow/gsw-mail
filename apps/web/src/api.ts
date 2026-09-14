@@ -130,10 +130,11 @@ const headers = (jsonBody = false): Record<string, string> => {
 };
 
 const json = async <T,>(res: Response): Promise<T> => {
-  if (res.status === 401) window.dispatchEvent(new Event("gsw-account-error"));
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const details = body as { message?: string; error?: string };
+    if (res.status === 401 && details.error !== "mail_identity_rejected") window.dispatchEvent(new Event("gsw-account-error"));
+    if (details.error === "mail_identity_rejected") throw new Error("Your mailbox connection needs attention. Retry to reconnect.");
     throw new Error(details.message ?? details.error ?? `request failed: ${res.status}`);
   }
   if (res.status === 204) return undefined as T;

@@ -68,6 +68,12 @@ Configure a separate OIDC directory only after the interoperability spike succee
 Do not configure `usernameDomain`. Validate discovery, JWKS, Ramon, and Alyssa
 JMAP sessions before switching the production authentication directory.
 
+The directory must be the active `Authentication.directoryId`, not merely a
+created directory object. For a rejected JMAP session, compare the safe token
+metadata (`iss`, `aud`, `email`, `preferred_username`, `scope`, `exp`, `alg`,
+and `kid`) with this directory and verify that the issuer discovery and JWKS
+are reachable from the Stalwart host. Never log or paste the bearer token.
+
 Register the confidential Better Auth OAuth client through the Better Auth admin
 API with the callback URI in `BETTER_AUTH_STALWART_REDIRECT_URI`, scopes
 `openid email`, PKCE enabled, and consent skipped only for this first-party
