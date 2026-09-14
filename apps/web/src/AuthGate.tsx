@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { getAccountContext, getSession, logout, requestOneTimeCode, requestPasswordResetCode, resetPasswordWithCode, setPassword, signInWithCode, signInWithPassword, type AuthSession } from "./auth";
+import { getSession, logout, requestOneTimeCode, requestPasswordResetCode, resetPasswordWithCode, resolveAccountContext, setPassword, signInWithCode, signInWithPassword, type AuthSession } from "./auth";
 import { AuthCard } from "./components/auth/AuthCard";
 import { AuthError } from "./components/auth/AuthError";
 import { AuthPage } from "./components/auth/AuthPage";
@@ -41,7 +41,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       if (!current) { setLoading(false); return; }
       if (window.location.pathname === "/create-password") { setLoading(false); return; }
       setResolution("connecting");
-      const context = await getAccountContext();
+       const context = await resolveAccountContext();
       if (attempt !== generation.current) return;
       setResolution("resolved");
       await new Promise((resolve) => setTimeout(resolve, 450));

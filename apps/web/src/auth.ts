@@ -12,6 +12,13 @@ export interface AccountContext {
   defaultDestination: "setup" | "control-center" | "mail";
 }
 
+export class AccountContextError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "AccountContextError";
+  }
+}
+
 async function authRequest<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`/api/auth${path}`, {
     method: body ? "POST" : "GET",
@@ -32,9 +39,23 @@ export function getSession(): Promise<AuthSession | null> {
 export function getAccountContext(): Promise<AccountContext> {
   return fetch("/api/account/context", { credentials: "include", signal: AbortSignal.timeout(15000) }).then(async (response) => {
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error ?? "Could not load account context.");
+    if (!response.ok) throw new AccountContextError(result.error ?? "Could not load account context.", response.status);
     return result as AccountContext;
   });
+}
+
+export async function resolveAccountContext(): Promise<AccountContext> {
+  let lastError: unknown;
+  for (const delay of [0, 250, 750]) {
+    if (delay) await new Promise((resolve) => window.setTimeout(resolve, delay));
+    try {
+      return await getAccountContext();
+    } catch (error) {
+      lastError = error;
+      if (!(error instanceof AccountContextError) || ![409, 503].includes(error.status)) throw error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Could not resolve account context.");
 }
 
 export function requestOneTimeCode(email: string): Promise<unknown> {

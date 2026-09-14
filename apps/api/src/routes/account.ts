@@ -13,6 +13,15 @@ export default async function accountRoutes(app: FastifyInstance) {
     const userId = req.user!.id;
     const [productUser] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!productUser || productUser.status !== "active") throw conflict("Account linkage unavailable");
+    if (!productUser.authUserId) throw conflict("Account linkage unavailable");
+    await db.transaction(async (tx) => {
+      const owned = await tx.select({ id: emailAccounts.id, workspaceId: emailAccounts.workspaceId, status: emailAccounts.status, authSetupStatus: emailAccounts.authSetupStatus }).from(emailAccounts).where(eq(emailAccounts.userId, userId));
+      for (const mailbox of owned) {
+        if (mailbox.status !== "active" || mailbox.authSetupStatus !== "ready") continue;
+        await tx.insert(mailAccountMemberships).values({ accountId: mailbox.id, userId, authUserId: productUser.authUserId!, role: "owner" }).onConflictDoUpdate({ target: [mailAccountMemberships.accountId, mailAccountMemberships.userId], set: { authUserId: productUser.authUserId!, role: "owner" } });
+      }
+      await tx.update(mailAccountMemberships).set({ authUserId: productUser.authUserId! }).where(eq(mailAccountMemberships.userId, userId));
+    });
     const workspaces = await db
       .select({ id: organizations.id, name: organizations.name, role: organizationMemberships.role, status: organizationMemberships.status, setupStep: workspaceSetupStates.currentStep, migratedFromExisting: workspaceSetupStates.migratedFromExisting })
       .from(organizationMemberships)
