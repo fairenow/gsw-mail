@@ -6,7 +6,7 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import { Resend } from "resend";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
-import { authAccounts, authSessions, authUsers, authVerifications, domains, emailAccounts, organizationMemberships, users } from "../db/schema.js";
+import { authAccounts, authSessions, authUsers, authVerifications, domains, emailAccounts, jwks, oauthAccessToken, oauthClient, oauthConsent, oauthRefreshToken, organizationMemberships, users } from "../db/schema.js";
 import { and, eq } from "drizzle-orm";
 import { renderGswAuthEmail } from "./email.js";
 
@@ -43,7 +43,7 @@ async function recoveryEmailForMailbox(email: string): Promise<string | null> {
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "pg",
-    schema: { user: authUsers, session: authSessions, account: authAccounts, verification: authVerifications },
+     schema: { user: authUsers, session: authSessions, account: authAccounts, verification: authVerifications, jwks, oauthClient, oauthRefreshToken, oauthAccessToken, oauthConsent },
   }),
   baseURL: config.auth.baseUrl,
   basePath: "/api/auth",
