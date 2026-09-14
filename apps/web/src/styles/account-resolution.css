@@ -1,21 +1,10 @@
 .gsw-resolution { text-align: center; }
 .gsw-resolution-art { position: relative; width: 160px; height: 140px; margin: 0 auto 24px; }
-.gsw-resolution-art img { position: absolute; width: 104px; height: 104px; object-fit: contain; left: 28px; top: 24px; z-index: 2; }
-.gsw-resolution-idle img { animation: gsw-breathe 700ms ease-in-out infinite; }
-.gsw-resolution-resolving img, .gsw-resolution-connecting img { animation: gsw-rise 1s ease-in-out infinite; }
-.gsw-resolution-sparks { position: absolute; inset: 0; fill: none; stroke: #c99b43; stroke-width: 3; stroke-linecap: round; opacity: 0; }
-.gsw-resolution-resolving .gsw-resolution-sparks, .gsw-resolution-connecting .gsw-resolution-sparks { animation: gsw-spark 1s ease-in-out infinite; }
-.gsw-resolution-card { position: absolute; left: 56px; top: 28px; width: 48px; height: 54px; padding-top: 8px; border: 2px solid #c99b43; border-radius: 8px; background: #fffaf0; color: #82632c; opacity: 0; }
-.gsw-resolution-connecting .gsw-resolution-card { animation: gsw-card 500ms ease-out forwards; }
+.gsw-resolution-art img { position: absolute; width: 160px; height: 140px; object-fit: contain; left: 0; top: 0; z-index: 2; }
 .gsw-resolution-check { position: absolute; z-index: 3; right: 20px; bottom: 6px; width: 32px; height: 32px; line-height: 32px; border-radius: 50%; background: #347d53; color: white; opacity: 0; }
 .gsw-resolution-resolved .gsw-resolution-check { animation: gsw-check 400ms ease-out forwards; }
-@keyframes gsw-breathe { 50% { transform: scale(1.03); opacity: .95; } }
-@keyframes gsw-rise { 50% { transform: translateY(-4px); } }
-@keyframes gsw-spark { 50% { opacity: 1; } }
-@keyframes gsw-card { to { opacity: 1; transform: translateY(-22px); } }
 @keyframes gsw-check { 0% { opacity: 0; transform: scale(0); } 75% { opacity: 1; transform: scale(1.1); } 100% { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) {
   .gsw-resolution * { animation: none !important; transform: none !important; transition: opacity 150ms linear; }
-  .gsw-resolution-connecting .gsw-resolution-card { opacity: 1; top: 6px; }
   .gsw-resolution-resolved .gsw-resolution-check { opacity: 1; }
 }
