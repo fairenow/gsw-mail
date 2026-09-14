@@ -1,4 +1,5 @@
 import cors from "@fastify/cors";
+import formbody from "@fastify/formbody";
 import rateLimit from "@fastify/rate-limit";
 import Fastify from "fastify";
 import { ZodError } from "zod";
@@ -29,6 +30,7 @@ export function buildApp() {
 
   app.register(cors, { origin: true });
   app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
+  app.register(formbody);
   const metadataResponse = async (handler: (request: Request) => Promise<Response>, req: { url: string; headers: Record<string, string | string[] | undefined> }, reply: { code: (status: number) => { header: (name: string, value: string) => unknown; send: (body: Buffer) => unknown } }) => {
     const response = await handler(new Request(`${config.auth.baseUrl}${req.url}`, { headers: req.headers as Record<string, string> }));
     const target = reply.code(response.status);
@@ -38,11 +40,11 @@ export function buildApp() {
   app.get("/api/auth/.well-known/openid-configuration", async (req, reply) => metadataResponse(oauthProviderOpenIdConfigMetadata(betterAuth), req, reply));
   app.get("/api/auth/.well-known/oauth-authorization-server", async (req, reply) => metadataResponse(oauthProviderAuthServerMetadata(betterAuth), req, reply));
   app.all("/api/auth/*", async (req, reply) => {
-    const body = req.method === "GET" || req.method === "HEAD" ? undefined : JSON.stringify(req.body ?? {});
+    const body = betterAuthBody(req);
     const request = new Request(`${config.auth.baseUrl}${req.url}`, {
       method: req.method,
       headers: req.headers as Record<string, string>,
-      ...(body ? { body } : {}),
+      ...(body !== undefined ? { body } : {}),
     });
     const response = await betterAuth.handler(request);
     reply.code(response.status);
@@ -56,6 +58,9 @@ export function buildApp() {
     }
     if (error instanceof ZodError) {
       return reply.code(400).send({ error: "invalid request", issues: error.issues });
+    }
+    if ((error as { code?: string }).code === "FST_ERR_CTP_INVALID_MEDIA_TYPE") {
+      return reply.code(415).send({ error: "unsupported media type" });
     }
     app.log.error(error);
     return reply.code(500).send({ error: "internal server error" });
@@ -83,4 +88,27 @@ export function buildApp() {
   app.register(recovery);
 
   return app;
+}
+
+function betterAuthBody(req: { method: string; headers: Record<string, string | string[] | undefined>; body?: unknown }): string | undefined {
+  if (req.method === "GET" || req.method === "HEAD") return undefined;
+  const contentType = String(req.headers["content-type"] ?? "").split(";", 1)[0]!.trim().toLowerCase();
+  if (contentType === "application/x-www-form-urlencoded") {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries((req.body ?? {}) as Record<string, unknown>)) {
+      if (value == null) continue;
+      if (Array.isArray(value)) {
+        for (const item of value) params.append(key, String(item));
+      } else {
+        params.set(key, String(value));
+      }
+    }
+    return params.toString();
+  }
+  if (contentType === "application/json" || contentType === "") return JSON.stringify(req.body ?? {});
+  if (typeof req.body === "string") return req.body;
+  const error = new Error(`unsupported Better Auth content type: ${contentType || "missing"}`) as Error & { code?: string; statusCode?: number };
+  error.code = "FST_ERR_CTP_INVALID_MEDIA_TYPE";
+  error.statusCode = 415;
+  throw error;
 }

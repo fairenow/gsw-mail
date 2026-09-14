@@ -23,6 +23,7 @@
   "dependencies": {
     "@better-auth/oauth-provider": "^1.6.0",
     "@fastify/cors": "^10.0.1",
+    "@fastify/formbody": "^8.0.2",
     "@fastify/rate-limit": "^11.2.0",
     "@opentelemetry/api": "^1.9.0",
     "better-auth": "1.6.0",
