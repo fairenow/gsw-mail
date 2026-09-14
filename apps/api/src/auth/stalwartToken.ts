@@ -20,10 +20,17 @@ export interface StalwartTokenMetadata {
   kid?: string;
   iss?: string;
   aud?: string | string[];
+  sub?: string;
   email?: string;
   preferred_username?: string;
   scope?: string | string[];
   exp?: number;
+}
+
+export type StalwartTokenFormat = "jwt" | "opaque";
+
+export function getStalwartTokenFormat(token: string): StalwartTokenFormat {
+  return token.split(".").length === 3 ? "jwt" : "opaque";
 }
 
 export function decodeStalwartTokenMetadata(token: string): StalwartTokenMetadata | undefined {
@@ -45,6 +52,7 @@ export function decodeStalwartTokenMetadata(token: string): StalwartTokenMetadat
       ...(typeof header.kid === "string" ? { kid: header.kid } : {}),
       ...(typeof claims.iss === "string" ? { iss: claims.iss } : {}),
       ...(aud ? { aud } : {}),
+      ...(typeof claims.sub === "string" ? { sub: claims.sub } : {}),
       ...(typeof claims.email === "string" ? { email: claims.email } : {}),
       ...(typeof claims.preferred_username === "string" ? { preferred_username: claims.preferred_username } : {}),
       ...(scope ? { scope } : {}),
@@ -174,6 +182,7 @@ export async function getStalwartAccessToken(input: StalwartTokenRequest, reques
       redirect_uri: config.auth.oauthRedirectUri,
       client_id: config.auth.oauthClientId,
       code_verifier: verifier,
+      resource: config.auth.stalwartAudience,
     }),
     signal: AbortSignal.timeout(10_000),
   });
@@ -185,10 +194,12 @@ export async function getStalwartAccessToken(input: StalwartTokenRequest, reques
     authUserId: input.authUserId,
     accountId: input.accountId,
     expiresIn: token.expires_in ?? config.auth.tokenTtlSeconds,
+    oauth_token_format: getStalwartTokenFormat(token.access_token),
     oauth_token_alg: tokenMetadata?.alg,
     oauth_token_kid: tokenMetadata?.kid,
     oauth_token_iss: tokenMetadata?.iss,
     oauth_token_aud: tokenMetadata?.aud,
+    oauth_token_sub: tokenMetadata?.sub,
     oauth_token_email: tokenMetadata?.email,
     oauth_token_preferred_username: tokenMetadata?.preferred_username,
     oauth_token_scope: tokenMetadata?.scope,
