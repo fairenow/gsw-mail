@@ -21,6 +21,7 @@ import account from "./routes/account.js";
 import mailboxSetup from "./routes/mailboxSetup.js";
 import recovery from "./routes/recovery.js";
 import { auth as betterAuth } from "./auth/better.js";
+import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } from "@better-auth/oauth-provider";
 import { config } from "./config.js";
 
 export function buildApp() {
@@ -28,6 +29,14 @@ export function buildApp() {
 
   app.register(cors, { origin: true });
   app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
+  const metadataResponse = async (handler: (request: Request) => Promise<Response>, req: { url: string; headers: Record<string, string | string[] | undefined> }, reply: { code: (status: number) => { header: (name: string, value: string) => unknown; send: (body: Buffer) => unknown } }) => {
+    const response = await handler(new Request(`${config.auth.baseUrl}${req.url}`, { headers: req.headers as Record<string, string> }));
+    const target = reply.code(response.status);
+    response.headers.forEach((value, key) => target.header(key, value));
+    return target.send(Buffer.from(await response.arrayBuffer()));
+  };
+  app.get("/api/auth/.well-known/openid-configuration", async (req, reply) => metadataResponse(oauthProviderOpenIdConfigMetadata(betterAuth), req, reply));
+  app.get("/api/auth/.well-known/oauth-authorization-server", async (req, reply) => metadataResponse(oauthProviderAuthServerMetadata(betterAuth), req, reply));
   app.all("/api/auth/*", async (req, reply) => {
     const body = req.method === "GET" || req.method === "HEAD" ? undefined : JSON.stringify(req.body ?? {});
     const request = new Request(`${config.auth.baseUrl}${req.url}`, {
