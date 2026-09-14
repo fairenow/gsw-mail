@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { requireAccountPermission } from "../auth/authorize.js";
-import { getStalwartAccessToken } from "../auth/stalwartToken.js";
+import { decodeStalwartTokenMetadata, getStalwartAccessToken, getStalwartTokenFormat } from "../auth/stalwartToken.js";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { authUsers, emailAccounts, mailAccountMemberships } from "../db/schema.js";
@@ -31,11 +31,23 @@ export function getEngine(accessToken?: string): MailEngine {
   if (!accessToken) throw new Error("user-scoped Stalwart access token required");
   const cached = requestEngines.get(accessToken);
   if (cached && cached.expiresAt > Date.now()) return cached.engine;
+  const tokenMetadata = decodeStalwartTokenMetadata(accessToken);
+  const sessionContext = {
+    mailbox: tokenMetadata?.email ?? "unknown",
+    issuer: config.auth.issuer,
+    audience: config.auth.stalwartAudience,
+    tokenFormat: getStalwartTokenFormat(accessToken),
+  };
   const engine = new StalwartEngine({
     resolveAccount,
     jmapUrl: config.stalwart.jmapUrl,
     accessToken,
     sessionTtlMs: config.stalwart.sessionTtlSeconds * 1000,
+    onSessionEvent: (event, status) => {
+      if (event === "start") console.info("jmap_session_start", sessionContext);
+      if (event === "success") console.info("jmap_session_success", sessionContext);
+      if (event === "rejected") console.warn("jmap_session_rejected", { ...sessionContext, status });
+    },
     onSlowOperation: (operation, durationMs) => console.warn(JSON.stringify({ operation, durationMs: Math.round(durationMs) }), "slow JMAP operation"),
   });
   requestEngines.set(accessToken, { engine, expiresAt: Date.now() + ENGINE_CACHE_TTL_MS });

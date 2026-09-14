@@ -23,6 +23,7 @@ export interface JmapClientOptions {
   sessionTtlMs: number;
   fetchImpl?: typeof fetch;
   onSlowOperation?: (operation: string, durationMs: number) => void;
+  onSessionEvent?: (event: "start" | "success" | "rejected", status?: number) => void;
 }
 
 const abs = (base: string, url: string): string => {
@@ -54,12 +55,14 @@ export class JmapClient {
     if (!force && this.sessionCache && now - this.sessionCache.at < this.opts.sessionTtlMs) {
       return this.sessionCache.session;
     }
+    this.opts.onSessionEvent?.("start");
     const res = await this.fetchImpl(abs(this.opts.baseUrl, "/.well-known/jmap"), {
       method: "GET",
       headers: { Accept: "application/json", Authorization: authorizationHeader(this.opts) },
     });
     this.reportSlow("JMAP session", started);
     if (!res.ok) {
+      this.opts.onSessionEvent?.("rejected", res.status);
       throw new JmapError(
         `JMAP session request failed: HTTP ${res.status} ${res.statusText}`,
         res.status === 401 ? "mail_identity_rejected" : "session_failed",
@@ -77,6 +80,7 @@ export class JmapClient {
     body.downloadUrl = body.downloadUrl ? abs(this.opts.baseUrl, body.downloadUrl) : `${body.apiUrl}/download/`;
     body.blobUrl = body.blobUrl ? abs(this.opts.baseUrl, body.blobUrl) : body.downloadUrl;
     this.sessionCache = { at: now, session: body };
+    this.opts.onSessionEvent?.("success");
     return body;
   }
 

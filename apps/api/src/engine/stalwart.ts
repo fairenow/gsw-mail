@@ -28,6 +28,7 @@ export interface StalwartOptions {
   sessionTtlMs?: number;
   fetchImpl?: typeof fetch;
   onSlowOperation?: (operation: string, durationMs: number) => void;
+  onSessionEvent?: (event: "start" | "success" | "rejected", status?: number) => void;
 }
 
 interface JmapMailbox {
@@ -299,6 +300,7 @@ export class StalwartEngine implements MailEngine {
       sessionTtlMs: opts.sessionTtlMs ?? 60_000,
       ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
       ...(opts.onSlowOperation ? { onSlowOperation: opts.onSlowOperation } : {}),
+      ...(opts.onSessionEvent ? { onSessionEvent: opts.onSessionEvent } : {}),
     });
   }
 
