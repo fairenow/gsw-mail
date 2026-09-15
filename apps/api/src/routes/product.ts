@@ -8,6 +8,8 @@ import { createContact, getContact, getContactEngineContext, listContacts, norma
 import { notFound } from "../lib/errors.js";
 import { mergeImportedEmails, validateImportedEmails } from "../lib/contactImport.js";
 import { richTextToPlainText, sanitizeRichText } from "../lib/richText.js";
+import { getEngine, getUserEngine } from "../engine/index.js";
+import { emailAccounts, mailAccountMemberships } from "../db/schema.js";
 
 const customValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 const contactInput = z.object({
@@ -79,6 +81,20 @@ export default async function productRoutes(app: FastifyInstance) {
   app.get("/product/contacts/address-books", async (req) => {
     const context = await getContactEngineContext(req.user!.id, req.accessToken, req.authUserId, req.headers as Record<string, string>);
     return { addressBooks: context ? await context.engine.listAddressBooks(context.accountId) : [] };
+  });
+
+  app.get("/product/calendars", async (req) => {
+    const engineContext = await getCalendarEngineContext(req.user?.id, req.authUserId, req.headers as Record<string, string>, req.query);
+    return { calendars: engineContext ? await engineContext.engine.listCalendars(engineContext.accountId) : [] };
+  });
+
+  app.get("/product/calendar-events", async (req) => {
+    const params = req.query as { accountId?: unknown; after?: unknown; before?: unknown };
+    const now = new Date();
+    const after = typeof params.after === "string" ? params.after : new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const before = typeof params.before === "string" ? params.before : new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+    const engineContext = await getCalendarEngineContext(req.user?.id, req.authUserId, req.headers as Record<string, string>, req.query);
+    return { events: engineContext ? await engineContext.engine.listCalendarEvents(engineContext.accountId, after, before) : [] };
   });
 
   app.get<{ Params: { id: string } }>("/product/contacts/:id", async (req) => {
@@ -156,6 +172,19 @@ export default async function productRoutes(app: FastifyInstance) {
     reply.code(201);
     return updatedBatch;
   });
+}
+
+async function getCalendarEngineContext(userId: string | undefined, authUserId: string | undefined, headers: Record<string, string>, query: unknown) {
+  if (!userId) return undefined;
+  const params = (query ?? {}) as { accountId?: unknown };
+  const requestedAccountId = typeof params.accountId === "string" ? params.accountId : undefined;
+  const account = requestedAccountId
+    ? (await db.select({ id: emailAccounts.id }).from(emailAccounts).where(eq(emailAccounts.id, requestedAccountId)).limit(1))[0]
+    : (await db.select({ id: emailAccounts.id }).from(emailAccounts).where(eq(emailAccounts.userId, userId)).limit(1))[0]
+      ?? (await db.select({ id: emailAccounts.id }).from(mailAccountMemberships).innerJoin(emailAccounts, eq(mailAccountMemberships.accountId, emailAccounts.id)).where(eq(mailAccountMemberships.userId, userId)).limit(1))[0];
+  if (!account) return undefined;
+  const engine = authUserId ? await getUserEngine({ productUserId: userId, authUserId, accountId: account.id, headers }) : getEngine();
+  return engine ? { accountId: account.id, engine } : undefined;
 }
 
 function defaultSignature() {

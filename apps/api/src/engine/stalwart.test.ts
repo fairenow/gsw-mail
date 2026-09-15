@@ -412,6 +412,9 @@ test("listMessages returns summaries with names", async () => {
   const emailGet = body.methodCalls.find(([name]) => name === "Email/get");
   assert.deepEqual(emailGet![1]["#ids"], { resultOf: "q1", name: "Email/query", path: "/ids" });
   assert.equal(emailGet![1].ids, undefined);
+  assert.equal(emailGet![1].fetchTextBodyValues, undefined);
+  assert.equal(emailGet![1].fetchHTMLBodyValues, undefined);
+  assert.ok((emailGet![1].properties as string[]).includes("preview"));
 });
 
 test("getMessage returns bodies, attachments, and headers", async () => {

@@ -7,6 +7,8 @@ import type {
   EngineAccountId,
   EngineContact,
   EngineContactInput,
+  EngineCalendar,
+  EngineCalendarEvent,
   EngineMessageId,
   EngineThreadId,
   FullMessage,
@@ -51,6 +53,26 @@ interface JmapAddressBook {
   isDefault?: boolean;
 }
 
+interface JmapCalendar {
+  id: string;
+  name: string;
+  color?: string;
+  isDefault?: boolean;
+  timeZone?: string;
+}
+
+interface JmapCalendarEvent {
+  id: string;
+  calendarIds?: Record<string, boolean>;
+  title?: string;
+  description?: string;
+  start?: string;
+  duration?: string;
+  timeZone?: string;
+  locations?: Record<string, { name?: string; description?: string; uri?: string }>;
+  showWithoutTime?: boolean;
+}
+
 interface JmapContact {
   id: string;
   addressBookIds?: Record<string, boolean>;
@@ -73,6 +95,7 @@ interface JmapEmail {
   receivedAt?: string;
   sentAt?: string;
   subject?: string;
+  preview?: string;
   from?: JmapEmailAddress[];
   to?: JmapEmailAddress[];
   cc?: JmapEmailAddress[];
@@ -132,6 +155,22 @@ const GET_PROPERTIES = [
   "header:References",
 ] as const;
 
+const SUMMARY_PROPERTIES = [
+  "id",
+  "threadId",
+  "mailboxIds",
+  "keywords",
+  "size",
+  "receivedAt",
+  "sentAt",
+  "subject",
+  "preview",
+  "from",
+  "to",
+  "cc",
+  "hasAttachment",
+] as const;
+
 const ROLE_TO_ENGINE: Record<string, Exclude<MailboxName["role"], null>> = {
   inbox: "inbox",
   sent: "sent",
@@ -164,6 +203,7 @@ const messageIdsToHeader = (value?: string | string[]): string | undefined => {
 };
 
 const snippetOf = (email: JmapEmail): string => {
+  if (email.preview) return email.preview.replace(/\s+/g, " ").trim().slice(0, 200);
   const partId = email.textBody?.[0]?.partId;
   const value = partId ? email.bodyValues?.[partId]?.value ?? "" : "";
   return value.replace(/\s+/g, " ").trim().slice(0, 200);
@@ -175,6 +215,16 @@ const renderTemplate = (template: string, vars: Record<string, string>): string 
 const presentKeys = (value: Record<string, unknown>): string[] => Object.entries(value).filter(([, item]) => item !== undefined).map(([key]) => key);
 
 const objectValues = <T>(value: Record<string, T> | undefined): T[] => Object.values(value ?? {});
+
+const addDuration = (start: string | undefined, duration: string): string | undefined => {
+  if (!start) return undefined;
+  const match = duration.match(/^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/);
+  if (!match) return undefined;
+  const milliseconds = ((Number(match[1] ?? 0) * 24 + Number(match[2] ?? 0)) * 60 + Number(match[3] ?? 0)) * 60_000 + Number(match[4] ?? 0) * 1_000;
+  const date = new Date(start);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return new Date(date.getTime() + milliseconds).toISOString();
+};
 
 const contactInputToCard = (input: EngineContactInput, addressBookId: string, uid: string): Record<string, unknown> => {
   const card: Record<string, unknown> = {
@@ -292,6 +342,7 @@ export class StalwartEngine implements MailEngine {
   private readonly client: JmapClient;
   private readonly mailboxes = new Map<EngineAccountId, MailboxName[]>();
   private readonly mailboxStats = new Map<EngineAccountId, MailboxStats[]>();
+  private readonly mailboxLoads = new Map<EngineAccountId, Promise<MailboxName[]>>();
 
   constructor(private readonly opts: StalwartOptions) {
     this.client = new JmapClient({
@@ -310,6 +361,20 @@ export class StalwartEngine implements MailEngine {
   }
 
   async listMailboxes(engineAccountId: EngineAccountId): Promise<MailboxName[]> {
+    const cached = this.mailboxes.get(engineAccountId);
+    if (cached) return cached;
+    const loading = this.mailboxLoads.get(engineAccountId);
+    if (loading) return loading;
+    const request = this.loadMailboxes(engineAccountId);
+    this.mailboxLoads.set(engineAccountId, request);
+    try {
+      return await request;
+    } finally {
+      this.mailboxLoads.delete(engineAccountId);
+    }
+  }
+
+  private async loadMailboxes(engineAccountId: EngineAccountId): Promise<MailboxName[]> {
     const session = await this.client.session();
     const accountId = this.client.resolveAccountId(session, this.opts.resolveAccount ? await this.opts.resolveAccount(engineAccountId) : engineAccountId);
     const responses = await this.client.call([
@@ -420,10 +485,7 @@ export class StalwartEngine implements MailEngine {
         {
           accountId,
           "#ids": { resultOf: "q1", name: "Email/query", path: "/ids" },
-          properties: GET_PROPERTIES as unknown as string[],
-          fetchTextBodyValues: true,
-          fetchHTMLBodyValues: true,
-          fetchAllBodyValues: true,
+          properties: SUMMARY_PROPERTIES as unknown as string[],
         },
         "g1",
       ],
@@ -551,10 +613,7 @@ export class StalwartEngine implements MailEngine {
         {
           accountId,
           "#ids": { resultOf: "t1", name: "Thread/get", path: "/list/*/emailIds" },
-          properties: GET_PROPERTIES as unknown as string[],
-          fetchTextBodyValues: true,
-          fetchHTMLBodyValues: true,
-          fetchAllBodyValues: true,
+          properties: SUMMARY_PROPERTIES as unknown as string[],
         },
         "g1",
       ],
@@ -811,6 +870,38 @@ export class StalwartEngine implements MailEngine {
     const responses = await this.client.call([["AddressBook/get", { accountId, ids: null }, "ab1"]]);
     const payload = responses[0]![1] as { list?: JmapAddressBook[] };
     return (payload.list ?? []).map((book) => ({ engineId: book.id, name: book.name, isDefault: book.isDefault === true }));
+  }
+
+  async listCalendars(engineAccountId: EngineAccountId): Promise<EngineCalendar[]> {
+    const { accountId } = await this.accountIdOf(engineAccountId);
+    const responses = await this.client.call([["Calendar/get", { accountId, ids: null, properties: ["id", "name", "color", "isDefault", "timeZone"] }, "cal1"]]);
+    const payload = responses[0]![1] as { list?: JmapCalendar[] };
+    return (payload.list ?? []).map((calendar) => ({
+      engineId: calendar.id,
+      name: calendar.name,
+      ...(calendar.color ? { color: calendar.color } : {}),
+      isDefault: calendar.isDefault === true,
+      ...(calendar.timeZone ? { timeZone: calendar.timeZone } : {}),
+    }));
+  }
+
+  async listCalendarEvents(engineAccountId: EngineAccountId, after: string, before: string): Promise<EngineCalendarEvent[]> {
+    const { accountId } = await this.accountIdOf(engineAccountId);
+    const responses = await this.client.call([
+      ["CalendarEvent/query", { accountId, filter: { after, before }, position: 0, limit: 200, sort: [{ property: "start", isAscending: true }] }, "ceq1"],
+      ["CalendarEvent/get", { accountId, "#ids": { resultOf: "ceq1", name: "CalendarEvent/query", path: "/ids" }, properties: ["id", "calendarIds", "title", "description", "start", "duration", "locations", "showWithoutTime"] }, "ceg1"],
+    ]);
+    const payload = responses[1]![1] as { list?: JmapCalendarEvent[] };
+    return (payload.list ?? []).map((event) => ({
+      engineId: event.id,
+      calendarIds: Object.entries(event.calendarIds ?? {}).filter(([, included]) => included).map(([id]) => id),
+      title: event.title ?? "Untitled event",
+      ...(event.description ? { description: event.description } : {}),
+      start: event.start ?? "",
+      ...(event.duration ? { end: addDuration(event.start, event.duration) } : {}),
+      ...(Object.values(event.locations ?? {})[0]?.name ? { location: Object.values(event.locations ?? {})[0]!.name } : {}),
+      allDay: event.showWithoutTime === true,
+    }));
   }
 
   async listContacts(engineAccountId: EngineAccountId): Promise<EngineContact[]> {

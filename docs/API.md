@@ -162,6 +162,8 @@ that block future sends. Delivery events append to `outbound_delivery_events`
 | GET | `/product/contact-imports` | import history counts, including duplicates and failures |
 | GET | `/product/contact-imports/:id/rows` | raw and failed import rows |
 | POST | `/product/contact-imports` | mapped CSV rows with `skip`, `merge`, or `overwrite` duplicate behavior; returns row, created, updated, skipped, duplicate, and failed counts |
+| GET | `/product/calendars?accountId=` | calendars available through the selected mailbox account's Stalwart JMAP session |
+| GET | `/product/calendar-events?accountId=&after=&before=` | read-only calendar events in the requested ISO date range |
 
 Successful outbound sends asynchronously record each recipient in the caller's
 contact scope, creating a `sent_mail` contact or incrementing engagement on the

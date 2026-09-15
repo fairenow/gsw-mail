@@ -115,6 +115,7 @@ production.
 - AI / automation / analytics / administration
 - User settings and sanitized rich-text signatures
 - Contacts product view, GSW relationship intelligence, engagement history, and CSV import history
+- Read-only calendar view backed by the selected Stalwart mailbox account's JMAP Calendars data
 
 ### Database (Postgres)
 - Product-level metadata only (organizations, domains, accounts, aliases,
@@ -129,7 +130,16 @@ production.
   notes, outreach metadata, engagement counts, custom fields, and CSV import history.
   Legacy Neon identity columns remain as migration cache data until all records are
   linked; linked reads come from Stalwart. Sent-recipient contact growth is best-effort
-  product metadata after Sent persistence and never blocks delivery.
+   product metadata after Sent persistence and never blocks delivery.
+
+Calendar data is not copied into Postgres. Calendar and event reads stay behind
+MailEngine and use the request-scoped Stalwart identity for the selected account.
+
+Inbox list and thread reads request summary-only JMAP properties; full bodies and
+attachments are fetched only when a message is opened. JMAP sessions, OAuth
+access tokens, mailbox metadata, and concurrent in-flight metadata/token loads
+are cached or coalesced within an API process. Message lists remain live reads
+so new mail and mailbox actions are not hidden by an unsafe shared cache.
 
 ### Object storage (future)
 - Large attachments, exports, backups.

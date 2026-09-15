@@ -3,6 +3,8 @@ import type {
   AttachmentMeta,
   EngineAddressBook,
   EngineAccountId,
+  EngineCalendar,
+  EngineCalendarEvent,
   EngineContact,
   EngineContactInput,
   EngineMessageId,
@@ -263,6 +265,14 @@ export class DemoEngine implements MailEngine {
     const created = [{ engineId: `demo-address-book-${accountId}`, name: "Personal", isDefault: true }];
     addressBooks.set(accountId, created);
     return created;
+  }
+
+  async listCalendars(accountId: EngineAccountId): Promise<EngineCalendar[]> {
+    return [{ engineId: `demo-calendar-${accountId}`, name: "Personal", isDefault: true, timeZone: "UTC" }];
+  }
+
+  async listCalendarEvents(_accountId: EngineAccountId, _after: string, _before: string): Promise<EngineCalendarEvent[]> {
+    return [];
   }
 
   async listContacts(accountId: EngineAccountId): Promise<EngineContact[]> {

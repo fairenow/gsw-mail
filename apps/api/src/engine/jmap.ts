@@ -100,7 +100,7 @@ export class JmapClient {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: authorizationHeader(this.opts) },
       body: JSON.stringify({
-        using: ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail", "urn:ietf:params:jmap:submission", ...(methods.some(([name]) => name.startsWith("AddressBook/") || name.startsWith("ContactCard/")) ? ["urn:ietf:params:jmap:contacts"] : [])],
+      using: ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail", "urn:ietf:params:jmap:submission", ...(methods.some(([name]) => name.startsWith("AddressBook/") || name.startsWith("ContactCard/")) ? ["urn:ietf:params:jmap:contacts"] : []), ...(methods.some(([name]) => name.startsWith("Calendar/") || name.startsWith("CalendarEvent/")) ? ["urn:ietf:params:jmap:calendars"] : [])],
         methodCalls: methods,
       }),
     });

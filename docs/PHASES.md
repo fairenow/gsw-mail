@@ -76,6 +76,7 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 - [x] Merged Contacts ownership boundary: Stalwart standard identity, Neon GSW enrichment
 - [x] Nullable Stalwart contact linkage and lazy idempotent migration for existing contacts
 - [x] Request-scoped JMAP Contacts methods for address books and ContactCards
+- [x] Mailbox sidebar links for Contacts and a read-only Stalwart calendar view
 - [ ] Contact enrichment from inbound mail and attachment/image upload workflow
 
 ## Phase 7 — Spam and security hardening

@@ -9,6 +9,25 @@ export interface EngineAddressBook {
   isDefault: boolean;
 }
 
+export interface EngineCalendar {
+  engineId: string;
+  name: string;
+  color?: string | undefined;
+  isDefault: boolean;
+  timeZone?: string | undefined;
+}
+
+export interface EngineCalendarEvent {
+  engineId: string;
+  calendarIds: string[];
+  title: string;
+  description?: string | undefined;
+  start: string;
+  end?: string | undefined;
+  location?: string | undefined;
+  allDay: boolean;
+}
+
 export interface EngineContactValue {
   value: string;
   label?: string | undefined;
@@ -178,6 +197,10 @@ export interface MailEngine {
   getAttachment(accountId: EngineAccountId, attachmentEngineId: string): Promise<AttachmentBody | null>;
 
   listAddressBooks(accountId: EngineAccountId): Promise<EngineAddressBook[]>;
+
+  listCalendars(accountId: EngineAccountId): Promise<EngineCalendar[]>;
+
+  listCalendarEvents(accountId: EngineAccountId, after: string, before: string): Promise<EngineCalendarEvent[]>;
 
   listContacts(accountId: EngineAccountId): Promise<EngineContact[]>;
 

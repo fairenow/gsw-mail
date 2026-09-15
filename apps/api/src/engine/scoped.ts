@@ -25,6 +25,8 @@ export function scopedMailEngine(resolve: (accountId: string) => Promise<MailEng
     findMessageByRfcMessageId: call("findMessageByRfcMessageId"),
     getAttachment: call("getAttachment"),
     listAddressBooks: call("listAddressBooks"),
+    listCalendars: call("listCalendars"),
+    listCalendarEvents: call("listCalendarEvents"),
     listContacts: call("listContacts"),
     getContact: call("getContact"),
     createContact: call("createContact"),

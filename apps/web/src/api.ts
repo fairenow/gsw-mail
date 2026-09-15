@@ -67,6 +67,25 @@ export interface ContactListResponse {
   offset: number;
 }
 
+export interface CalendarSummary {
+  engineId: string;
+  name: string;
+  color?: string;
+  isDefault: boolean;
+  timeZone?: string;
+}
+
+export interface CalendarEvent {
+  engineId: string;
+  calendarIds: string[];
+  title: string;
+  description?: string;
+  start: string;
+  end?: string;
+  location?: string;
+  allDay: boolean;
+}
+
 export interface ProductSettings {
   general: Record<string, unknown>;
   compose: Record<string, unknown>;
@@ -200,4 +219,6 @@ export const api = {
   importContacts: (body: unknown) => post<{ id: string; filename: string; rowCount: number; createdCount: number; updatedCount: number; skippedCount: number; duplicateCount: number; failedCount: number }>("/product/contact-imports", body, interactiveTimeout),
   contactImports: () => get<{ imports: { id: string; filename: string; rowCount: number; createdCount: number; updatedCount: number; skippedCount: number; duplicateCount: number; failedCount: number; createdAt: string }[] }>("/product/contact-imports"),
   contactImportRows: (id: string) => get<{ rows: { rowNumber: number; raw: Record<string, string>; status: string; error?: string | null }[] }>(`/product/contact-imports/${id}/rows`),
+  calendars: (accountId?: string) => get<{ calendars: CalendarSummary[] }>(`/product/calendars${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ""}`),
+  calendarEvents: (accountId: string, after: string, before: string) => get<{ events: CalendarEvent[] }>(`/product/calendar-events?accountId=${encodeURIComponent(accountId)}&after=${encodeURIComponent(after)}&before=${encodeURIComponent(before)}`),
 };

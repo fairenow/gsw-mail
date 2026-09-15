@@ -64,8 +64,24 @@ export function decodeStalwartTokenMetadata(token: string): StalwartTokenMetadat
 }
 
 const cache = new Map<string, CachedToken>();
+const inFlight = new Map<string, Promise<string>>();
 
 export async function getStalwartAccessToken(input: StalwartTokenRequest, request: typeof fetch = fetch): Promise<string> {
+  const cacheKey = `${input.authUserId}:${input.accountId}:${config.auth.stalwartAudience}`;
+  const cached = cache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
+  const pending = inFlight.get(cacheKey);
+  if (pending) return pending;
+  const operation = getStalwartAccessTokenUncached(input, request);
+  inFlight.set(cacheKey, operation);
+  try {
+    return await operation;
+  } finally {
+    if (inFlight.get(cacheKey) === operation) inFlight.delete(cacheKey);
+  }
+}
+
+async function getStalwartAccessTokenUncached(input: StalwartTokenRequest, request: typeof fetch = fetch): Promise<string> {
   if (!config.auth.oauthClientId || !config.auth.oauthClientSecret) {
     throw new Error("Better Auth Stalwart OAuth client is not configured");
   }
