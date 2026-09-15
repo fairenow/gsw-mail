@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { X } from "lucide-react";
 import { api, type Contact } from "../api";
 import { useAppShell } from "../components/AppShell";
+import { MailWorkspace } from "../components/MailWorkspace";
 
 type ImportState = { filename: string; headers: string[]; rows: Record<string, string>[]; mapping: Record<string, string> } | null;
 type FailedRow = { rowNumber: number; raw: Record<string, string>; error?: string | null };
@@ -70,12 +71,7 @@ export function ContactsPage() {
     }
   };
 
-  return <div className="gsw-product-shell">
-    <header className="gsw-product-header">
-      <a href="/" className="gsw-wordmark"><img src="/logo-3.png" alt="" />GSW Mail</a>
-      <nav><a href="/">Mailbox</a><a className="active" href="/contacts">Contacts</a><a href="/settings">Settings</a></nav>
-    </header>
-    <main className="gsw-contacts-page">
+  return <MailWorkspace section="contacts"><div className="gsw-product-shell"><main className="gsw-contacts-page">
       <div className="gsw-page-heading">
         <div><p className="gsw-eyebrow">People you reach</p><h1>Contacts</h1><p>Useful relationship context, not a CRM. {title}.</p></div>
         <div className="gsw-page-actions"><label className="gsw-secondary-btn">Import CSV<input className="gsw-hidden-input" type="file" accept=".csv,text/csv" onChange={(event) => void parseFile(event)} /></label><button className="gsw-primary-btn" onClick={() => setNewContact(true)}>New contact</button></div>
@@ -87,12 +83,12 @@ export function ContactsPage() {
         <aside className="gsw-import-history"><h2>Import history</h2>{imports.length ? imports.map((item) => <div key={item.id}><strong>{item.filename}</strong><span>{item.createdCount} new · {item.updatedCount} updated · {item.skippedCount} skipped · {item.duplicateCount} duplicates · {item.failedCount} failed</span><small>{new Date(item.createdAt).toLocaleDateString()}</small>{item.failedCount > 0 && <button className="gsw-link-btn" onClick={() => void api.contactImportRows(item.id).then((value) => setFailedRows(value.rows.filter((row) => row.status === "failed"))).catch(() => undefined)}>View failed rows</button>}</div>) : <p>No imports yet.</p>}</aside>
       </div>
       <div className="gsw-contact-pagination"><span>Showing {totalContacts === 0 ? 0 : page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalContacts)} of {totalContacts}</span><div><button className="gsw-secondary-btn" disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>Previous</button><button className="gsw-secondary-btn" disabled={(page + 1) * pageSize >= totalContacts} onClick={() => setPage((current) => current + 1)}>Next</button></div></div>
-    </main>
+    </main></div>
     {selected && <ContactDrawer contact={selected} onClose={() => setSelected(null)} onSaved={(value) => { setSelected(value); load(); }} />}
     {newContact && <div className="gsw-drawer-backdrop"><section className="gsw-contact-drawer"><button className="gsw-drawer-close" onClick={() => setNewContact(false)} aria-label="Close new contact"><X size={18} strokeWidth={1.75} aria-hidden="true" /></button><p className="gsw-eyebrow">Address book</p><h2>New contact</h2><div className="gsw-contact-form"><input placeholder="Name" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /><input placeholder="Email" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /><input placeholder="Organization" value={form.organization} onChange={(event) => setForm({ ...form, organization: event.target.value })} /><input placeholder="Job title" value={form.jobTitle} onChange={(event) => setForm({ ...form, jobTitle: event.target.value })} /><input placeholder="Tags, separated by commas" value={form.tags} onChange={(event) => setForm({ ...form, tags: event.target.value })} /><textarea placeholder="Notes" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /><button className="gsw-primary-btn" onClick={() => void create()}>Create contact</button></div></section></div>}
     {failedRows && <div className="gsw-modal-backdrop"><section className="gsw-import-modal"><div className="gsw-page-heading"><div><p className="gsw-eyebrow">Import review</p><h2>Failed rows</h2><p>{failedRows.length} rows need attention.</p></div><button className="gsw-drawer-close" onClick={() => setFailedRows(null)} aria-label="Close failed rows"><X size={18} strokeWidth={1.75} aria-hidden="true" /></button></div>{failedRows.map((row) => <div className="gsw-import-preview" key={row.rowNumber}><strong>Row {row.rowNumber}</strong><p>{row.error}</p><p>{Object.values(row.raw).join(" · ")}</p></div>)}</section></div>}
     {importState && <div className="gsw-modal-backdrop"><section className="gsw-import-modal"><div className="gsw-page-heading"><div><p className="gsw-eyebrow">Step 2 of 2</p><h2>Map CSV columns</h2><p>{importState.filename} · {importState.rows.length} rows detected</p></div><button className="gsw-drawer-close" onClick={() => setImportState(null)} aria-label="Close import mapping"><X size={18} strokeWidth={1.75} aria-hidden="true" /></button></div><div className="gsw-import-mapping">{importState.headers.map((header) => <label key={header}><span>{header}</span><select value={importState.mapping[header]} onChange={(event) => setImportState({ ...importState, mapping: { ...importState.mapping, [header]: event.target.value } })}>{fields.map((field) => <option key={field} value={field}>{field === "ignore" ? "Leave as custom field" : field}</option>)}</select></label>)}</div><div className="gsw-import-preview"><strong>Preview</strong><div>{importState.rows.slice(0, 3).map((row, index) => <p key={index}>{Object.values(row).join(" · ")}</p>)}</div></div><label className="gsw-duplicate-choice">Duplicates<select value={duplicateBehavior} onChange={(event) => setDuplicateBehavior(event.target.value)}><option value="merge">Merge missing fields (safest)</option><option value="skip">Skip</option><option value="overwrite">Overwrite mapped fields</option></select></label><button className="gsw-primary-btn" onClick={() => void runImport()}>Import {importState.rows.length} rows</button></section></div>}
-  </div>;
+   </MailWorkspace>;
 }
 
 function ContactDrawer({ contact, onClose, onSaved }: { contact: Contact; onClose: () => void; onSaved: (contact: Contact) => void }) {

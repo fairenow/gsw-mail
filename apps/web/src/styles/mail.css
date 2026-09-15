@@ -329,6 +329,8 @@
   overflow: hidden;
 }
 
+.gsw-workspace-panel { grid-column: 2 / -1; min-width: 0; min-height: 0; overflow: auto; background: var(--gsw-bg); }
+
 .gsw-mail-body.sidebar-collapsed {
   grid-template-columns: 76px 380px 1fr;
 }

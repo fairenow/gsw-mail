@@ -59,6 +59,10 @@
     {
       "source": "/contacts",
       "destination": "/index.html"
+    },
+    {
+      "source": "/calendar",
+      "destination": "/index.html"
     }
   ]
 }
