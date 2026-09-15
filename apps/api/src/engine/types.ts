@@ -25,6 +25,8 @@ export interface EngineCalendarEvent {
   start: string;
   end?: string | undefined;
   location?: string | undefined;
+  meetingLink?: string | undefined;
+  attendees: string[];
   allDay: boolean;
 }
 
@@ -35,6 +37,9 @@ export interface EngineCalendarEventInput {
   start: string;
   durationMinutes: number;
   location?: string | undefined;
+  meetingLink?: string | undefined;
+  attendees: string[];
+  sendSchedulingMessages: boolean;
   timeZone?: string | undefined;
   allDay: boolean;
 }

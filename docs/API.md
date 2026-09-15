@@ -164,8 +164,8 @@ that block future sends. Delivery events append to `outbound_delivery_events`
 | POST | `/product/contact-imports` | mapped CSV rows with `skip`, `merge`, or `overwrite` duplicate behavior; returns row, created, updated, skipped, duplicate, and failed counts |
 | GET | `/product/calendars?accountId=` | calendars available through the selected mailbox account's Stalwart JMAP session |
 | GET | `/product/calendar-events?accountId=&after=&before=` | read-only calendar events in the requested ISO date range |
-| POST | `/product/calendar-events` | create an event in a Stalwart calendar |
-| PATCH | `/product/calendar-events/:id` | update an event in Stalwart |
+| POST | `/product/calendar-events` | create an event in a Stalwart calendar; supports `meetingLink`, attendee emails, and confirmed `sendSchedulingMessages` |
+| PATCH | `/product/calendar-events/:id` | update an event in Stalwart; scheduling notifications are opt-in per request |
 | DELETE | `/product/calendar-events/:id?accountId=` | delete an event from Stalwart |
 
 Successful outbound sends asynchronously record each recipient in the caller's

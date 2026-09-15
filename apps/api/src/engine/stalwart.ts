@@ -71,6 +71,9 @@ interface JmapCalendarEvent {
   duration?: string;
   timeZone?: string;
   locations?: Record<string, { name?: string; description?: string; uri?: string }>;
+  virtualLocations?: Record<string, { name?: string; uri?: string }>;
+  participants?: Record<string, { calendarAddress?: string; email?: string; participationStatus?: string }>;
+  organizerCalendarAddress?: string;
   showWithoutTime?: boolean;
 }
 
@@ -87,6 +90,8 @@ const calendarQueryDate = (value: string): string => {
 
 const calendarEventToEngine = (event: JmapCalendarEvent): EngineCalendarEvent => {
   const location = Object.values(event.locations ?? {})[0]?.name;
+  const meetingLink = Object.values(event.virtualLocations ?? {})[0]?.uri;
+  const attendees = Object.values(event.participants ?? {}).map((participant) => participant.calendarAddress ?? participant.email ?? "").filter((address) => address && address !== event.organizerCalendarAddress).map((address) => address.replace(/^mailto:/i, ""));
   return {
     engineId: event.id,
     calendarIds: Object.entries(event.calendarIds ?? {}).filter(([, included]) => included).map(([id]) => id),
@@ -95,11 +100,13 @@ const calendarEventToEngine = (event: JmapCalendarEvent): EngineCalendarEvent =>
     start: event.start ?? "",
     ...(event.duration ? { end: addDuration(event.start, event.duration) } : {}),
     ...(location ? { location } : {}),
+    ...(meetingLink ? { meetingLink } : {}),
+    attendees,
     allDay: event.showWithoutTime === true,
   };
 };
 
-const calendarEventCard = (input: EngineCalendarEventInput, uid: string): Record<string, unknown> => ({
+const calendarEventCard = (input: EngineCalendarEventInput, uid: string, organizerAddress?: string): Record<string, unknown> => ({
   "@type": "Event",
   uid,
   calendarIds: { [input.calendarId]: true },
@@ -110,6 +117,14 @@ const calendarEventCard = (input: EngineCalendarEventInput, uid: string): Record
   showWithoutTime: input.allDay,
   ...(input.description ? { description: input.description } : {}),
   ...(input.location ? { locations: { location: { "@type": "Location", name: input.location } } } : {}),
+  ...(input.meetingLink ? { virtualLocations: { meeting: { "@type": "VirtualLocation", name: "Online meeting", uri: input.meetingLink } } } : {}),
+  ...(input.attendees.length && organizerAddress ? {
+    organizerCalendarAddress: `mailto:${organizerAddress}`,
+    participants: {
+      organizer: { "@type": "Participant", calendarAddress: `mailto:${organizerAddress}`, kind: "individual", roles: { owner: true, chair: true }, participationStatus: "accepted" },
+      ...Object.fromEntries(input.attendees.map((address, index) => [`attendee-${index + 1}`, { "@type": "Participant", calendarAddress: `mailto:${address}`, kind: "individual", expectReply: true, participationStatus: "needs-action", roles: { attendee: true } }])),
+    },
+  } : {}),
 });
 
 interface JmapContact {
@@ -505,7 +520,7 @@ export class StalwartEngine implements MailEngine {
     filter: Record<string, unknown>,
     { position = 0, limit = 50 }: { position?: number; limit?: number },
   ): Promise<JmapEmail[]> {
-    const { accountId } = await this.accountIdOf(engineAccountId);
+    const { session, accountId } = await this.accountIdOf(engineAccountId);
     const responses = await this.client.call([
       [
         "Email/query",
@@ -928,15 +943,15 @@ export class StalwartEngine implements MailEngine {
     const { accountId } = await this.accountIdOf(engineAccountId);
     const responses = await this.client.call([
       ["CalendarEvent/query", { accountId, filter: { after: calendarQueryDate(after), before: calendarQueryDate(before) }, position: 0, limit: 200, sort: [{ property: "start", isAscending: true }] }, "ceq1"],
-      ["CalendarEvent/get", { accountId, "#ids": { resultOf: "ceq1", name: "CalendarEvent/query", path: "/ids" }, properties: ["id", "calendarIds", "title", "description", "start", "duration", "locations", "showWithoutTime"] }, "ceg1"],
+      ["CalendarEvent/get", { accountId, "#ids": { resultOf: "ceq1", name: "CalendarEvent/query", path: "/ids" }, properties: ["id", "calendarIds", "title", "description", "start", "duration", "locations", "virtualLocations", "participants", "organizerCalendarAddress", "showWithoutTime"] }, "ceg1"],
     ]);
     const payload = responses[1]![1] as { list?: JmapCalendarEvent[] };
     return (payload.list ?? []).map(calendarEventToEngine);
   }
 
   async createCalendarEvent(engineAccountId: EngineAccountId, input: EngineCalendarEventInput): Promise<EngineCalendarEvent> {
-    const { accountId } = await this.accountIdOf(engineAccountId);
-    const responses = await this.client.call([["CalendarEvent/set", { accountId, create: { event: calendarEventCard(input, randomUUID()) } }, "ces1"]]);
+    const { session, accountId } = await this.accountIdOf(engineAccountId);
+    const responses = await this.client.call([["CalendarEvent/set", { accountId, create: { event: calendarEventCard(input, randomUUID(), session.accounts[accountId]?.name) }, sendSchedulingMessages: input.sendSchedulingMessages }, "ces1"]]);
     const payload = responses[0]![1] as { created?: Record<string, { id?: string }>; notCreated?: Record<string, { description?: string }> };
     const id = payload.created?.event?.id;
     if (!id) throw new Error(payload.notCreated?.event?.description ?? "Stalwart did not return a calendar event ID");
@@ -946,14 +961,14 @@ export class StalwartEngine implements MailEngine {
   }
 
   async updateCalendarEvent(engineAccountId: EngineAccountId, eventId: string, input: EngineCalendarEventInput): Promise<EngineCalendarEvent> {
-    const { accountId } = await this.accountIdOf(engineAccountId);
-    const card = calendarEventCard(input, randomUUID());
+    const { session, accountId } = await this.accountIdOf(engineAccountId);
+    const card = calendarEventCard(input, randomUUID(), session.accounts[accountId]?.name);
     delete card.uid;
     const update = Object.fromEntries(Object.entries(card).filter(([key]) => key !== "calendarIds").map(([key, value]) => [`/${key}`, value]));
     update["/calendarIds"] = card.calendarIds;
     update["/description"] = input.description ?? null;
     update["/locations"] = input.location ? card.locations : null;
-    const responses = await this.client.call([["CalendarEvent/set", { accountId, update: { [eventId]: update } }, "ceu1"]]);
+    const responses = await this.client.call([["CalendarEvent/set", { accountId, update: { [eventId]: update }, sendSchedulingMessages: input.sendSchedulingMessages }, "ceu1"]]);
     const payload = responses[0]![1] as { notUpdated?: Record<string, { description?: string }> };
     if (payload.notUpdated?.[eventId]) throw new Error(payload.notUpdated[eventId].description ?? "Stalwart calendar event update failed");
     const event = await this.getCalendarEvent(engineAccountId, eventId);
@@ -970,7 +985,7 @@ export class StalwartEngine implements MailEngine {
 
   private async getCalendarEvent(engineAccountId: EngineAccountId, eventId: string): Promise<EngineCalendarEvent | null> {
     const { accountId } = await this.accountIdOf(engineAccountId);
-    const responses = await this.client.call([["CalendarEvent/get", { accountId, ids: [eventId], properties: ["id", "calendarIds", "title", "description", "start", "duration", "locations", "showWithoutTime"] }, "ceg2"]]);
+    const responses = await this.client.call([["CalendarEvent/get", { accountId, ids: [eventId], properties: ["id", "calendarIds", "title", "description", "start", "duration", "locations", "virtualLocations", "participants", "organizerCalendarAddress", "showWithoutTime"] }, "ceg2"]]);
     const payload = responses[0]![1] as { list?: JmapCalendarEvent[] };
     return payload.list?.[0] ? calendarEventToEngine(payload.list[0]) : null;
   }

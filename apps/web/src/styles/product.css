@@ -151,6 +151,8 @@
 .gsw-calendar-form textarea { min-height: 90px; resize: vertical; }
 .gsw-calendar-form > label { margin-top: 16px; }
 .gsw-calendar-form > label .gsw-primary-btn { margin-top: 12px; width: fit-content; }
+.gsw-calendar-form small { color: var(--gsw-text-muted); font-weight: 400; }
+.gsw-calendar-invitations { display: flex !important; align-items: center; gap: 8px; margin-top: 14px !important; }
 .gsw-calendar-all-day { display: flex !important; align-items: center; gap: 8px; padding-top: 25px; }
 @media (max-width: 700px) { .gsw-calendar-page { padding: 28px 18px 48px; } .gsw-calendar-layout { grid-template-columns: 1fr; } .gsw-page-heading { gap: 18px; flex-direction: column; } .gsw-calendar-controls { justify-content: space-between; } }
 @media (max-width: 560px) { .gsw-calendar-form-grid { grid-template-columns: 1fr; } .gsw-calendar-all-day { padding-top: 0; } }

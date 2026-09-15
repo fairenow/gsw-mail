@@ -135,7 +135,9 @@ production.
 Calendar data is not copied into Postgres. Calendar and event reads and writes
 stay behind MailEngine and use the request-scoped Stalwart identity for the
 selected account. `CalendarEvent/set` is the source of truth for event CRUD;
-Neon does not mirror event rows.
+Neon does not mirror event rows. Virtual meetings use JSCalendar
+`virtualLocations`; attendee invitations use JSCalendar `participants` and are
+sent only when the user confirms and the API sets `sendSchedulingMessages`.
 
 Inbox list and thread reads request summary-only JMAP properties; full bodies and
 attachments are fetched only when a message is opened. JMAP sessions, OAuth
