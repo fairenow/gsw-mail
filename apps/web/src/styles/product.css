@@ -144,6 +144,24 @@
 .gsw-calendar-event { position: relative; cursor: pointer; }
 .gsw-calendar-event:hover { background: var(--gsw-accent-soft); }
 .gsw-calendar-event .gsw-link-btn { align-self: start; }
+.gsw-calendar-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 18px 0; color: var(--gsw-text-muted); font-size: 13px; }
+.gsw-calendar-view-toggle { display: inline-flex; padding: 3px; border: 1px solid var(--gsw-border); border-radius: 999px; background: var(--gsw-surface); }
+.gsw-calendar-view-toggle button { padding: 7px 13px; border-radius: 999px; color: var(--gsw-text-muted); text-transform: capitalize; }
+.gsw-calendar-view-toggle button.active { background: var(--gsw-accent); color: #fff; }
+.gsw-calendar-grid { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--gsw-border); border-radius: 14px; background: var(--gsw-border); }
+.gsw-calendar-grid-month { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.gsw-calendar-grid-week { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.gsw-calendar-grid-day { grid-template-columns: minmax(0, 1fr); }
+.gsw-calendar-day { min-height: 120px; padding: 10px; background: var(--gsw-surface); cursor: pointer; }
+.gsw-calendar-grid-week .gsw-calendar-day { min-height: 340px; }
+.gsw-calendar-grid-day .gsw-calendar-day { min-height: 420px; }
+.gsw-calendar-day:hover { background: var(--gsw-accent-soft); }
+.gsw-calendar-day header { margin-bottom: 9px; color: var(--gsw-text-muted); font-size: 12px; }
+.gsw-calendar-grid-event { display: grid; grid-template-columns: 1fr auto; gap: 2px; width: 100%; margin: 4px 0; padding: 0; border-left: 3px solid var(--gsw-accent); border-radius: 5px; background: var(--gsw-accent-soft); text-align: left; }
+.gsw-calendar-grid-event > button:first-child { display: grid; gap: 2px; min-width: 0; padding: 7px; text-align: left; }
+.gsw-calendar-grid-delete { padding: 7px 5px; color: var(--gsw-text-muted); font-size: 10px; }
+.gsw-calendar-grid-event time, .gsw-calendar-grid-event small { color: var(--gsw-text-muted); font-size: 10px; }
+.gsw-calendar-grid-event span { overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .gsw-calendar-form { margin-top: 24px; padding: 24px; border: 1px solid var(--gsw-border); border-radius: 14px; background: var(--gsw-surface); }
 .gsw-calendar-form .gsw-page-heading { margin-bottom: 18px; }
 .gsw-calendar-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
@@ -154,5 +172,5 @@
 .gsw-calendar-form small { color: var(--gsw-text-muted); font-weight: 400; }
 .gsw-calendar-invitations { display: flex !important; align-items: center; gap: 8px; margin-top: 14px !important; }
 .gsw-calendar-all-day { display: flex !important; align-items: center; gap: 8px; padding-top: 25px; }
-@media (max-width: 700px) { .gsw-calendar-page { padding: 28px 18px 48px; } .gsw-calendar-layout { grid-template-columns: 1fr; } .gsw-page-heading { gap: 18px; flex-direction: column; } .gsw-calendar-controls { justify-content: space-between; } }
+@media (max-width: 700px) { .gsw-calendar-page { padding: 28px 18px 48px; } .gsw-calendar-layout { grid-template-columns: 1fr; } .gsw-page-heading { gap: 18px; flex-direction: column; } .gsw-calendar-controls { justify-content: space-between; } .gsw-calendar-grid-month { grid-template-columns: repeat(2, minmax(0, 1fr)); } .gsw-calendar-grid-week { overflow-x: auto; grid-template-columns: repeat(7, minmax(130px, 1fr)); } .gsw-calendar-grid-month .gsw-calendar-day { min-height: 100px; } }
 @media (max-width: 560px) { .gsw-calendar-form-grid { grid-template-columns: 1fr; } .gsw-calendar-all-day { padding-top: 0; } }
