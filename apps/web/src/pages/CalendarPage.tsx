@@ -62,6 +62,8 @@ export function CalendarPage() {
       const saved = editingId ? await api.updateCalendarEvent(editingId, body) : await api.createCalendarEvent(body);
       setEditingId(null);
       setFormOpen(false);
+      const savedDate = new Date(saved.start);
+      if (!Number.isNaN(savedDate.getTime())) { setSelectedDay(savedDate); setMonth(monthStart(savedDate)); }
       setEvents((current) => sortEvents([...current.filter((event) => event.engineId !== saved.engineId), saved]));
       const after = monthStart(month).toISOString();
       const before = monthEnd(month).toISOString();
