@@ -72,3 +72,7 @@ checked before the authorization-code exchange. The token email claim is the
 complete mailbox address and Stalwart is configured with `claimUsername=email`;
 there is no username domain, impersonation, shared credential, or global mail
 service identity. Existing Stalwart principals and mail state are preserved.
+
+## Responsive mail panels (adopted, September 2026)
+
+Use independent vertical scroll areas inside a viewport-sized mail shell. Keep pagination in the list footer and use the existing 50-message limit/offset API. Below 1100px, folder navigation is an overlay so opening it preserves the selected list or message. Phone compose occupies the dynamic viewport; content length does not determine window height.

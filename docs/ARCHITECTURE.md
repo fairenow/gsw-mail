@@ -270,3 +270,9 @@ The exact `/mail` page rewrite must precede the `/mail/:path*` API proxy in Verc
 Account resolution now displays the supplied `/loading-animation-1.gif` while session/context requests are pending. Status copy remains driven by real progress. Success and reduced-motion preferences use the static logo; navigation does not wait for the GIF to finish.
 
 ### Mailbox-scoped service access (prepared, not activated)
+
+## Mail viewport and paging
+
+The mail shell is bounded to the dynamic viewport. Message rows truncate within their grid column; the list body scrolls vertically while its header and pagination stay visible. Folder pages request 50 messages using the existing API limit/offset parameters and display the mailbox total. Search displays the results returned by the existing search endpoint.
+
+At widths below 1100px, folders overlay the list or reader and dismiss without changing the underlying view. Search opens over the header. Below 700px, compose fills the dynamic viewport; desktop compose has a bounded height. Long editor content scrolls internally.

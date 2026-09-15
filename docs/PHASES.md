@@ -123,3 +123,11 @@ The exact `/mail` page rewrite must precede the `/mail/:path*` API proxy in Verc
 Account resolution now displays the supplied `/loading-animation-1.gif` while session/context requests are pending. Status copy remains driven by real progress. Success and reduced-motion preferences use the static logo; navigation does not wait for the GIF to finish.
 
 Mailbox access is now staged behind Better Auth OAuth Provider interoperability. Ramon and Alyssa tokens must resolve to their existing Stalwart principals before any production authentication-directory change. No shared mailbox credential or impersonation path is permitted; provisioning credentials remain limited to Stalwart lifecycle management.
+
+## Responsive mail UI fixes — September 2026
+
+- [x] Constrain list rows and truncate sender, subject, and preview text.
+- [x] Add fixed list footer with previous/next pages and mailbox totals.
+- [x] Overlay folder navigation on phone/tablet list and reader views.
+- [x] Expand phone/tablet search from an icon across the header.
+- [x] Bound compose height and scroll long content; full-screen compose on phones.

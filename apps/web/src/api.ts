@@ -169,7 +169,7 @@ export const api = {
   updateWorkspace: (name: string) => patch<Pick<SetupState, "workspace" | "currentStep">>("/api/setup/workspace", { name }),
   addSetupDomain: (domain: string) => post<Pick<SetupState, "domain" | "currentStep">>("/api/setup/domain", { domain }),
   accounts: () => get<AccountsResponse>("/mail/accounts").then((r) => r.accounts),
-  messages: (accountId: string, mailbox: string, limit = 50) => get<MessagesResponse>(`/mail/messages?accountId=${accountId}&mailbox=${mailbox}&limit=${limit}`).then((r) => r.messages),
+  messages: (accountId: string, mailbox: string, limit = 50, offset = 0) => get<MessagesResponse>(`/mail/messages?accountId=${accountId}&mailbox=${mailbox}&limit=${limit}&offset=${offset}`).then((r) => r.messages),
   mailboxStats: (accountId: string) => get<MailboxStatsResponse>(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`).then((r) => r.folders),
   message: (accountId: string, engineId: string) => get<FullMessage>(`/mail/messages/${engineId}?accountId=${accountId}`),
   read: (accountId: string, engineId: string, seen: boolean) =>

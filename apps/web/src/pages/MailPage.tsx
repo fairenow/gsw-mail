@@ -11,7 +11,8 @@ import { MessageListHeader } from "../components/mail/MessageListHeader";
 import { MessageReader } from "../components/mail/MessageReader";
 import { MessageRow } from "../components/mail/MessageRow";
 
-type MobileView = "folders" | "messages" | "reader";
+type MobileView = "messages" | "reader";
+const pageSize = 50;
 const fallbackTemplateKey = "gsw_default";
 const parseRecipients = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
 const draftRecipients = (value: string) => parseRecipients(value).filter((item) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item));
@@ -41,7 +42,13 @@ export function MailPage() {
   const [open, setOpen] = useState<FullMessage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [mobileView, setMobileView] = useState<MobileView>("folders");
+  const [mobileView, setMobileView] = useState<MobileView>("messages");
+  const [foldersOpen, setFoldersOpen] = useState(false);
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState(false);
+  const listRequest = useRef(0);
+  const listScroll = useRef<HTMLDivElement>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("gsw-mail-sidebar-collapsed") === "true");
   const readTimers = useRef(new Map<string, number>());
   const [compose, setCompose] = useState(false);
@@ -65,9 +72,17 @@ export function MailPage() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [sendRequestId, setSendRequestId] = useState<string | null>(null);
 
-  const loadFolder = useCallback(async (accountId: string, name: Folder) => {
+  const loadFolder = useCallback(async (accountId: string, name: Folder, nextPage = 0) => {
+    const request = ++listRequest.current;
     setError(null);
-    try { setMessages(await timedMailRequest(`folder:${name}`, () => api.messages(accountId, name))); } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    setLoading(true);
+    try {
+      const result = await timedMailRequest(`folder:${name}`, () => api.messages(accountId, name, pageSize, nextPage * pageSize));
+      if (request !== listRequest.current) return;
+      setMessages(result); setPage(nextPage); setSearchResults(false);
+      listScroll.current?.scrollTo(0, 0);
+    } catch (err) { if (request === listRequest.current) setError(err instanceof Error ? err.message : String(err)); }
+    finally { if (request === listRequest.current) setLoading(false); }
   }, []);
   const loadFolderCounts = useCallback(async (accountId: string) => {
     try {
@@ -91,15 +106,34 @@ export function MailPage() {
   useEffect(() => { void api.settings().then((settings) => { setSignature(settings.signature); setTemplateKey(settings.general.templateKey === "bible_reader" ? "bible_reader" : fallbackTemplateKey); }).catch(() => undefined); }, []);
   useEffect(() => () => readTimers.current.forEach((timer) => window.clearTimeout(timer)), []);
 
+  useEffect(() => {
+    if (!foldersOpen) return;
+    const closeFolders = (event: KeyboardEvent) => { if (event.key === "Escape") setFoldersOpen(false); };
+    window.addEventListener("keydown", closeFolders);
+    return () => window.removeEventListener("keydown", closeFolders);
+  }, [foldersOpen]);
+
   const signatureFor = (mode: ComposeMode) => {
     if (!signature?.enabled || (mode === "new" && !signature.onNew) || ((mode === "reply" || mode === "replyAll") && !signature.onReply) || (mode === "forward" && !signature.onForward)) return "";
     return signature.signatureHtml ? `<div class="gsw-signature">${signature.signatureHtml}</div><div><br></div>` : "";
   };
-  const selectAccount = useCallback((id: string) => { const next = accounts.find((item) => item.id === id); if (!next) return; shellSelectAccount(id); setFolder("Inbox"); setOpen(null); setLastSend(null); setMobileView("folders"); }, [accounts, shellSelectAccount]);
-  const selectFolder = (name: Folder) => { setFolder(name); setOpen(null); setMobileView("messages"); if (account) void loadFolder(account.id, name); };
+  const selectAccount = useCallback((id: string) => { const next = accounts.find((item) => item.id === id); if (!next) return; shellSelectAccount(id); setFolder("Inbox"); setSearch(""); setOpen(null); setLastSend(null); setMobileView("messages"); setFoldersOpen(false); }, [accounts, shellSelectAccount]);
+  const selectFolder = (name: Folder) => { setFolder(name); setSearch(""); setFoldersOpen(false); setOpen(null); setMobileView("messages"); if (account) void loadFolder(account.id, name); };
   const refresh = useCallback(() => { if (account) { void loadFolder(account.id, folder); void loadFolderCounts(account.id); } }, [account, folder, loadFolder, loadFolderCounts]);
-  const toggleSidebar = useCallback(() => { if (window.matchMedia("(max-width: 699px)").matches) { setMobileView((current) => current === "folders" ? "messages" : "folders"); return; } setSidebarCollapsed((current) => { const next = !current; localStorage.setItem("gsw-mail-sidebar-collapsed", String(next)); return next; }); }, []);
-  const runSearch = useCallback(async () => { if (!account) return; if (!search.trim()) { refresh(); return; } try { setError(null); setMessages(await api.search(account.id, search.trim())); setOpen(null); setMobileView("messages"); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } }, [account, refresh, search]);
+  const toggleSidebar = useCallback(() => { if (window.matchMedia("(max-width: 1099px)").matches) { setFoldersOpen((current) => !current); return; } setSidebarCollapsed((current) => { const next = !current; localStorage.setItem("gsw-mail-sidebar-collapsed", String(next)); return next; }); }, []);
+  const runSearch = useCallback(async () => {
+    if (!account) return;
+    if (!search.trim()) { refresh(); return; }
+    const request = ++listRequest.current;
+    setLoading(true); setError(null);
+    try {
+      const result = await api.search(account.id, search.trim());
+      if (request !== listRequest.current) return;
+      setMessages(result); setPage(0); setSearchResults(true); setOpen(null); setMobileView("messages"); setFoldersOpen(false);
+      listScroll.current?.scrollTo(0, 0);
+    } catch (err) { if (request === listRequest.current) setError(err instanceof Error ? err.message : String(err)); }
+    finally { if (request === listRequest.current) setLoading(false); }
+  }, [account, refresh, search]);
   useEffect(() => { configureTopBar({ search, searchPlaceholder: "Search mail", onSearchChange: setSearch, onSearch: () => void runSearch(), searchDisabled: false, sidebarCollapsed, onToggleSidebar: toggleSidebar, onSelectAccount: selectAccount }); }, [configureTopBar, runSearch, search, selectAccount, sidebarCollapsed, toggleSidebar]);
 
   const openDraft = (draft: FullMessage) => {
@@ -138,10 +172,11 @@ export function MailPage() {
 
     return <>
      <main className={`gsw-mail-body ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
-      <MailSidebar account={account} profileImageUrl={profileImageUrl} folder={folder} counts={folderCounts} composeOpen={compose} mobileHidden={mobileView !== "folders"} collapsed={sidebarCollapsed} onSelectFolder={selectFolder} onToggleCompose={() => openCompose()} />
-       <section className={`gsw-message-list ${mobileView !== "messages" ? "" : "mobile-open"}`} aria-label={`${folder} messages`}><MessageListHeader folder={folder} count={messages.length} onRefresh={refresh} onEmptyTrash={folder === "Trash" ? () => void emptyTrash() : undefined} />{error && <p className="gsw-errors">{error}</p>}{messages.length ? messages.map((message) => <MessageRow key={message.engineId} message={message} folder={folder} active={open?.engineId === message.engineId} onOpen={() => void selectMessage(message)} onToggleRead={() => void toggleRead(message)} onDelete={() => void runAction("trash", message.engineId)} onArchive={() => void runAction("archive", message.engineId)} onRestore={folder === "Trash" ? () => void restoreMessage(message.engineId) : undefined} onDestroy={folder === "Trash" ? () => void destroyMessage(message.engineId) : undefined} />) : <div className="gsw-list-empty"><span aria-hidden="true"><Inbox size={28} strokeWidth={1.75} /></span><strong>No messages here</strong><p>Your {folder.toLowerCase()} is clear.</p></div>}</section>
+      {foldersOpen && <button className="gsw-folder-backdrop" aria-label="Close folders" onClick={() => setFoldersOpen(false)} />}
+      <MailSidebar account={account} profileImageUrl={profileImageUrl} folder={folder} counts={folderCounts} composeOpen={compose} mobileHidden={!foldersOpen} collapsed={sidebarCollapsed} onSelectFolder={selectFolder} onToggleCompose={() => { setFoldersOpen(false); if (compose) { void saveDraft(true); setCompose(false); } else openCompose(); }} />
+       <section className={`gsw-message-list ${mobileView !== "messages" ? "" : "mobile-open"}`} aria-label={`${folder} messages`}><MessageListHeader folder={folder} count={searchResults ? messages.length : folderCounts[folder].total} onRefresh={refresh} onEmptyTrash={folder === "Trash" ? () => void emptyTrash() : undefined} />{error && <p className="gsw-errors">{error}</p>}<div className="gsw-message-list-scroll" ref={listScroll} aria-busy={loading}>{messages.length ? messages.map((message) => <MessageRow key={message.engineId} message={message} folder={folder} active={open?.engineId === message.engineId} onOpen={() => void selectMessage(message)} onToggleRead={() => void toggleRead(message)} onDelete={() => void runAction("trash", message.engineId)} onArchive={() => void runAction("archive", message.engineId)} onRestore={folder === "Trash" ? () => void restoreMessage(message.engineId) : undefined} onDestroy={folder === "Trash" ? () => void destroyMessage(message.engineId) : undefined} />) : <div className="gsw-list-empty"><span aria-hidden="true"><Inbox size={28} strokeWidth={1.75} /></span><strong>No messages here</strong><p>Your {folder.toLowerCase()} is clear.</p></div>}</div><nav className="gsw-message-pagination" aria-label="Message pages"><button className="gsw-icon-btn" aria-label="Previous page" disabled={loading || page === 0} onClick={() => account && void loadFolder(account.id, folder, page - 1)}>‹</button><span aria-live="polite">{loading ? "Loading…" : `${messages.length ? page * pageSize + 1 : 0}–${page * pageSize + messages.length}${searchResults ? " results" : ` of ${folderCounts[folder].total}`}`}</span><button className="gsw-icon-btn" aria-label="Next page" disabled={loading || searchResults || (page + 1) * pageSize >= folderCounts[folder].total} onClick={() => account && void loadFolder(account.id, folder, page + 1)}>›</button></nav></section>
       <section className={`gsw-reading-pane ${mobileView === "reader" ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} aria-label="Message reader">{open ? <MessageReader message={open} accountAddress={account?.address} folder={folder} onBack={() => setMobileView("messages")} onReply={() => openCompose("reply", open)} onReplyAll={() => openCompose("replyAll", open)} onForward={() => openCompose("forward", open)} onArchive={() => void runAction("archive", open.engineId)} onTrash={() => void runAction("trash", open.engineId)} onToggleRead={() => void toggleRead(open)} onRestore={() => void restoreMessage(open.engineId)} onDestroy={() => void destroyMessage(open.engineId)} /> : <EmptyReader />}</section>
     </main>
-    {compose && <ComposeWindow mode={composeMode} minimized={composeMinimized} to={to} cc={cc} bcc={bcc} subject={subject} html={html} sending={sending} draftStatus={draftStatus} sendError={sendError} sendNote={lastSend ? `Sent · ${lastSend.status}` : undefined} onToChange={(value) => { setTo(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onCcChange={(value) => { setCc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onBccChange={(value) => { setBcc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onSubjectChange={(value) => { setSubject(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onHtmlChange={(value) => { setHtml(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onMinimize={() => { void saveDraft(true); setComposeMinimized(true); }} onClose={() => { void saveDraft(true); setCompose(false); }} onSubmit={() => void runSend()} onRetry={() => void runSend()} onUndo={lastSend ? () => void runUndo() : undefined} />}
+    {compose && <ComposeWindow mode={composeMode} minimized={composeMinimized} to={to} cc={cc} bcc={bcc} subject={subject} html={html} sending={sending} draftStatus={draftStatus} sendError={sendError} sendNote={lastSend ? `Sent · ${lastSend.status}` : undefined} onToChange={(value) => { setTo(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onCcChange={(value) => { setCc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onBccChange={(value) => { setBcc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onSubjectChange={(value) => { setSubject(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onHtmlChange={(value) => { setHtml(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onMinimize={() => { void saveDraft(true); setComposeMinimized((current) => !current); }} onClose={() => { void saveDraft(true); setCompose(false); }} onSubmit={() => void runSend()} onRetry={() => void runSend()} onUndo={lastSend ? () => void runUndo() : undefined} />}
    </>;
 }
