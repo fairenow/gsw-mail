@@ -1272,3 +1272,22 @@
   .gsw-compose-actions { bottom: -12px; }
   .gsw-account-menu { min-width: 0; width: min(280px, calc(100vw - 16px)); overflow-wrap: anywhere; }
 }
+
+.gsw-reading-body a[href], .gsw-rich-content a[href] {
+  color: #1565c0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.gsw-reading-body blockquote {
+  margin: 18px 0;
+  padding-left: 16px;
+  border-left: 3px solid var(--gsw-border);
+}
+
+.gsw-link-entry { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; flex-shrink: 0; border-bottom: 1px solid var(--gsw-border); }
+.gsw-link-entry input { flex: 1 1 180px; min-width: 0; }
+.gsw-link-entry button { color: var(--gsw-accent-dark); }
+.gsw-link-entry [role="alert"] { width: 100%; color: #b3261e; }

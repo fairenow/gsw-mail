@@ -15,3 +15,11 @@ test("removes unsafe links and image protocols", () => {
   assert.doesNotMatch(html, /javascript|data:text/);
   assert.match(html, /src="https:\/\/example.com\/image.png"/);
 });
+
+test("preserves link labels and query parameters across draft and send sanitization", () => {
+  const input = '<a href="https://example.com/book?a=1&amp;b=2" target="_blank" rel="noopener noreferrer">Book a visit</a>';
+  const draft = sanitizeRichText(input);
+  assert.equal(draft, input);
+  assert.equal(sanitizeRichText(draft), input);
+  assert.match(sanitizeRichText('<a href="https://example.com/?a=1&b=2">Full link</a>'), /a=1&amp;b=2/);
+});
