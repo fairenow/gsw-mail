@@ -28,7 +28,7 @@ export function CalendarPage() {
   const [form, setForm] = useState<EventForm>(blankForm);
   const [saving, setSaving] = useState(false);
   const defaultCalendar = calendars.find((calendar) => calendar.isDefault) ?? calendars[0];
-  const calendarTitle = `${account?.displayName || account?.address?.split("@")[0] || "Your"} Calendar`;
+  const calendarTitle = (account?.displayName || account?.address?.split("@")[0] || "Your").replace(/^stalwart\s+/i, "").trim() || "Your";
 
   useEffect(() => { configureTopBar({ search: "", searchPlaceholder: "Search mail", searchDisabled: true }); }, [configureTopBar]);
   useEffect(() => {
@@ -77,7 +77,7 @@ export function CalendarPage() {
   };
 
   return <MailWorkspace section="calendar"><div className="gsw-product-shell"><main className="gsw-calendar-page">
-      <div className="gsw-page-heading"><div><p className="gsw-eyebrow">{calendarTitle}</p><h1>{calendarTitle}</h1><p>Your events and meeting invitations.</p></div><div className="gsw-calendar-controls"><button className="gsw-secondary-btn" onClick={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}>Previous</button><strong>{month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</strong><button className="gsw-secondary-btn" onClick={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}>Next</button><button className="gsw-primary-btn gsw-calendar-new-event" onClick={openNew}><Plus size={16} aria-hidden="true" /><span>New event</span></button></div></div>
+      <div className="gsw-page-heading"><div><p className="gsw-eyebrow">{calendarTitle}</p><h1>Calendar</h1><p>Your events and meeting invitations.</p></div><div className="gsw-calendar-controls"><button className="gsw-secondary-btn" onClick={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}>Previous</button><strong>{month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</strong><button className="gsw-secondary-btn" onClick={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}>Next</button><button className="gsw-primary-btn gsw-calendar-new-event" onClick={openNew}><Plus size={16} aria-hidden="true" /><span>New event</span></button></div></div>
       {error && <p className="gsw-errors">{error}</p>}
       <div className="gsw-calendar-toolbar"><div className="gsw-calendar-view-toggle">{(["day", "week", "month"] as CalendarView[]).map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => setView(item)}>{item[0]!.toUpperCase() + item.slice(1)}</button>)}</div><span>{defaultCalendar?.name ?? "No calendar selected"}</span></div>
       <div className="gsw-calendar-layout"><aside className="gsw-calendar-list"><h2>{calendarTitle}</h2>{calendars.length ? calendars.map((calendar) => <div key={calendar.engineId}><span className="gsw-calendar-dot" style={{ background: calendar.color ?? "var(--gsw-accent)" }} />{calendar.isDefault ? calendarTitle : calendar.name}</div>) : <p>No calendars available.</p>}</aside><CalendarGrid events={events} month={month} selectedDay={selectedDay} view={view} onSelectDay={(day) => { setSelectedDay(day); setMonth(monthStart(day)); }} onOpen={openEdit} onDelete={remove} /></div>
