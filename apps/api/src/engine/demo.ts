@@ -5,6 +5,7 @@ import type {
   EngineAccountId,
   EngineCalendar,
   EngineCalendarEvent,
+  EngineCalendarEventInput,
   EngineContact,
   EngineContactInput,
   EngineMessageId,
@@ -274,6 +275,18 @@ export class DemoEngine implements MailEngine {
   async listCalendarEvents(_accountId: EngineAccountId, _after: string, _before: string): Promise<EngineCalendarEvent[]> {
     return [];
   }
+
+  async createCalendarEvent(accountId: EngineAccountId, input: EngineCalendarEventInput): Promise<EngineCalendarEvent> {
+    void accountId;
+    return { engineId: `demo-event-${++seq}`, calendarIds: [input.calendarId], title: input.title, ...(input.description ? { description: input.description } : {}), start: input.start, end: new Date(new Date(input.start).getTime() + input.durationMinutes * 60_000).toISOString(), ...(input.location ? { location: input.location } : {}), allDay: input.allDay };
+  }
+
+  async updateCalendarEvent(accountId: EngineAccountId, eventId: string, input: EngineCalendarEventInput): Promise<EngineCalendarEvent> {
+    const updated = await this.createCalendarEvent(accountId, input);
+    return { ...updated, engineId: eventId };
+  }
+
+  async destroyCalendarEvent(_accountId: EngineAccountId, _eventId: string): Promise<void> {}
 
   async listContacts(accountId: EngineAccountId): Promise<EngineContact[]> {
     return contacts.get(accountId)?.map(cloneContact) ?? [];

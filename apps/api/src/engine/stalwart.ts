@@ -9,6 +9,7 @@ import type {
   EngineContactInput,
   EngineCalendar,
   EngineCalendarEvent,
+  EngineCalendarEventInput,
   EngineMessageId,
   EngineThreadId,
   FullMessage,
@@ -72,6 +73,44 @@ interface JmapCalendarEvent {
   locations?: Record<string, { name?: string; description?: string; uri?: string }>;
   showWithoutTime?: boolean;
 }
+
+const durationIso = (minutes: number): string => {
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return `PT${hours ? `${hours}H` : ""}${remainder ? `${remainder}M` : hours ? "" : "1M"}`;
+};
+
+const calendarQueryDate = (value: string): string => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value.replace(/Z$/, "") : date.toISOString().slice(0, 19);
+};
+
+const calendarEventToEngine = (event: JmapCalendarEvent): EngineCalendarEvent => {
+  const location = Object.values(event.locations ?? {})[0]?.name;
+  return {
+    engineId: event.id,
+    calendarIds: Object.entries(event.calendarIds ?? {}).filter(([, included]) => included).map(([id]) => id),
+    title: event.title ?? "Untitled event",
+    ...(event.description ? { description: event.description } : {}),
+    start: event.start ?? "",
+    ...(event.duration ? { end: addDuration(event.start, event.duration) } : {}),
+    ...(location ? { location } : {}),
+    allDay: event.showWithoutTime === true,
+  };
+};
+
+const calendarEventCard = (input: EngineCalendarEventInput, uid: string): Record<string, unknown> => ({
+  "@type": "Event",
+  uid,
+  calendarIds: { [input.calendarId]: true },
+  title: input.title,
+  start: input.start,
+  duration: durationIso(input.durationMinutes),
+  timeZone: input.timeZone ?? "Etc/UTC",
+  showWithoutTime: input.allDay,
+  ...(input.description ? { description: input.description } : {}),
+  ...(input.location ? { locations: { location: { "@type": "Location", name: input.location } } } : {}),
+});
 
 interface JmapContact {
   id: string;
@@ -888,20 +927,52 @@ export class StalwartEngine implements MailEngine {
   async listCalendarEvents(engineAccountId: EngineAccountId, after: string, before: string): Promise<EngineCalendarEvent[]> {
     const { accountId } = await this.accountIdOf(engineAccountId);
     const responses = await this.client.call([
-      ["CalendarEvent/query", { accountId, filter: { after, before }, position: 0, limit: 200, sort: [{ property: "start", isAscending: true }] }, "ceq1"],
+      ["CalendarEvent/query", { accountId, filter: { after: calendarQueryDate(after), before: calendarQueryDate(before) }, position: 0, limit: 200, sort: [{ property: "start", isAscending: true }] }, "ceq1"],
       ["CalendarEvent/get", { accountId, "#ids": { resultOf: "ceq1", name: "CalendarEvent/query", path: "/ids" }, properties: ["id", "calendarIds", "title", "description", "start", "duration", "locations", "showWithoutTime"] }, "ceg1"],
     ]);
     const payload = responses[1]![1] as { list?: JmapCalendarEvent[] };
-    return (payload.list ?? []).map((event) => ({
-      engineId: event.id,
-      calendarIds: Object.entries(event.calendarIds ?? {}).filter(([, included]) => included).map(([id]) => id),
-      title: event.title ?? "Untitled event",
-      ...(event.description ? { description: event.description } : {}),
-      start: event.start ?? "",
-      ...(event.duration ? { end: addDuration(event.start, event.duration) } : {}),
-      ...(Object.values(event.locations ?? {})[0]?.name ? { location: Object.values(event.locations ?? {})[0]!.name } : {}),
-      allDay: event.showWithoutTime === true,
-    }));
+    return (payload.list ?? []).map(calendarEventToEngine);
+  }
+
+  async createCalendarEvent(engineAccountId: EngineAccountId, input: EngineCalendarEventInput): Promise<EngineCalendarEvent> {
+    const { accountId } = await this.accountIdOf(engineAccountId);
+    const responses = await this.client.call([["CalendarEvent/set", { accountId, create: { event: calendarEventCard(input, randomUUID()) } }, "ces1"]]);
+    const payload = responses[0]![1] as { created?: Record<string, { id?: string }>; notCreated?: Record<string, { description?: string }> };
+    const id = payload.created?.event?.id;
+    if (!id) throw new Error(payload.notCreated?.event?.description ?? "Stalwart did not return a calendar event ID");
+    const event = await this.getCalendarEvent(engineAccountId, id);
+    if (!event) throw new Error("Stalwart calendar event disappeared after creation");
+    return event;
+  }
+
+  async updateCalendarEvent(engineAccountId: EngineAccountId, eventId: string, input: EngineCalendarEventInput): Promise<EngineCalendarEvent> {
+    const { accountId } = await this.accountIdOf(engineAccountId);
+    const card = calendarEventCard(input, randomUUID());
+    delete card.uid;
+    const update = Object.fromEntries(Object.entries(card).filter(([key]) => key !== "calendarIds").map(([key, value]) => [`/${key}`, value]));
+    update["/calendarIds"] = card.calendarIds;
+    update["/description"] = input.description ?? null;
+    update["/locations"] = input.location ? card.locations : null;
+    const responses = await this.client.call([["CalendarEvent/set", { accountId, update: { [eventId]: update } }, "ceu1"]]);
+    const payload = responses[0]![1] as { notUpdated?: Record<string, { description?: string }> };
+    if (payload.notUpdated?.[eventId]) throw new Error(payload.notUpdated[eventId].description ?? "Stalwart calendar event update failed");
+    const event = await this.getCalendarEvent(engineAccountId, eventId);
+    if (!event) throw new Error("Stalwart calendar event disappeared after update");
+    return event;
+  }
+
+  async destroyCalendarEvent(engineAccountId: EngineAccountId, eventId: string): Promise<void> {
+    const { accountId } = await this.accountIdOf(engineAccountId);
+    const responses = await this.client.call([["CalendarEvent/set", { accountId, destroy: [eventId] }, "ced1"]]);
+    const payload = responses[0]![1] as { notDestroyed?: Record<string, { description?: string }> };
+    if (payload.notDestroyed?.[eventId]) throw new Error(payload.notDestroyed[eventId].description ?? "Stalwart calendar event deletion failed");
+  }
+
+  private async getCalendarEvent(engineAccountId: EngineAccountId, eventId: string): Promise<EngineCalendarEvent | null> {
+    const { accountId } = await this.accountIdOf(engineAccountId);
+    const responses = await this.client.call([["CalendarEvent/get", { accountId, ids: [eventId], properties: ["id", "calendarIds", "title", "description", "start", "duration", "locations", "showWithoutTime"] }, "ceg2"]]);
+    const payload = responses[0]![1] as { list?: JmapCalendarEvent[] };
+    return payload.list?.[0] ? calendarEventToEngine(payload.list[0]) : null;
   }
 
   async listContacts(engineAccountId: EngineAccountId): Promise<EngineContact[]> {

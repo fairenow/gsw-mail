@@ -221,4 +221,7 @@ export const api = {
   contactImportRows: (id: string) => get<{ rows: { rowNumber: number; raw: Record<string, string>; status: string; error?: string | null }[] }>(`/product/contact-imports/${id}/rows`),
   calendars: (accountId?: string) => get<{ calendars: CalendarSummary[] }>(`/product/calendars${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ""}`),
   calendarEvents: (accountId: string, after: string, before: string) => get<{ events: CalendarEvent[] }>(`/product/calendar-events?accountId=${encodeURIComponent(accountId)}&after=${encodeURIComponent(after)}&before=${encodeURIComponent(before)}`),
+  createCalendarEvent: (body: { accountId: string; calendarId: string; title: string; description?: string; start: string; durationMinutes: number; location?: string; timeZone?: string; allDay: boolean }) => post<CalendarEvent>("/product/calendar-events", body),
+  updateCalendarEvent: (id: string, body: { accountId: string; calendarId: string; title: string; description?: string; start: string; durationMinutes: number; location?: string; timeZone?: string; allDay: boolean }) => patch<CalendarEvent>(`/product/calendar-events/${encodeURIComponent(id)}`, body),
+  deleteCalendarEvent: (id: string, accountId: string) => request(`/product/calendar-events/${encodeURIComponent(id)}?accountId=${encodeURIComponent(accountId)}`, { method: "DELETE" }).then((res) => json<{ deleted: boolean; eventId: string }>(res)),
 };

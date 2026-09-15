@@ -28,6 +28,17 @@ export interface EngineCalendarEvent {
   allDay: boolean;
 }
 
+export interface EngineCalendarEventInput {
+  calendarId: string;
+  title: string;
+  description?: string | undefined;
+  start: string;
+  durationMinutes: number;
+  location?: string | undefined;
+  timeZone?: string | undefined;
+  allDay: boolean;
+}
+
 export interface EngineContactValue {
   value: string;
   label?: string | undefined;
@@ -201,6 +212,12 @@ export interface MailEngine {
   listCalendars(accountId: EngineAccountId): Promise<EngineCalendar[]>;
 
   listCalendarEvents(accountId: EngineAccountId, after: string, before: string): Promise<EngineCalendarEvent[]>;
+
+  createCalendarEvent(accountId: EngineAccountId, input: EngineCalendarEventInput): Promise<EngineCalendarEvent>;
+
+  updateCalendarEvent(accountId: EngineAccountId, eventId: string, input: EngineCalendarEventInput): Promise<EngineCalendarEvent>;
+
+  destroyCalendarEvent(accountId: EngineAccountId, eventId: string): Promise<void>;
 
   listContacts(accountId: EngineAccountId): Promise<EngineContact[]>;
 
