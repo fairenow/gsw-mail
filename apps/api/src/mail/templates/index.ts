@@ -1,4 +1,5 @@
 import { config } from "../../config.js";
+
 import type { MailTemplate, MailTemplateInput, RenderedMailTemplate } from "./types.js";
 
 const escapeHtml = (value: string): string => value
@@ -9,6 +10,7 @@ const escapeHtml = (value: string): string => value
   .replaceAll("'", "&#39;");
 
 const textToHtml = (value: string): string => escapeHtml(value).replaceAll("\n", "<br />");
+
 const mailAssetUrl = (filename: string): string => `https://mail.guidedstepswellness.com/${filename}`;
 
 export const gswDefaultTemplate: MailTemplate = {
@@ -16,9 +18,11 @@ export const gswDefaultTemplate: MailTemplate = {
   name: "Guided Steps Wellness: The Community",
   category: "personal",
   description: "A restrained branded wrapper for everyday mail.",
+
   render: (input: MailTemplateInput): RenderedMailTemplate => {
     const text = input.bodyText ?? "";
     const body = input.bodyHtml ?? textToHtml(text);
+
     return {
       text,
       html: `<!doctype html><html lang="en"><body style="margin:0;background:#f7f3ea;color:#484640;font-family:Arial,sans-serif;line-height:1.6"><div style="width:100%;padding:32px 16px"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8e1d4;border-radius:12px;overflow:hidden"><div style="padding:18px 24px;border-bottom:2px solid #e89a12"><img src="${mailAssetUrl("guided_steps_logo.png")}" alt="Guided Steps Wellness" style="display:block;width:52px;height:52px;object-fit:contain;margin-bottom:12px" /><div style="color:#292824;font-size:16px;font-weight:700">Guided Steps Wellness: The Community</div></div><div style="padding:28px 24px;font-size:15px">${body}</div><div style="padding:16px 24px;border-top:1px solid #eee9df;color:#77756f;font-size:12px">Guided Steps Wellness: The Community<br /><a href="https://thecommunity.guidedstepswellness.com/" style="color:#8d6b37;text-decoration:none">thecommunity.guidedstepswellness.com</a><br />Building community with purpose.</div></div></div></body></html>`,
@@ -33,7 +37,6 @@ export const bibleReaderTemplate: MailTemplate = {
   defaultSubject: "{{subject}}",
   description: "A calm, devotional template for Bible Study Reader messages.",
   availableVariables: [
-    "recipient_name",
     "email_body",
     "cta_label",
     "cta_url",
@@ -42,26 +45,30 @@ export const bibleReaderTemplate: MailTemplate = {
     "scripture_text",
     "community_name"
   ],
+
   render: (input: MailTemplateInput): RenderedMailTemplate => {
-    const recipient = input.recipientName ? `Hello ${input.recipientName}` : "";
     const textBody = [
-      recipient,
       input.lessonTitle,
       input.bodyText ?? "",
-      input.scriptureText ? `\"${input.scriptureText}\"${input.scriptureReference ? `\n${input.scriptureReference}` : ""}` : "",
+      input.scriptureText ? `"${input.scriptureText}"${input.scriptureReference ? `\n${input.scriptureReference}` : ""}` : "",
       input.ctaLabel && input.ctaUrl ? `${input.ctaLabel}: ${input.ctaUrl}` : "",
     ].filter(Boolean).join("\n\n");
+
     const body = input.bodyHtml ?? textToHtml(input.bodyText ?? "");
+
     const lesson = input.lessonTitle ? `<div style="margin:0 0 18px;color:#292824;font-size:20px;font-weight:700">${escapeHtml(input.lessonTitle)}</div>` : "";
+
     const scripture = input.scriptureText
       ? `<div style="margin:24px 0;padding:18px 20px;border-left:3px solid #b98a45;background:#fbf8f1;color:#5d5142"><div style="font-family:Georgia,serif;font-size:17px;font-style:italic">&ldquo;${escapeHtml(input.scriptureText)}&rdquo;</div>${input.scriptureReference ? `<div style="margin-top:8px;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase">${escapeHtml(input.scriptureReference)}</div>` : ""}</div>`
       : "";
+
     const cta = input.ctaLabel && input.ctaUrl
       ? `<div style="margin:26px 0 6px"><a href="${escapeHtml(input.ctaUrl)}" style="display:inline-block;padding:12px 20px;border-radius:6px;background:#b98a45;color:#fff;font-size:14px;font-weight:700;text-decoration:none">${escapeHtml(input.ctaLabel)}</a></div>`
       : "";
+
     return {
       text: textBody,
-      html: `<!doctype html><html lang="en"><body style="margin:0;background:#f8f6f0;color:#484640;font-family:Arial,sans-serif;line-height:1.6"><div style="width:100%;padding:32px 16px"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8e1d4;border-radius:10px;overflow:hidden"><div style="padding:22px 24px;border-bottom:1px solid #e8e1d4"><img src="${mailAssetUrl("bible_app.png")}" alt="Bible Study Reader" style="display:block;width:48px;height:48px;object-fit:contain;margin-bottom:12px" /><div style="color:#292824;font-family:Georgia,serif;font-size:20px;font-weight:700">Bible Study Reader</div><div style="margin-top:3px;color:#77756f;font-size:13px">Study the Word. Grow together.</div></div><div style="padding:30px 24px;font-size:15px">${lesson}<div style="margin-bottom:18px">${escapeHtml(recipient)}</div>${body}${scripture}${cta}</div><div style="padding:18px 24px;border-top:1px solid #eee9df;color:#77756f;font-size:12px">A study Bible you can use anywhere, anytime.<br /><span style="color:#5d5142">Read &bull; Highlight &bull; Notes &bull; Share</span><br /><br />Guided Steps Wellness<br /><a href="https://bible.guidedstepswellness.com" style="color:#8d6b37;text-decoration:none">bible.guidedstepswellness.com</a></div></div></div></body></html>`,
+      html: `<!doctype html><html lang="en"><body style="margin:0;background:#f8f6f0;color:#484640;font-family:Arial,sans-serif;line-height:1.6"><div style="width:100%;padding:32px 16px"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8e1d4;border-radius:10px;overflow:hidden"><div style="padding:22px 24px;border-bottom:1px solid #e8e1d4"><img src="${mailAssetUrl("bible_app.png")}" alt="Bible Study Reader" style="display:block;width:48px;height:48px;object-fit:contain;margin-bottom:12px" /><div style="color:#292824;font-family:Georgia,serif;font-size:20px;font-weight:700">Bible Study Reader</div><div style="margin-top:3px;color:#77756f;font-size:13px">Study the Word. Grow together.</div></div><div style="padding:30px 24px;font-size:15px">${lesson}${body}${scripture}${cta}</div><div style="padding:18px 24px;border-top:1px solid #eee9df;color:#77756f;font-size:12px">A study Bible you can use anywhere, anytime.<br /><span style="color:#5d5142">Read &bull; Highlight &bull; Notes &bull; Share</span><br /><br />Guided Steps Wellness<br /><a href="https://bible.guidedstepswellness.com" style="color:#8d6b37;text-decoration:none">bible.guidedstepswellness.com</a></div></div></div></body></html>`,
     };
   },
 };
