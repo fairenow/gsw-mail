@@ -43,7 +43,9 @@ export const bibleReaderTemplate: MailTemplate = {
     "lesson_title",
     "scripture_reference",
     "scripture_text",
-    "community_name"
+    "community_name",
+    "sender_name",
+    "sender_title",
   ],
 
   render: (input: MailTemplateInput): RenderedMailTemplate => {
