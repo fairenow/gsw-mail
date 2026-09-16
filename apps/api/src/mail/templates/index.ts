@@ -40,19 +40,16 @@ export const bibleReaderTemplate: MailTemplate = {
     "lesson_title",
     "scripture_reference",
     "scripture_text",
-    "community_name",
-    "sender_name",
-    "sender_title",
+    "community_name"
   ],
   render: (input: MailTemplateInput): RenderedMailTemplate => {
-    const recipient = input.recipientName ? `Hello ${input.recipientName},` : "Hello,";
+    const recipient = input.recipientName ? `Hello ${input.recipientName}` : "";
     const textBody = [
       recipient,
       input.lessonTitle,
       input.bodyText ?? "",
       input.scriptureText ? `\"${input.scriptureText}\"${input.scriptureReference ? `\n${input.scriptureReference}` : ""}` : "",
       input.ctaLabel && input.ctaUrl ? `${input.ctaLabel}: ${input.ctaUrl}` : "",
-      input.senderName ? `\n${input.senderName}${input.senderTitle ? `\n${input.senderTitle}` : ""}` : "",
     ].filter(Boolean).join("\n\n");
     const body = input.bodyHtml ?? textToHtml(input.bodyText ?? "");
     const lesson = input.lessonTitle ? `<div style="margin:0 0 18px;color:#292824;font-size:20px;font-weight:700">${escapeHtml(input.lessonTitle)}</div>` : "";
@@ -62,10 +59,9 @@ export const bibleReaderTemplate: MailTemplate = {
     const cta = input.ctaLabel && input.ctaUrl
       ? `<div style="margin:26px 0 6px"><a href="${escapeHtml(input.ctaUrl)}" style="display:inline-block;padding:12px 20px;border-radius:6px;background:#b98a45;color:#fff;font-size:14px;font-weight:700;text-decoration:none">${escapeHtml(input.ctaLabel)}</a></div>`
       : "";
-    const sender = input.senderName ? `<div style="margin-top:24px;color:#77756f;font-size:13px">${escapeHtml(input.senderName)}${input.senderTitle ? `<br />${escapeHtml(input.senderTitle)}` : ""}</div>` : "";
     return {
       text: textBody,
-      html: `<!doctype html><html lang="en"><body style="margin:0;background:#f8f6f0;color:#484640;font-family:Arial,sans-serif;line-height:1.6"><div style="width:100%;padding:32px 16px"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8e1d4;border-radius:10px;overflow:hidden"><div style="padding:22px 24px;border-bottom:1px solid #e8e1d4"><img src="${mailAssetUrl("bible_app.png")}" alt="Bible Study Reader" style="display:block;width:48px;height:48px;object-fit:contain;margin-bottom:12px" /><div style="color:#292824;font-family:Georgia,serif;font-size:20px;font-weight:700">Bible Study Reader</div><div style="margin-top:3px;color:#77756f;font-size:13px">Study the Word. Grow together.</div></div><div style="padding:30px 24px;font-size:15px">${lesson}<div style="margin-bottom:18px">${escapeHtml(recipient)}</div>${body}${scripture}${cta}${sender}</div><div style="padding:18px 24px;border-top:1px solid #eee9df;color:#77756f;font-size:12px">A study Bible you can use anywhere, anytime.<br /><span style="color:#5d5142">Read &bull; Highlight &bull; Notes &bull; Share</span><br /><br />Guided Steps Wellness<br /><a href="https://bible.guidedstepswellness.com" style="color:#8d6b37;text-decoration:none">bible.guidedstepswellness.com</a></div></div></div></body></html>`,
+      html: `<!doctype html><html lang="en"><body style="margin:0;background:#f8f6f0;color:#484640;font-family:Arial,sans-serif;line-height:1.6"><div style="width:100%;padding:32px 16px"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8e1d4;border-radius:10px;overflow:hidden"><div style="padding:22px 24px;border-bottom:1px solid #e8e1d4"><img src="${mailAssetUrl("bible_app.png")}" alt="Bible Study Reader" style="display:block;width:48px;height:48px;object-fit:contain;margin-bottom:12px" /><div style="color:#292824;font-family:Georgia,serif;font-size:20px;font-weight:700">Bible Study Reader</div><div style="margin-top:3px;color:#77756f;font-size:13px">Study the Word. Grow together.</div></div><div style="padding:30px 24px;font-size:15px">${lesson}<div style="margin-bottom:18px">${escapeHtml(recipient)}</div>${body}${scripture}${cta}</div><div style="padding:18px 24px;border-top:1px solid #eee9df;color:#77756f;font-size:12px">A study Bible you can use anywhere, anytime.<br /><span style="color:#5d5142">Read &bull; Highlight &bull; Notes &bull; Share</span><br /><br />Guided Steps Wellness<br /><a href="https://bible.guidedstepswellness.com" style="color:#8d6b37;text-decoration:none">bible.guidedstepswellness.com</a></div></div></div></body></html>`,
     };
   },
 };

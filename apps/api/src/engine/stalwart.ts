@@ -941,12 +941,23 @@ export class StalwartEngine implements MailEngine {
 
   async listCalendarEvents(engineAccountId: EngineAccountId, after: string, before: string): Promise<EngineCalendarEvent[]> {
     const { accountId } = await this.accountIdOf(engineAccountId);
-    const responses = await this.client.call([
-      ["CalendarEvent/query", { accountId, filter: { after: calendarQueryDate(after), before: calendarQueryDate(before) }, position: 0, limit: 200, sort: [{ property: "start", isAscending: true }] }, "ceq1"],
-      ["CalendarEvent/get", { accountId, "#ids": { resultOf: "ceq1", name: "CalendarEvent/query", path: "/ids" }, properties: ["id", "calendarIds", "title", "description", "start", "duration", "locations", "virtualLocations", "participants", "organizerCalendarAddress", "showWithoutTime"] }, "ceg1"],
-    ]);
-    const payload = responses[1]![1] as { list?: JmapCalendarEvent[] };
-    return (payload.list ?? []).map(calendarEventToEngine);
+    const fetchEvents = async (filter: Record<string, unknown> | undefined, suffix: string): Promise<EngineCalendarEvent[]> => {
+      const responses = await this.client.call([
+        ["CalendarEvent/query", { accountId, ...(filter ? { filter } : {}), position: 0, limit: 200, sort: [{ property: "start", isAscending: true }] }, `ceq${suffix}`],
+        ["CalendarEvent/get", { accountId, "#ids": { resultOf: `ceq${suffix}`, name: "CalendarEvent/query", path: "/ids" }, properties: ["id", "calendarIds", "title", "description", "start", "duration", "locations", "virtualLocations", "participants", "organizerCalendarAddress", "showWithoutTime"] }, `ceg${suffix}`],
+      ]);
+      const payload = responses[1]![1] as { list?: JmapCalendarEvent[] };
+      return (payload.list ?? []).map(calendarEventToEngine);
+    };
+    const filtered = await fetchEvents({ after: calendarQueryDate(after), before: calendarQueryDate(before) }, "1");
+    if (filtered.length > 0) return filtered;
+    const fallback = await fetchEvents(undefined, "2");
+    const afterTime = new Date(after).getTime();
+    const beforeTime = new Date(before).getTime();
+    return fallback.filter((event) => {
+      const start = new Date(event.start).getTime();
+      return Number.isNaN(start) || Number.isNaN(afterTime) || Number.isNaN(beforeTime) || (start >= afterTime && start < beforeTime);
+    });
   }
 
   async createCalendarEvent(engineAccountId: EngineAccountId, input: EngineCalendarEventInput): Promise<EngineCalendarEvent> {
