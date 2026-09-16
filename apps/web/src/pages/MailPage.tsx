@@ -34,6 +34,16 @@ const messageHtml = (message: FullMessage) => sanitizeHtml(message.htmlBody || p
 const messageBody = (message: FullMessage) => message.textBody?.trim() || message.htmlBody?.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>|<[^>]+>/gi, "").trim() || "";
 const localDraftKey = (accountId: string) => `gsw-mail-draft:${accountId}`;
 const emptyFolderCounts = (): Record<Folder, { total: number; unread: number }> => Object.fromEntries(FOLDERS.map((name) => [name, { total: 0, unread: 0 }])) as Record<Folder, { total: number; unread: number }>;
+const normalizeComposeHtml = (value: string) => {
+  let normalized = sanitizeHtml(value);
+  const signaturePattern = /<div[^>]*class=["'][^"']*\bgsw-signature\b[^"']*["'][^>]*>[\s\S]*?<\/div>(?:<div[^>]*>\s*<br\s*\/?>\s*<\/div>)?/gi;
+  const signatures = normalized.match(signaturePattern) ?? [];
+  if (signatures.length < 2) return normalized;
+  const keep = signatures[signatures.length - 1];
+  normalized = normalized.replace(signaturePattern, "");
+  normalized = normalized.replace(/^\s*(?:<div[^>]*>\s*)?(?:Hello,?|Hello)(?:\s|&nbsp;|<br\s*\/?>)*(?:<\/div>)?/i, "");
+  return `${normalized}${keep}`;
+};
 
 export function MailPage() {
   const { account, accounts, profileImageUrl, selectAccount: shellSelectAccount, configureTopBar } = useAppShell();
@@ -134,7 +144,7 @@ export function MailPage() {
 
   const openDraft = (draft: FullMessage) => {
     setComposeMode("new"); setCompose(true); setComposeMinimized(false); setDraftId(draft.engineId); setDraftDirty(false); setDraftSaveBlocked(false); setDraftStatus("saved"); setLastSend(null); setSendError(null); setSendRequestId(null);
-    setTo(draft.to?.map((item) => item.email).join(", ") ?? ""); setCc(draft.cc?.map((item) => item.email).join(", ") ?? ""); setBcc(""); setSubject(draft.subject); setHtml(draft.htmlBody ?? plainTextToHtml(messageBody(draft))); setInReplyTo(draft.headers?.["In-Reply-To"]); setReferences(draft.headers?.References);
+    setTo(draft.to?.map((item) => item.email).join(", ") ?? ""); setCc(draft.cc?.map((item) => item.email).join(", ") ?? ""); setBcc(""); setSubject(draft.subject); setHtml(normalizeComposeHtml(draft.htmlBody ?? plainTextToHtml(messageBody(draft)))); setInReplyTo(draft.headers?.["In-Reply-To"]); setReferences(draft.headers?.References);
   };
   const selectMessage = async (message: MessageSummary) => {
     if (!account) return;
@@ -151,7 +161,7 @@ export function MailPage() {
     const currentAccount = account;
     if (!message) {
       const stored = mode === "new" && currentAccount ? localStorage.getItem(localDraftKey(currentAccount.id)) : null;
-      if (stored) { try { const local = JSON.parse(stored) as { to?: string; cc?: string; bcc?: string; subject?: string; html?: string; text?: string; inReplyTo?: string; references?: string; mode?: ComposeMode }; setComposeMode(local.mode ?? "new"); setTo(local.to ?? ""); setCc(local.cc ?? ""); setBcc(local.bcc ?? ""); setSubject(local.subject ?? ""); setHtml(local.html ?? plainTextToHtml(local.text ?? "")); setInReplyTo(local.inReplyTo); setReferences(local.references); setDraftDirty(true); setDraftSaveBlocked(false); setDraftStatus("notSaved"); return; } catch { if (currentAccount) localStorage.removeItem(localDraftKey(currentAccount.id)); } }
+      if (stored) { try { const local = JSON.parse(stored) as { to?: string; cc?: string; bcc?: string; subject?: string; html?: string; text?: string; inReplyTo?: string; references?: string; mode?: ComposeMode }; setComposeMode(local.mode ?? "new"); setTo(local.to ?? ""); setCc(local.cc ?? ""); setBcc(local.bcc ?? ""); setSubject(local.subject ?? ""); setHtml(normalizeComposeHtml(local.html ?? plainTextToHtml(local.text ?? ""))); setInReplyTo(local.inReplyTo); setReferences(local.references); setDraftDirty(true); setDraftSaveBlocked(false); setDraftStatus("notSaved"); return; } catch { if (currentAccount) localStorage.removeItem(localDraftKey(currentAccount.id)); } }
       setTo(""); setCc(""); setBcc(""); setSubject(""); setHtml(`<div><br></div>`); setInReplyTo(undefined); setReferences(undefined); return;
     }
     const messageId = message.headers?.["Message-ID"]; const priorReferences = message.headers?.References?.trim(); setInReplyTo(mode === "forward" ? undefined : messageId); setReferences(mode === "forward" ? undefined : [priorReferences, messageId].filter(Boolean).join(" ") || undefined);
@@ -160,11 +170,15 @@ export function MailPage() {
   };
   const openComposeTo = (email: string) => { openCompose("new"); setTo(email); };
 
-  const draftPayload = useCallback((): import("../api").DraftInput | null => account ? { accountId: account.id, to: draftRecipients(to), cc: draftRecipients(cc), bcc: draftRecipients(bcc), subject, textBody: richTextToText(html), htmlBody: sanitizeHtml(html), inReplyTo, references, mode: composeMode, templateKey } : null, [account, bcc, cc, composeMode, html, inReplyTo, references, subject, templateKey, to]);
-  const saveDraft = useCallback(async (force = false): Promise<string | null> => { if (!account || !compose || (!draftDirty && !force)) return draftId; const payload = draftPayload(); if (!payload) return draftId; setDraftStatus("saving"); try { const savedId = draftId ? (await api.updateDraft(draftId, payload)).engineId : (await api.createDraft(payload)).engineId; localStorage.removeItem(localDraftKey(account.id)); setDraftId(savedId); setDraftDirty(false); setDraftSaveBlocked(false); setDraftStatus("saved"); return savedId; } catch { localStorage.setItem(localDraftKey(account.id), JSON.stringify({ mode: composeMode, to, cc, bcc, subject, html, inReplyTo, references })); setDraftSaveBlocked(true); setDraftStatus("notSaved"); return null; } }, [account, bcc, cc, compose, composeMode, draftDirty, draftId, draftPayload, html, inReplyTo, references, subject, to]);
+  const draftPayload = useCallback((): import("../api").DraftInput | null => {
+    if (!account) return null;
+    const cleanHtml = normalizeComposeHtml(html);
+    return { accountId: account.id, to: draftRecipients(to), cc: draftRecipients(cc), bcc: draftRecipients(bcc), subject, textBody: richTextToText(cleanHtml), htmlBody: cleanHtml, inReplyTo, references, mode: composeMode, templateKey };
+  }, [account, bcc, cc, composeMode, html, inReplyTo, references, subject, templateKey, to]);
+  const saveDraft = useCallback(async (force = false): Promise<string | null> => { if (!account || !compose || (!draftDirty && !force)) return draftId; const payload = draftPayload(); if (!payload) return draftId; setDraftStatus("saving"); try { const savedId = draftId ? (await api.updateDraft(draftId, payload)).engineId : (await api.createDraft(payload)).engineId; localStorage.removeItem(localDraftKey(account.id)); setDraftId(savedId); setDraftDirty(false); setDraftSaveBlocked(false); setDraftStatus("saved"); return savedId; } catch { localStorage.setItem(localDraftKey(account.id), JSON.stringify({ mode: composeMode, to, cc, bcc, subject, html: normalizeComposeHtml(html), inReplyTo, references })); setDraftSaveBlocked(true); setDraftStatus("notSaved"); return null; } }, [account, bcc, cc, compose, composeMode, draftDirty, draftId, draftPayload, html, inReplyTo, references, subject, to]);
   useEffect(() => { if (!compose || !draftDirty || draftSaveBlocked) return; const timer = window.setTimeout(() => { void saveDraft(); }, 1500); return () => window.clearTimeout(timer); }, [compose, draftDirty, draftSaveBlocked, to, cc, bcc, subject, html, saveDraft]);
   useEffect(() => { const saveOnHide = () => { if (document.visibilityState === "hidden") void saveDraft(); }; document.addEventListener("visibilitychange", saveOnHide); return () => document.removeEventListener("visibilitychange", saveOnHide); }, [saveDraft]);
-  const runSend = async () => { if (!account) return; try { setError(null); setSendError(null); setSending(true); const clientRequestId = sendRequestId ?? crypto.randomUUID(); setSendRequestId(clientRequestId); const savedId = await saveDraft(true); const result = savedId ? await api.sendDraft(savedId, account.id, clientRequestId, composeMode, templateKey) : await api.send(account.id, parseRecipients(to), { cc: parseRecipients(cc), bcc: parseRecipients(bcc), subject, textBody: richTextToText(html), htmlBody: sanitizeHtml(html), inReplyTo, references, mode: composeMode, clientRequestId, templateKey }); setLastSend(result); setSendError(null); setCompose(false); setComposeMinimized(false); setDraftId(null); setDraftDirty(false); setDraftSaveBlocked(false); setSendRequestId(null); localStorage.removeItem(localDraftKey(account.id)); setTo(""); setCc(""); setBcc(""); setSubject(""); setHtml(""); setInReplyTo(undefined); setReferences(undefined); } catch (err) { const message = err instanceof Error ? err.message : String(err); setSendError(message); setError(message); } finally { setSending(false); } };
+  const runSend = async () => { if (!account) return; try { setError(null); setSendError(null); setSending(true); const clientRequestId = sendRequestId ?? crypto.randomUUID(); setSendRequestId(clientRequestId); const cleanHtml = normalizeComposeHtml(html); const savedId = await saveDraft(true); const result = savedId ? await api.sendDraft(savedId, account.id, clientRequestId, composeMode, templateKey) : await api.send(account.id, parseRecipients(to), { cc: parseRecipients(cc), bcc: parseRecipients(bcc), subject, textBody: richTextToText(cleanHtml), htmlBody: cleanHtml, inReplyTo, references, mode: composeMode, clientRequestId, templateKey }); setLastSend(result); setSendError(null); setCompose(false); setComposeMinimized(false); setDraftId(null); setDraftDirty(false); setDraftSaveBlocked(false); setSendRequestId(null); localStorage.removeItem(localDraftKey(account.id)); setTo(""); setCc(""); setBcc(""); setSubject(""); setHtml(""); setInReplyTo(undefined); setReferences(undefined); } catch (err) { const message = err instanceof Error ? err.message : String(err); setSendError(message); setError(message); } finally { setSending(false); } };
   const runUndo = async () => { if (!lastSend) return; try { const result = await api.cancelSend(lastSend.sendId); setLastSend({ ...lastSend, status: result.status }); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
 
   return <>
