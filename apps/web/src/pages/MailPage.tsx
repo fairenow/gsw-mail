@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Inbox } from "lucide-react";
-import { api, type FullMessage, type MessageSummary, type SendResult } from "../api";
+import { api, type FullMessage, type MessageSummary, type ProductSettings, type SendResult } from "../api";
 import { useAppShell } from "../components/AppShell";
 import { plainTextToHtml, richTextToText, sanitizeHtml } from "../components/RichTextEditor";
 import { FOLDERS, type Folder } from "../components/folders";
@@ -70,6 +70,7 @@ export function MailPage() {
   const [bcc, setBcc] = useState("");
   const [subject, setSubject] = useState("");
   const [html, setHtml] = useState("");
+  const [signature, setSignature] = useState<ProductSettings["signature"] | null>(null);
   const [templateKey, setTemplateKey] = useState(fallbackTemplateKey);
   const [inReplyTo, setInReplyTo] = useState<string | undefined>();
   const [references, setReferences] = useState<string | undefined>();
@@ -113,7 +114,7 @@ export function MailPage() {
     });
   }, []);
   useEffect(() => { if (account) void loadAccount(account.id, "Inbox"); }, [account, loadAccount]);
-  useEffect(() => { void api.settings().then((settings) => { setTemplateKey(settings.general.templateKey === "bible_reader" ? "bible_reader" : fallbackTemplateKey); }).catch(() => undefined); }, []);
+  useEffect(() => { void api.settings().then((settings) => { setSignature(settings.signature); setTemplateKey(settings.general.templateKey === "bible_reader" ? "bible_reader" : fallbackTemplateKey); }).catch(() => undefined); }, []);
   useEffect(() => () => readTimers.current.forEach((timer) => window.clearTimeout(timer)), []);
 
   useEffect(() => {
@@ -122,6 +123,11 @@ export function MailPage() {
     window.addEventListener("keydown", closeFolders);
     return () => window.removeEventListener("keydown", closeFolders);
   }, [foldersOpen]);
+
+  const signatureFor = (mode: ComposeMode) => {
+    if (!signature?.enabled || (mode === "new" && !signature.onNew) || ((mode === "reply" || mode === "replyAll") && !signature.onReply) || (mode === "forward" && !signature.onForward)) return "";
+    return signature.signatureHtml ? `<div class="gsw-signature">${signature.signatureHtml}</div><div><br></div>` : "";
+  };
 
   const selectAccount = useCallback((id: string) => { const next = accounts.find((item) => item.id === id); if (!next) return; shellSelectAccount(id); setFolder("Inbox"); setSearch(""); setOpen(null); setLastSend(null); setMobileView("messages"); setFoldersOpen(false); }, [accounts, shellSelectAccount]);
   const selectFolder = (name: Folder) => { setFolder(name); setSearch(""); setFoldersOpen(false); setOpen(null); setMobileView("messages"); if (account) void loadFolder(account.id, name); };
@@ -162,11 +168,11 @@ export function MailPage() {
     if (!message) {
       const stored = mode === "new" && currentAccount ? localStorage.getItem(localDraftKey(currentAccount.id)) : null;
       if (stored) { try { const local = JSON.parse(stored) as { to?: string; cc?: string; bcc?: string; subject?: string; html?: string; text?: string; inReplyTo?: string; references?: string; mode?: ComposeMode }; setComposeMode(local.mode ?? "new"); setTo(local.to ?? ""); setCc(local.cc ?? ""); setBcc(local.bcc ?? ""); setSubject(local.subject ?? ""); setHtml(normalizeComposeHtml(local.html ?? plainTextToHtml(local.text ?? ""))); setInReplyTo(local.inReplyTo); setReferences(local.references); setDraftDirty(true); setDraftSaveBlocked(false); setDraftStatus("notSaved"); return; } catch { if (currentAccount) localStorage.removeItem(localDraftKey(currentAccount.id)); } }
-      setTo(""); setCc(""); setBcc(""); setSubject(""); setHtml(`<div><br></div>`); setInReplyTo(undefined); setReferences(undefined); return;
+      setTo(""); setCc(""); setBcc(""); setSubject(""); setHtml(`<div><br></div><div><br></div>${signatureFor("new")}`); setInReplyTo(undefined); setReferences(undefined); return;
     }
     const messageId = message.headers?.["Message-ID"]; const priorReferences = message.headers?.References?.trim(); setInReplyTo(mode === "forward" ? undefined : messageId); setReferences(mode === "forward" ? undefined : [priorReferences, messageId].filter(Boolean).join(" ") || undefined);
-    if (mode === "forward") { setTo(""); setCc(""); setBcc(""); setSubject(subjectWithPrefix(message.subject || "(no subject)", "Fwd")); setHtml(`<div>---------- Forwarded message ----------<br>From: ${message.from?.name || ""} &lt;${message.from?.email || ""}&gt;<br>Date: ${new Date(message.date).toLocaleString()}<br>Subject: ${message.subject || "(no subject)"}<br>To: ${message.to?.map((item) => item.email).join(", ") || ""}<br><br>${messageHtml(message)}</div>`); }
-    else { const replyTo = uniqueRecipients([message.from?.email || "", ...(message.to ?? []).map((item) => item.email)], account?.address ?? ""); const replyCc = uniqueRecipients((message.cc ?? []).map((item) => item.email), account?.address ?? ""); const quote = `<div>On ${new Date(message.date).toLocaleString()}, ${message.from?.email || "the sender"} wrote:</div><blockquote>${messageHtml(message)}</blockquote>`; setTo((mode === "replyAll" ? replyTo : [message.from?.email || ""]).filter(Boolean).join(", ")); setCc(mode === "replyAll" ? replyCc.join(", ") : ""); setBcc(""); setSubject(subjectWithPrefix(message.subject || "(no subject)", "Re")); setHtml(`<div><br></div>${quote}`); }
+    if (mode === "forward") { setTo(""); setCc(""); setBcc(""); setSubject(subjectWithPrefix(message.subject || "(no subject)", "Fwd")); setHtml(`${signatureFor("forward")}<div>---------- Forwarded message ----------<br>From: ${message.from?.name || ""} &lt;${message.from?.email || ""}&gt;<br>Date: ${new Date(message.date).toLocaleString()}<br>Subject: ${message.subject || "(no subject)"}<br>To: ${message.to?.map((item) => item.email).join(", ") || ""}<br><br>${messageHtml(message)}</div>`); }
+    else { const replyTo = uniqueRecipients([message.from?.email || "", ...(message.to ?? []).map((item) => item.email)], account?.address ?? ""); const replyCc = uniqueRecipients((message.cc ?? []).map((item) => item.email), account?.address ?? ""); const quote = `<div>On ${new Date(message.date).toLocaleString()}, ${message.from?.email || "the sender"} wrote:</div><blockquote>${messageHtml(message)}</blockquote>`; setTo((mode === "replyAll" ? replyTo : [message.from?.email || ""]).filter(Boolean).join(", ")); setCc(mode === "replyAll" ? replyCc.join(", ") : ""); setBcc(""); setSubject(subjectWithPrefix(message.subject || "(no subject)", "Re")); setHtml(signature?.position === "afterQuotedText" ? `${quote}${signatureFor(mode)}` : `${signatureFor(mode)}${quote}`); }
   };
   const openComposeTo = (email: string) => { openCompose("new"); setTo(email); };
 
