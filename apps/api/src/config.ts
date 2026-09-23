@@ -18,6 +18,7 @@ const config = {
     jmapUrl: env("STALWART_JMAP_URL", "https://localhost:443"),
     adminToken: env("STALWART_ADMIN_TOKEN", "change-me-stalwart-admin"),
     sessionTtlSeconds: Number(env("STALWART_SESSION_TTL_SECONDS", "60")),
+    webhookSecret: process.env.STALWART_WEBHOOK_SECRET,
   },
   outbound: {
     relay: env("OUTBOUND_RELAY", "null"),
