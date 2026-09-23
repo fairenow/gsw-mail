@@ -5,6 +5,7 @@ import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { authUsers, emailAccounts, mailAccountMemberships } from "../db/schema.js";
 import { DemoEngine } from "./demo.js";
+import { JmapClient, JmapError } from "./jmap.js";
 import { StalwartEngine } from "./stalwart.js";
 import type { MailEngine } from "./types.js";
 
@@ -75,14 +76,13 @@ export function getEngine(accessToken?: string): MailEngine {
   return engine;
 }
 
-export async function getUserEngine(input: {
+async function getUserMailboxToken(input: {
   productUserId: string;
   authUserId: string;
   accountId: string;
   headers: Record<string, string>;
   permission?: "read" | "send" | "manage";
-}): Promise<MailEngine> {
-  if (config.mailEngine === "demo") return getEngine();
+}): Promise<{ token: string; accountAddress: string }> {
   const account = await requireAccountPermission(input.productUserId, input.accountId, input.permission ?? "read");
   if (account.status !== "active" || account.authSetupStatus !== "ready") throw new Error("mailbox is not ready for mail access");
 
@@ -107,7 +107,102 @@ export async function getUserEngine(input: {
   }
 
   const token = await getStalwartAccessToken({ authUserId: input.authUserId, accountId: account.id, headers: input.headers });
+  return { token, accountAddress: account.address };
+}
+
+export async function getUserEngine(input: {
+  productUserId: string;
+  authUserId: string;
+  accountId: string;
+  headers: Record<string, string>;
+  permission?: "read" | "send" | "manage";
+}): Promise<MailEngine> {
+  if (config.mailEngine === "demo") return getEngine();
+  const { token } = await getUserMailboxToken(input);
   return getEngine(token);
+}
+
+export type UserMessageChanges = {
+  oldState: string | null;
+  newState: string;
+  hasMoreChanges: boolean;
+  created: string[];
+  updated: string[];
+  destroyed: string[];
+  resetRequired: boolean;
+};
+
+export async function getUserMessageChanges(input: {
+  productUserId: string;
+  authUserId: string;
+  accountId: string;
+  headers: Record<string, string>;
+  sinceState?: string | undefined;
+}): Promise<UserMessageChanges> {
+  if (config.mailEngine === "demo") {
+    return {
+      oldState: input.sinceState ?? null,
+      newState: "demo-state-1",
+      hasMoreChanges: false,
+      created: [],
+      updated: [],
+      destroyed: [],
+      resetRequired: false,
+    };
+  }
+
+  const { token, accountAddress } = await getUserMailboxToken({ ...input, permission: "read" });
+  const client = new JmapClient({
+    baseUrl: config.stalwart.jmapUrl,
+    token,
+    sessionTtlMs: config.stalwart.sessionTtlSeconds * 1000,
+  });
+  const session = await client.session();
+  const accountId = client.resolveAccountId(session, accountAddress);
+
+  const currentState = async (): Promise<string> => {
+    const response = await client.call([["Email/get", { accountId, ids: [], properties: ["id"] }, "state"]]);
+    const state = response[0]?.[1]?.state;
+    if (typeof state !== "string") throw new Error("Stalwart Email/get did not return a state token");
+    return state;
+  };
+
+  if (!input.sinceState) {
+    return {
+      oldState: null,
+      newState: await currentState(),
+      hasMoreChanges: false,
+      created: [],
+      updated: [],
+      destroyed: [],
+      resetRequired: false,
+    };
+  }
+
+  try {
+    const response = await client.call([["Email/changes", { accountId, sinceState: input.sinceState, maxChanges: 250 }, "changes"]]);
+    const payload = response[0]?.[1] ?? {};
+    return {
+      oldState: typeof payload.oldState === "string" ? payload.oldState : input.sinceState,
+      newState: typeof payload.newState === "string" ? payload.newState : input.sinceState,
+      hasMoreChanges: payload.hasMoreChanges === true,
+      created: Array.isArray(payload.created) ? payload.created.filter((id): id is string => typeof id === "string") : [],
+      updated: Array.isArray(payload.updated) ? payload.updated.filter((id): id is string => typeof id === "string") : [],
+      destroyed: Array.isArray(payload.destroyed) ? payload.destroyed.filter((id): id is string => typeof id === "string") : [],
+      resetRequired: false,
+    };
+  } catch (error) {
+    if (!(error instanceof JmapError) || error.type !== "cannotCalculateChanges") throw error;
+    return {
+      oldState: input.sinceState,
+      newState: await currentState(),
+      hasMoreChanges: false,
+      created: [],
+      updated: [],
+      destroyed: [],
+      resetRequired: true,
+    };
+  }
 }
 
 export function getServiceEngine(): MailEngine {
