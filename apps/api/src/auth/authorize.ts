@@ -37,7 +37,7 @@ export async function getAccessibleAccounts(userId: string): Promise<AccessibleA
   const membershipRows = await db
     .select({
       account: emailAccounts,
-       organizationId: emailAccounts.workspaceId,
+      organizationId: emailAccounts.workspaceId,
       role: mailAccountMemberships.role,
     })
     .from(mailAccountMemberships)
@@ -62,7 +62,7 @@ export async function getAccessibleAccounts(userId: string): Promise<AccessibleA
 
   if (config.env !== "production") {
     const ownedRows = await db
-       .select({ account: emailAccounts, organizationId: emailAccounts.workspaceId })
+      .select({ account: emailAccounts, organizationId: emailAccounts.workspaceId })
       .from(emailAccounts)
       .innerJoin(domains, eq(emailAccounts.domainId, domains.id))
       .where(eq(emailAccounts.userId, userId));
@@ -90,28 +90,27 @@ export async function requireAccountPermission(
   accountId: string,
   permission: AccountPermission,
 ): Promise<AccessibleAccount> {
-  const accountRows = await db
-    .select({ account: emailAccounts, organizationId: emailAccounts.workspaceId })
+  const [row] = await db
+    .select({
+      account: emailAccounts,
+      organizationId: emailAccounts.workspaceId,
+      role: mailAccountMemberships.role,
+    })
     .from(emailAccounts)
     .innerJoin(domains, eq(emailAccounts.domainId, domains.id))
-    .where(eq(emailAccounts.id, accountId))
-    .limit(1);
-  const account = accountRows[0]?.account;
-  if (!account) throw notFound("account not found");
-  const organizationId = accountRows[0]?.organizationId ?? "";
-
-  const membershipRows = await db
-    .select({ role: mailAccountMemberships.role })
-    .from(mailAccountMemberships)
-    .where(
+    .leftJoin(
+      mailAccountMemberships,
       and(
-        eq(mailAccountMemberships.accountId, accountId),
+        eq(mailAccountMemberships.accountId, emailAccounts.id),
         eq(mailAccountMemberships.userId, userId),
       ),
     )
+    .where(eq(emailAccounts.id, accountId))
     .limit(1);
-  const membershipRole = membershipRows[0]?.role;
-  const role = membershipRole ?? (devOwnerFallback(account.userId, userId) ? "owner" : undefined);
+
+  const account = row?.account;
+  if (!account) throw notFound("account not found");
+  const role = row.role ?? (devOwnerFallback(account.userId, userId) ? "owner" : undefined);
   if (!role) throw forbidden();
   const permissions = PERMISSIONS[role];
   if (!permissions.includes(permission)) throw forbidden();
@@ -125,7 +124,7 @@ export async function requireAccountPermission(
     role,
     permissions,
     domainId: account.domainId,
-    organizationId,
+    organizationId: row.organizationId,
   };
 }
 
