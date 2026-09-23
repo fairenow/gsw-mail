@@ -13,11 +13,17 @@ interface Query {
   accountId?: string;
 }
 
-const safeFilename = (value: string): string => value
-  .replace(/[\r\n]/g, " ")
-  .replace(/["\\]/g, "_")
-  .trim()
-  .slice(0, 180) || "attachment";
+const safeFilename = (value: string): string => {
+  // Reject an effectively empty/control-only filename before substitution so a
+  // malicious CRLF-only value cannot turn into a synthetic underscore name.
+  if (!value.replace(/[\u0000-\u001f\u007f]/g, "").trim()) return "attachment";
+
+  return value
+    .replace(/[\u0000-\u001f\u007f]+/g, "_")
+    .replace(/["\\]/g, "_")
+    .trim()
+    .slice(0, 180) || "attachment";
+};
 
 export default async (app: FastifyInstance) => {
   await requireUser(app, { optional: false });
