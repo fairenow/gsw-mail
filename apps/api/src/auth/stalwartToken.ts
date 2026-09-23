@@ -1,7 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
 import { fromNodeHeaders } from "better-auth/node";
+import { and, eq, gt } from "drizzle-orm";
 import { decodeJwt, decodeProtectedHeader } from "jose";
 import { config } from "../config.js";
+import { db } from "../db/client.js";
+import { oauthAccessToken } from "../db/schema.js";
 import { auth } from "./better.js";
 
 export interface StalwartTokenRequest {
@@ -66,7 +69,33 @@ export function decodeStalwartTokenMetadata(token: string): StalwartTokenMetadat
 const cache = new Map<string, CachedToken>();
 const inFlight = new Map<string, Promise<string>>();
 
+const bearerFromHeaders = (headers: Record<string, string>): string | null => {
+  const authorization = headers.authorization ?? headers.Authorization;
+  if (!authorization?.startsWith("Bearer ")) return null;
+  return authorization.slice("Bearer ".length).trim() || null;
+};
+
+async function mobileStalwartBearer(input: StalwartTokenRequest): Promise<string | null> {
+  const token = bearerFromHeaders(input.headers);
+  if (!token) return null;
+  const [record] = await db
+    .select({ token: oauthAccessToken.token, scopes: oauthAccessToken.scopes })
+    .from(oauthAccessToken)
+    .where(and(
+      eq(oauthAccessToken.token, token),
+      eq(oauthAccessToken.userId, input.authUserId),
+      eq(oauthAccessToken.clientId, config.auth.mobileClientId),
+      gt(oauthAccessToken.expiresAt, new Date()),
+    ))
+    .limit(1);
+  if (!record || !record.scopes.includes("email")) return null;
+  return record.token;
+}
+
 export async function getStalwartAccessToken(input: StalwartTokenRequest, request: typeof fetch = fetch): Promise<string> {
+  const directMobileToken = await mobileStalwartBearer(input);
+  if (directMobileToken) return directMobileToken;
+
   const cacheKey = `${input.authUserId}:${input.accountId}:${config.auth.stalwartAudience}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
