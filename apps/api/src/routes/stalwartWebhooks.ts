@@ -62,6 +62,7 @@ export function extractEmailAddresses(value: unknown): string[] {
 export function verifyStalwartWebhookSignature(raw: Buffer, signature: string | string[] | undefined, secret: string): boolean {
   if (!signature) return false;
   const header = Array.isArray(signature) ? signature[0] : signature;
+  if (!header) return false;
   const encoded = header.trim().replace(/^sha256=/i, "");
   let offered: Buffer;
   try {
