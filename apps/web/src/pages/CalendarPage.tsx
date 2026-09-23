@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { api, type CalendarEvent } from "../api";
 import { useAppShell } from "../components/AppShell";
@@ -9,6 +9,7 @@ const monthEnd = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 
 type EventForm = { calendarId: string; title: string; description: string; start: string; durationMinutes: string; location: string; meetingLink: string; attendees: string; sendInvitations: boolean; allDay: boolean };
 type CalendarView = "day" | "week" | "month";
 const localInput = (value: string) => { const date = new Date(value); if (Number.isNaN(date.getTime())) return value.slice(0, 16); const offset = date.getTimezoneOffset() * 60_000; return new Date(date.getTime() - offset).toISOString().slice(0, 16); };
+const calendarBoundary = (date: Date) => localInput(date.toISOString());
 const blankForm = (calendarId = ""): EventForm => ({ calendarId, title: "", description: "", start: localInput(new Date().toISOString()), durationMinutes: "60", location: "", meetingLink: "", attendees: "", sendInvitations: true, allDay: false });
 const dateKey = (value: string | Date) => { const date = value instanceof Date ? value : new Date(value); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; };
 const startOfWeek = (date: Date) => { const result = new Date(date); result.setDate(result.getDate() - result.getDay()); result.setHours(0, 0, 0, 0); return result; };
@@ -27,20 +28,39 @@ export function CalendarPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<EventForm>(blankForm);
   const [saving, setSaving] = useState(false);
+  const syncAccount = useRef<string | null>(null);
   const defaultCalendar = calendars.find((calendar) => calendar.isDefault) ?? calendars[0];
   const calendarTitle = (account?.displayName || account?.address?.split("@")[0] || "Your").replace(/^stalwart\s+/i, "").trim() || "Your";
 
   useEffect(() => { configureTopBar({ search: "", searchPlaceholder: "Search mail", searchDisabled: true }); }, [configureTopBar]);
   useEffect(() => {
     if (!account) return;
-    const after = monthStart(month).toISOString();
-    const before = monthEnd(month).toISOString();
-    void Promise.all([api.calendars(account.id), api.calendarEvents(account.id, after, before)]).then(([calendarResult, eventResult]) => {
-      setCalendars(calendarResult.calendars);
-      setForm((current) => ({ ...current, calendarId: calendarResult.calendars.find((calendar) => calendar.isDefault)?.engineId ?? calendarResult.calendars[0]?.engineId ?? "" }));
-      setEvents(sortEvents(eventResult.events));
-      setError("");
-    }).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+    let cancelled = false;
+    const load = async () => {
+      try {
+        if (syncAccount.current !== account.id && account.permissions.includes("send")) {
+          syncAccount.current = account.id;
+          await fetch("/product/calendar-events/sync-invitations", {
+            method: "POST",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ accountId: account.id }),
+          }).then(async (response) => { if (!response.ok) throw new Error((await response.json().catch(() => ({})) as { error?: string }).error ?? "calendar invitation sync failed"); }).catch((err) => console.warn("[calendar] invitation sync failed", err));
+        }
+        const after = calendarBoundary(monthStart(month));
+        const before = calendarBoundary(monthEnd(month));
+        const [calendarResult, eventResult] = await Promise.all([api.calendars(account.id), api.calendarEvents(account.id, after, before)]);
+        if (cancelled) return;
+        setCalendars(calendarResult.calendars);
+        setForm((current) => ({ ...current, calendarId: current.calendarId || calendarResult.calendars.find((calendar) => calendar.isDefault)?.engineId || calendarResult.calendars[0]?.engineId || "" }));
+        setEvents(sortEvents(eventResult.events));
+        setError("");
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
   }, [account, month]);
 
   const openNew = () => { setEditingId(null); setFormOpen(true); setForm(blankForm(defaultCalendar?.engineId ?? "")); };
@@ -58,17 +78,17 @@ export function CalendarPage() {
       if (attendees.some((email) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) { setError("Enter valid attendee email addresses."); return; }
       const sendSchedulingMessages = form.sendInvitations && attendees.length > 0;
       if (sendSchedulingMessages && !window.confirm(`Send a calendar invitation email to ${attendees.join(", ")}?`)) return;
-      const body = { accountId: account.id, calendarId: form.calendarId, title: form.title.trim(), description: form.description || undefined, start: form.start, durationMinutes: Math.max(1, Number(form.durationMinutes) || 60), location: form.location || undefined, meetingLink: form.meetingLink || undefined, attendees, sendSchedulingMessages, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, allDay: form.allDay };
+      const body = { accountId: account.id, calendarId: form.calendarId, title: form.title.trim(), description: form.description || undefined, start: form.start.length === 16 ? `${form.start}:00` : form.start, durationMinutes: Math.max(1, Number(form.durationMinutes) || 60), location: form.location || undefined, meetingLink: form.meetingLink || undefined, attendees, sendSchedulingMessages, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, allDay: form.allDay };
       const saved = editingId ? await api.updateCalendarEvent(editingId, body) : await api.createCalendarEvent(body);
       setEditingId(null);
       setFormOpen(false);
       const savedDate = new Date(saved.start);
-      if (!Number.isNaN(savedDate.getTime())) { setSelectedDay(savedDate); setMonth(monthStart(savedDate)); }
+      const targetMonth = Number.isNaN(savedDate.getTime()) ? monthStart(month) : monthStart(savedDate);
+      if (!Number.isNaN(savedDate.getTime())) setSelectedDay(savedDate);
+      setMonth(targetMonth);
       setEvents((current) => sortEvents([...current.filter((event) => event.engineId !== saved.engineId), saved]));
-      const after = monthStart(month).toISOString();
-      const before = monthEnd(month).toISOString();
-      const refreshed = (await api.calendarEvents(account.id, after, before)).events;
-      setEvents((current) => sortEvents([...(refreshed.length ? refreshed : current), saved].filter((event, index, all) => all.findIndex((candidate) => candidate.engineId === event.engineId) === index)));
+      const refreshed = (await api.calendarEvents(account.id, calendarBoundary(targetMonth), calendarBoundary(monthEnd(targetMonth)))).events;
+      setEvents(sortEvents([...refreshed.filter((event) => event.engineId !== saved.engineId), saved]));
       setError("");
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
     finally { setSaving(false); }

@@ -17,6 +17,7 @@ import suppressions from "./routes/suppressions.js";
 import threads from "./routes/threads.js";
 import webhooks from "./routes/webhooks.js";
 import product from "./routes/product.js";
+import calendarSync from "./routes/calendarSync.js";
 import setup from "./routes/setup.js";
 import account from "./routes/account.js";
 import mailboxSetup from "./routes/mailboxSetup.js";
@@ -86,6 +87,7 @@ export function buildApp() {
   app.register(suppressions);
   app.register(webhooks);
   app.register(product);
+  app.register(calendarSync);
   app.register(setup);
   app.register(account);
   app.register(mailboxSetup);
