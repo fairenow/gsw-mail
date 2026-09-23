@@ -5,12 +5,13 @@ import { SenderAvatar } from "./SenderAvatar";
 
 const rowDate = (value: string) => new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
-export function MessageRow({ message, active, selected, folder, onOpen, onSelect, onToggleRead, onToggleFlag, onDelete, onArchive, onRestore, onDestroy }: {
+export function MessageRow({ message, active, selected, folder, onOpen, onPrefetch, onSelect, onToggleRead, onToggleFlag, onDelete, onArchive, onRestore, onDestroy }: {
   message: MessageSummary;
   active: boolean;
   selected: boolean;
   folder: Folder;
   onOpen: () => void;
+  onPrefetch?: () => void;
   onSelect: () => void;
   onToggleRead: () => void;
   onToggleFlag: () => void;
@@ -21,7 +22,7 @@ export function MessageRow({ message, active, selected, folder, onOpen, onSelect
 }) {
   const sender = message.from?.name || message.from?.email || "Unknown sender";
   return (
-    <article className={`gsw-message-row ${message.read ? "read" : "unread"} ${active ? "open" : ""} ${selected ? "selected" : ""}`} onClick={onOpen} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onOpen(); }}>
+    <article className={`gsw-message-row ${message.read ? "read" : "unread"} ${active ? "open" : ""} ${selected ? "selected" : ""}`} onClick={onOpen} onPointerEnter={onPrefetch} onFocus={onPrefetch} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onOpen(); }}>
       <input type="checkbox" checked={selected} onChange={onSelect} onClick={(event) => event.stopPropagation()} aria-label={`Select ${message.subject || "message"}`} style={{ flex: "0 0 auto", width: 16, height: 16, accentColor: "#e89a12", cursor: "pointer" }} />
       <button type="button" onClick={(event) => { event.stopPropagation(); onToggleFlag(); }} aria-label={message.flagged ? "Unstar message" : "Star message"} title={message.flagged ? "Unstar" : "Star"} style={{ border: 0, background: "transparent", padding: 2, cursor: "pointer", color: message.flagged ? "#e89a12" : "#9b978e", flex: "0 0 auto" }}><Star size={17} fill={message.flagged ? "currentColor" : "none"} /></button>
       <SenderAvatar name={message.from?.name} email={message.from?.email} />
