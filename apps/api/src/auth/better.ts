@@ -69,9 +69,10 @@ export const auth = betterAuth({
     oauthProvider({
       loginPage: "/sign-in",
       consentPage: "/sign-in",
-      scopes: ["openid", "email"],
+      scopes: ["openid", "email", "offline_access"],
       validAudiences: [config.auth.stalwartAudience],
       accessTokenExpiresIn: config.auth.tokenTtlSeconds,
+      refreshTokenReuseInterval: 30,
       customUserInfoClaims: ({ user }) => ({
         email: user.email,
         email_verified: user.emailVerified,
