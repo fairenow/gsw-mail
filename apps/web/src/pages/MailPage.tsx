@@ -14,7 +14,7 @@ import { appendDraftAttachments, listDraftAttachments, removeDraftAttachment, ty
 
 type MobileView = "messages" | "reader";
 const pageSize = 50;
-const fallbackTemplateKey = "gsw_default";
+const fallbackTemplateKey = "none";
 const parseRecipients = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
 const draftRecipients = (value: string) => parseRecipients(value).filter((item) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item));
 const uniqueRecipients = (values: string[], accountAddress: string) => {
@@ -109,7 +109,7 @@ export function MailPage() {
     });
   }, []);
   useEffect(() => { if (account) void loadAccount(account.id, "Inbox"); }, [account, loadAccount]);
-  useEffect(() => { void api.settings().then((settings) => { setSignature(settings.signature); setTemplateKey(settings.general.templateKey === "bible_reader" ? "bible_reader" : fallbackTemplateKey); }).catch(() => undefined); }, []);
+  useEffect(() => { void api.settings().then((settings) => { setSignature(settings.signature); const selected = settings.general.templateKey; setTemplateKey(selected === "bible_reader" ? "bible_reader" : selected === "gsw_default" ? "gsw_default" : "none"); }).catch(() => undefined); }, []);
   useEffect(() => () => readTimers.current.forEach((timer) => window.clearTimeout(timer)), []);
   useEffect(() => { if (!foldersOpen) return; const closeFolders = (event: KeyboardEvent) => { if (event.key === "Escape") setFoldersOpen(false); }; window.addEventListener("keydown", closeFolders); return () => window.removeEventListener("keydown", closeFolders); }, [foldersOpen]);
 
