@@ -1,4 +1,10 @@
+import { eq } from "drizzle-orm";
+
 import { config } from "../config.js";
+
+import { db } from "../db/client.js";
+
+import { emailSignatures } from "../db/schema.js";
 
 import { getUserEngine } from "../engine/index.js";
 
@@ -59,6 +65,34 @@ export interface SubmitSendResult {
   idempotentReplay?: boolean;
 }
 
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const removeLeadingLegacyHello = (value: string): string => value.replace(
+  /^\s*(?:(?:<div|<p)[^>]*>\s*)?(?:Hello\s*,?|Hello)(?:\s|&nbsp;|<br\s*\/?>)*(?:(?:<\/div>|<\/p>)\s*)?/i,
+  "",
+);
+
+const normalizeNewMessageSignature = (html: string, signatureHtml: string): string => {
+  const safeSignature = sanitizeRichText(signatureHtml).trim();
+  if (!safeSignature) return html;
+
+  const markedSignaturePattern = /<div[^>]*class=["'][^"']*\bgsw-signature\b[^"']*["'][^>]*>[\s\S]*?<\/div>(?:\s*<div[^>]*>\s*<br\s*\/?>\s*<\/div>)?/gi;
+  const markedSignatures = html.match(markedSignaturePattern) ?? [];
+  const withoutMarked = html.replace(markedSignaturePattern, "");
+  const rawSignaturePattern = new RegExp(escapeRegExp(safeSignature), "gi");
+  const rawSignatures = withoutMarked.match(rawSignaturePattern) ?? [];
+
+  if (markedSignatures.length + rawSignatures.length < 2) return html;
+
+  let body = withoutMarked.replace(rawSignaturePattern, "");
+  body = removeLeadingLegacyHello(body)
+    .replace(/^(?:\s*(?:<div|<p)[^>]*>\s*<br\s*\/?>\s*<\/(?:div|p)>)){1,3}/i, "")
+    .trim();
+
+  const spacer = body ? "<div><br></div>" : "";
+  return `${body}${spacer}<div class="gsw-signature">${safeSignature}</div><div><br></div>`;
+};
+
 export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResult> {
   if (input.account.status !== "active") throw badRequest("account is not active");
 
@@ -90,11 +124,23 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
 
   const templateKey = input.templateKey ?? DEFAULT_MAIL_TEMPLATE_KEY;
 
-  const safeHtml = input.htmlBody ? sanitizeRichText(input.htmlBody) : undefined;
+  let safeHtml = input.htmlBody ? sanitizeRichText(input.htmlBody) : undefined;
+
+  if (safeHtml && input.mode === "new") {
+    const [signature] = await db
+      .select({ signatureHtml: emailSignatures.signatureHtml, enabled: emailSignatures.enabled, onNew: emailSignatures.onNew })
+      .from(emailSignatures)
+      .where(eq(emailSignatures.userId, input.userId))
+      .limit(1);
+
+    if (signature?.enabled && signature.onNew && signature.signatureHtml) {
+      safeHtml = normalizeNewMessageSignature(safeHtml, signature.signatureHtml);
+    }
+  }
 
   const messageHtml = safeHtml;
 
-  const messageText = input.textBody ?? (safeHtml ? richTextToPlainText(safeHtml) : "");
+  const messageText = safeHtml ? richTextToPlainText(safeHtml) : (input.textBody ?? "");
 
   const rendered = renderMailTemplate(templateKey, {
     bodyHtml: messageHtml,
