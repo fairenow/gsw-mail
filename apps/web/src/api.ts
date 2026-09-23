@@ -1,5 +1,3 @@
-
-
 export interface Account {
   id: string;
   address: string;
@@ -24,10 +22,27 @@ export interface MessageSummary {
   mailbox: string;
 }
 
+export interface MessageAttachment {
+  engineId: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  inline: boolean;
+}
+
+export interface ComposeAttachment {
+  filename: string;
+  contentType: string;
+  size: number;
+  content: string;
+  contentDisposition?: "attachment" | "inline";
+  contentId?: string;
+}
+
 export interface FullMessage extends MessageSummary {
   textBody?: string;
   htmlBody?: string;
-  attachments?: { engineId: string; filename: string; contentType: string; size: number; inline: boolean }[];
+  attachments?: MessageAttachment[];
   headers?: Record<string, string>;
 }
 
@@ -113,22 +128,11 @@ export interface SetupState {
   migratedFromExisting: boolean;
 }
 
-interface AccountsResponse {
-  accounts: Account[];
-}
+interface AccountsResponse { accounts: Account[]; }
+interface MessagesResponse { messages: MessageSummary[]; }
 
-interface MessagesResponse {
-  messages: MessageSummary[];
-}
-
-export interface MailboxFolderStats {
-  total: number;
-  unread: number;
-}
-
-interface MailboxStatsResponse {
-  folders: Record<string, MailboxFolderStats>;
-}
+export interface MailboxFolderStats { total: number; unread: number; }
+interface MailboxStatsResponse { folders: Record<string, MailboxFolderStats>; }
 
 export interface DraftInput {
   accountId: string;
@@ -144,11 +148,7 @@ export interface DraftInput {
   templateKey?: string;
 }
 
-const headers = (jsonBody = false): Record<string, string> => {
-  return {
-    ...(jsonBody ? { "content-type": "application/json" } : {}),
-  };
-};
+const headers = (jsonBody = false): Record<string, string> => ({ ...(jsonBody ? { "content-type": "application/json" } : {}) });
 
 const json = async <T,>(res: Response): Promise<T> => {
   if (!res.ok) {
@@ -185,6 +185,8 @@ const patch = async <T,>(url: string, body: unknown, timeoutMs?: number): Promis
 
 const interactiveTimeout = 20_000;
 
+export type BulkMailAction = "archive" | "trash" | "restore" | "destroy" | "read" | "unread" | "star" | "unstar";
+
 export const api = {
   setup: () => get<SetupState>("/api/setup"),
   updateWorkspace: (name: string) => patch<Pick<SetupState, "workspace" | "currentStep">>("/api/setup/workspace", { name }),
@@ -193,19 +195,21 @@ export const api = {
   messages: (accountId: string, mailbox: string, limit = 50, offset = 0) => get<MessagesResponse>(`/mail/messages?accountId=${accountId}&mailbox=${mailbox}&limit=${limit}&offset=${offset}`).then((r) => r.messages),
   mailboxStats: (accountId: string) => get<MailboxStatsResponse>(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`).then((r) => r.folders),
   message: (accountId: string, engineId: string) => get<FullMessage>(`/mail/messages/${engineId}?accountId=${accountId}`),
-  read: (accountId: string, engineId: string, seen: boolean) =>
-    post(`/mail/messages/${engineId}/read`, { accountId, seen }),
+  read: (accountId: string, engineId: string, seen: boolean) => post(`/mail/messages/${engineId}/read`, { accountId, seen }),
+  flag: (accountId: string, engineId: string, flagged: boolean) => post(`/mail/messages/${engineId}/flag`, { accountId, flagged }),
+  bulk: (accountId: string, ids: string[], action: BulkMailAction) => post<{ updated: number; action: BulkMailAction }>("/mail/messages/bulk", { accountId, ids, action }, interactiveTimeout),
   archive: (accountId: string, engineId: string) => post(`/mail/messages/${engineId}/archive`, { accountId }),
   trash: (accountId: string, engineId: string) => post(`/mail/messages/${engineId}/trash`, { accountId }),
   move: (accountId: string, engineId: string, mailbox: string) => post(`/mail/messages/${engineId}/move`, { accountId, mailbox }),
   destroy: (accountId: string, engineId: string) => post(`/mail/messages/${engineId}/destroy`, { accountId }),
   emptyTrash: (accountId: string) => post<{ deleted: number }>("/mail/messages/empty-trash", { accountId }),
+  attachmentUrl: (accountId: string, attachment: MessageAttachment) => `/mail/attachments/${encodeURIComponent(attachment.engineId)}?accountId=${encodeURIComponent(accountId)}&filename=${encodeURIComponent(attachment.filename)}`,
   search: (accountId: string, q: string) => get<MessagesResponse>(`/mail/search?accountId=${accountId}&q=${encodeURIComponent(q)}`).then((r) => r.messages),
-  send: (accountId: string, to: string[], body: { cc?: string[]; bcc?: string[]; subject?: string; textBody?: string; htmlBody?: string; inReplyTo?: string; references?: string; mode?: "new" | "reply" | "replyAll" | "forward"; clientRequestId?: string; templateKey?: string }) =>
+  send: (accountId: string, to: string[], body: { cc?: string[]; bcc?: string[]; subject?: string; textBody?: string; htmlBody?: string; inReplyTo?: string; references?: string; mode?: "new" | "reply" | "replyAll" | "forward"; clientRequestId?: string; templateKey?: string; attachments?: ComposeAttachment[] }) =>
     post<SendResult>("/mail/send", { accountId, to, ...body }, interactiveTimeout),
   createDraft: (body: DraftInput) => post<{ engineId: string }>("/mail/drafts", body, interactiveTimeout),
   updateDraft: (id: string, body: DraftInput) => patch<{ engineId: string }>(`/mail/drafts/${id}`, body, interactiveTimeout).then((result) => result ?? { engineId: id }),
-  sendDraft: (id: string, accountId: string, clientRequestId?: string, mode?: "new" | "reply" | "replyAll" | "forward", templateKey?: string) => post<SendResult>(`/mail/drafts/${id}/send`, { accountId, ...(clientRequestId ? { clientRequestId } : {}), ...(mode ? { mode } : {}), ...(templateKey ? { templateKey } : {}) }, interactiveTimeout),
+  sendDraft: (id: string, accountId: string, clientRequestId?: string, mode?: "new" | "reply" | "replyAll" | "forward", templateKey?: string, attachments?: ComposeAttachment[]) => post<SendResult>(`/mail/drafts/${id}/send`, { accountId, ...(clientRequestId ? { clientRequestId } : {}), ...(mode ? { mode } : {}), ...(templateKey ? { templateKey } : {}), ...(attachments?.length ? { attachments } : {}) }, interactiveTimeout),
   sendStatus: (sendId: string) => get<never>("/mail/sends/" + sendId),
   cancelSend: (sendId: string) => post<{ status: string }>(`/mail/sends/${sendId}/cancel`),
   retrySend: (sendId: string, accountId: string) => post<{ status: string }>(`/mail/sends/${sendId}/retry`, { accountId }),

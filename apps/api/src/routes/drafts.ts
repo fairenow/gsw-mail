@@ -18,6 +18,15 @@ import { DEFAULT_MAIL_TEMPLATE_KEY } from "../mail/templates/index.js";
 
 import { sanitizeRichText } from "../lib/richText.js";
 
+const attachmentSchema = z.object({
+  filename: z.string().min(1).max(255),
+  contentType: z.string().min(1),
+  size: z.number().int().nonnegative(),
+  contentDisposition: z.enum(["attachment", "inline"]).optional(),
+  contentId: z.string().optional(),
+  content: z.string().regex(/^[A-Za-z0-9+/]+={0,2}$/, { message: "attachment content must be base64" }),
+});
+
 const draftSchema = z.object({
   accountId: z.string().uuid(),
   to: z.array(z.string().email()).optional(),
@@ -38,6 +47,7 @@ const sendDraftSchema = z.object({
   clientRequestId: z.string().trim().min(1).max(200).optional(),
   mode: z.enum(["new", "reply", "replyAll", "forward"]).optional(),
   templateKey: z.string().optional(),
+  attachments: z.array(attachmentSchema).max(20).optional(),
 });
 
 export default async (app: FastifyInstance) => {
@@ -156,6 +166,7 @@ export default async (app: FastifyInstance) => {
       htmlHasSignatureMarker: draft.htmlBody?.includes("gsw-signature") ?? false,
       htmlPreview: draft.htmlBody?.slice(0, 500),
       textPreview: draft.textBody?.slice(0, 250),
+      attachmentCount: body.attachments?.length ?? 0,
     }, "draft body before submitSend");
 
     let result: Awaited<ReturnType<typeof submitSend>>;
@@ -177,6 +188,7 @@ export default async (app: FastifyInstance) => {
         replyTo: draft.headers["Reply-To"],
         inReplyTo: draft.headers["In-Reply-To"],
         references: draft.headers["References"],
+        attachments: body.attachments,
         clientRequestId: body.clientRequestId,
       });
     } catch (error) {
@@ -195,6 +207,7 @@ export default async (app: FastifyInstance) => {
           hasInReplyTo: Boolean(draft.headers["In-Reply-To"]),
           hasReferences: Boolean(draft.headers.References),
         },
+        attachmentCount: body.attachments?.length ?? 0,
         jmapFailure: describeJmapFailure(error),
       }, "draft send failed");
 

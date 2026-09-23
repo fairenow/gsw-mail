@@ -10,6 +10,7 @@ import admin from "./routes/admin.js";
 import aliases from "./routes/aliases.js";
 import drafts from "./routes/drafts.js";
 import messages from "./routes/messages.js";
+import mailActions from "./routes/mailActions.js";
 import search from "./routes/search.js";
 import send from "./routes/send.js";
 import sends from "./routes/sends.js";
@@ -29,8 +30,10 @@ import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } fr
 import { config } from "./config.js";
 import { JmapError } from "./engine/jmap.js";
 
+const MAIL_ATTACHMENT_BODY_LIMIT = 30 * 1024 * 1024;
+
 export function buildApp() {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: true, bodyLimit: MAIL_ATTACHMENT_BODY_LIMIT });
 
   app.register(cors, { origin: true });
   app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
@@ -80,6 +83,7 @@ export function buildApp() {
   app.register(accounts);
   app.register(aliases);
   app.register(messages);
+  app.register(mailActions);
   app.register(threads);
   app.register(search);
   app.register(send);

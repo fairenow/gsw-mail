@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Minus, X } from "lucide-react";
+import { Minus, Paperclip, X } from "lucide-react";
+import type { ComposeAttachment } from "../../api";
 import { RichTextEditor } from "../RichTextEditor";
 
 export type ComposeMode = "new" | "reply" | "replyAll" | "forward";
@@ -8,6 +9,7 @@ type ContactSuggestion = { id: string; displayName: string | null; organization:
 type LegacyContact = { id: string; displayName?: string | null; organization?: string | null; jobTitle?: string | null; emails?: { email: string; isPrimary?: boolean }[] };
 const contactCache = new Map<string, { expiresAt: number; contacts: ContactSuggestion[] }>();
 const CONTACT_CACHE_TTL_MS = 30_000;
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 
 const normalizeSuggestion = (contact: LegacyContact): ContactSuggestion | null => {
   const email = contact.emails?.find((item) => item.isPrimary)?.email ?? contact.emails?.[0]?.email ?? "";
@@ -21,9 +23,6 @@ async function contactSuggestions(query: string): Promise<ContactSuggestion[]> {
     const body = await preferred.json() as { contacts?: ContactSuggestion[] };
     return body.contacts ?? [];
   }
-
-  // Keep autocomplete working during staggered Vercel/Railway deploys or if the
-  // optimized suggestions endpoint is temporarily unavailable.
   const fallback = await fetch(`/product/contacts?q=${encodeURIComponent(query)}&limit=20&offset=0`, { credentials: "include" });
   if (!fallback.ok) throw new Error(`contact suggestions failed: ${preferred.status}/${fallback.status}`);
   const body = await fallback.json() as { contacts?: LegacyContact[] };
@@ -44,16 +43,10 @@ function RecipientField({ label, value, onChange }: { label: string; value: stri
   const query = value.split(",").at(-1)?.trim() ?? "";
 
   useEffect(() => {
-    if (!focused || query.length < 2) {
-      setResults([]);
-      return;
-    }
+    if (!focused || query.length < 2) { setResults([]); return; }
     const normalizedQuery = query.toLowerCase();
     const cached = contactCache.get(normalizedQuery);
-    if (cached && cached.expiresAt > Date.now()) {
-      setResults(cached.contacts);
-      return;
-    }
+    if (cached && cached.expiresAt > Date.now()) { setResults(cached.contacts); return; }
     const currentRequest = ++requestId.current;
     const timer = window.setTimeout(() => {
       void contactSuggestions(query).then((contacts) => {
@@ -61,9 +54,7 @@ function RecipientField({ label, value, onChange }: { label: string; value: stri
         contactCache.set(normalizedQuery, { expiresAt: Date.now() + CONTACT_CACHE_TTL_MS, contacts });
         if (contactCache.size > 100) contactCache.delete(contactCache.keys().next().value!);
         setResults(contacts);
-      }).catch(() => {
-        if (currentRequest === requestId.current) setResults([]);
-      });
+      }).catch(() => { if (currentRequest === requestId.current) setResults([]); });
     }, 120);
     return () => window.clearTimeout(timer);
   }, [focused, query]);
@@ -90,7 +81,20 @@ function RecipientField({ label, value, onChange }: { label: string; value: stri
   </div>;
 }
 
-export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, sending, draftStatus, sendError, sendNote, onToChange, onCcChange, onBccChange, onSubjectChange, onHtmlChange, onMinimize, onClose, onSubmit, onRetry, onUndo }: {
+const fileToAttachment = (file: File): Promise<ComposeAttachment> => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onerror = () => reject(reader.error ?? new Error("Unable to read attachment"));
+  reader.onload = () => {
+    const result = String(reader.result ?? "");
+    const content = result.includes(",") ? result.slice(result.indexOf(",") + 1) : result;
+    resolve({ filename: file.name, contentType: file.type || "application/octet-stream", size: file.size, content, contentDisposition: "attachment" });
+  };
+  reader.readAsDataURL(file);
+});
+
+const formatBytes = (size: number) => size < 1024 ? `${size} B` : size < 1024 * 1024 ? `${Math.round(size / 1024)} KB` : `${(size / (1024 * 1024)).toFixed(1)} MB`;
+
+export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, attachments, sending, draftStatus, sendError, sendNote, onToChange, onCcChange, onBccChange, onSubjectChange, onHtmlChange, onAttachmentsChange, onMinimize, onClose, onSubmit, onRetry, onUndo }: {
   mode: ComposeMode;
   minimized: boolean;
   to: string;
@@ -98,6 +102,7 @@ export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, sen
   bcc: string;
   subject: string;
   html: string;
+  attachments: ComposeAttachment[];
   sending: boolean;
   draftStatus: "idle" | "saving" | "saved" | "notSaved";
   sendError?: string | null;
@@ -107,6 +112,7 @@ export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, sen
   onBccChange: (value: string) => void;
   onSubjectChange: (value: string) => void;
   onHtmlChange: (value: string) => void;
+  onAttachmentsChange: (attachments: ComposeAttachment[]) => void;
   onMinimize: () => void;
   onClose: () => void;
   onSubmit: () => void;
@@ -114,10 +120,23 @@ export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, sen
   onUndo?: () => void;
 }) {
   const [showBcc, setShowBcc] = useState(Boolean(bcc));
+  const [attachmentError, setAttachmentError] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
   const submit = (event: FormEvent) => { event.preventDefault(); onSubmit(); };
   const title = mode === "new" ? "New message" : mode === "forward" ? "Forward message" : mode === "replyAll" ? "Reply all" : "Reply";
   const status = draftStatus === "saving" ? "Saving..." : draftStatus === "saved" ? "Saved" : draftStatus === "notSaved" ? "Not saved" : "";
-  if (minimized) return <button className="gsw-compose-minimized" onClick={onMinimize}><span><strong>{title}</strong><small>{subject || to || "New draft"}</small></span><span className="gsw-compose-minimized-status">{status || "Draft"}</span></button>;
+  const pickFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setAttachmentError("");
+    const incoming = Array.from(files);
+    const total = attachments.reduce((sum, item) => sum + item.size, 0) + incoming.reduce((sum, item) => sum + item.size, 0);
+    if (attachments.length + incoming.length > 20) { setAttachmentError("You can attach up to 20 files."); return; }
+    if (total > MAX_ATTACHMENT_BYTES) { setAttachmentError("Attachments are limited to 20 MB total."); return; }
+    try { onAttachmentsChange([...attachments, ...(await Promise.all(incoming.map(fileToAttachment)))]); }
+    catch (error) { setAttachmentError(error instanceof Error ? error.message : "Unable to attach file"); }
+    if (fileInput.current) fileInput.current.value = "";
+  };
+  if (minimized) return <button className="gsw-compose-minimized" onClick={onMinimize}><span><strong>{title}</strong><small>{subject || to || "New draft"}</small></span><span className="gsw-compose-minimized-status">{attachments.length ? `${attachments.length} attachment${attachments.length === 1 ? "" : "s"}` : status || "Draft"}</span></button>;
   return <section className="gsw-compose-window" aria-label="Compose message">
     <div className="gsw-compose-head"><strong>{title}</strong><div><button className="gsw-compose-head-action" onClick={onMinimize} aria-label="Minimize compose"><Minus size={16} strokeWidth={1.75} aria-hidden="true" /></button><button className="gsw-compose-head-action" onClick={onClose} aria-label="Close compose"><X size={16} strokeWidth={1.75} aria-hidden="true" /></button></div></div>
     <form className="gsw-compose-form" onSubmit={submit}>
@@ -126,7 +145,10 @@ export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, sen
       {showBcc && <RecipientField label="Bcc" value={bcc} onChange={onBccChange} />}
       <input value={subject} onChange={(event) => onSubjectChange(event.target.value)} placeholder="Subject" aria-label="Subject" />
       <RichTextEditor value={html} onChange={onHtmlChange} placeholder="Write a message" />
-      <div className="gsw-compose-actions"><span className={`gsw-send-note ${sendError ? "gsw-send-error" : ""}`}>{sendError || status || sendNote}{sendError && <button type="button" className="gsw-link-btn" onClick={onRetry}>Retry</button>}{sendNote && onUndo && <button type="button" className="gsw-link-btn" onClick={onUndo}>Undo</button>}</span><button className="gsw-primary-btn" type="submit" disabled={sending}>{sending ? "Sending..." : "Send"}</button></div>
+      {!!attachments.length && <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "8px 12px 0" }}>{attachments.map((attachment, index) => <span key={`${attachment.filename}:${index}`} style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid #e5dccd", borderRadius: 999, padding: "5px 8px", fontSize: 12 }}><Paperclip size={13} />{attachment.filename} <small>{formatBytes(attachment.size)}</small><button type="button" aria-label={`Remove ${attachment.filename}`} onClick={() => onAttachmentsChange(attachments.filter((_, itemIndex) => itemIndex !== index))} style={{ border: 0, background: "transparent", cursor: "pointer" }}>×</button></span>)}</div>}
+      {attachmentError && <div className="gsw-send-error" style={{ padding: "6px 12px 0" }}>{attachmentError}</div>}
+      <input ref={fileInput} type="file" multiple hidden onChange={(event) => void pickFiles(event.target.files)} />
+      <div className="gsw-compose-actions"><span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><button type="button" className="gsw-icon-btn" onClick={() => fileInput.current?.click()} aria-label="Attach files" title="Attach files"><Paperclip size={18} /></button><span className={`gsw-send-note ${sendError ? "gsw-send-error" : ""}`}>{sendError || status || sendNote}{sendError && <button type="button" className="gsw-link-btn" onClick={onRetry}>Retry</button>}{sendNote && onUndo && <button type="button" className="gsw-link-btn" onClick={onUndo}>Undo</button>}</span></span><button className="gsw-primary-btn" type="submit" disabled={sending}>{sending ? "Sending..." : "Send"}</button></div>
     </form>
   </section>;
 }
