@@ -33,6 +33,23 @@ export interface AccessibleAccount {
   organizationId: string;
 }
 
+interface CachedAccessibleAccount {
+  account: AccessibleAccount;
+  expiresAt: number;
+}
+
+const permissionCache = new Map<string, CachedAccessibleAccount>();
+const permissionInFlight = new Map<string, Promise<AccessibleAccount>>();
+const PERMISSION_CACHE_TTL_MS = 60_000;
+
+const permissionCacheKey = (userId: string, accountId: string) => `${userId}:${accountId}`;
+
+const trimPermissionCache = () => {
+  const now = Date.now();
+  for (const [key, value] of permissionCache) if (value.expiresAt <= now) permissionCache.delete(key);
+  if (permissionCache.size > 1024) permissionCache.delete(permissionCache.keys().next().value!);
+};
+
 export async function getAccessibleAccounts(userId: string): Promise<AccessibleAccount[]> {
   const membershipRows = await db
     .select({
@@ -47,7 +64,7 @@ export async function getAccessibleAccounts(userId: string): Promise<AccessibleA
 
   const byId = new Map<string, AccessibleAccount>();
   for (const row of membershipRows) {
-    byId.set(row.account.id, {
+    const account: AccessibleAccount = {
       id: row.account.id,
       address: row.account.address,
       displayName: row.account.displayName,
@@ -57,7 +74,9 @@ export async function getAccessibleAccounts(userId: string): Promise<AccessibleA
       permissions: PERMISSIONS[row.role],
       domainId: row.account.domainId,
       organizationId: row.organizationId,
-    });
+    };
+    byId.set(row.account.id, account);
+    permissionCache.set(permissionCacheKey(userId, row.account.id), { account, expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS });
   }
 
   if (config.env !== "production") {
@@ -68,7 +87,7 @@ export async function getAccessibleAccounts(userId: string): Promise<AccessibleA
       .where(eq(emailAccounts.userId, userId));
     for (const row of ownedRows) {
       if (byId.has(row.account.id)) continue;
-      byId.set(row.account.id, {
+      const account: AccessibleAccount = {
         id: row.account.id,
         address: row.account.address,
         displayName: row.account.displayName,
@@ -78,18 +97,17 @@ export async function getAccessibleAccounts(userId: string): Promise<AccessibleA
         permissions: PERMISSIONS.owner,
         domainId: row.account.domainId,
         organizationId: row.organizationId,
-      });
+      };
+      byId.set(row.account.id, account);
+      permissionCache.set(permissionCacheKey(userId, row.account.id), { account, expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS });
     }
   }
 
+  trimPermissionCache();
   return [...byId.values()];
 }
 
-export async function requireAccountPermission(
-  userId: string,
-  accountId: string,
-  permission: AccountPermission,
-): Promise<AccessibleAccount> {
+const loadAccessibleAccount = async (userId: string, accountId: string): Promise<AccessibleAccount> => {
   const [row] = await db
     .select({
       account: emailAccounts,
@@ -112,9 +130,6 @@ export async function requireAccountPermission(
   if (!account) throw notFound("account not found");
   const role = row.role ?? (devOwnerFallback(account.userId, userId) ? "owner" : undefined);
   if (!role) throw forbidden();
-  const permissions = PERMISSIONS[role];
-  if (!permissions.includes(permission)) throw forbidden();
-
   return {
     id: account.id,
     address: account.address,
@@ -122,10 +137,37 @@ export async function requireAccountPermission(
     status: account.status,
     authSetupStatus: account.authSetupStatus,
     role,
-    permissions,
+    permissions: PERMISSIONS[role],
     domainId: account.domainId,
     organizationId: row.organizationId,
   };
+};
+
+export async function requireAccountPermission(
+  userId: string,
+  accountId: string,
+  permission: AccountPermission,
+): Promise<AccessibleAccount> {
+  const key = permissionCacheKey(userId, accountId);
+  const cached = permissionCache.get(key);
+  let account: AccessibleAccount;
+  if (cached && cached.expiresAt > Date.now()) {
+    account = cached.account;
+  } else {
+    if (cached) permissionCache.delete(key);
+    const existing = permissionInFlight.get(key);
+    const pending = existing ?? loadAccessibleAccount(userId, accountId);
+    if (!existing) permissionInFlight.set(key, pending);
+    try {
+      account = await pending;
+      permissionCache.set(key, { account, expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS });
+      trimPermissionCache();
+    } finally {
+      if (permissionInFlight.get(key) === pending) permissionInFlight.delete(key);
+    }
+  }
+  if (!account.permissions.includes(permission)) throw forbidden();
+  return account;
 }
 
 export type OrgRole = (typeof organizationMemberships.role.enumValues)[number];
