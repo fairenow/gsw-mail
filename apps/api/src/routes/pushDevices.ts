@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/middleware.js";
+import { sendPushToUser } from "../mobile/expoPush.js";
 import { listMobilePushDevices, removeMobilePushDevice, upsertMobilePushDevice } from "../mobile/pushDevices.js";
 
 const pushDeviceSchema = z.object({
@@ -22,6 +23,16 @@ export default async (app: FastifyInstance) => {
     await upsertMobilePushDevice({ userId: req.user!.id, ...input });
     reply.code(201);
     return { registered: true };
+  });
+
+  app.post("/product/push-devices/test", async (req) => {
+    return sendPushToUser({
+      userId: req.user!.id,
+      title: "GSW Mail notifications are ready",
+      body: "This device is connected for native mail notifications.",
+      data: { route: "mail", kind: "push-test" },
+      channelId: "mail",
+    });
   });
 
   app.delete<{ Params: { token: string } }>("/product/push-devices/:token", async (req) => {
