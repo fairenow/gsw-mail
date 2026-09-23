@@ -36,6 +36,17 @@ export function sanitizeRichText(input: string): string {
     });
 }
 
+export function hasRemoteMailImages(input: string): boolean {
+  return /<img\b[^>]*\bsrc\s*=\s*(?:"https?:|'https?:|https?:)/i.test(input);
+}
+
+export function sanitizeInboundMailHtml(input: string): string {
+  // Incoming mail is untrusted. Apply the normal allow-list sanitizer, then
+  // remove remote image loads so opening a message cannot leak the reader's IP,
+  // device timing, or open event to tracking pixels. Inline data images remain.
+  return sanitizeRichText(input).replace(/<img\b[^>]*\bsrc="https?:[^"]*"[^>]*>/gi, "");
+}
+
 export function richTextToPlainText(input: string): string {
   return input
     .replace(/<br\s*\/?\s*>/gi, "\n")
