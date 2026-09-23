@@ -33,7 +33,8 @@ function linkifyTextNodes(doc: Document) {
   }
 }
 
-const tags = new Set(["A", "B", "BLOCKQUOTE", "BR", "DIV", "EM", "FONT", "H1", "H2", "H3", "I", "IMG", "LI", "OL", "P", "SPAN", "STRONG", "U", "UL"]);
+const tags = new Set(["A", "B", "BLOCKQUOTE", "BR", "CENTER", "CODE", "DIV", "EM", "FONT", "H1", "H2", "H3", "H4", "H5", "H6", "HR", "I", "IMG", "LI", "OL", "P", "PRE", "SECTION", "SMALL", "SPAN", "STRONG", "SUB", "SUP", "TABLE", "TBODY", "TD", "TFOOT", "TH", "THEAD", "TR", "U", "UL"]);
+const safeStyleProperty = /^(?:background(?:-color)?|border(?:-(?:top|right|bottom|left))?(?:-(?:color|style|width))?|border-collapse|border-radius|box-sizing|color|display|float|font(?:-family|-size|-style|-weight)?|height|letter-spacing|line-height|margin(?:-(?:top|right|bottom|left))?|max-height|max-width|min-height|min-width|overflow|padding(?:-(?:top|right|bottom|left))?|text-align|text-decoration|text-indent|text-transform|vertical-align|white-space|width|word-break|word-wrap)\s*:/i;
 
 export function sanitizeHtml(input: string): string {
   const doc = new DOMParser().parseFromString(input, "text/html");
@@ -58,9 +59,9 @@ export function sanitizeHtml(input: string): string {
           else element.removeAttribute("href");
           return;
         }
-        const safeUrl = /^(https?:|mailto:|data:image\/(?:png|gif|jpeg|webp);base64,)/i.test(value);
-        if (name.startsWith("on") || !["align", "color", "face", "href", "rel", "size", "src", "style", "target", "title", "width"].includes(name) || ((name === "href" || name === "src") && !safeUrl)) element.removeAttribute(attribute.name);
-        if (name === "style") element.setAttribute("style", value.split(";").filter((part) => /^(color|background-color|font-size|font-family|font-weight|font-style|text-align|text-decoration)\s*:/i.test(part) && !/url\s*\(|expression\s*\(/i.test(part)).join(";"));
+        const safeUrl = /^(https?:|mailto:|cid:|data:image\/(?:png|gif|jpeg|webp);base64,)/i.test(value);
+        if (name.startsWith("on") || !["align", "alt", "border", "cellpadding", "cellspacing", "color", "colspan", "face", "height", "href", "rel", "rowspan", "size", "src", "style", "target", "title", "valign", "width"].includes(name) || ((name === "href" || name === "src") && !safeUrl)) element.removeAttribute(attribute.name);
+        if (name === "style") element.setAttribute("style", value.split(";").map((part) => part.trim()).filter((part) => safeStyleProperty.test(part) && !/url\s*\(|expression\s*\(|javascript:/i.test(part)).join(";"));
       });
       if (element.tagName === "A") { element.setAttribute("target", "_blank"); element.setAttribute("rel", "noopener noreferrer"); }
       walk(element);
@@ -78,11 +79,11 @@ export function richTextToText(input: string): string {
     if (href && link.textContent?.trim() !== href) link.append(` (${href})`);
   });
   doc.querySelectorAll("br").forEach((node) => node.replaceWith("\n"));
-  doc.querySelectorAll("p,div,li").forEach((node) => node.append("\n"));
+  doc.querySelectorAll("p,div,li,tr").forEach((node) => node.append("\n"));
+  doc.querySelectorAll("td,th").forEach((node) => node.append(" "));
   return (doc.body.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 export function plainTextToHtml(input: string): string {
   return input.split(/\n/).map((line) => `<div>${line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") || "<br>"}</div>`).join("");
 }
-
