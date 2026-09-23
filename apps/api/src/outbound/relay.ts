@@ -19,6 +19,11 @@ export function sanitizeOutboundHeaderValue(value: string | null | undefined): s
   return sanitized || undefined;
 }
 
+export function isInvalidHeaderError(message: string | null | undefined): boolean {
+  if (!message) return false;
+  return /header keys and values cannot contain carriage return, line feed, or null characters|invalid header|invalid.*header/i.test(message);
+}
+
 export const NullRelay: OutboundRelay = {
   name: "null",
   async send(job: OutboundJob, attachments?: RelayAttachment[]): Promise<RelayResult> {
@@ -51,7 +56,7 @@ export function createResendRelay(apiKey: string): OutboundRelay {
         ...(job.cc ? { cc: job.cc } : {}),
         ...(job.bcc ? { bcc: job.bcc } : {}),
         ...(job.htmlBody ? { html: job.htmlBody } : {}),
-        ...(job.replyTo ? { replyTo: job.replyTo } : {}),
+        ...(job.replyTo ? { replyTo: sanitizeOutboundHeaderValue(job.replyTo) } : {}),
         ...(attachments?.length
           ? {
               attachments: attachments.map((a) => ({
@@ -63,11 +68,24 @@ export function createResendRelay(apiKey: string): OutboundRelay {
             }
           : {}),
       };
-      const response = await client.emails.send(options);
-      if (response.error) {
-        return { accepted: false, message: response.error.message };
+      try {
+        const response = await client.emails.send(options);
+        if (response.error) {
+          return {
+            accepted: false,
+            permanent: isInvalidHeaderError(response.error.message),
+            message: response.error.message,
+          };
+        }
+        return { accepted: true, deliveryId: response.data?.id };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          accepted: false,
+          permanent: isInvalidHeaderError(message),
+          message,
+        };
       }
-      return { accepted: true, deliveryId: response.data?.id };
     },
   };
 }
