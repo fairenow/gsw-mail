@@ -1,4 +1,4 @@
-import type { MessageSummary } from "../../api";
+import { api, type MessageSummary } from "../../api";
 import { Archive, Ellipsis, Mail, MailOpen, RotateCcw, Star, Trash2 } from "lucide-react";
 import type { Folder } from "../folders";
 import { SenderAvatar } from "./SenderAvatar";
@@ -21,8 +21,9 @@ export function MessageRow({ message, active, selected, folder, onOpen, onPrefet
   onDestroy?: () => void;
 }) {
   const sender = message.from?.name || message.from?.email || "Unknown sender";
+  const prefetch = () => { api.prefetchActiveMessage(message.engineId); onPrefetch?.(); };
   return (
-    <article className={`gsw-message-row ${message.read ? "read" : "unread"} ${active ? "open" : ""} ${selected ? "selected" : ""}`} onClick={onOpen} onPointerEnter={onPrefetch} onFocus={onPrefetch} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onOpen(); }}>
+    <article className={`gsw-message-row ${message.read ? "read" : "unread"} ${active ? "open" : ""} ${selected ? "selected" : ""}`} onClick={onOpen} onPointerEnter={prefetch} onFocus={prefetch} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onOpen(); }}>
       <input type="checkbox" checked={selected} onChange={onSelect} onClick={(event) => event.stopPropagation()} aria-label={`Select ${message.subject || "message"}`} style={{ flex: "0 0 auto", width: 16, height: 16, accentColor: "#e89a12", cursor: "pointer" }} />
       <button type="button" onClick={(event) => { event.stopPropagation(); onToggleFlag(); }} aria-label={message.flagged ? "Unstar message" : "Star message"} title={message.flagged ? "Unstar" : "Star"} style={{ border: 0, background: "transparent", padding: 2, cursor: "pointer", color: message.flagged ? "#e89a12" : "#9b978e", flex: "0 0 auto" }}><Star size={17} fill={message.flagged ? "currentColor" : "none"} /></button>
       <SenderAvatar name={message.from?.name} email={message.from?.email} />
