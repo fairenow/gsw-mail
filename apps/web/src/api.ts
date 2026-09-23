@@ -167,6 +167,7 @@ const get = <T,>(url: string) => fetch(url, { headers: headers(), credentials: "
 type CachedRead = { value: unknown; freshUntil: number; staleUntil: number };
 const readCache = new Map<string, CachedRead>();
 const inflightReads = new Map<string, Promise<unknown>>();
+let activeMailAccountId: string | null = null;
 
 const fetchAndCache = <T,>(url: string, freshMs: number, staleMs: number): Promise<T> => {
   const existing = inflightReads.get(url) as Promise<T> | undefined;
@@ -254,9 +255,10 @@ export const api = {
   updateWorkspace: (name: string) => patch<Pick<SetupState, "workspace" | "currentStep">>("/api/setup/workspace", { name }),
   addSetupDomain: (domain: string) => post<Pick<SetupState, "domain" | "currentStep">>("/api/setup/domain", { domain }),
   accounts: () => cachedGet<AccountsResponse>("/mail/accounts", 15_000, 120_000).then((r) => r.accounts),
-  messages: (accountId: string, mailbox: string, limit = 50, offset = 0) => cachedGet<MessagesResponse>(`/mail/messages?accountId=${accountId}&mailbox=${mailbox}&limit=${limit}&offset=${offset}`, 4_000, 30_000).then((r) => r.messages),
-  mailboxStats: (accountId: string) => cachedGet<MailboxStatsResponse>(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`, 5_000, 30_000).then((r) => r.folders),
-  message: (accountId: string, engineId: string) => cachedGet<FullMessage>(messageDetailKey(accountId, engineId), 30_000, 5 * 60_000),
+  messages: (accountId: string, mailbox: string, limit = 50, offset = 0) => { activeMailAccountId = accountId; return cachedGet<MessagesResponse>(`/mail/messages?accountId=${accountId}&mailbox=${mailbox}&limit=${limit}&offset=${offset}`, 4_000, 30_000).then((r) => r.messages); },
+  mailboxStats: (accountId: string) => { activeMailAccountId = accountId; return cachedGet<MailboxStatsResponse>(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`, 5_000, 30_000).then((r) => r.folders); },
+  message: (accountId: string, engineId: string) => { activeMailAccountId = accountId; return cachedGet<FullMessage>(messageDetailKey(accountId, engineId), 30_000, 5 * 60_000); },
+  prefetchActiveMessage: (engineId: string) => { if (!activeMailAccountId) return; void cachedGet<FullMessage>(messageDetailKey(activeMailAccountId, engineId), 30_000, 5 * 60_000).catch(() => undefined); },
   read: async (accountId: string, engineId: string, seen: boolean) => { const result = await post(`/mail/messages/${engineId}/read`, { accountId, seen }); mutateCachedMessages(accountId, engineId, { read: seen }); readCache.delete(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`); return result; },
   flag: async (accountId: string, engineId: string, flagged: boolean) => { const result = await post(`/mail/messages/${engineId}/flag`, { accountId, flagged }); mutateCachedMessages(accountId, engineId, { flagged }); return result; },
   bulk: async (accountId: string, ids: string[], action: BulkMailAction) => { const result = await post<{ updated: number; action: BulkMailAction }>("/mail/messages/bulk", { accountId, ids, action }, interactiveTimeout); clearAccountMailCache(accountId); return result; },
