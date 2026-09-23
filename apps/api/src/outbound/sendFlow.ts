@@ -1,29 +1,17 @@
 import { eq } from "drizzle-orm";
 
 import { config } from "../config.js";
-
 import { db } from "../db/client.js";
-
 import { emailSignatures } from "../db/schema.js";
-
 import { getUserEngine } from "../engine/index.js";
-
 import type { SendAttachment } from "../engine/types.js";
-
 import { badRequest, conflict } from "../lib/errors.js";
-
 import { generateMessageId } from "../lib/messageId.js";
-
 import type { AccessibleAccount } from "../auth/authorize.js";
-
+import { buildOutgoingMessage } from "../mail/messageBuilder.js";
+import { DEFAULT_MAIL_TEMPLATE_KEY, resolveMailTemplateKey } from "../mail/templates/index.js";
 import { checkSuppressions } from "./delivery.js";
-
 import { recordSentRecipients } from "../lib/contacts.js";
-
-import { DEFAULT_MAIL_TEMPLATE_KEY, renderMailTemplate } from "../mail/templates/index.js";
-
-import { richTextToPlainText, sanitizeRichText } from "../lib/richText.js";
-
 import {
   backfillOutboundAttachmentEngineIds,
   checkSendRate,
@@ -65,47 +53,16 @@ export interface SubmitSendResult {
   idempotentReplay?: boolean;
 }
 
-const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-const removeLeadingLegacyHello = (value: string): string => value.replace(
-  /^\s*(?:(?:<div|<p)[^>]*>\s*)?(?:Hello\s*,?|Hello)(?:\s|&nbsp;|<br\s*\/?>)*(?:(?:<\/div>|<\/p>)\s*)?/i,
-  "",
-);
-
-const normalizeNewMessageSignature = (html: string, signatureHtml: string): string => {
-  const safeSignature = sanitizeRichText(signatureHtml).trim();
-  if (!safeSignature) return html;
-
-  const markedSignaturePattern = /<div[^>]*class=["'][^"']*\bgsw-signature\b[^"']*["'][^>]*>[\s\S]*?<\/div>(?:\s*<div[^>]*>\s*<br\s*\/?>\s*<\/div>)?/gi;
-  const markedSignatures = html.match(markedSignaturePattern) ?? [];
-  const withoutMarked = html.replace(markedSignaturePattern, "");
-  const rawSignaturePattern = new RegExp(escapeRegExp(safeSignature), "gi");
-  const rawSignatures = withoutMarked.match(rawSignaturePattern) ?? [];
-
-  if (markedSignatures.length + rawSignatures.length < 2) return html;
-
-  let body = withoutMarked.replace(rawSignaturePattern, "");
-  body = removeLeadingLegacyHello(body)
-    .replace(/^(?:\s*(?:<div|<p)[^>]*>\s*<br\s*\/?>\s*<\/(?:div|p)>)){1,3}/i, "")
-    .trim();
-
-  const spacer = body ? "<div><br></div>" : "";
-  return `${body}${spacer}<div class="gsw-signature">${safeSignature}</div><div><br></div>`;
-};
-
 export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResult> {
   if (input.account.status !== "active") throw badRequest("account is not active");
 
   const recipientEmails = [input.to, input.cc ?? [], input.bcc ?? []].flat();
-
   if (recipientEmails.length > config.send.maxRecipients) {
     throw badRequest(`too many recipients (max ${config.send.maxRecipients})`);
   }
-
   if (recipientEmails.length === 0) throw badRequest("at least one recipient is required");
 
   const suppressed = await checkSuppressions(input.account.organizationId, recipientEmails);
-
   if (suppressed.length > 0) {
     throw conflict(`recipient is suppressed and cannot receive mail: ${suppressed.join(", ")}`);
   }
@@ -113,40 +70,43 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
   await checkSendRate(input.account.id);
 
   const now = new Date();
-
   const nextAttemptAt = new Date(now.getTime() + config.send.delaySeconds * 1000);
-
   const messageId = generateMessageId();
-
   const engine = input.authUserId && input.headers
     ? await getUserEngine({ productUserId: input.userId, authUserId: input.authUserId, accountId: input.account.id, headers: input.headers, permission: "send" })
     : (() => { throw new Error("user-scoped OAuth context required for sending"); })();
 
-  const templateKey = input.templateKey ?? DEFAULT_MAIL_TEMPLATE_KEY;
+  const [signature] = await db
+    .select({
+      signatureHtml: emailSignatures.signatureHtml,
+      signatureText: emailSignatures.signatureText,
+      enabled: emailSignatures.enabled,
+      onNew: emailSignatures.onNew,
+      onReply: emailSignatures.onReply,
+      onForward: emailSignatures.onForward,
+      position: emailSignatures.position,
+    })
+    .from(emailSignatures)
+    .where(eq(emailSignatures.userId, input.userId))
+    .limit(1);
 
-  let safeHtml = input.htmlBody ? sanitizeRichText(input.htmlBody) : undefined;
-
-  if (safeHtml && input.mode === "new") {
-    const [signature] = await db
-      .select({ signatureHtml: emailSignatures.signatureHtml, enabled: emailSignatures.enabled, onNew: emailSignatures.onNew })
-      .from(emailSignatures)
-      .where(eq(emailSignatures.userId, input.userId))
-      .limit(1);
-
-    if (signature?.enabled && signature.onNew && signature.signatureHtml) {
-      safeHtml = normalizeNewMessageSignature(safeHtml, signature.signatureHtml);
-    }
-  }
-
-  const messageHtml = safeHtml;
-
-  const messageText = safeHtml ? richTextToPlainText(safeHtml) : (input.textBody ?? "");
-
-  const rendered = renderMailTemplate(templateKey, {
-    bodyHtml: messageHtml,
-    bodyText: messageText,
+  const templateKey = resolveMailTemplateKey(input.templateKey ?? DEFAULT_MAIL_TEMPLATE_KEY);
+  const rendered = buildOutgoingMessage({
+    bodyHtml: input.htmlBody,
+    bodyText: input.textBody,
+    mode: input.mode ?? (input.inReplyTo ? "reply" : "new"),
+    templateKey,
     senderName: input.account.displayName ?? undefined,
     senderEmail: input.account.address,
+    signature: signature ? {
+      signatureHtml: signature.signatureHtml,
+      signatureText: signature.signatureText,
+      enabled: signature.enabled,
+      onNew: signature.onNew,
+      onReply: signature.onReply,
+      onForward: signature.onForward,
+      position: signature.position,
+    } : null,
   });
 
   const reserve = await reserveSendOperation({
@@ -170,9 +130,7 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
 
   if (!reserve.reserved) {
     const existing = await getSendStatus(reserve.id);
-
     if (!existing) throw new Error("send operation conflict without existing row");
-
     return {
       sendId: existing.id,
       messageId: existing.messageId,
@@ -184,14 +142,12 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
   }
 
   await insertRecipients(reserve.id, input.to, input.cc ?? [], input.bcc ?? []);
-
   await insertOutboundAttachments(
     reserve.id,
     (input.attachments ?? []).map(({ content: _content, ...a }) => ({ ...a, engineAttachmentId: null })),
   );
 
   let sent;
-
   try {
     sent = await engine.saveSent(input.account.id, {
       from: input.account.address,
@@ -209,7 +165,6 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
     });
   } catch (err) {
     await failSendPreparation(reserve.id, "sent_persistence", err instanceof Error ? err.message : String(err));
-
     throw new Error("failed to persist sent message", { cause: err });
   }
 
