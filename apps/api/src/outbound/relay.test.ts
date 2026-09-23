@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { sanitizeOutboundHeaderValue } from "./relay.js";
+import { isInvalidHeaderError, sanitizeOutboundHeaderValue } from "./relay.js";
 
 test("sanitizeOutboundHeaderValue unfolds RFC header continuations", () => {
   assert.equal(
@@ -18,4 +18,13 @@ test("sanitizeOutboundHeaderValue removes raw CR LF and null characters", () => 
 
 test("sanitizeOutboundHeaderValue preserves valid message id syntax", () => {
   assert.equal(sanitizeOutboundHeaderValue("<abc.123@team.guidedstepswellness.com>"), "<abc.123@team.guidedstepswellness.com>");
+});
+
+test("invalid provider header failures are classified as permanent", () => {
+  assert.equal(
+    isInvalidHeaderError("Header keys and values cannot contain carriage return, line feed, or null characters."),
+    true,
+  );
+  assert.equal(isInvalidHeaderError("Invalid header value"), true);
+  assert.equal(isInvalidHeaderError("Temporary provider timeout"), false);
 });
