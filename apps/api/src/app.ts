@@ -18,6 +18,7 @@ import sends from "./routes/sends.js";
 import suppressions from "./routes/suppressions.js";
 import threads from "./routes/threads.js";
 import webhooks from "./routes/webhooks.js";
+import stalwartWebhooks from "./routes/stalwartWebhooks.js";
 import product from "./routes/product.js";
 import calendarSync from "./routes/calendarSync.js";
 import contactSuggestions from "./routes/contactSuggestions.js";
@@ -96,6 +97,7 @@ export function buildApp() {
   app.register(admin);
   app.register(suppressions);
   app.register(webhooks);
+  app.register(stalwartWebhooks);
   app.register(product);
   app.register(calendarSync);
   app.register(contactSuggestions);
