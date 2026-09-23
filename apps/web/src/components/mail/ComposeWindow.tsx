@@ -1,29 +1,70 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Minus, X } from "lucide-react";
-import { api, type Contact } from "../../api";
 import { RichTextEditor } from "../RichTextEditor";
 
 export type ComposeMode = "new" | "reply" | "replyAll" | "forward";
 
+type ContactSuggestion = { id: string; displayName: string | null; organization: string | null; jobTitle: string | null; email: string };
+const contactCache = new Map<string, { expiresAt: number; contacts: ContactSuggestion[] }>();
+const CONTACT_CACHE_TTL_MS = 30_000;
+
+async function contactSuggestions(query: string): Promise<ContactSuggestion[]> {
+  const response = await fetch(`/product/contact-suggestions?q=${encodeURIComponent(query)}`, { credentials: "include" });
+  if (!response.ok) throw new Error(`contact suggestions failed: ${response.status}`);
+  const body = await response.json() as { contacts?: ContactSuggestion[] };
+  return body.contacts ?? [];
+}
+
 function RecipientField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   const [focused, setFocused] = useState(false);
-  const [results, setResults] = useState<Contact[]>([]);
+  const [results, setResults] = useState<ContactSuggestion[]>([]);
+  const requestId = useRef(0);
   const query = value.split(",").at(-1)?.trim() ?? "";
+
   useEffect(() => {
-    if (!focused) return;
-    const timer = window.setTimeout(() => { void api.contacts(query).then(setResults).catch(() => setResults([])); }, 180);
+    if (!focused || query.length < 2) {
+      setResults([]);
+      return;
+    }
+    const normalizedQuery = query.toLowerCase();
+    const cached = contactCache.get(normalizedQuery);
+    if (cached && cached.expiresAt > Date.now()) {
+      setResults(cached.contacts);
+      return;
+    }
+    const currentRequest = ++requestId.current;
+    const timer = window.setTimeout(() => {
+      void contactSuggestions(query).then((contacts) => {
+        if (currentRequest !== requestId.current) return;
+        contactCache.set(normalizedQuery, { expiresAt: Date.now() + CONTACT_CACHE_TTL_MS, contacts });
+        if (contactCache.size > 100) contactCache.delete(contactCache.keys().next().value!);
+        setResults(contacts);
+      }).catch(() => {
+        if (currentRequest === requestId.current) setResults([]);
+      });
+    }, 120);
     return () => window.clearTimeout(timer);
   }, [focused, query]);
-  const select = (contact: Contact) => {
-    const address = contact.emails[0]?.email;
-    if (!address) return;
+
+  const select = (contact: ContactSuggestion) => {
     const prefix = value.slice(0, value.lastIndexOf(",") + 1);
-    onChange(`${prefix}${prefix ? " " : ""}${address}, `);
+    onChange(`${prefix}${prefix ? " " : ""}${contact.email}, `);
     setFocused(false);
   };
+
   return <div className="gsw-recipient-field">
     <input value={value} onChange={(event) => onChange(event.target.value)} onFocus={() => setFocused(true)} onBlur={() => window.setTimeout(() => setFocused(false), 150)} placeholder={label} aria-label={label} required={label === "To"} />
-     {focused && results.length > 0 && <div className="gsw-contact-autocomplete">{results.slice(0, 50).map((contact) => <button type="button" key={contact.id} onMouseDown={(event) => event.preventDefault()} onClick={() => select(contact)}><strong>{contact.displayName || contact.emails[0]?.email}</strong><span>{contact.jobTitle || contact.organization || contact.emails[0]?.email}</span><small>{contact.emails[0]?.email}</small></button>)}</div>}
+    {focused && results.length > 0 && <div className="gsw-contact-autocomplete">{results.map((contact) => {
+      const email = contact.email.trim();
+      const name = contact.displayName?.trim();
+      const detail = contact.jobTitle?.trim() || contact.organization?.trim();
+      const heading = name && name.toLowerCase() !== email.toLowerCase() ? name : email;
+      return <button type="button" key={`${contact.id}:${email}`} onMouseDown={(event) => event.preventDefault()} onClick={() => select(contact)}>
+        <strong>{heading}</strong>
+        {detail && detail.toLowerCase() !== heading.toLowerCase() && detail.toLowerCase() !== email.toLowerCase() && <span>{detail}</span>}
+        {heading.toLowerCase() !== email.toLowerCase() && <small>{email}</small>}
+      </button>;
+    })}</div>}
   </div>;
 }
 
@@ -56,7 +97,7 @@ export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, sen
   const status = draftStatus === "saving" ? "Saving..." : draftStatus === "saved" ? "Saved" : draftStatus === "notSaved" ? "Not saved" : "";
   if (minimized) return <button className="gsw-compose-minimized" onClick={onMinimize}><span><strong>{title}</strong><small>{subject || to || "New draft"}</small></span><span className="gsw-compose-minimized-status">{status || "Draft"}</span></button>;
   return <section className="gsw-compose-window" aria-label="Compose message">
-     <div className="gsw-compose-head"><strong>{title}</strong><div><button className="gsw-compose-head-action" onClick={onMinimize} aria-label="Minimize compose"><Minus size={16} strokeWidth={1.75} aria-hidden="true" /></button><button className="gsw-compose-head-action" onClick={onClose} aria-label="Close compose"><X size={16} strokeWidth={1.75} aria-hidden="true" /></button></div></div>
+    <div className="gsw-compose-head"><strong>{title}</strong><div><button className="gsw-compose-head-action" onClick={onMinimize} aria-label="Minimize compose"><Minus size={16} strokeWidth={1.75} aria-hidden="true" /></button><button className="gsw-compose-head-action" onClick={onClose} aria-label="Close compose"><X size={16} strokeWidth={1.75} aria-hidden="true" /></button></div></div>
     <form className="gsw-compose-form" onSubmit={submit}>
       <div className="gsw-recipient-row"><RecipientField label="To" value={to} onChange={onToChange} /><button type="button" className="gsw-recipient-toggle" onClick={() => setShowBcc((current) => !current)}>Cc/Bcc</button></div>
       <RecipientField label="Cc" value={cc} onChange={onCcChange} />
