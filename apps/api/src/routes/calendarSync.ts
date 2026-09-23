@@ -6,7 +6,7 @@ import { getUserEngine } from "../engine/index.js";
 import { parseCalendarInvites } from "../lib/calendarInvites.js";
 
 const bodySchema = z.object({ accountId: z.string().min(1) });
-const eventKey = (event: { title: string; start: string; location?: string }) => `${event.title.trim().toLowerCase()}|${event.start}|${(event.location ?? "").trim().toLowerCase()}`;
+const eventKey = (event: { title: string; start: string; location?: string | undefined }) => `${event.title.trim().toLowerCase()}|${event.start}|${(event.location ?? "").trim().toLowerCase()}`;
 
 export default async function calendarSyncRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
