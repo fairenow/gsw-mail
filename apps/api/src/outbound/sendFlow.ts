@@ -8,6 +8,7 @@ import { buildOutgoingMessage } from "../mail/messageBuilder.js";
 import { DEFAULT_MAIL_TEMPLATE_KEY, resolveMailTemplateKey } from "../mail/templates/index.js";
 import { checkSuppressions } from "./delivery.js";
 import { recordSentRecipients } from "../lib/contacts.js";
+import { storeOutboundAttachmentPayloads } from "./attachmentPayloadStore.js";
 import {
   backfillOutboundAttachmentEngineIds,
   checkSendRate,
@@ -118,6 +119,7 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
     reserve.id,
     (input.attachments ?? []).map(({ content: _content, ...a }) => ({ ...a, engineAttachmentId: null })),
   );
+  await storeOutboundAttachmentPayloads(reserve.id, input.attachments ?? []);
 
   let sent;
   try {
