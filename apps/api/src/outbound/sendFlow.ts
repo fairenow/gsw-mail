@@ -9,6 +9,7 @@ import { DEFAULT_MAIL_TEMPLATE_KEY, resolveMailTemplateKey } from "../mail/templ
 import { checkSuppressions } from "./delivery.js";
 import { recordSentRecipients } from "../lib/contacts.js";
 import { storeOutboundAttachmentPayloads } from "./attachmentPayloadStore.js";
+import { sanitizeOutboundHeaderValue } from "./relay.js";
 import {
   backfillOutboundAttachmentEngineIds,
   checkSendRate,
@@ -68,7 +69,11 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
 
   const now = new Date();
   const nextAttemptAt = new Date(now.getTime() + config.send.delaySeconds * 1000);
-  const messageId = generateMessageId();
+  const messageId = sanitizeOutboundHeaderValue(generateMessageId())!;
+  const safeSubject = sanitizeOutboundHeaderValue(input.subject) ?? "";
+  const safeReplyTo = sanitizeOutboundHeaderValue(input.replyTo);
+  const safeInReplyTo = sanitizeOutboundHeaderValue(input.inReplyTo);
+  const safeReferences = sanitizeOutboundHeaderValue(input.references);
   const engine = input.authUserId && input.headers
     ? await getUserEngine({ productUserId: input.userId, authUserId: input.authUserId, accountId: input.account.id, headers: input.headers, permission: "send" })
     : (() => { throw new Error("user-scoped OAuth context required for sending"); })();
@@ -88,13 +93,13 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
     to: input.to,
     cc: input.cc,
     bcc: input.bcc,
-    subject: input.subject,
+    subject: safeSubject,
     textBody: rendered.text,
     htmlBody: rendered.html,
     templateKey,
-    replyTo: input.replyTo,
-    inReplyTo: input.inReplyTo,
-    references: input.references,
+    replyTo: safeReplyTo,
+    inReplyTo: safeInReplyTo,
+    references: safeReferences,
     messageId,
     attachments: input.attachments,
     clientRequestId: input.clientRequestId,
@@ -128,12 +133,12 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
       to: input.to,
       cc: input.cc,
       bcc: input.bcc,
-      subject: input.subject,
+      subject: safeSubject,
       textBody: rendered.text,
       htmlBody: rendered.html,
-      replyTo: input.replyTo,
-      inReplyTo: input.inReplyTo,
-      references: input.references,
+      replyTo: safeReplyTo,
+      inReplyTo: safeInReplyTo,
+      references: safeReferences,
       messageId,
       attachments: input.attachments,
     });
