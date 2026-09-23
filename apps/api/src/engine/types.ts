@@ -106,15 +106,6 @@ export interface MessageSummary {
   security?: SecurityMetadata;
 }
 
-export interface MessageChanges {
-  oldState: string | null;
-  newState: string;
-  hasMoreChanges: boolean;
-  created: EngineMessageId[];
-  updated: EngineMessageId[];
-  destroyed: EngineMessageId[];
-}
-
 export interface SecurityMetadata {
   spf?: string;
   dkim?: string;
@@ -195,8 +186,6 @@ export interface MailEngine {
   listMailboxStats(accountId: EngineAccountId): Promise<MailboxStats[]>;
 
   listMessages(accountId: EngineAccountId, query: MessageQuery): Promise<MessageSummary[]>;
-
-  getMessageChanges(accountId: EngineAccountId, sinceState?: string | undefined): Promise<MessageChanges>;
 
   getMessage(accountId: EngineAccountId, messageId: EngineMessageId): Promise<FullMessage | null>;
 
