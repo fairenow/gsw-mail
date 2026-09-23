@@ -12,7 +12,9 @@ test("template renderer preserves the compose-body signature without appending a
     bodyHtml: `<div>Hey,</div><div>Check it out!</div><div>Best,</div>${signatureHtml}`,
   });
 
-  assert.equal((result.bodyHtml.match(/data-gsw-signature="true"/g) ?? []).length, 1);
+  // Rich-text sanitization intentionally removes internal data-* markers. The
+  // user-visible signature is the invariant: preserve its content exactly once.
+  assert.equal((result.bodyHtml.match(/Ramon Williams Jr\./g) ?? []).length, 1);
   assert.equal((result.html.match(/Ramon Williams Jr\./g) ?? []).length, 1);
   assert.match(result.html, /gsw-template:gsw_default:2026-09-23-v2/);
   assert.match(result.html, /Facebook/);
@@ -26,7 +28,7 @@ test("template renderer does not invent a signature when compose has signatures 
     bodyHtml: "<div>Hello,</div><div>Thanks for reaching out!</div>",
   });
 
-  assert.doesNotMatch(result.bodyHtml, /gsw-signature/);
+  assert.doesNotMatch(result.bodyHtml, /Ramon Williams Jr\./);
   assert.doesNotMatch(result.html, /Ramon Williams Jr\./);
   assert.match(result.bodyHtml, /^<div>Hello,<\/div>/);
 });
@@ -60,6 +62,6 @@ test("reply body ordering is preserved; template does not relocate its signature
     bodyHtml,
   });
 
-  assert.ok(result.bodyHtml.indexOf("data-gsw-signature") < result.bodyHtml.indexOf("On Sep 23"));
-  assert.equal((result.bodyHtml.match(/data-gsw-signature="true"/g) ?? []).length, 1);
+  assert.ok(result.bodyHtml.indexOf("Ramon Williams Jr.") < result.bodyHtml.indexOf("On Sep 23"));
+  assert.equal((result.bodyHtml.match(/Ramon Williams Jr\./g) ?? []).length, 1);
 });
