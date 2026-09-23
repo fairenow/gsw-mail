@@ -1,6 +1,6 @@
 import { config } from "../config.js";
 import { reconcilePreparing } from "./reconcile.js";
-import { getRelay } from "./relay.js";
+import { getRelay, isInvalidHeaderError } from "./relay.js";
 import { clearOutboundAttachmentPayloads, loadOutboundAttachmentPayloads } from "./attachmentPayloadStore.js";
 import { claimDueJobs, loadJob, markAccepted, markFailed, markTransportRetry } from "./queue.js";
 import type { RelayAttachment } from "./types.js";
@@ -61,15 +61,20 @@ export function createOutboundWorker(intervalMs = 5_000): OutboundWorker {
             await markTransportRetry(job.id, result.message ?? "relay deferred");
           }
         } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
           console.warn("[outbound:worker] delivery failed", {
-            error: err instanceof Error ? err.message : String(err),
+            error: message,
             accountId: job.accountId,
             sendId: job.id,
             recipients: { to: job.to, cc: job.cc ?? [], bccCount: job.bcc?.length ?? 0 },
             subject: job.subject ?? "",
             threading: { hasInReplyTo: Boolean(job.inReplyTo), hasReferences: Boolean(job.references) },
           });
-          await markTransportRetry(job.id, err instanceof Error ? err.message : String(err));
+          if (isInvalidHeaderError(message)) {
+            await markFailed(job.id, "invalid_header", message);
+          } else {
+            await markTransportRetry(job.id, message);
+          }
         }
       }
     } catch (err) {
