@@ -5,6 +5,8 @@ import { requireUser } from "../auth/middleware.js";
 import { submitSend } from "../outbound/sendFlow.js";
 import { describeJmapFailure } from "../lib/jmapError.js";
 
+const SEND_BODY_LIMIT = 30 * 1024 * 1024;
+
 const sendSchema = z.object({
   accountId: z.string().uuid(),
   to: z.array(z.string().email({ message: "invalid recipient" })).min(1),
@@ -37,7 +39,7 @@ const sendSchema = z.object({
 export default async (app: FastifyInstance) => {
   await requireUser(app, { optional: false });
 
-  app.post("/mail/send", async (req, reply) => {
+  app.post("/mail/send", { bodyLimit: SEND_BODY_LIMIT }, async (req, reply) => {
     const input = sendSchema.parse(req.body);
     const account = await requireAccountPermission(req.user!.id, input.accountId, "send");
     try {
@@ -52,9 +54,9 @@ export default async (app: FastifyInstance) => {
         bcc: input.bcc,
         subject: input.subject,
         textBody: input.textBody,
-         htmlBody: input.htmlBody,
-         templateKey: input.templateKey,
-         mode: input.mode,
+        htmlBody: input.htmlBody,
+        templateKey: input.templateKey,
+        mode: input.mode,
         replyTo: input.replyTo,
         inReplyTo: input.inReplyTo,
         references: input.references,
@@ -79,6 +81,7 @@ export default async (app: FastifyInstance) => {
         recipients: { to: input.to, cc: input.cc ?? [], bccCount: input.bcc?.length ?? 0 },
         subject: input.subject ?? "",
         threading: { hasInReplyTo: Boolean(input.inReplyTo), hasReferences: Boolean(input.references) },
+        attachmentCount: input.attachments?.length ?? 0,
         jmapFailure: describeJmapFailure(error),
       }, "mail send failed");
       throw error;
