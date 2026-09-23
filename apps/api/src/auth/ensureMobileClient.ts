@@ -10,9 +10,9 @@ const redirectUri = config.auth.mobileRedirectUri;
 const existing = await db.select({ id: oauthClient.id }).from(oauthClient).where(eq(oauthClient.clientId, clientId)).limit(1);
 const values = {
   redirectUris: [redirectUri],
-  scopes: ["openid", "email"],
+  scopes: ["openid", "email", "offline_access"],
   name: "GSW Mail Mobile",
-  grantTypes: ["authorization_code"],
+  grantTypes: ["authorization_code", "refresh_token"],
   responseTypes: ["code"],
   skipConsent: true,
   requirePKCE: true,
