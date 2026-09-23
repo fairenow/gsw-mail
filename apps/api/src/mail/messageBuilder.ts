@@ -32,8 +32,8 @@ export interface BuiltOutgoingMessage {
 }
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const emptyBlockSource = `(?:\\s*(?:<div|<p)[^>]*>\\s*(?:&nbsp;|<br\\s*\\/?>)?\\s*<\\/(?:div|p)>)){1,4}`;
-const emptyBlockPattern = new RegExp(emptyBlockSource, "gi");
+const emptyBlockPattern = /(?:\s*(?:<div|<p)[^>]*>\s*(?:&nbsp;|<br\s*\/?>)?\s*<\/(?:div|p)>){1,4}/gi;
+const emptyBlockSource = emptyBlockPattern.source;
 const markedSignaturePattern = /<div[^>]*(?:class=["'][^"']*\bgsw-signature\b[^"']*["']|data-gsw-signature=["']true["'])[^>]*>[\s\S]*?<\/div>(?:\s*<div[^>]*>\s*<br\s*\/?>\s*<\/div>)?/gi;
 
 const signatureEnabledForMode = (signature: SignaturePolicy | null | undefined, mode: MessageMode): boolean => {
@@ -64,8 +64,8 @@ const stripLegacySignatureArtifacts = (html: string, safeSignature: string): str
 
   return body
     .replace(/^\s+|\s+$/g, "")
-    .replace(new RegExp(`^${emptyBlockPattern.source}`, "i"), "")
-    .replace(new RegExp(`${emptyBlockPattern.source}$`, "i"), "")
+    .replace(new RegExp(`^${emptyBlockSource}`, "i"), "")
+    .replace(new RegExp(`${emptyBlockSource}$`, "i"), "")
     .trim();
 };
 
