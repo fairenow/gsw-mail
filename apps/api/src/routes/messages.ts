@@ -6,7 +6,7 @@ import { db } from "../db/client.js";
 import { inboundMessages, mailboxRole } from "../db/schema.js";
 import { getUserEngine } from "../engine/index.js";
 import { badRequest, notFound } from "../lib/errors.js";
-import { hasRemoteMailImages, sanitizeInboundMailHtml } from "../lib/richText.js";
+import { hasRemoteMailImages, sanitizeInboundMailHtml, sanitizeRichText } from "../lib/richText.js";
 
 type MailboxRole = (typeof mailboxRole.enumValues)[number];
 type StandardMailboxRole = Exclude<MailboxRole, null>;
@@ -21,6 +21,7 @@ interface Query {
   limit?: string;
   offset?: string;
   threadId?: string;
+  remoteImages?: string;
 }
 
 interface StatsQuery {
@@ -102,11 +103,13 @@ export default async (app: FastifyInstance) => {
     const message = await engine.getMessage(query.accountId, params.id);
     if (!message) throw notFound("message not found");
     const rawHtmlBody = message.htmlBody;
+    const allowRemoteImages = query.remoteImages === "1" || query.remoteImages === "true";
+    const hasRemoteImages = rawHtmlBody ? hasRemoteMailImages(rawHtmlBody) : false;
     return {
       ...message,
       ...(rawHtmlBody ? {
-        htmlBody: sanitizeInboundMailHtml(rawHtmlBody),
-        remoteImagesBlocked: hasRemoteMailImages(rawHtmlBody),
+        htmlBody: allowRemoteImages ? sanitizeRichText(rawHtmlBody) : sanitizeInboundMailHtml(rawHtmlBody),
+        remoteImagesBlocked: hasRemoteImages && !allowRemoteImages,
       } : {}),
     };
   });
