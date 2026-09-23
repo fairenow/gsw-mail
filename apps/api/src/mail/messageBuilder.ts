@@ -10,17 +10,17 @@ export interface SignaturePolicy {
   onForward: boolean;
   position: "beforeQuotedText" | "afterQuotedText";
   signatureHtml: string;
-  signatureText?: string | null;
+  signatureText?: string | null | undefined;
 }
 
 export interface BuildOutgoingMessageInput {
-  bodyHtml?: string;
-  bodyText?: string;
-  mode?: MessageMode;
+  bodyHtml?: string | undefined;
+  bodyText?: string | undefined;
+  mode?: MessageMode | undefined;
   templateKey: MailTemplateKey;
-  senderName?: string;
+  senderName?: string | undefined;
   senderEmail: string;
-  signature?: SignaturePolicy | null;
+  signature?: SignaturePolicy | null | undefined;
 }
 
 export interface BuiltOutgoingMessage {
