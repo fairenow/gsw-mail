@@ -3,10 +3,52 @@ import type { FastifyInstance } from "fastify";
 import { conflict } from "../lib/errors.js";
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
-import { domains, emailAccounts, mailAccountMemberships, organizationMemberships, organizations, users, workspaceSetupStates } from "../db/schema.js";
+import { contacts, domains, emailAccounts, emailSignatures, mailAccountMemberships, organizationMemberships, organizations, userSettings, users, workspaceSetupStates } from "../db/schema.js";
 
 export default async function accountRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
+
+  app.get("/api/account/diagnostics", async (req) => {
+    const userId = req.user!.id;
+    const [productUser] = await db.select({ id: users.id, email: users.email, authUserId: users.authUserId, status: users.status }).from(users).where(eq(users.id, userId)).limit(1);
+    const ownedMailboxes = await db.select({ id: emailAccounts.id, address: emailAccounts.address, status: emailAccounts.status, authSetupStatus: emailAccounts.authSetupStatus }).from(emailAccounts).where(eq(emailAccounts.userId, userId));
+    const mailboxMemberships = await db
+      .select({ accountId: mailAccountMemberships.accountId, role: mailAccountMemberships.role, authUserId: mailAccountMemberships.authUserId, address: emailAccounts.address, status: emailAccounts.status, authSetupStatus: emailAccounts.authSetupStatus })
+      .from(mailAccountMemberships)
+      .innerJoin(emailAccounts, eq(mailAccountMemberships.accountId, emailAccounts.id))
+      .where(eq(mailAccountMemberships.userId, userId));
+    const workspaceMemberships = await db.select({ organizationId: organizationMemberships.organizationId, role: organizationMemberships.role, status: organizationMemberships.status }).from(organizationMemberships).where(eq(organizationMemberships.userId, userId));
+    const contactRows = await db.select({ id: contacts.id }).from(contacts).where(eq(contacts.ownerUserId, userId));
+    const [settings] = await db.select({ userId: userSettings.userId }).from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
+    const [signature] = await db.select({ userId: emailSignatures.userId }).from(emailSignatures).where(eq(emailSignatures.userId, userId)).limit(1);
+
+    const diagnostics = {
+      authenticated: true,
+      authUserId: req.authUserId ?? null,
+      productUser: productUser ?? null,
+      counts: {
+        ownedMailboxes: ownedMailboxes.length,
+        mailboxMemberships: mailboxMemberships.length,
+        workspaceMemberships: workspaceMemberships.length,
+        contacts: contactRows.length,
+      },
+      ownedMailboxes,
+      mailboxMemberships,
+      workspaceMemberships,
+      hasSettings: Boolean(settings),
+      hasSignature: Boolean(signature),
+    };
+
+    req.log.info({
+      authUserId: diagnostics.authUserId,
+      userId,
+      ...diagnostics.counts,
+      hasSettings: diagnostics.hasSettings,
+      hasSignature: diagnostics.hasSignature,
+    }, "account linkage diagnostics resolved");
+
+    return diagnostics;
+  });
 
   app.get("/api/account/context", async (req) => {
     const startedAt = Date.now();
