@@ -1,7 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { requireAccountPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
 import { inboundMessages, mailboxRole } from "../db/schema.js";
@@ -52,11 +51,16 @@ export default async (app: FastifyInstance) => {
 
   app.get<{ Querystring: StatsQuery }>("/mail/mailboxes/stats", async (req) => {
     if (!req.query.accountId) throw badRequest("accountId is required");
-    await requireAccountPermission(req.user!.id, req.query.accountId, "read");
+    const engine = await getUserEngine({
+      productUserId: req.user!.id,
+      authUserId: req.authUserId ?? req.user!.id,
+      accountId: req.query.accountId,
+      headers: req.headers as Record<string, string>,
+    });
     const folders = Object.fromEntries(
       Object.values(folderNames).map((name) => [name, { total: 0, unread: 0 }]),
     ) as Record<string, { total: number; unread: number }>;
-    for (const stats of await getUserEngine({ productUserId: req.user!.id, authUserId: req.authUserId ?? req.user!.id, accountId: req.query.accountId, headers: req.headers as Record<string, string> }).then((engine) => engine.listMailboxStats(req.query.accountId))) {
+    for (const stats of await engine.listMailboxStats(req.query.accountId)) {
       folders[folderNames[stats.role]] = { total: stats.total, unread: stats.unread };
     }
     return { folders };
@@ -66,20 +70,19 @@ export default async (app: FastifyInstance) => {
     const { query, user } = req;
     if (!query.accountId) throw badRequest("accountId is required");
     const accountId = query.accountId;
-    await requireAccountPermission(user!.id, accountId, "read");
-    const engine = await getUserEngine({ productUserId: user!.id, authUserId: req.authUserId ?? user!.id, accountId, headers: req.headers as Record<string, string> });
-
-    const mailboxes = await engine.listMailboxes(accountId);
-    const requested = (query.mailbox ?? "inbox").toLowerCase();
-    const matched = mailboxes.find((m) => m.role === requested) ?? mailboxes.find((m) => m.engineName.toLowerCase() === requested);
-    const mailbox = matched?.engineName ?? query.mailbox ?? "Inbox";
+    const engine = await getUserEngine({
+      productUserId: user!.id,
+      authUserId: req.authUserId ?? user!.id,
+      accountId,
+      headers: req.headers as Record<string, string>,
+    });
 
     const requestedLimit = query.limit ? Number(query.limit) : 50;
     const requestedOffset = query.offset ? Number(query.offset) : 0;
     const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 100) : 50;
     const offset = Number.isFinite(requestedOffset) ? Math.max(Math.trunc(requestedOffset), 0) : 0;
     const messages = await engine.listMessages(accountId, {
-      mailbox,
+      mailbox: query.mailbox ?? "Inbox",
       limit,
       offset,
       threadId: query.threadId,
@@ -90,8 +93,12 @@ export default async (app: FastifyInstance) => {
   app.get<{ Params: Params; Querystring: Query }>("/mail/messages/:id", async (req) => {
     const { params, query, user } = req;
     if (!query.accountId) throw badRequest("accountId is required");
-    await requireAccountPermission(user!.id, query.accountId, "read");
-    const engine = await getUserEngine({ productUserId: user!.id, authUserId: req.authUserId ?? user!.id, accountId: query.accountId, headers: req.headers as Record<string, string> });
+    const engine = await getUserEngine({
+      productUserId: user!.id,
+      authUserId: req.authUserId ?? user!.id,
+      accountId: query.accountId,
+      headers: req.headers as Record<string, string>,
+    });
     const message = await engine.getMessage(query.accountId, params.id);
     if (!message) throw notFound("message not found");
     const rawHtmlBody = message.htmlBody;
@@ -106,7 +113,6 @@ export default async (app: FastifyInstance) => {
 
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/read", async (req) => {
     const input = seenSchema.parse(req.body);
-    await requireAccountPermission(req.user!.id, input.accountId, "read");
     const engine = await getUserEngine({ productUserId: req.user!.id, authUserId: req.authUserId ?? req.user!.id, accountId: input.accountId, headers: req.headers as Record<string, string> });
     await engine.setSeen(input.accountId, [req.params.id], input.seen);
     await syncCache(input.accountId, req.params.id, { read: input.seen });
@@ -115,7 +121,6 @@ export default async (app: FastifyInstance) => {
 
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/flag", async (req) => {
     const input = flagSchema.parse(req.body);
-    await requireAccountPermission(req.user!.id, input.accountId, "read");
     const engine = await getUserEngine({ productUserId: req.user!.id, authUserId: req.authUserId ?? req.user!.id, accountId: input.accountId, headers: req.headers as Record<string, string> });
     await engine.setFlagged(input.accountId, [req.params.id], input.flagged);
     await syncCache(input.accountId, req.params.id, { flagged: input.flagged });
@@ -124,7 +129,6 @@ export default async (app: FastifyInstance) => {
 
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/move", async (req) => {
     const input = moveSchema.parse(req.body);
-    await requireAccountPermission(req.user!.id, input.accountId, "send");
     const engine = await getUserEngine({ productUserId: req.user!.id, authUserId: req.authUserId ?? req.user!.id, accountId: input.accountId, headers: req.headers as Record<string, string>, permission: "send" });
     await engine.move(input.accountId, [req.params.id], input.mailbox);
     const role = roleFromName(input.mailbox);
@@ -135,7 +139,6 @@ export default async (app: FastifyInstance) => {
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/archive", async (req) => {
     const { params, body, user } = req;
     if (!body.accountId) throw badRequest("accountId is required");
-    await requireAccountPermission(user!.id, body.accountId, "send");
     const engine = await getUserEngine({ productUserId: user!.id, authUserId: req.authUserId ?? user!.id, accountId: body.accountId, headers: req.headers as Record<string, string>, permission: "send" });
     await engine.move(body.accountId, [params.id], "Archive");
     await syncCache(body.accountId, params.id, { mailboxRole: "archive" });
@@ -145,7 +148,6 @@ export default async (app: FastifyInstance) => {
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/trash", async (req) => {
     const { params, body, user } = req;
     if (!body.accountId) throw badRequest("accountId is required");
-    await requireAccountPermission(user!.id, body.accountId, "send");
     const engine = await getUserEngine({ productUserId: user!.id, authUserId: req.authUserId ?? user!.id, accountId: body.accountId, headers: req.headers as Record<string, string>, permission: "send" });
     await engine.move(body.accountId, [params.id], "Trash");
     await syncCache(body.accountId, params.id, { mailboxRole: "trash" });
@@ -155,7 +157,6 @@ export default async (app: FastifyInstance) => {
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/destroy", async (req) => {
     const { params, body, user } = req;
     if (!body.accountId) throw badRequest("accountId is required");
-    await requireAccountPermission(user!.id, body.accountId, "send");
     await (await getUserEngine({ productUserId: user!.id, authUserId: req.authUserId ?? user!.id, accountId: body.accountId, headers: req.headers as Record<string, string>, permission: "send" })).destroy(body.accountId, [params.id]);
     return { messageId: params.id, deleted: true };
   });
@@ -163,7 +164,6 @@ export default async (app: FastifyInstance) => {
   app.post<{ Body: ActionBody }>("/mail/messages/empty-trash", async (req) => {
     const { body, user } = req;
     if (!body.accountId) throw badRequest("accountId is required");
-    await requireAccountPermission(user!.id, body.accountId, "send");
     const engine = await getUserEngine({ productUserId: user!.id, authUserId: req.authUserId ?? user!.id, accountId: body.accountId, headers: req.headers as Record<string, string>, permission: "send" });
     let deleted = 0;
     while (true) {
