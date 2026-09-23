@@ -10,6 +10,7 @@ import { MailSidebar } from "../components/mail/MailSidebar";
 import { MessageListHeader } from "../components/mail/MessageListHeader";
 import { MessageReader } from "../components/mail/MessageReader";
 import { MessageRow } from "../components/mail/MessageRow";
+import { appendDraftAttachments, listDraftAttachments, removeDraftAttachment, type DraftAttachmentMeta } from "../lib/draftAttachments";
 
 type MobileView = "messages" | "reader";
 const pageSize = 50;
@@ -68,6 +69,8 @@ export function MailPage() {
   const [subject, setSubject] = useState("");
   const [html, setHtml] = useState("");
   const [attachments, setAttachments] = useState<ComposeAttachment[]>([]);
+  const [persistedAttachments, setPersistedAttachments] = useState<DraftAttachmentMeta[]>([]);
+  const [attachmentSyncing, setAttachmentSyncing] = useState(false);
   const [signature, setSignature] = useState<ProductSettings["signature"] | null>(null);
   const [templateKey, setTemplateKey] = useState(fallbackTemplateKey);
   const [inReplyTo, setInReplyTo] = useState<string | undefined>();
@@ -129,9 +132,17 @@ export function MailPage() {
   }, [account, refresh, search]);
   useEffect(() => { configureTopBar({ search, searchPlaceholder: "Search mail", onSearchChange: setSearch, onSearch: () => void runSearch(), searchDisabled: false, sidebarCollapsed, onToggleSidebar: toggleSidebar, onSelectAccount: selectAccount }); }, [configureTopBar, runSearch, search, selectAccount, sidebarCollapsed, toggleSidebar]);
 
+  const loadSharedDraftAttachments = useCallback(async (accountId: string, engineId: string) => {
+    setAttachmentSyncing(true);
+    try { setPersistedAttachments(await listDraftAttachments(accountId, engineId)); }
+    catch (err) { setError(err instanceof Error ? err.message : String(err)); setPersistedAttachments([]); }
+    finally { setAttachmentSyncing(false); }
+  }, []);
+
   const openDraft = (draft: FullMessage) => {
-    setComposeMode("new"); setCompose(true); setComposeMinimized(false); setDraftId(draft.engineId); setDraftDirty(false); setDraftSaveBlocked(false); setDraftStatus("saved"); setLastSend(null); setSendError(null); setSendRequestId(null); setAttachments([]);
+    setComposeMode("new"); setCompose(true); setComposeMinimized(false); setDraftId(draft.engineId); setDraftDirty(false); setDraftSaveBlocked(false); setDraftStatus("saved"); setLastSend(null); setSendError(null); setSendRequestId(null); setAttachments([]); setPersistedAttachments([]);
     setTo(draft.to?.map((item) => item.email).join(", ") ?? ""); setCc(draft.cc?.map((item) => item.email).join(", ") ?? ""); setBcc(""); setSubject(draft.subject); setHtml(normalizeComposeHtml(draft.htmlBody ?? plainTextToHtml(messageBody(draft)))); setInReplyTo(draft.headers?.["In-Reply-To"]); setReferences(draft.headers?.References);
+    if (account) void loadSharedDraftAttachments(account.id, draft.engineId);
   };
   const selectMessage = async (message: MessageSummary) => {
     if (!account) return;
@@ -161,7 +172,7 @@ export function MailPage() {
   };
 
   const openCompose = (mode: ComposeMode = "new", message?: FullMessage) => {
-    setComposeMode(mode); setLastSend(null); setSendError(null); setSendRequestId(null); setCompose(true); setComposeMinimized(false); setDraftId(null); setDraftDirty(false); setDraftSaveBlocked(false); setDraftStatus("idle"); setAttachments([]);
+    setComposeMode(mode); setLastSend(null); setSendError(null); setSendRequestId(null); setCompose(true); setComposeMinimized(false); setDraftId(null); setDraftDirty(false); setDraftSaveBlocked(false); setDraftStatus("idle"); setAttachments([]); setPersistedAttachments([]); setAttachmentSyncing(false);
     const currentAccount = account;
     if (!message) {
       const stored = mode === "new" && currentAccount ? localStorage.getItem(localDraftKey(currentAccount.id)) : null;
@@ -179,10 +190,81 @@ export function MailPage() {
     const cleanHtml = normalizeComposeHtml(html);
     return { accountId: account.id, to: draftRecipients(to), cc: draftRecipients(cc), bcc: draftRecipients(bcc), subject, textBody: richTextToText(cleanHtml), htmlBody: cleanHtml, inReplyTo, references, mode: composeMode, templateKey };
   }, [account, bcc, cc, composeMode, html, inReplyTo, references, subject, templateKey, to]);
-  const saveDraft = useCallback(async (force = false): Promise<string | null> => { if (!account || !compose || (!draftDirty && !force)) return draftId; const payload = draftPayload(); if (!payload) return draftId; setDraftStatus("saving"); try { const savedId = draftId ? (await api.updateDraft(draftId, payload)).engineId : (await api.createDraft(payload)).engineId; localStorage.removeItem(localDraftKey(account.id)); setDraftId(savedId); setDraftDirty(false); setDraftSaveBlocked(false); setDraftStatus("saved"); return savedId; } catch { localStorage.setItem(localDraftKey(account.id), JSON.stringify({ mode: composeMode, to, cc, bcc, subject, html: normalizeComposeHtml(html), inReplyTo, references })); setDraftSaveBlocked(true); setDraftStatus("notSaved"); return null; } }, [account, bcc, cc, compose, composeMode, draftDirty, draftId, draftPayload, html, inReplyTo, references, subject, to]);
+
+  const saveDraft = useCallback(async (force = false): Promise<string | null> => {
+    if (!account || !compose || (!draftDirty && !force)) return draftId;
+    const payload = draftPayload();
+    if (!payload) return draftId;
+    setDraftStatus("saving");
+    try {
+      const previousDraftId = draftId;
+      const savedId = previousDraftId ? (await api.updateDraft(previousDraftId, payload)).engineId : (await api.createDraft(payload)).engineId;
+      localStorage.removeItem(localDraftKey(account.id));
+      setDraftId(savedId);
+      setDraftDirty(false);
+      setDraftSaveBlocked(false);
+      setDraftStatus("saved");
+      return savedId;
+    } catch {
+      localStorage.setItem(localDraftKey(account.id), JSON.stringify({ mode: composeMode, to, cc, bcc, subject, html: normalizeComposeHtml(html), inReplyTo, references }));
+      setDraftSaveBlocked(true);
+      setDraftStatus("notSaved");
+      return null;
+    }
+  }, [account, bcc, cc, compose, composeMode, draftDirty, draftId, draftPayload, html, inReplyTo, references, subject, to]);
+
+  const syncLocalAttachments = useCallback(async (items: ComposeAttachment[], targetDraftId?: string): Promise<void> => {
+    if (!account || items.length === 0) return;
+    setAttachmentSyncing(true);
+    try {
+      const id = targetDraftId ?? draftId ?? await saveDraft(true);
+      if (!id) throw new Error("Save the draft before attaching files.");
+      const synced = await appendDraftAttachments(account.id, id, items);
+      setDraftId(id);
+      setPersistedAttachments(synced);
+      setAttachments([]);
+      setDraftStatus("saved");
+    } finally {
+      setAttachmentSyncing(false);
+    }
+  }, [account, draftId, saveDraft]);
+
+  const changeAttachments = useCallback((value: ComposeAttachment[]) => {
+    setSendRequestId(null);
+    const added = value.length > attachments.length;
+    setAttachments(value);
+    if (!added || value.length === 0) return;
+    void syncLocalAttachments(value).catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      setSendError(message);
+      setError(message);
+    });
+  }, [attachments.length, syncLocalAttachments]);
+
+  const removePersisted = useCallback(async (attachment: DraftAttachmentMeta) => {
+    if (!account || !draftId) return;
+    setAttachmentSyncing(true);
+    try { setPersistedAttachments(await removeDraftAttachment(account.id, draftId, attachment.position)); }
+    catch (err) { const message = err instanceof Error ? err.message : String(err); setSendError(message); setError(message); }
+    finally { setAttachmentSyncing(false); }
+  }, [account, draftId]);
+
   useEffect(() => { if (!compose || !draftDirty || draftSaveBlocked) return; const timer = window.setTimeout(() => { void saveDraft(); }, 1500); return () => window.clearTimeout(timer); }, [compose, draftDirty, draftSaveBlocked, to, cc, bcc, subject, html, saveDraft]);
   useEffect(() => { const saveOnHide = () => { if (document.visibilityState === "hidden") void saveDraft(); }; document.addEventListener("visibilitychange", saveOnHide); return () => document.removeEventListener("visibilitychange", saveOnHide); }, [saveDraft]);
-  const runSend = async () => { if (!account) return; try { setError(null); setSendError(null); setSending(true); const clientRequestId = sendRequestId ?? crypto.randomUUID(); setSendRequestId(clientRequestId); const cleanHtml = normalizeComposeHtml(html); const savedId = await saveDraft(true); const result = savedId ? await api.sendDraft(savedId, account.id, clientRequestId, composeMode, templateKey, attachments) : await api.send(account.id, parseRecipients(to), { cc: parseRecipients(cc), bcc: parseRecipients(bcc), subject, textBody: richTextToText(cleanHtml), htmlBody: cleanHtml, inReplyTo, references, mode: composeMode, clientRequestId, templateKey, attachments }); setLastSend(result); setSendError(null); setCompose(false); setComposeMinimized(false); setDraftId(null); setDraftDirty(false); setDraftSaveBlocked(false); setSendRequestId(null); localStorage.removeItem(localDraftKey(account.id)); setTo(""); setCc(""); setBcc(""); setSubject(""); setHtml(""); setAttachments([]); setInReplyTo(undefined); setReferences(undefined); } catch (err) { const message = err instanceof Error ? err.message : String(err); setSendError(message); setError(message); } finally { setSending(false); } };
+
+  const runSend = async () => {
+    if (!account) return;
+    try {
+      setError(null); setSendError(null); setSending(true);
+      const clientRequestId = sendRequestId ?? crypto.randomUUID(); setSendRequestId(clientRequestId);
+      const savedId = await saveDraft(true);
+      if (!savedId) throw new Error("Your draft could not be synced. It was not sent.");
+      if (attachments.length > 0) await syncLocalAttachments(attachments, savedId);
+      const result = await api.sendDraft(savedId, account.id, clientRequestId, composeMode, templateKey);
+      setLastSend(result); setSendError(null); setCompose(false); setComposeMinimized(false); setDraftId(null); setDraftDirty(false); setDraftSaveBlocked(false); setSendRequestId(null); localStorage.removeItem(localDraftKey(account.id)); setTo(""); setCc(""); setBcc(""); setSubject(""); setHtml(""); setAttachments([]); setPersistedAttachments([]); setInReplyTo(undefined); setReferences(undefined);
+    } catch (err) { const message = err instanceof Error ? err.message : String(err); setSendError(message); setError(message); }
+    finally { setSending(false); }
+  };
   const runUndo = async () => { if (!lastSend) return; try { const result = await api.cancelSend(lastSend.sendId); setLastSend({ ...lastSend, status: result.status }); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
 
   return <>
@@ -197,6 +279,6 @@ export function MailPage() {
       </section>
       <section className={`gsw-reading-pane ${mobileView === "reader" ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} aria-label="Message reader">{open ? <MessageReader message={open} accountId={account?.id} accountAddress={account?.address} folder={folder} onBack={() => setMobileView("messages")} onReply={() => openCompose("reply", open)} onReplyAll={() => openCompose("replyAll", open)} onForward={() => openCompose("forward", open)} onArchive={() => void runAction("archive", open.engineId)} onTrash={() => void runAction("trash", open.engineId)} onToggleRead={() => void toggleRead(open)} onRestore={() => void restoreMessage(open.engineId)} onDestroy={() => void destroyMessage(open.engineId)} onComposeEmail={openComposeTo} /> : <EmptyReader />}</section>
     </main>
-    {compose && <ComposeWindow mode={composeMode} minimized={composeMinimized} to={to} cc={cc} bcc={bcc} subject={subject} html={html} attachments={attachments} sending={sending} draftStatus={draftStatus} sendError={sendError} sendNote={lastSend ? `Sent · ${lastSend.status}` : undefined} onToChange={(value) => { setTo(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onCcChange={(value) => { setCc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onBccChange={(value) => { setBcc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onSubjectChange={(value) => { setSubject(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onHtmlChange={(value) => { setHtml(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onAttachmentsChange={(value) => { setAttachments(value); setSendRequestId(null); }} onMinimize={() => { void saveDraft(true); setComposeMinimized((current) => !current); }} onClose={() => { void saveDraft(true); setCompose(false); }} onSubmit={() => void runSend()} onRetry={() => void runSend()} onUndo={lastSend ? () => void runUndo() : undefined} />}
+    {compose && <ComposeWindow mode={composeMode} minimized={composeMinimized} to={to} cc={cc} bcc={bcc} subject={subject} html={html} attachments={attachments} persistedAttachments={persistedAttachments} attachmentSyncing={attachmentSyncing} sending={sending} draftStatus={draftStatus} sendError={sendError} sendNote={lastSend ? `Sent · ${lastSend.status}` : undefined} onToChange={(value) => { setTo(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onCcChange={(value) => { setCc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onBccChange={(value) => { setBcc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onSubjectChange={(value) => { setSubject(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onHtmlChange={(value) => { setHtml(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onAttachmentsChange={changeAttachments} onRemovePersistedAttachment={(attachment) => { void removePersisted(attachment); }} onMinimize={() => { void saveDraft(true); setComposeMinimized((current) => !current); }} onClose={() => { void saveDraft(true); setCompose(false); }} onSubmit={() => void runSend()} onRetry={() => void runSend()} onUndo={lastSend ? () => void runUndo() : undefined} />}
   </>;
 }
