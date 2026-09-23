@@ -3,86 +3,63 @@ import test from "node:test";
 
 import { buildOutgoingMessage } from "../mail/messageBuilder.js";
 
-const signature = {
-  enabled: true,
-  onNew: true,
-  onReply: true,
-  onForward: true,
-  position: "beforeQuotedText" as const,
-  signatureHtml: "<div>Ramon Williams Jr.</div><div>Guided Steps Wellness: The Community</div><div>734-545-3247</div><div><a href=\"https://guidedstepswellness.com\">Visit Us Here!</a></div>",
-  signatureText: "Ramon Williams Jr.\nGuided Steps Wellness: The Community\n734-545-3247\nVisit Us Here!",
-};
+const signatureHtml = '<div class="gsw-signature" data-gsw-signature="true"><div>Ramon Williams Jr.</div><div>Guided Steps Wellness: The Community</div><div>734-545-3247</div><div><a href="https://thecommunity.guidedstepswellness.com" target="_blank" rel="noopener noreferrer">Visit Us Here!</a></div></div>';
 
-test("template system removes legacy greeting/signature preamble and emits one canonical signature", () => {
+test("template renderer preserves the compose-body signature without appending another copy", () => {
   const result = buildOutgoingMessage({
     templateKey: "gsw_default",
     senderEmail: "ramon@team.guidedstepswellness.com",
-    mode: "new",
-    signature,
-    bodyHtml: `<div>Hello,</div>${signature.signatureHtml}<div><br></div><div>Hello Buddy,</div><div>This is the actual message.</div><div><br></div><div class=\"gsw-signature\">${signature.signatureHtml}</div>`,
+    bodyHtml: `<div>Hey,</div><div>Check it out!</div><div>Best,</div>${signatureHtml}`,
   });
 
-  assert.equal((result.bodyHtml.match(/data-gsw-signature=\"true\"/g) ?? []).length, 1);
-  assert.equal((result.bodyHtml.match(/Ramon Williams Jr\./g) ?? []).length, 1);
-  assert.match(result.bodyHtml, /Hello Buddy,/);
-  assert.doesNotMatch(result.bodyHtml, /^\s*<div>Hello,?<\/div>/i);
+  assert.equal((result.bodyHtml.match(/data-gsw-signature="true"/g) ?? []).length, 1);
+  assert.equal((result.html.match(/Ramon Williams Jr\./g) ?? []).length, 1);
   assert.match(result.html, /gsw-template:gsw_default:2026-09-23-v2/);
   assert.match(result.html, /Facebook/);
   assert.match(result.html, /LinkedIn/);
 });
 
-test("normal user-authored Hello remains when the signature is only at the end", () => {
+test("template renderer does not invent a signature when compose has signatures disabled", () => {
   const result = buildOutgoingMessage({
     templateKey: "gsw_default",
     senderEmail: "ramon@team.guidedstepswellness.com",
-    mode: "new",
-    signature,
-    bodyHtml: `<div>Hello,</div><div>This greeting belongs to the message.</div><div class=\"gsw-signature\">${signature.signatureHtml}</div>`,
+    bodyHtml: "<div>Hello,</div><div>Thanks for reaching out!</div>",
   });
 
+  assert.doesNotMatch(result.bodyHtml, /gsw-signature/);
+  assert.doesNotMatch(result.html, /Ramon Williams Jr\./);
   assert.match(result.bodyHtml, /^<div>Hello,<\/div>/);
-  assert.equal((result.bodyHtml.match(/data-gsw-signature=\"true\"/g) ?? []).length, 1);
 });
 
-test("signature HTML containing production URLs never becomes regex source", () => {
-  const productionSignature = {
-    ...signature,
-    signatureHtml: '<div>Ramon Williams Jr.</div><div>Guided Steps Wellness: The Community</div><div>734-545-3247</div><div><a href="https://thecommunity.guidedstepswellness.com" target="_blank" rel="noopener noreferrer">Visit Us Here!</a></div>',
-  };
-
+test("production-style signature HTML and URLs pass through without regex processing", () => {
   assert.doesNotThrow(() => buildOutgoingMessage({
     templateKey: "gsw_default",
     senderEmail: "ramon@team.guidedstepswellness.com",
-    mode: "new",
-    signature: productionSignature,
-    bodyHtml: `<div>Hey Buddy,</div><div>Ol' pal, check it out.</div><div>Blessings,</div><div class=\"gsw-signature\">${productionSignature.signatureHtml}</div>`,
+    bodyHtml: `<div>Hey Buddy,</div><div>Ol' pal, check it out.</div><div>Blessings,</div>${signatureHtml}`,
   }));
 });
 
-test("Bible template contains the YouTube project link and version marker", () => {
+test("Bible template contains the YouTube project link and keeps the body signature once", () => {
   const result = buildOutgoingMessage({
     templateKey: "bible_reader",
     senderEmail: "ramon@team.guidedstepswellness.com",
-    mode: "new",
-    signature,
-    bodyHtml: "<div>Testing Bible template.</div>",
+    bodyHtml: `<div>Testing Bible template.</div>${signatureHtml}`,
   });
 
   assert.match(result.html, /https:\/\/www\.youtube\.com\/@bible_study_app/);
   assert.match(result.html, /youtube-email-icon\.png\?v=2026-09-23-v2/);
   assert.match(result.html, /gsw-template:bible_reader:2026-09-23-v2/);
-  assert.equal((result.bodyHtml.match(/data-gsw-signature=\"true\"/g) ?? []).length, 1);
+  assert.equal((result.html.match(/Ramon Williams Jr\./g) ?? []).length, 1);
 });
 
-test("reply signature is inserted before quoted history", () => {
+test("reply body ordering is preserved; template does not relocate its signature", () => {
+  const bodyHtml = `<div>Thanks for the note.</div>${signatureHtml}<div>On Sep 23, sender wrote:</div><blockquote>Prior message</blockquote>`;
   const result = buildOutgoingMessage({
     templateKey: "gsw_default",
     senderEmail: "ramon@team.guidedstepswellness.com",
-    mode: "reply",
-    signature,
-    bodyHtml: "<div>Thanks for the note.</div><div>On Sep 23, sender wrote:</div><blockquote>Prior message</blockquote>",
+    bodyHtml,
   });
 
   assert.ok(result.bodyHtml.indexOf("data-gsw-signature") < result.bodyHtml.indexOf("On Sep 23"));
-  assert.equal((result.bodyHtml.match(/data-gsw-signature=\"true\"/g) ?? []).length, 1);
+  assert.equal((result.bodyHtml.match(/data-gsw-signature="true"/g) ?? []).length, 1);
 });
