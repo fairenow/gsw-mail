@@ -16,6 +16,9 @@ export function sanitizeRichText(input: string): string {
         .map((match) => {
           const key = match[1]!.toLowerCase();
           const value = match[2] ?? match[3] ?? match[4] ?? "";
+          if (key === "class") {
+            return value.split(/\s+/).includes("gsw-signature") ? ' class="gsw-signature"' : "";
+          }
           if (!allowedAttributes.has(key) || key.startsWith("on")) return "";
           if ((key === "href" || key === "src") && !/^(https?:|mailto:|data:image\/(?:png|gif|jpeg|webp);base64,)/i.test(value)) return "";
           if (key === "style") {
