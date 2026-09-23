@@ -11,8 +11,11 @@ import type { MailEngine } from "./types.js";
 let demoEngine: MailEngine | undefined;
 const requestEngines = new Map<string, { engine: MailEngine; expiresAt: number }>();
 const accountAddressCache = new Map<string, { address: string; expiresAt: number }>();
-const ENGINE_CACHE_TTL_MS = 60_000;
+const identityCache = new Map<string, { email: string; expiresAt: number }>();
+const MAX_ENGINE_CACHE_TTL_MS = 10 * 60_000;
+const OPAQUE_ENGINE_CACHE_TTL_MS = 5 * 60_000;
 const ACCOUNT_CACHE_TTL_MS = 300_000;
+const IDENTITY_CACHE_TTL_MS = 60_000;
 
 const resolveAccount = async (id: string): Promise<string> => {
   const cached = accountAddressCache.get(id);
@@ -23,6 +26,22 @@ const resolveAccount = async (id: string): Promise<string> => {
   return account.address;
 };
 
+const engineExpiresAt = (accessToken: string): number => {
+  const now = Date.now();
+  const metadata = decodeStalwartTokenMetadata(accessToken);
+  if (metadata?.exp) {
+    const tokenExpiry = metadata.exp * 1000 - 30_000;
+    return Math.max(now + 30_000, Math.min(now + MAX_ENGINE_CACHE_TTL_MS, tokenExpiry));
+  }
+  return now + OPAQUE_ENGINE_CACHE_TTL_MS;
+};
+
+const trimEngineCache = () => {
+  const now = Date.now();
+  for (const [key, value] of requestEngines) if (value.expiresAt <= now) requestEngines.delete(key);
+  if (requestEngines.size > 256) requestEngines.delete(requestEngines.keys().next().value!);
+};
+
 export function getEngine(accessToken?: string): MailEngine {
   if (config.mailEngine === "demo") {
     demoEngine ??= new DemoEngine();
@@ -31,6 +50,7 @@ export function getEngine(accessToken?: string): MailEngine {
   if (!accessToken) throw new Error("user-scoped Stalwart access token required");
   const cached = requestEngines.get(accessToken);
   if (cached && cached.expiresAt > Date.now()) return cached.engine;
+  if (cached) requestEngines.delete(accessToken);
   const tokenMetadata = decodeStalwartTokenMetadata(accessToken);
   const sessionContext = {
     mailbox: tokenMetadata?.email ?? "unknown",
@@ -50,7 +70,8 @@ export function getEngine(accessToken?: string): MailEngine {
     },
     onSlowOperation: (operation, durationMs) => console.warn(JSON.stringify({ operation, durationMs: Math.round(durationMs) }), "slow JMAP operation"),
   });
-  requestEngines.set(accessToken, { engine, expiresAt: Date.now() + ENGINE_CACHE_TTL_MS });
+  requestEngines.set(accessToken, { engine, expiresAt: engineExpiresAt(accessToken) });
+  trimEngineCache();
   return engine;
 }
 
@@ -64,15 +85,27 @@ export async function getUserEngine(input: {
   if (config.mailEngine === "demo") return getEngine();
   const account = await requireAccountPermission(input.productUserId, input.accountId, input.permission ?? "read");
   if (account.status !== "active" || account.authSetupStatus !== "ready") throw new Error("mailbox is not ready for mail access");
-  const [identity] = await db
-    .select({ authUserId: mailAccountMemberships.authUserId, email: authUsers.email })
-    .from(mailAccountMemberships)
-    .innerJoin(authUsers, eq(mailAccountMemberships.authUserId, authUsers.id))
-    .where(and(eq(mailAccountMemberships.accountId, account.id), eq(mailAccountMemberships.userId, input.productUserId), eq(mailAccountMemberships.authUserId, input.authUserId)))
-    .limit(1);
-  if (identity?.authUserId !== input.authUserId || identity.email.toLowerCase() !== account.address.toLowerCase()) {
+
+  const identityKey = `${input.productUserId}:${input.authUserId}:${account.id}`;
+  const cachedIdentity = identityCache.get(identityKey);
+  let identityEmail = cachedIdentity && cachedIdentity.expiresAt > Date.now() ? cachedIdentity.email : undefined;
+  if (!identityEmail) {
+    const [identity] = await db
+      .select({ authUserId: mailAccountMemberships.authUserId, email: authUsers.email })
+      .from(mailAccountMemberships)
+      .innerJoin(authUsers, eq(mailAccountMemberships.authUserId, authUsers.id))
+      .where(and(eq(mailAccountMemberships.accountId, account.id), eq(mailAccountMemberships.userId, input.productUserId), eq(mailAccountMemberships.authUserId, input.authUserId)))
+      .limit(1);
+    if (identity?.authUserId !== input.authUserId) throw new Error("mailbox identity is not linked to this Better Auth session");
+    identityEmail = identity.email;
+    identityCache.set(identityKey, { email: identityEmail, expiresAt: Date.now() + IDENTITY_CACHE_TTL_MS });
+    if (identityCache.size > 512) identityCache.delete(identityCache.keys().next().value!);
+  }
+  if (identityEmail.toLowerCase() !== account.address.toLowerCase()) {
+    identityCache.delete(identityKey);
     throw new Error("mailbox identity is not linked to this Better Auth session");
   }
+
   const token = await getStalwartAccessToken({ authUserId: input.authUserId, accountId: account.id, headers: input.headers });
   return getEngine(token);
 }
