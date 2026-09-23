@@ -1,8 +1,4 @@
-import { eq } from "drizzle-orm";
-
 import { config } from "../config.js";
-import { db } from "../db/client.js";
-import { emailSignatures } from "../db/schema.js";
 import { getUserEngine } from "../engine/index.js";
 import type { SendAttachment } from "../engine/types.js";
 import { badRequest, conflict } from "../lib/errors.js";
@@ -76,37 +72,13 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
     ? await getUserEngine({ productUserId: input.userId, authUserId: input.authUserId, accountId: input.account.id, headers: input.headers, permission: "send" })
     : (() => { throw new Error("user-scoped OAuth context required for sending"); })();
 
-  const [signature] = await db
-    .select({
-      signatureHtml: emailSignatures.signatureHtml,
-      signatureText: emailSignatures.signatureText,
-      enabled: emailSignatures.enabled,
-      onNew: emailSignatures.onNew,
-      onReply: emailSignatures.onReply,
-      onForward: emailSignatures.onForward,
-      position: emailSignatures.position,
-    })
-    .from(emailSignatures)
-    .where(eq(emailSignatures.userId, input.userId))
-    .limit(1);
-
   const templateKey = resolveMailTemplateKey(input.templateKey ?? DEFAULT_MAIL_TEMPLATE_KEY);
   const rendered = buildOutgoingMessage({
     bodyHtml: input.htmlBody,
     bodyText: input.textBody,
-    mode: input.mode ?? (input.inReplyTo ? "reply" : "new"),
     templateKey,
     senderName: input.account.displayName ?? undefined,
     senderEmail: input.account.address,
-    signature: signature ? {
-      signatureHtml: signature.signatureHtml,
-      signatureText: signature.signatureText,
-      enabled: signature.enabled,
-      onNew: signature.onNew,
-      onReply: signature.onReply,
-      onForward: signature.onForward,
-      position: signature.position,
-    } : null,
   });
 
   const reserve = await reserveSendOperation({
