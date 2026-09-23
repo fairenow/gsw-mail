@@ -1,11 +1,16 @@
 const allowedTags = new Set([
-  "A", "B", "BLOCKQUOTE", "BR", "DIV", "EM", "FONT", "H1", "H2", "H3", "I", "IMG", "LI", "OL", "P", "SPAN", "STRONG", "U", "UL",
+  "A", "B", "BLOCKQUOTE", "BR", "CENTER", "CODE", "DIV", "EM", "FONT", "H1", "H2", "H3", "H4", "H5", "H6", "HR", "I", "IMG", "LI", "OL", "P", "PRE", "SECTION", "SMALL", "SPAN", "STRONG", "SUB", "SUP", "TABLE", "TBODY", "TD", "TFOOT", "TH", "THEAD", "TR", "U", "UL",
 ]);
-const allowedAttributes = new Set(["align", "color", "face", "href", "rel", "size", "src", "style", "target", "title", "width"]);
+const allowedAttributes = new Set([
+  "align", "alt", "border", "cellpadding", "cellspacing", "color", "colspan", "face", "height", "href", "rel", "rowspan", "size", "src", "style", "target", "title", "valign", "width",
+]);
+
+const safeStyleProperty = /^(?:background(?:-color)?|border(?:-(?:top|right|bottom|left))?(?:-(?:color|style|width))?|border-collapse|border-radius|box-sizing|color|display|float|font(?:-family|-size|-style|-weight)?|height|letter-spacing|line-height|margin(?:-(?:top|right|bottom|left))?|max-height|max-width|min-height|min-width|overflow|padding(?:-(?:top|right|bottom|left))?|text-align|text-decoration|text-indent|text-transform|vertical-align|white-space|width|word-break|word-wrap)\s*:/i;
 
 export function sanitizeRichText(input: string): string {
   return input
-    .replace(/<(script|style|iframe|object|embed|form)[\s\S]*?<\/\1>/gi, "")
+    .replace(/<(script|iframe|object|embed|form)[\s\S]*?<\/\1>/gi, "")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/<\/?([a-z0-9]+)(?:\s[^>]*)?>/gi, (tag, name: string) => {
       const upper = name.toUpperCase();
@@ -20,12 +25,12 @@ export function sanitizeRichText(input: string): string {
             return value.split(/\s+/).includes("gsw-signature") ? ' class="gsw-signature"' : "";
           }
           if (!allowedAttributes.has(key) || key.startsWith("on")) return "";
-          if ((key === "href" || key === "src") && !/^(https?:|mailto:|data:image\/(?:png|gif|jpeg|webp);base64,)/i.test(value)) return "";
+          if ((key === "href" || key === "src") && !/^(https?:|mailto:|cid:|data:image\/(?:png|gif|jpeg|webp);base64,)/i.test(value)) return "";
           if (key === "style") {
             const safeStyle = value
               .split(";")
               .map((declaration) => declaration.trim())
-              .filter((declaration) => /^(color|background-color|font-size|font-family|font-weight|font-style|text-align|text-decoration)\s*:/i.test(declaration) && !/url\s*\(|expression\s*\(/i.test(declaration))
+              .filter((declaration) => safeStyleProperty.test(declaration) && !/url\s*\(|expression\s*\(|javascript:/i.test(declaration))
               .join("; ");
             return safeStyle ? ` style="${escapeAttribute(safeStyle)}"` : "";
           }
@@ -41,16 +46,17 @@ export function hasRemoteMailImages(input: string): boolean {
 }
 
 export function sanitizeInboundMailHtml(input: string): string {
-  // Incoming mail is untrusted. Apply the normal allow-list sanitizer, then
-  // remove remote image loads so opening a message cannot leak the reader's IP,
-  // device timing, or open event to tracking pixels. Inline data images remain.
+  // Incoming mail is untrusted. Preserve the layout primitives that real email
+  // clients rely on (tables, spacing, typography and inline borders), while
+  // removing executable content and remote image loads that can track opens.
   return sanitizeRichText(input).replace(/<img\b[^>]*\bsrc="https?:[^"]*"[^>]*>/gi, "");
 }
 
 export function richTextToPlainText(input: string): string {
   return input
     .replace(/<br\s*\/?\s*>/gi, "\n")
-    .replace(/<\/p\s*>|<\/div\s*>|<\/li\s*>/gi, "\n")
+    .replace(/<\/p\s*>|<\/div\s*>|<\/li\s*>|<\/tr\s*>/gi, "\n")
+    .replace(/<\/td\s*>|<\/th\s*>/gi, " ")
     .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
