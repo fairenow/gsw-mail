@@ -46,6 +46,12 @@ export function sanitizeHtml(input: string): string {
       [...element.attributes].forEach((attribute) => {
         const name = attribute.name.toLowerCase();
         const value = attribute.value;
+        if (name === "class") {
+          const signatureClass = value.split(/\s+/).includes("gsw-signature");
+          if (signatureClass) element.setAttribute("class", "gsw-signature");
+          else element.removeAttribute("class");
+          return;
+        }
         if (name === "href") {
           const href = normalizeLinkUrl(value);
           if (href) element.setAttribute("href", href);
