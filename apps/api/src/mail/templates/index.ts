@@ -14,10 +14,10 @@ const textToHtml = (value: string): string => escapeHtml(value).replaceAll("\n",
 const mailAssetUrl = (filename: string): string => `https://mail.guidedstepswellness.com/${filename}`;
 
 const socialLink = (url: string, icon: string, label: string): string =>
-  `<a href="${url}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;color:#6f6b63;text-decoration:none;font-size:12px"><img src="${mailAssetUrl(icon)}" alt="${label}" width="18" height="18" style="display:inline-block;width:18px;height:18px;border:0;vertical-align:middle" /><span style="vertical-align:middle">${label}</span></a>`;
+  `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="display:inline-table;margin-right:14px;vertical-align:middle"><tr><td style="padding:0 6px 0 0;vertical-align:middle"><a href="${url}" target="_blank" rel="noopener noreferrer" style="text-decoration:none"><img src="${mailAssetUrl(icon)}" alt="${label}" width="18" height="18" style="display:block;width:18px;height:18px;border:0" /></a></td><td style="padding:0;vertical-align:middle"><a href="${url}" target="_blank" rel="noopener noreferrer" style="color:#6f6b63;text-decoration:none;font-size:12px">${label}</a></td></tr></table>`;
 
-const gswSocialLinks = `${socialLink("https://www.facebook.com/profile.php?id=61584353387952", "facebook-email-icon.svg", "Facebook")}${socialLink("https://www.linkedin.com/company/guided-steps-wellness-the-community/posts/?viewAsMember=true", "linkedin-email-icon.svg", "LinkedIn")}`;
-const bibleSocialLinks = socialLink("https://www.youtube.com/@bible_study_app", "youtube-email-icon.svg", "YouTube");
+const gswSocialLinks = `${socialLink("https://www.facebook.com/profile.php?id=61584353387952", "facebook-email-icon.png", "Facebook")}${socialLink("https://www.linkedin.com/company/guided-steps-wellness-the-community/posts/?viewAsMember=true", "linkedin-email-icon.png", "LinkedIn")}`;
+const bibleSocialLinks = socialLink("https://www.youtube.com/@bible_study_app", "youtube-email-icon.png", "YouTube");
 
 export const gswDefaultTemplate: MailTemplate = {
   key: "gsw_default",

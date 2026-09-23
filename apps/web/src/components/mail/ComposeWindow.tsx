@@ -5,14 +5,36 @@ import { RichTextEditor } from "../RichTextEditor";
 export type ComposeMode = "new" | "reply" | "replyAll" | "forward";
 
 type ContactSuggestion = { id: string; displayName: string | null; organization: string | null; jobTitle: string | null; email: string };
+type LegacyContact = { id: string; displayName?: string | null; organization?: string | null; jobTitle?: string | null; emails?: { email: string; isPrimary?: boolean }[] };
 const contactCache = new Map<string, { expiresAt: number; contacts: ContactSuggestion[] }>();
 const CONTACT_CACHE_TTL_MS = 30_000;
 
+const normalizeSuggestion = (contact: LegacyContact): ContactSuggestion | null => {
+  const email = contact.emails?.find((item) => item.isPrimary)?.email ?? contact.emails?.[0]?.email ?? "";
+  if (!email) return null;
+  return { id: contact.id, displayName: contact.displayName ?? null, organization: contact.organization ?? null, jobTitle: contact.jobTitle ?? null, email };
+};
+
 async function contactSuggestions(query: string): Promise<ContactSuggestion[]> {
-  const response = await fetch(`/product/contact-suggestions?q=${encodeURIComponent(query)}`, { credentials: "include" });
-  if (!response.ok) throw new Error(`contact suggestions failed: ${response.status}`);
-  const body = await response.json() as { contacts?: ContactSuggestion[] };
-  return body.contacts ?? [];
+  const preferred = await fetch(`/product/contact-suggestions?q=${encodeURIComponent(query)}`, { credentials: "include" });
+  if (preferred.ok) {
+    const body = await preferred.json() as { contacts?: ContactSuggestion[] };
+    return body.contacts ?? [];
+  }
+
+  // Keep autocomplete working during staggered Vercel/Railway deploys or if the
+  // optimized suggestions endpoint is temporarily unavailable.
+  const fallback = await fetch(`/product/contacts?q=${encodeURIComponent(query)}&limit=20&offset=0`, { credentials: "include" });
+  if (!fallback.ok) throw new Error(`contact suggestions failed: ${preferred.status}/${fallback.status}`);
+  const body = await fallback.json() as { contacts?: LegacyContact[] };
+  const seen = new Set<string>();
+  return (body.contacts ?? []).map(normalizeSuggestion).filter((item): item is ContactSuggestion => {
+    if (!item) return false;
+    const email = item.email.trim().toLowerCase();
+    if (!email || seen.has(email)) return false;
+    seen.add(email);
+    return true;
+  }).slice(0, 20);
 }
 
 function RecipientField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
@@ -53,7 +75,7 @@ function RecipientField({ label, value, onChange }: { label: string; value: stri
   };
 
   return <div className="gsw-recipient-field">
-    <input value={value} onChange={(event) => onChange(event.target.value)} onFocus={() => setFocused(true)} onBlur={() => window.setTimeout(() => setFocused(false), 150)} placeholder={label} aria-label={label} required={label === "To"} />
+    <input value={value} onChange={(event) => onChange(event.target.value)} onFocus={() => setFocused(true)} onBlur={() => window.setTimeout(() => setFocused(false), 150)} placeholder={label} aria-label={label} required={label === "To"} autoComplete="off" />
     {focused && results.length > 0 && <div className="gsw-contact-autocomplete">{results.map((contact) => {
       const email = contact.email.trim();
       const name = contact.displayName?.trim();
