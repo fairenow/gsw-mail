@@ -16,7 +16,7 @@ test("template renderer preserves the compose-body signature without appending a
   // user-visible signature is the invariant: preserve its content exactly once.
   assert.equal((result.bodyHtml.match(/Ramon Williams Jr\./g) ?? []).length, 1);
   assert.equal((result.html.match(/Ramon Williams Jr\./g) ?? []).length, 1);
-  assert.match(result.html, /gsw-template:gsw_default:2026-09-23-v2/);
+  assert.match(result.html, /gsw-template:gsw_default:2026-09-23-v3/);
   assert.match(result.html, /Facebook/);
   assert.match(result.html, /LinkedIn/);
 });
@@ -49,8 +49,8 @@ test("Bible template contains the YouTube project link and keeps the body signat
   });
 
   assert.match(result.html, /https:\/\/www\.youtube\.com\/@bible_study_app/);
-  assert.match(result.html, /youtube-email-icon\.png\?v=2026-09-23-v2/);
-  assert.match(result.html, /gsw-template:bible_reader:2026-09-23-v2/);
+  assert.match(result.html, /youtube-email-icon\.png\?v=2026-09-23-v3/);
+  assert.match(result.html, /gsw-template:bible_reader:2026-09-23-v3/);
   assert.equal((result.html.match(/Ramon Williams Jr\./g) ?? []).length, 1);
 });
 
