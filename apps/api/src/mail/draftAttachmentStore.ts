@@ -45,24 +45,43 @@ export type DraftAttachmentMeta = {
   contentId?: string | undefined;
 };
 
+const rowFor = (accountId: string, draftEngineId: string, attachment: SendAttachment, position: number) => {
+  if (!attachment.content) throw new Error(`attachment ${attachment.filename} is missing base64 content`);
+  return {
+    accountId,
+    draftEngineId,
+    position,
+    filename: attachment.filename,
+    contentType: attachment.contentType || "application/octet-stream",
+    size: attachment.size,
+    contentDisposition: attachment.contentDisposition ?? null,
+    contentId: attachment.contentId ?? null,
+    contentBase64: attachment.content,
+  };
+};
+
 export async function replaceDraftAttachments(accountId: string, draftEngineId: string, attachments: SendAttachment[]): Promise<void> {
   await ensureTable();
   await db.delete(draftAttachmentPayloads).where(and(eq(draftAttachmentPayloads.accountId, accountId), eq(draftAttachmentPayloads.draftEngineId, draftEngineId)));
   if (!attachments.length) return;
-  await db.insert(draftAttachmentPayloads).values(attachments.map((attachment, position) => {
-    if (!attachment.content) throw new Error(`attachment ${attachment.filename} is missing base64 content`);
-    return {
-      accountId,
-      draftEngineId,
-      position,
-      filename: attachment.filename,
-      contentType: attachment.contentType || "application/octet-stream",
-      size: attachment.size,
-      contentDisposition: attachment.contentDisposition ?? null,
-      contentId: attachment.contentId ?? null,
-      contentBase64: attachment.content,
-    };
-  }));
+  await db.insert(draftAttachmentPayloads).values(attachments.map((attachment, position) => rowFor(accountId, draftEngineId, attachment, position)));
+}
+
+export async function appendDraftAttachments(accountId: string, draftEngineId: string, attachments: SendAttachment[]): Promise<void> {
+  if (!attachments.length) return;
+  await ensureTable();
+  const existing = await listDraftAttachments(accountId, draftEngineId);
+  const nextPosition = existing.reduce((max, item) => Math.max(max, item.position), -1) + 1;
+  await db.insert(draftAttachmentPayloads).values(attachments.map((attachment, offset) => rowFor(accountId, draftEngineId, attachment, nextPosition + offset)));
+}
+
+export async function removeDraftAttachment(accountId: string, draftEngineId: string, position: number): Promise<void> {
+  await ensureTable();
+  await db.delete(draftAttachmentPayloads).where(and(
+    eq(draftAttachmentPayloads.accountId, accountId),
+    eq(draftAttachmentPayloads.draftEngineId, draftEngineId),
+    eq(draftAttachmentPayloads.position, position),
+  ));
 }
 
 export async function moveDraftAttachments(accountId: string, fromDraftEngineId: string, toDraftEngineId: string): Promise<void> {

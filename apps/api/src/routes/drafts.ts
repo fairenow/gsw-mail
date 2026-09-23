@@ -9,10 +9,12 @@ import { submitSend } from "../outbound/sendFlow.js";
 import { DEFAULT_MAIL_TEMPLATE_KEY } from "../mail/templates/index.js";
 import { sanitizeRichText } from "../lib/richText.js";
 import {
+  appendDraftAttachments,
   clearDraftAttachments,
   listDraftAttachments,
   loadDraftAttachments,
   moveDraftAttachments,
+  removeDraftAttachment,
   replaceDraftAttachments,
 } from "../mail/draftAttachmentStore.js";
 
@@ -134,6 +136,25 @@ export default async (app: FastifyInstance) => {
     await requireAccountPermission(req.user!.id, input.accountId, "send");
     await replaceDraftAttachments(input.accountId, req.params.id, input.attachments);
     return { attachments: await listDraftAttachments(input.accountId, req.params.id) };
+  });
+
+  app.post<{ Params: { id: string } }>("/mail/drafts/:id/attachments", async (req) => {
+    const input = draftAttachmentsSchema.parse(req.body);
+    await requireAccountPermission(req.user!.id, input.accountId, "send");
+    const existing = await listDraftAttachments(input.accountId, req.params.id);
+    if (existing.length + input.attachments.length > 20) throw badRequest("too many draft attachments (max 20)");
+    await appendDraftAttachments(input.accountId, req.params.id, input.attachments);
+    return { attachments: await listDraftAttachments(input.accountId, req.params.id) };
+  });
+
+  app.delete<{ Params: { id: string; position: string }; Querystring: { accountId?: string } }>("/mail/drafts/:id/attachments/:position", async (req) => {
+    const accountId = req.query.accountId;
+    if (!accountId) throw badRequest("accountId is required");
+    await requireAccountPermission(req.user!.id, accountId, "send");
+    const position = Number(req.params.position);
+    if (!Number.isInteger(position) || position < 0) throw badRequest("attachment position must be a non-negative integer");
+    await removeDraftAttachment(accountId, req.params.id, position);
+    return { attachments: await listDraftAttachments(accountId, req.params.id) };
   });
 
   app.post<{ Params: { id: string } }>("/mail/drafts/:id/send", async (req, reply) => {
