@@ -27,6 +27,7 @@ import account from "./routes/account.js";
 import mailboxSetup from "./routes/mailboxSetup.js";
 import recovery from "./routes/recovery.js";
 import pushDevices from "./routes/pushDevices.js";
+import mailChanges from "./routes/mailChanges.js";
 import { auth as betterAuth } from "./auth/better.js";
 import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } from "@better-auth/oauth-provider";
 import { config } from "./config.js";
@@ -104,6 +105,7 @@ export function buildApp() {
   app.register(mailboxSetup);
   app.register(recovery);
   app.register(pushDevices);
+  app.register(mailChanges);
 
   return app;
 }
