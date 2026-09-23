@@ -30,8 +30,10 @@ import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } fr
 import { config } from "./config.js";
 import { JmapError } from "./engine/jmap.js";
 
+const MAIL_ATTACHMENT_BODY_LIMIT = 30 * 1024 * 1024;
+
 export function buildApp() {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: true, bodyLimit: MAIL_ATTACHMENT_BODY_LIMIT });
 
   app.register(cors, { origin: true });
   app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
