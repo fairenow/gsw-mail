@@ -2,8 +2,8 @@ import { config } from "../../config.js";
 
 import type { MailTemplate, MailTemplateInput, RenderedMailTemplate } from "./types.js";
 
-export type MailTemplateKey = "gsw_default" | "bible_reader";
-export const MAIL_TEMPLATE_VERSION = "2026-09-23-v2";
+export type MailTemplateKey = "none" | "gsw_default" | "bible_reader";
+export const MAIL_TEMPLATE_VERSION = "2026-09-23-v3";
 
 const escapeHtml = (value: string): string => value
   .replaceAll("&", "&amp;")
@@ -28,8 +28,22 @@ const bibleSocialLinks = socialRow(
   socialLink("https://www.youtube.com/@bible_study_app", "youtube-email-icon.png", "YouTube"),
 );
 
-const documentShell = (key: MailTemplateKey, content: string): string =>
+const documentShell = (key: Exclude<MailTemplateKey, "none">, content: string): string =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="x-gsw-template" content="${key}:${MAIL_TEMPLATE_VERSION}"></head><body style="margin:0">${content}<!-- gsw-template:${key}:${MAIL_TEMPLATE_VERSION} --></body></html>`;
+
+export const noTemplate: MailTemplate = {
+  key: "none",
+  name: "No Template",
+  category: "plain",
+  description: "Send the message exactly as composed, without branded template framing or footer content.",
+  render: (input: MailTemplateInput): RenderedMailTemplate => {
+    const text = input.bodyText ?? "";
+    return {
+      text,
+      html: input.bodyHtml ?? textToHtml(text),
+    };
+  },
+};
 
 export const gswDefaultTemplate: MailTemplate = {
   key: "gsw_default",
@@ -86,6 +100,7 @@ export const bibleReaderTemplate: MailTemplate = {
 };
 
 export const MAIL_TEMPLATES: Record<MailTemplateKey, MailTemplate> = {
+  none: noTemplate,
   gsw_default: gswDefaultTemplate,
   bible_reader: bibleReaderTemplate,
 };
@@ -99,10 +114,14 @@ export const MAIL_TEMPLATE_CATALOG = Object.values(MAIL_TEMPLATES).map((template
 }));
 
 export const DEFAULT_MAIL_TEMPLATE_KEY: MailTemplateKey =
-  config.mail.defaultTemplateKey === "bible_reader" ? "bible_reader" : "gsw_default";
+  config.mail.defaultTemplateKey === "bible_reader"
+    ? "bible_reader"
+    : config.mail.defaultTemplateKey === "gsw_default"
+      ? "gsw_default"
+      : "none";
 
 export const resolveMailTemplateKey = (key?: string | null): MailTemplateKey =>
-  key === "bible_reader" ? "bible_reader" : "gsw_default";
+  key === "bible_reader" ? "bible_reader" : key === "gsw_default" ? "gsw_default" : "none";
 
 export const renderMailTemplate = (key: MailTemplateKey, input: MailTemplateInput): RenderedMailTemplate =>
   MAIL_TEMPLATES[key].render(input);
