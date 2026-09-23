@@ -31,9 +31,10 @@ export interface BuiltOutgoingMessage {
   templateKey: MailTemplateKey;
 }
 
-const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const emptyBlockPattern = /(?:\s*(?:<div|<p)[^>]*>\s*(?:&nbsp;|<br\s*\/?>)?\s*<\/(?:div|p)>){1,4}/gi;
-const emptyBlockSource = emptyBlockPattern.source;
+const leadingEmptyBlocksPattern = /^(?:\s*(?:<div|<p)[^>]*>\s*(?:&nbsp;|<br\s*\/?>)?\s*<\/(?:div|p)>){1,4}/i;
+const trailingEmptyBlocksPattern = /(?:\s*(?:<div|<p)[^>]*>\s*(?:&nbsp;|<br\s*\/?>)?\s*<\/(?:div|p)>){1,4}\s*$/i;
+const leadingHelloPattern = /^\s*(?:<div[^>]*>\s*Hello\s*,?\s*<\/div>|<p[^>]*>\s*Hello\s*,?\s*<\/p>|Hello\s*,?)/i;
+const leadingSignatureMarkerPattern = /^\s*<div[^>]*(?:class=["'][^"']*\bgsw-signature\b[^"']*["']|data-gsw-signature=["']true["'])[^>]*>/i;
 const markedSignaturePattern = /<div[^>]*(?:class=["'][^"']*\bgsw-signature\b[^"']*["']|data-gsw-signature=["']true["'])[^>]*>[\s\S]*?<\/div>(?:\s*<div[^>]*>\s*<br\s*\/?>\s*<\/div>)?/gi;
 
 const signatureEnabledForMode = (signature: SignaturePolicy | null | undefined, mode: MessageMode): boolean => {
@@ -45,27 +46,29 @@ const signatureEnabledForMode = (signature: SignaturePolicy | null | undefined, 
 
 const stripLegacySignatureArtifacts = (html: string, safeSignature: string): string => {
   let body = html;
-  const escapedSignature = safeSignature ? escapeRegExp(safeSignature) : "";
-  const rawSignaturePattern = escapedSignature ? new RegExp(escapedSignature, "gi") : undefined;
 
   // Older compose builds could persist: Hello -> signature -> actual message -> signature.
-  // Remove only that known preamble shape; a normal user-authored "Hello" stays untouched.
-  if (escapedSignature) {
-    const wrappedSignature = `<div[^>]*(?:class=["'][^"']*\\bgsw-signature\\b[^"']*["']|data-gsw-signature=["']true["'])[^>]*>\\s*${escapedSignature}\\s*<\\/div>`;
-    const leadingLegacyPreamble = new RegExp(
-      `^\\s*(?:(?:<div|<p)[^>]*>\\s*)?(?:Hello\\s*,?|Hello)\\s*(?:(?:<\\/div>|<\\/p>)\\s*)?)(?:${emptyBlockSource})?\\s*(?:${wrappedSignature}|${escapedSignature})(?:${emptyBlockSource})?`,
-      "i",
-    );
-    body = body.replace(leadingLegacyPreamble, "");
+  // Detect that shape without compiling the user's signature HTML into a RegExp.
+  if (safeSignature) {
+    const helloMatch = body.match(leadingHelloPattern);
+    if (helloMatch) {
+      const afterHello = body.slice(helloMatch[0].length).replace(leadingEmptyBlocksPattern, "").trimStart();
+      if (afterHello.startsWith(safeSignature) || leadingSignatureMarkerPattern.test(afterHello)) {
+        body = afterHello;
+      }
+    }
   }
 
+  // The server owns signature placement. Strip any compose/draft copy first, then add
+  // exactly one canonical signature later. Exact string replacement avoids regex syntax
+  // failures from arbitrary HTML attributes, URLs, parentheses, or pasted formatting.
   body = body.replace(markedSignaturePattern, "");
-  if (rawSignaturePattern) body = body.replace(rawSignaturePattern, "");
+  if (safeSignature) body = body.split(safeSignature).join("");
 
   return body
-    .replace(/^\s+|\s+$/g, "")
-    .replace(new RegExp(`^${emptyBlockSource}`, "i"), "")
-    .replace(new RegExp(`${emptyBlockSource}$`, "i"), "")
+    .trim()
+    .replace(leadingEmptyBlocksPattern, "")
+    .replace(trailingEmptyBlocksPattern, "")
     .trim();
 };
 
