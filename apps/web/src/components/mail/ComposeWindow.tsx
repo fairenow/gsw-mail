@@ -1,27 +1,23 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Minus, X } from "lucide-react";
-import { api, type Contact } from "../../api";
 import { RichTextEditor } from "../RichTextEditor";
 
 export type ComposeMode = "new" | "reply" | "replyAll" | "forward";
 
-const contactCache = new Map<string, { expiresAt: number; contacts: Contact[] }>();
+type ContactSuggestion = { id: string; displayName: string | null; organization: string | null; jobTitle: string | null; email: string };
+const contactCache = new Map<string, { expiresAt: number; contacts: ContactSuggestion[] }>();
 const CONTACT_CACHE_TTL_MS = 30_000;
 
-const primaryEmail = (contact: Contact) => contact.emails.find((item) => item.isPrimary)?.email ?? contact.emails[0]?.email ?? "";
-const dedupeContacts = (contacts: Contact[]) => {
-  const seen = new Set<string>();
-  return contacts.filter((contact) => {
-    const email = primaryEmail(contact).trim().toLowerCase();
-    if (!email || seen.has(email)) return false;
-    seen.add(email);
-    return true;
-  });
-};
+async function contactSuggestions(query: string): Promise<ContactSuggestion[]> {
+  const response = await fetch(`/product/contact-suggestions?q=${encodeURIComponent(query)}`, { credentials: "include" });
+  if (!response.ok) throw new Error(`contact suggestions failed: ${response.status}`);
+  const body = await response.json() as { contacts?: ContactSuggestion[] };
+  return body.contacts ?? [];
+}
 
 function RecipientField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   const [focused, setFocused] = useState(false);
-  const [results, setResults] = useState<Contact[]>([]);
+  const [results, setResults] = useState<ContactSuggestion[]>([]);
   const requestId = useRef(0);
   const query = value.split(",").at(-1)?.trim() ?? "";
 
@@ -38,12 +34,11 @@ function RecipientField({ label, value, onChange }: { label: string; value: stri
     }
     const currentRequest = ++requestId.current;
     const timer = window.setTimeout(() => {
-      void api.contacts(query).then((contacts) => {
+      void contactSuggestions(query).then((contacts) => {
         if (currentRequest !== requestId.current) return;
-        const unique = dedupeContacts(contacts);
-        contactCache.set(normalizedQuery, { expiresAt: Date.now() + CONTACT_CACHE_TTL_MS, contacts: unique });
+        contactCache.set(normalizedQuery, { expiresAt: Date.now() + CONTACT_CACHE_TTL_MS, contacts });
         if (contactCache.size > 100) contactCache.delete(contactCache.keys().next().value!);
-        setResults(unique);
+        setResults(contacts);
       }).catch(() => {
         if (currentRequest === requestId.current) setResults([]);
       });
@@ -51,18 +46,16 @@ function RecipientField({ label, value, onChange }: { label: string; value: stri
     return () => window.clearTimeout(timer);
   }, [focused, query]);
 
-  const select = (contact: Contact) => {
-    const address = primaryEmail(contact);
-    if (!address) return;
+  const select = (contact: ContactSuggestion) => {
     const prefix = value.slice(0, value.lastIndexOf(",") + 1);
-    onChange(`${prefix}${prefix ? " " : ""}${address}, `);
+    onChange(`${prefix}${prefix ? " " : ""}${contact.email}, `);
     setFocused(false);
   };
 
   return <div className="gsw-recipient-field">
     <input value={value} onChange={(event) => onChange(event.target.value)} onFocus={() => setFocused(true)} onBlur={() => window.setTimeout(() => setFocused(false), 150)} placeholder={label} aria-label={label} required={label === "To"} />
-    {focused && results.length > 0 && <div className="gsw-contact-autocomplete">{results.slice(0, 20).map((contact) => {
-      const email = primaryEmail(contact);
+    {focused && results.length > 0 && <div className="gsw-contact-autocomplete">{results.map((contact) => {
+      const email = contact.email.trim();
       const name = contact.displayName?.trim();
       const detail = contact.jobTitle?.trim() || contact.organization?.trim();
       const heading = name && name.toLowerCase() !== email.toLowerCase() ? name : email;
