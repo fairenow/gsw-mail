@@ -13,6 +13,12 @@ const textToHtml = (value: string): string => escapeHtml(value).replaceAll("\n",
 
 const mailAssetUrl = (filename: string): string => `https://mail.guidedstepswellness.com/${filename}`;
 
+const socialLink = (url: string, icon: string, label: string): string =>
+  `<a href="${url}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;color:#6f6b63;text-decoration:none;font-size:12px"><img src="${mailAssetUrl(icon)}" alt="${label}" width="18" height="18" style="display:inline-block;width:18px;height:18px;border:0;vertical-align:middle" /><span style="vertical-align:middle">${label}</span></a>`;
+
+const gswSocialLinks = `${socialLink("https://www.facebook.com/profile.php?id=61584353387952", "facebook-email-icon.svg", "Facebook")}${socialLink("https://www.linkedin.com/company/guided-steps-wellness-the-community/posts/?viewAsMember=true", "linkedin-email-icon.svg", "LinkedIn")}`;
+const bibleSocialLinks = socialLink("https://www.youtube.com/@bible_study_app", "youtube-email-icon.svg", "YouTube");
+
 export const gswDefaultTemplate: MailTemplate = {
   key: "gsw_default",
   name: "Guided Steps Wellness: The Community",
@@ -25,7 +31,7 @@ export const gswDefaultTemplate: MailTemplate = {
 
     return {
       text,
-      html: `<!doctype html><html lang="en"><body style="margin:0;background:#f7f3ea;color:#484640;font-family:Arial,sans-serif;line-height:1.6"><div style="width:100%;padding:32px 16px"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8e1d4;border-radius:12px;overflow:hidden"><div style="padding:18px 24px;border-bottom:2px solid #e89a12"><img src="${mailAssetUrl("guided_steps_logo.png")}" alt="Guided Steps Wellness" style="display:block;width:52px;height:52px;object-fit:contain;margin-bottom:12px" /><div style="color:#292824;font-size:16px;font-weight:700">Guided Steps Wellness: The Community</div></div><div style="padding:28px 24px;font-size:15px">${body}</div><div style="padding:16px 24px;border-top:1px solid #eee9df;color:#77756f;font-size:12px">Guided Steps Wellness: The Community<br /><a href="https://thecommunity.guidedstepswellness.com/" style="color:#8d6b37;text-decoration:none">thecommunity.guidedstepswellness.com</a><br />Building community with purpose.</div></div></div></body></html>`,
+      html: `<!doctype html><html lang="en"><body style="margin:0;background:#f7f3ea;color:#484640;font-family:Arial,sans-serif;line-height:1.6"><div style="width:100%;padding:32px 16px"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8e1d4;border-radius:12px;overflow:hidden"><div style="padding:18px 24px;border-bottom:2px solid #e89a12"><img src="${mailAssetUrl("guided_steps_logo.png")}" alt="Guided Steps Wellness" style="display:block;width:52px;height:52px;object-fit:contain;margin-bottom:12px" /><div style="color:#292824;font-size:16px;font-weight:700">Guided Steps Wellness: The Community</div></div><div style="padding:28px 24px;font-size:15px">${body}</div><div style="padding:16px 24px;border-top:1px solid #eee9df;color:#77756f;font-size:12px">Guided Steps Wellness: The Community<br /><a href="https://thecommunity.guidedstepswellness.com/" style="color:#8d6b37;text-decoration:none">thecommunity.guidedstepswellness.com</a><br />Building community with purpose.<div style="margin-top:12px">${gswSocialLinks}</div></div></div></div></body></html>`,
     };
   },
 };
@@ -70,7 +76,7 @@ export const bibleReaderTemplate: MailTemplate = {
 
     return {
       text: textBody,
-      html: `<!doctype html><html lang="en"><body style="margin:0;background:#f8f6f0;color:#484640;font-family:Arial,sans-serif;line-height:1.6"><div style="width:100%;padding:32px 16px"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8e1d4;border-radius:10px;overflow:hidden"><div style="padding:22px 24px;border-bottom:1px solid #e8e1d4"><img src="${mailAssetUrl("bible_app.png")}" alt="Bible Study Reader" style="display:block;width:48px;height:48px;object-fit:contain;margin-bottom:12px" /><div style="color:#292824;font-family:Georgia,serif;font-size:20px;font-weight:700">Bible Study Reader</div><div style="margin-top:3px;color:#77756f;font-size:13px">Study the Word. Grow together.</div></div><div style="padding:30px 24px;font-size:15px">${lesson}${body}${scripture}${cta}</div><div style="padding:18px 24px;border-top:1px solid #eee9df;color:#77756f;font-size:12px">A study Bible you can use anywhere, anytime.<br /><span style="color:#5d5142">Read &bull; Highlight &bull; Notes &bull; Share</span><br /><br />Guided Steps Wellness<br /><a href="https://bible.guidedstepswellness.com" style="color:#8d6b37;text-decoration:none">bible.guidedstepswellness.com</a></div></div></div></body></html>`,
+      html: `<!doctype html><html lang="en"><body style="margin:0;background:#f8f6f0;color:#484640;font-family:Arial,sans-serif;line-height:1.6"><div style="width:100%;padding:32px 16px"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8e1d4;border-radius:10px;overflow:hidden"><div style="padding:22px 24px;border-bottom:1px solid #e8e1d4"><img src="${mailAssetUrl("bible_app.png")}" alt="Bible Study Reader" style="display:block;width:48px;height:48px;object-fit:contain;margin-bottom:12px" /><div style="color:#292824;font-family:Georgia,serif;font-size:20px;font-weight:700">Bible Study Reader</div><div style="margin-top:3px;color:#77756f;font-size:13px">Study the Word. Grow together.</div></div><div style="padding:30px 24px;font-size:15px">${lesson}${body}${scripture}${cta}</div><div style="padding:18px 24px;border-top:1px solid #eee9df;color:#77756f;font-size:12px">A study Bible you can use anywhere, anytime.<br /><span style="color:#5d5142">Read &bull; Highlight &bull; Notes &bull; Share</span><br /><br />Guided Steps Wellness<br /><a href="https://bible.guidedstepswellness.com" style="color:#8d6b37;text-decoration:none">bible.guidedstepswellness.com</a><div style="margin-top:12px">${bibleSocialLinks}</div></div></div></div></body></html>`,
     };
   },
 };
