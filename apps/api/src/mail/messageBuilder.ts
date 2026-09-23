@@ -32,7 +32,8 @@ export interface BuiltOutgoingMessage {
 }
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const emptyBlockPattern = /(?:\s*(?:<div|<p)[^>]*>\s*(?:&nbsp;|<br\s*\/?>)?\s*<\/(?:div|p)>)){1,3}/gi;
+const emptyBlockSource = `(?:\\s*(?:<div|<p)[^>]*>\\s*(?:&nbsp;|<br\\s*\\/?>)?\\s*<\\/(?:div|p)>)){1,4}`;
+const emptyBlockPattern = new RegExp(emptyBlockSource, "gi");
 const markedSignaturePattern = /<div[^>]*(?:class=["'][^"']*\bgsw-signature\b[^"']*["']|data-gsw-signature=["']true["'])[^>]*>[\s\S]*?<\/div>(?:\s*<div[^>]*>\s*<br\s*\/?>\s*<\/div>)?/gi;
 
 const signatureEnabledForMode = (signature: SignaturePolicy | null | undefined, mode: MessageMode): boolean => {
@@ -44,13 +45,15 @@ const signatureEnabledForMode = (signature: SignaturePolicy | null | undefined, 
 
 const stripLegacySignatureArtifacts = (html: string, safeSignature: string): string => {
   let body = html;
-  const rawSignaturePattern = safeSignature ? new RegExp(escapeRegExp(safeSignature), "gi") : undefined;
+  const escapedSignature = safeSignature ? escapeRegExp(safeSignature) : "";
+  const rawSignaturePattern = escapedSignature ? new RegExp(escapedSignature, "gi") : undefined;
 
-  // The old compose flow could save a greeting + signature before the actual body.
-  // Remove that exact legacy preamble only when a signature follows the greeting.
-  if (safeSignature) {
+  // Older compose builds could persist: Hello -> signature -> actual message -> signature.
+  // Remove only that known preamble shape; a normal user-authored "Hello" stays untouched.
+  if (escapedSignature) {
+    const wrappedSignature = `<div[^>]*(?:class=["'][^"']*\\bgsw-signature\\b[^"']*["']|data-gsw-signature=["']true["'])[^>]*>\\s*${escapedSignature}\\s*<\\/div>`;
     const leadingLegacyPreamble = new RegExp(
-      `^\\s*(?:(?:<div|<p)[^>]*>\\s*)?(?:Hello\\s*,?|Hello)(?:\\s|&nbsp;|<br\\s*\\/?>)*(?:(?:<\\/div>|<\\/p>)\\s*)?(?:${escapeRegExp(safeSignature)})`,
+      `^\\s*(?:(?:<div|<p)[^>]*>\\s*)?(?:Hello\\s*,?|Hello)\\s*(?:(?:<\\/div>|<\\/p>)\\s*)?)(?:${emptyBlockSource})?\\s*(?:${wrappedSignature}|${escapedSignature})(?:${emptyBlockSource})?`,
       "i",
     );
     body = body.replace(leadingLegacyPreamble, "");
