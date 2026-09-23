@@ -28,13 +28,50 @@ export async function provisionControlPlaneUser(identitySubject: string, email: 
   const normalizedEmail = email.trim().toLowerCase();
   const displayName = name?.trim() || displayNameFromAddress(normalizedEmail);
   return database.transaction(async (tx) => {
-    const id = `better-auth-${identitySubject}`;
-    const existingUser = (await tx.select({ id: users.id }).from(users).where(eq(users.authUserId, identitySubject)).limit(1))[0]
-      ?? (await tx.select({ id: users.id }).from(users).where(eq(users.id, id)).limit(1))[0];
-    if (existingUser) {
-      const [existing] = await tx.select().from(users).where(eq(users.id, existingUser.id)).limit(1);
-      if (!existing || existing.status !== "active") throw new Error("account linkage unavailable");
-      await tx.update(users).set({ authUserId: identitySubject, lastLoginAt: new Date() }).where(eq(users.id, existing.id));
+    const deterministicId = `better-auth-${identitySubject}`;
+    const directUser = (await tx.select().from(users).where(eq(users.authUserId, identitySubject)).limit(1))[0]
+      ?? (await tx.select().from(users).where(eq(users.id, deterministicId)).limit(1))[0];
+
+    const emailMatches = (await tx.select().from(users).where(eq(users.email, normalizedEmail)))
+      .filter((candidate) => candidate.status === "active");
+
+    const hasMailboxData = async (userId: string) => {
+      const owned = await tx.select({ id: emailAccounts.id }).from(emailAccounts).where(eq(emailAccounts.userId, userId)).limit(1);
+      if (owned[0]) return true;
+      const membership = await tx.select({ id: mailAccountMemberships.id }).from(mailAccountMemberships).where(eq(mailAccountMemberships.userId, userId)).limit(1);
+      return Boolean(membership[0]);
+    };
+
+    let existing = directUser;
+    const directHasMailboxData = directUser ? await hasMailboxData(directUser.id) : false;
+    const alternateWithMailboxData: typeof emailMatches = [];
+    for (const candidate of emailMatches) {
+      if (candidate.id === directUser?.id) continue;
+      if (await hasMailboxData(candidate.id)) alternateWithMailboxData.push(candidate);
+    }
+
+    // A Better Auth identity can already have a freshly auto-provisioned product
+    // row while the user's real mailbox/settings/contacts still live on an older
+    // product row with the same verified login email. Prefer the data-bearing row
+    // when that relationship is unambiguous. This repairs the link on the next
+    // authenticated request instead of making Mobile/Web maintain separate data.
+    if (directUser && !directHasMailboxData && alternateWithMailboxData.length === 1) {
+      const target = alternateWithMailboxData[0]!;
+      if (target.authUserId && target.authUserId !== identitySubject) throw new Error("account linkage unavailable");
+      if (directUser.authUserId === identitySubject) {
+        await tx.update(users).set({ authUserId: null }).where(eq(users.id, directUser.id));
+      }
+      existing = target;
+    } else if (!directUser) {
+      if (alternateWithMailboxData.length === 1) existing = alternateWithMailboxData[0]!;
+      else if (emailMatches.length === 1) existing = emailMatches[0]!;
+      else if (alternateWithMailboxData.length > 1 || emailMatches.length > 1) throw new Error("account linkage unavailable");
+    }
+
+    if (existing) {
+      if (existing.status !== "active") throw new Error("account linkage unavailable");
+      if (existing.authUserId && existing.authUserId !== identitySubject) throw new Error("account linkage unavailable");
+      await tx.update(users).set({ authUserId: identitySubject, email: normalizedEmail, name: existing.name ?? displayName, emailVerified: true, lastLoginAt: new Date() }).where(eq(users.id, existing.id));
       await tx.update(mailAccountMemberships).set({ authUserId: identitySubject }).where(eq(mailAccountMemberships.userId, existing.id));
       const owned = await tx.select().from(emailAccounts).where(eq(emailAccounts.userId, existing.id));
       for (const account of owned) {
@@ -44,13 +81,14 @@ export async function provisionControlPlaneUser(identitySubject: string, email: 
       }
       return { id: existing.id, email: normalizedEmail };
     }
+
     const workspaceSlug = `${config.provisioning.organizationSlug}-${createHash("sha256").update(identitySubject).digest("hex").slice(0, 12)}`;
     const [organization] = await tx.insert(organizations).values({ name: config.provisioning.organizationName, slug: workspaceSlug }).returning({ id: organizations.id });
     const organizationId = organization?.id;
     if (!organizationId) throw new Error("failed to provision workspace");
     const [user] = await tx
       .insert(users)
-      .values({ id, authUserId: identitySubject, identityProvider: "better-auth", identitySubject, email: normalizedEmail, emailVerified: true, name: displayName, lastLoginAt: new Date() })
+      .values({ id: deterministicId, authUserId: identitySubject, identityProvider: "better-auth", identitySubject, email: normalizedEmail, emailVerified: true, name: displayName, lastLoginAt: new Date() })
       .onConflictDoUpdate({ target: users.id, set: { authUserId: identitySubject, email: normalizedEmail, name: displayName, emailVerified: true, lastLoginAt: new Date() } })
       .returning({ id: users.id });
     if (!user) throw new Error("failed to provision control-plane user");
