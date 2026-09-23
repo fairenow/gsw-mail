@@ -31,6 +31,34 @@ test("template system removes legacy greeting/signature preamble and emits one c
   assert.match(result.html, /LinkedIn/);
 });
 
+test("normal user-authored Hello remains when the signature is only at the end", () => {
+  const result = buildOutgoingMessage({
+    templateKey: "gsw_default",
+    senderEmail: "ramon@team.guidedstepswellness.com",
+    mode: "new",
+    signature,
+    bodyHtml: `<div>Hello,</div><div>This greeting belongs to the message.</div><div class=\"gsw-signature\">${signature.signatureHtml}</div>`,
+  });
+
+  assert.match(result.bodyHtml, /^<div>Hello,<\/div>/);
+  assert.equal((result.bodyHtml.match(/data-gsw-signature=\"true\"/g) ?? []).length, 1);
+});
+
+test("signature HTML containing production URLs never becomes regex source", () => {
+  const productionSignature = {
+    ...signature,
+    signatureHtml: '<div>Ramon Williams Jr.</div><div>Guided Steps Wellness: The Community</div><div>734-545-3247</div><div><a href="https://thecommunity.guidedstepswellness.com" target="_blank" rel="noopener noreferrer">Visit Us Here!</a></div>',
+  };
+
+  assert.doesNotThrow(() => buildOutgoingMessage({
+    templateKey: "gsw_default",
+    senderEmail: "ramon@team.guidedstepswellness.com",
+    mode: "new",
+    signature: productionSignature,
+    bodyHtml: `<div>Hey Buddy,</div><div>Ol' pal, check it out.</div><div>Blessings,</div><div class=\"gsw-signature\">${productionSignature.signatureHtml}</div>`,
+  }));
+});
+
 test("Bible template contains the YouTube project link and version marker", () => {
   const result = buildOutgoingMessage({
     templateKey: "bible_reader",
