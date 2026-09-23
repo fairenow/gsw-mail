@@ -164,6 +164,68 @@ const json = async <T,>(res: Response): Promise<T> => {
 
 const get = <T,>(url: string) => fetch(url, { headers: headers(), credentials: "include" }).then((res) => json<T>(res));
 
+type CachedRead = { value: unknown; freshUntil: number; staleUntil: number };
+const readCache = new Map<string, CachedRead>();
+const inflightReads = new Map<string, Promise<unknown>>();
+
+const fetchAndCache = <T,>(url: string, freshMs: number, staleMs: number): Promise<T> => {
+  const existing = inflightReads.get(url) as Promise<T> | undefined;
+  if (existing) return existing;
+  const request = get<T>(url)
+    .then((value) => {
+      const now = Date.now();
+      readCache.set(url, { value, freshUntil: now + freshMs, staleUntil: now + staleMs });
+      return value;
+    })
+    .finally(() => inflightReads.delete(url));
+  inflightReads.set(url, request as Promise<unknown>);
+  return request;
+};
+
+const cachedGet = <T,>(url: string, freshMs: number, staleMs = freshMs * 6): Promise<T> => {
+  const cached = readCache.get(url);
+  const now = Date.now();
+  if (cached && cached.freshUntil > now) return Promise.resolve(cached.value as T);
+  if (cached && cached.staleUntil > now) {
+    void fetchAndCache<T>(url, freshMs, staleMs).catch(() => undefined);
+    return Promise.resolve(cached.value as T);
+  }
+  if (cached) readCache.delete(url);
+  return fetchAndCache<T>(url, freshMs, staleMs);
+};
+
+const messageListPrefix = (accountId: string) => `/mail/messages?accountId=${accountId}&`;
+const messageDetailKey = (accountId: string, engineId: string) => `/mail/messages/${engineId}?accountId=${accountId}`;
+
+const mutateCachedMessages = (accountId: string, engineId: string, patch: Partial<MessageSummary>) => {
+  for (const [key, cached] of readCache) {
+    if (!key.startsWith(messageListPrefix(accountId))) continue;
+    const response = cached.value as MessagesResponse;
+    if (!response?.messages) continue;
+    readCache.set(key, { ...cached, value: { ...response, messages: response.messages.map((message) => message.engineId === engineId ? { ...message, ...patch } : message) } });
+  }
+  const detailKey = messageDetailKey(accountId, engineId);
+  const detail = readCache.get(detailKey);
+  if (detail) readCache.set(detailKey, { ...detail, value: { ...(detail.value as FullMessage), ...patch } });
+};
+
+const removeCachedMessage = (accountId: string, engineId: string) => {
+  for (const [key, cached] of readCache) {
+    if (!key.startsWith(messageListPrefix(accountId))) continue;
+    const response = cached.value as MessagesResponse;
+    if (!response?.messages) continue;
+    readCache.set(key, { ...cached, value: { ...response, messages: response.messages.filter((message) => message.engineId !== engineId) } });
+  }
+  readCache.delete(messageDetailKey(accountId, engineId));
+  readCache.delete(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`);
+};
+
+const clearAccountMailCache = (accountId: string) => {
+  for (const key of readCache.keys()) {
+    if (key.includes(`accountId=${accountId}`) || key.includes(`accountId=${encodeURIComponent(accountId)}`)) readCache.delete(key);
+  }
+};
+
 const request = async (url: string, init: RequestInit, timeoutMs?: number): Promise<Response> => {
   const controller = timeoutMs ? new AbortController() : undefined;
   const timeout = timeoutMs ? window.setTimeout(() => controller?.abort(), timeoutMs) : undefined;
@@ -191,25 +253,24 @@ export const api = {
   setup: () => get<SetupState>("/api/setup"),
   updateWorkspace: (name: string) => patch<Pick<SetupState, "workspace" | "currentStep">>("/api/setup/workspace", { name }),
   addSetupDomain: (domain: string) => post<Pick<SetupState, "domain" | "currentStep">>("/api/setup/domain", { domain }),
-  accounts: () => get<AccountsResponse>("/mail/accounts").then((r) => r.accounts),
-  messages: (accountId: string, mailbox: string, limit = 50, offset = 0) => get<MessagesResponse>(`/mail/messages?accountId=${accountId}&mailbox=${mailbox}&limit=${limit}&offset=${offset}`).then((r) => r.messages),
-  mailboxStats: (accountId: string) => get<MailboxStatsResponse>(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`).then((r) => r.folders),
-  message: (accountId: string, engineId: string) => get<FullMessage>(`/mail/messages/${engineId}?accountId=${accountId}`),
-  read: (accountId: string, engineId: string, seen: boolean) => post(`/mail/messages/${engineId}/read`, { accountId, seen }),
-  flag: (accountId: string, engineId: string, flagged: boolean) => post(`/mail/messages/${engineId}/flag`, { accountId, flagged }),
-  bulk: (accountId: string, ids: string[], action: BulkMailAction) => post<{ updated: number; action: BulkMailAction }>("/mail/messages/bulk", { accountId, ids, action }, interactiveTimeout),
-  archive: (accountId: string, engineId: string) => post(`/mail/messages/${engineId}/archive`, { accountId }),
-  trash: (accountId: string, engineId: string) => post(`/mail/messages/${engineId}/trash`, { accountId }),
-  move: (accountId: string, engineId: string, mailbox: string) => post(`/mail/messages/${engineId}/move`, { accountId, mailbox }),
-  destroy: (accountId: string, engineId: string) => post(`/mail/messages/${engineId}/destroy`, { accountId }),
-  emptyTrash: (accountId: string) => post<{ deleted: number }>("/mail/messages/empty-trash", { accountId }),
+  accounts: () => cachedGet<AccountsResponse>("/mail/accounts", 15_000, 120_000).then((r) => r.accounts),
+  messages: (accountId: string, mailbox: string, limit = 50, offset = 0) => cachedGet<MessagesResponse>(`/mail/messages?accountId=${accountId}&mailbox=${mailbox}&limit=${limit}&offset=${offset}`, 4_000, 30_000).then((r) => r.messages),
+  mailboxStats: (accountId: string) => cachedGet<MailboxStatsResponse>(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`, 5_000, 30_000).then((r) => r.folders),
+  message: (accountId: string, engineId: string) => cachedGet<FullMessage>(messageDetailKey(accountId, engineId), 30_000, 5 * 60_000),
+  read: async (accountId: string, engineId: string, seen: boolean) => { const result = await post(`/mail/messages/${engineId}/read`, { accountId, seen }); mutateCachedMessages(accountId, engineId, { read: seen }); readCache.delete(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`); return result; },
+  flag: async (accountId: string, engineId: string, flagged: boolean) => { const result = await post(`/mail/messages/${engineId}/flag`, { accountId, flagged }); mutateCachedMessages(accountId, engineId, { flagged }); return result; },
+  bulk: async (accountId: string, ids: string[], action: BulkMailAction) => { const result = await post<{ updated: number; action: BulkMailAction }>("/mail/messages/bulk", { accountId, ids, action }, interactiveTimeout); clearAccountMailCache(accountId); return result; },
+  archive: async (accountId: string, engineId: string) => { const result = await post(`/mail/messages/${engineId}/archive`, { accountId }); removeCachedMessage(accountId, engineId); return result; },
+  trash: async (accountId: string, engineId: string) => { const result = await post(`/mail/messages/${engineId}/trash`, { accountId }); removeCachedMessage(accountId, engineId); return result; },
+  move: async (accountId: string, engineId: string, mailbox: string) => { const result = await post(`/mail/messages/${engineId}/move`, { accountId, mailbox }); removeCachedMessage(accountId, engineId); return result; },
+  destroy: async (accountId: string, engineId: string) => { const result = await post(`/mail/messages/${engineId}/destroy`, { accountId }); removeCachedMessage(accountId, engineId); return result; },
+  emptyTrash: async (accountId: string) => { const result = await post<{ deleted: number }>("/mail/messages/empty-trash", { accountId }); clearAccountMailCache(accountId); return result; },
   attachmentUrl: (accountId: string, attachment: MessageAttachment) => `/mail/attachments/${encodeURIComponent(attachment.engineId)}?accountId=${encodeURIComponent(accountId)}&filename=${encodeURIComponent(attachment.filename)}`,
   search: (accountId: string, q: string) => get<MessagesResponse>(`/mail/search?accountId=${accountId}&q=${encodeURIComponent(q)}`).then((r) => r.messages),
-  send: (accountId: string, to: string[], body: { cc?: string[]; bcc?: string[]; subject?: string; textBody?: string; htmlBody?: string; inReplyTo?: string; references?: string; mode?: "new" | "reply" | "replyAll" | "forward"; clientRequestId?: string; templateKey?: string; attachments?: ComposeAttachment[] }) =>
-    post<SendResult>("/mail/send", { accountId, to, ...body }, interactiveTimeout),
-  createDraft: (body: DraftInput) => post<{ engineId: string }>("/mail/drafts", body, interactiveTimeout),
-  updateDraft: (id: string, body: DraftInput) => patch<{ engineId: string }>(`/mail/drafts/${id}`, body, interactiveTimeout).then((result) => result ?? { engineId: id }),
-  sendDraft: (id: string, accountId: string, clientRequestId?: string, mode?: "new" | "reply" | "replyAll" | "forward", templateKey?: string, attachments?: ComposeAttachment[]) => post<SendResult>(`/mail/drafts/${id}/send`, { accountId, ...(clientRequestId ? { clientRequestId } : {}), ...(mode ? { mode } : {}), ...(templateKey ? { templateKey } : {}), ...(attachments?.length ? { attachments } : {}) }, interactiveTimeout),
+  send: async (accountId: string, to: string[], body: { cc?: string[]; bcc?: string[]; subject?: string; textBody?: string; htmlBody?: string; inReplyTo?: string; references?: string; mode?: "new" | "reply" | "replyAll" | "forward"; clientRequestId?: string; templateKey?: string; attachments?: ComposeAttachment[] }) => { const result = await post<SendResult>("/mail/send", { accountId, to, ...body }, interactiveTimeout); clearAccountMailCache(accountId); return result; },
+  createDraft: async (body: DraftInput) => { const result = await post<{ engineId: string }>("/mail/drafts", body, interactiveTimeout); clearAccountMailCache(body.accountId); return result; },
+  updateDraft: async (id: string, body: DraftInput) => { const result = await patch<{ engineId: string }>(`/mail/drafts/${id}`, body, interactiveTimeout).then((value) => value ?? { engineId: id }); clearAccountMailCache(body.accountId); return result; },
+  sendDraft: async (id: string, accountId: string, clientRequestId?: string, mode?: "new" | "reply" | "replyAll" | "forward", templateKey?: string, attachments?: ComposeAttachment[]) => { const result = await post<SendResult>(`/mail/drafts/${id}/send`, { accountId, ...(clientRequestId ? { clientRequestId } : {}), ...(mode ? { mode } : {}), ...(templateKey ? { templateKey } : {}), ...(attachments?.length ? { attachments } : {}) }, interactiveTimeout); clearAccountMailCache(accountId); return result; },
   sendStatus: (sendId: string) => get<never>("/mail/sends/" + sendId),
   cancelSend: (sendId: string) => post<{ status: string }>(`/mail/sends/${sendId}/cancel`),
   retrySend: (sendId: string, accountId: string) => post<{ status: string }>(`/mail/sends/${sendId}/retry`, { accountId }),
