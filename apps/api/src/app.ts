@@ -8,6 +8,7 @@ import { HttpError } from "./lib/errors.js";
 import accounts from "./routes/accounts.js";
 import admin from "./routes/admin.js";
 import aliases from "./routes/aliases.js";
+import attachments from "./routes/attachments.js";
 import drafts from "./routes/drafts.js";
 import messages from "./routes/messages.js";
 import mailActions from "./routes/mailActions.js";
@@ -83,6 +84,7 @@ export function buildApp() {
   app.register(accounts);
   app.register(aliases);
   app.register(messages);
+  app.register(attachments);
   app.register(mailActions);
   app.register(threads);
   app.register(search);
