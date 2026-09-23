@@ -2,6 +2,23 @@ import { Resend } from "resend";
 import { config } from "../config.js";
 import type { OutboundJob, OutboundRelay, RelayAttachment, RelayResult } from "./types.js";
 
+/**
+ * Header values pulled from received mail can contain RFC 5322 folding (CRLF +
+ * whitespace). Stalwart preserves those values, but Resend/Undici correctly
+ * rejects raw CR/LF/NUL in header values. Unfold and strip control characters
+ * before handing threading headers to the provider.
+ */
+export function sanitizeOutboundHeaderValue(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  const sanitized = value
+    .replace(/\r\n[ \t]+/g, " ")
+    .replace(/[\r\n\0]+/g, " ")
+    .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return sanitized || undefined;
+}
+
 export const NullRelay: OutboundRelay = {
   name: "null",
   async send(job: OutboundJob, attachments?: RelayAttachment[]): Promise<RelayResult> {
@@ -18,16 +35,19 @@ export function createResendRelay(apiKey: string): OutboundRelay {
     name: "resend",
     async send(job: OutboundJob, attachments?: RelayAttachment[]): Promise<RelayResult> {
       const headers: Record<string, string> = {};
-      if (job.messageId) headers["Message-ID"] = job.messageId;
-      if (job.inReplyTo) headers["In-Reply-To"] = job.inReplyTo;
-      if (job.references) headers["References"] = job.references;
+      const messageId = sanitizeOutboundHeaderValue(job.messageId);
+      const inReplyTo = sanitizeOutboundHeaderValue(job.inReplyTo);
+      const references = sanitizeOutboundHeaderValue(job.references);
+      if (messageId) headers["Message-ID"] = messageId;
+      if (inReplyTo) headers["In-Reply-To"] = inReplyTo;
+      if (references) headers["References"] = references;
 
       const options = {
         from: job.fromAddress,
         to: job.to,
-        subject: job.subject ?? "",
+        subject: sanitizeOutboundHeaderValue(job.subject) ?? "",
         text: job.textBody ?? "",
-        ...(headers["Message-ID"] || headers["In-Reply-To"] || headers["References"] ? { headers } : {}),
+        ...(Object.keys(headers).length ? { headers } : {}),
         ...(job.cc ? { cc: job.cc } : {}),
         ...(job.bcc ? { bcc: job.bcc } : {}),
         ...(job.htmlBody ? { html: job.htmlBody } : {}),
