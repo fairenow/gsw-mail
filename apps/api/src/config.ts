@@ -44,7 +44,7 @@ const config = {
     perHour: Number(env("SEND_PER_HOUR", "400")),
   },
   mail: {
-    defaultTemplateKey: env("DEFAULT_MAIL_TEMPLATE_KEY", "gsw_default"),
+    defaultTemplateKey: env("DEFAULT_MAIL_TEMPLATE_KEY", "none"),
   },
   provisioning: {
     organizationName: env("PROVISIONING_ORGANIZATION_NAME", "Guided Steps Wellness"),
