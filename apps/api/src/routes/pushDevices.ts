@@ -50,6 +50,7 @@ export default async (app: FastifyInstance) => {
       data: { route: "mail", kind: "push-test" },
       channelId: "mail",
       category: "general",
+      checkReceipts: true,
     });
   });
 
