@@ -1,0 +1,14 @@
+.gsw-calendar-day-outside-month {
+  background: color-mix(in srgb, var(--gsw-surface) 72%, var(--gsw-bg));
+}
+
+.gsw-calendar-day-outside-month > header {
+  opacity: 0.62;
+}
+
+@media (max-width: 700px) {
+  .gsw-calendar-grid-month {
+    grid-template-columns: repeat(7, minmax(112px, 1fr));
+    overflow-x: auto;
+  }
+}
