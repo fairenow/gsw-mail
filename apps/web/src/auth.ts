@@ -33,7 +33,10 @@ async function authRequest<T>(path: string, body?: unknown): Promise<T> {
 }
 
 function currentOAuthQuery(): string | undefined {
-  const value = new URLSearchParams(window.location.search).get("oauth_query")?.trim();
+  // Better Auth's OAuth Provider signs the authorization parameters directly into
+  // the login-page query string. Custom sign-in endpoints must forward that whole
+  // signed query as `oauth_query`; it is not a nested `oauth_query` URL parameter.
+  const value = window.location.search.replace(/^\?/, "").trim();
   return value || undefined;
 }
 
