@@ -13,7 +13,9 @@ const calendarBoundary = (date: Date) => localInput(date.toISOString());
 const blankForm = (calendarId = ""): EventForm => ({ calendarId, title: "", description: "", start: localInput(new Date().toISOString()), durationMinutes: "60", location: "", meetingLink: "", attendees: "", sendInvitations: true, allDay: false });
 const dateKey = (value: string | Date) => { const date = value instanceof Date ? value : new Date(value); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; };
 const startOfWeek = (date: Date) => { const result = new Date(date); result.setDate(result.getDate() - result.getDay()); result.setHours(0, 0, 0, 0); return result; };
-const daysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+const monthGridStart = (date: Date) => startOfWeek(monthStart(date));
+const monthGridEnd = (date: Date) => { const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0); const end = startOfWeek(lastDay); end.setDate(end.getDate() + 7); return end; };
+const monthGridDates = (date: Date) => { const dates: Date[] = []; const end = monthGridEnd(date); for (const cursor = monthGridStart(date); cursor < end; cursor.setDate(cursor.getDate() + 1)) dates.push(new Date(cursor)); return dates; };
 const sortEvents = (items: CalendarEvent[]) => [...items].sort((a, b) => a.start.localeCompare(b.start));
 
 export function CalendarPage() {
@@ -47,8 +49,8 @@ export function CalendarPage() {
             body: JSON.stringify({ accountId: account.id }),
           }).then(async (response) => { if (!response.ok) throw new Error((await response.json().catch(() => ({})) as { error?: string }).error ?? "calendar invitation sync failed"); }).catch((err) => console.warn("[calendar] invitation sync failed", err));
         }
-        const after = calendarBoundary(monthStart(month));
-        const before = calendarBoundary(monthEnd(month));
+        const after = calendarBoundary(monthGridStart(month));
+        const before = calendarBoundary(monthGridEnd(month));
         const [calendarResult, eventResult] = await Promise.all([api.calendars(account.id), api.calendarEvents(account.id, after, before)]);
         if (cancelled) return;
         setCalendars(calendarResult.calendars);
@@ -87,7 +89,7 @@ export function CalendarPage() {
       if (!Number.isNaN(savedDate.getTime())) setSelectedDay(savedDate);
       setMonth(targetMonth);
       setEvents((current) => sortEvents([...current.filter((event) => event.engineId !== saved.engineId), saved]));
-      const refreshed = (await api.calendarEvents(account.id, calendarBoundary(targetMonth), calendarBoundary(monthEnd(targetMonth)))).events;
+      const refreshed = (await api.calendarEvents(account.id, calendarBoundary(monthGridStart(targetMonth)), calendarBoundary(monthGridEnd(targetMonth)))).events;
       setEvents(sortEvents([...refreshed.filter((event) => event.engineId !== saved.engineId), saved]));
       setError("");
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
@@ -108,6 +110,6 @@ export function CalendarPage() {
 }
 
 function CalendarGrid({ events, month, selectedDay, view, onSelectDay, onOpen, onDelete }: { events: CalendarEvent[]; month: Date; selectedDay: Date; view: CalendarView; onSelectDay: (day: Date) => void; onOpen: (event: CalendarEvent) => void; onDelete: (event: CalendarEvent) => void }) {
-  const dates = view === "day" ? [selectedDay] : view === "week" ? Array.from({ length: 7 }, (_, index) => { const day = startOfWeek(selectedDay); day.setDate(day.getDate() + index); return day; }) : Array.from({ length: daysInMonth(month) }, (_, index) => new Date(month.getFullYear(), month.getMonth(), index + 1));
-  return <section className={`gsw-calendar-grid gsw-calendar-grid-${view}`}>{dates.map((day) => { const key = dateKey(day); const dayEvents = events.filter((event) => dateKey(event.start) === key); return <div className="gsw-calendar-day" key={key} onClick={() => onSelectDay(day)}><header><strong>{day.toLocaleDateString(undefined, { weekday: view === "month" ? "short" : "long", month: "short", day: "numeric" })}</strong></header>{dayEvents.map((event) => <div className="gsw-calendar-grid-event" key={event.engineId}><button onClick={(click) => { click.stopPropagation(); onOpen(event); }}><time>{event.allDay ? "All day" : new Date(event.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time><span>{event.title}</span>{event.meetingLink && <small>Virtual</small>}</button><button className="gsw-calendar-grid-delete" onClick={(click) => { click.stopPropagation(); void onDelete(event); }}>Delete</button></div>)}</div>; })}</section>;
+  const dates = view === "day" ? [selectedDay] : view === "week" ? Array.from({ length: 7 }, (_, index) => { const day = startOfWeek(selectedDay); day.setDate(day.getDate() + index); return day; }) : monthGridDates(month);
+  return <section className={`gsw-calendar-grid gsw-calendar-grid-${view}`}>{dates.map((day) => { const key = dateKey(day); const dayEvents = events.filter((event) => dateKey(event.start) === key); const outsideMonth = view === "month" && (day.getMonth() !== month.getMonth() || day.getFullYear() !== month.getFullYear()); return <div className={`gsw-calendar-day${outsideMonth ? " gsw-calendar-day-outside-month" : ""}`} key={key} onClick={() => onSelectDay(day)}><header><strong>{day.toLocaleDateString(undefined, { weekday: view === "month" ? "short" : "long", month: "short", day: "numeric" })}</strong></header>{dayEvents.map((event) => <div className="gsw-calendar-grid-event" key={event.engineId}><button onClick={(click) => { click.stopPropagation(); onOpen(event); }}><time>{event.allDay ? "All day" : new Date(event.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time><span>{event.title}</span>{event.meetingLink && <small>Virtual</small>}</button><button className="gsw-calendar-grid-delete" onClick={(click) => { click.stopPropagation(); void onDelete(event); }}>Delete</button></div>)}</div>; })}</section>;
 }
