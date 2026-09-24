@@ -83,7 +83,7 @@ export async function sendPushToUser(input: {
   body: string;
   data?: PushData;
   badge?: number;
-  sound?: "default" | null;
+  sound?: string | null;
   channelId?: string;
   category?: PushCategory;
   checkReceipts?: boolean;
