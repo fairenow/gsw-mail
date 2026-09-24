@@ -5,7 +5,6 @@ import { useAppShell } from "../components/AppShell";
 import { MailWorkspace } from "../components/MailWorkspace";
 
 const monthStart = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
-const monthEnd = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 1);
 type EventForm = { calendarId: string; title: string; description: string; start: string; durationMinutes: string; location: string; meetingLink: string; attendees: string; sendInvitations: boolean; allDay: boolean };
 type CalendarView = "day" | "week" | "month";
 const localInput = (value: string) => { const date = new Date(value); if (Number.isNaN(date.getTime())) return value.slice(0, 16); const offset = date.getTimezoneOffset() * 60_000; return new Date(date.getTime() - offset).toISOString().slice(0, 16); };
