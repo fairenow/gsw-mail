@@ -5,6 +5,11 @@ import { MailSidebar } from "./mail/MailSidebar";
 import { useAppShell } from "./AppShell";
 
 const emptyCounts = () => Object.fromEntries(FOLDERS.map((name) => [name, { total: 0, unread: 0 }])) as Record<Folder, { total: number; unread: number }>;
+const goToMailbox = () => {
+  if (window.location.pathname === "/") return;
+  window.history.pushState({}, "", "/");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+};
 
 export function MailWorkspace({ section, children }: { section: "contacts" | "calendar" | "settings"; children: ReactNode }) {
   const { account, profileImageUrl, configureTopBar } = useAppShell();
@@ -26,7 +31,7 @@ export function MailWorkspace({ section, children }: { section: "contacts" | "ca
 
   return <main className={`gsw-mail-body gsw-workspace-body ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
     {foldersOpen && <button className="gsw-folder-backdrop" aria-label="Close folders" onClick={() => setFoldersOpen(false)} />}
-    <MailSidebar account={account} profileImageUrl={profileImageUrl} folder="Inbox" counts={counts} composeOpen={false} mobileHidden={!foldersOpen} collapsed={sidebarCollapsed} section={section} onSelectFolder={() => { window.location.href = "/"; }} onToggleCompose={() => { window.location.href = "/"; }} />
+    <MailSidebar account={account} profileImageUrl={profileImageUrl} folder="Inbox" counts={counts} composeOpen={false} mobileHidden={!foldersOpen} collapsed={sidebarCollapsed} section={section} onSelectFolder={goToMailbox} onToggleCompose={goToMailbox} />
     <section className="gsw-workspace-panel">{children}</section>
   </main>;
 }
