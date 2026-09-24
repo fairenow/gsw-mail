@@ -41,7 +41,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       if (!current) { setLoading(false); return; }
       if (window.location.pathname === "/create-password") { setLoading(false); return; }
       setResolution("connecting");
-       const context = await resolveAccountContext();
+      const context = await resolveAccountContext();
       if (attempt !== generation.current) return;
       setResolution("resolved");
       await new Promise((resolve) => setTimeout(resolve, 450));
@@ -85,13 +85,22 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const verifyCode = async () => {
     if (code.length !== 6) { setError("Enter the 6-digit code from your email."); return; }
     setBusy(true); setError("");
-    try { await signInWithCode(email, code, mode === "sign-up" ? name : undefined); if (mode === "sign-up") window.location.assign("/create-password"); else refresh(); }
+    try {
+      const result = await signInWithCode(email, code, mode === "sign-up" ? name : undefined);
+      if (result.continuedOAuth) return;
+      if (mode === "sign-up") window.location.assign("/create-password");
+      else void refresh();
+    }
     catch (err) { setError(err instanceof Error ? err.message : "That code is invalid or expired."); }
     finally { setBusy(false); }
   };
   const submitPassword = async () => {
     setBusy(true); setError("");
-    try { await signInWithPassword(email, password); refresh(); }
+    try {
+      const result = await signInWithPassword(email, password);
+      if (result.continuedOAuth) return;
+      void refresh();
+    }
     catch (err) { setError(err instanceof Error ? err.message : "Unable to sign in."); }
     finally { setBusy(false); }
   };
