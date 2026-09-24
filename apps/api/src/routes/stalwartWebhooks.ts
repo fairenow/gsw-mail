@@ -106,7 +106,8 @@ async function notifyAccount(account: IncomingAccount, data: Record<string, unkn
       userId,
       title,
       body,
-      channelId: "mail",
+      sound: "gsw-mail-gong.wav",
+      channelId: "mail-gong",
       category: "mail",
       data: {
         route: "mail",
