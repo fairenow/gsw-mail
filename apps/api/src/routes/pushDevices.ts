@@ -33,8 +33,13 @@ export default async (app: FastifyInstance) => {
 
   app.patch<{ Params: { token: string } }>("/product/push-devices/:token/preferences", async (req) => {
     const input = preferenceSchema.parse(req.body);
-    await updateMobilePushDevicePreferences(req.user!.id, req.params.token, input);
-    return { updated: true, preferences: input };
+    const preferences = {
+      ...(input.mailEnabled !== undefined ? { mailEnabled: input.mailEnabled } : {}),
+      ...(input.calendarEnabled !== undefined ? { calendarEnabled: input.calendarEnabled } : {}),
+      ...(input.calendarReminderMinutes !== undefined ? { calendarReminderMinutes: input.calendarReminderMinutes } : {}),
+    };
+    await updateMobilePushDevicePreferences(req.user!.id, req.params.token, preferences);
+    return { updated: true, preferences };
   });
 
   app.post("/product/push-devices/test", async (req) => {
