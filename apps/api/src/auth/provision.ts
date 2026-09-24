@@ -42,7 +42,14 @@ export async function provisionControlPlaneUser(identitySubject: string, email: 
       return Boolean(membership[0]);
     };
 
+    const detachDirectAuthLink = async () => {
+      if (directUser?.authUserId === identitySubject) {
+        await tx.update(users).set({ authUserId: null }).where(eq(users.id, directUser.id));
+      }
+    };
+
     let existing = directUser;
+    let preserveExistingEmail = false;
     const directHasMailboxData = directUser ? await hasMailboxData(directUser.id) : false;
     const alternateWithMailboxData: typeof emailMatches = [];
     for (const candidate of emailMatches) {
@@ -53,14 +60,11 @@ export async function provisionControlPlaneUser(identitySubject: string, email: 
     // A Better Auth identity can already have a freshly auto-provisioned product
     // row while the user's real mailbox/settings/contacts still live on an older
     // product row with the same verified login email. Prefer the data-bearing row
-    // when that relationship is unambiguous. This repairs the link on the next
-    // authenticated request instead of making Mobile/Web maintain separate data.
+    // when that relationship is unambiguous.
     if (directUser && !directHasMailboxData && alternateWithMailboxData.length === 1) {
       const target = alternateWithMailboxData[0]!;
       if (target.authUserId && target.authUserId !== identitySubject) throw new Error("account linkage unavailable");
-      if (directUser.authUserId === identitySubject) {
-        await tx.update(users).set({ authUserId: null }).where(eq(users.id, directUser.id));
-      }
+      await detachDirectAuthLink();
       existing = target;
     } else if (!directUser) {
       if (alternateWithMailboxData.length === 1) existing = alternateWithMailboxData[0]!;
@@ -68,10 +72,43 @@ export async function provisionControlPlaneUser(identitySubject: string, email: 
       else if (alternateWithMailboxData.length > 1 || emailMatches.length > 1) throw new Error("account linkage unavailable");
     }
 
+    // Mailbox sign-in identities are authoritative when the verified Better Auth
+    // email is itself an existing GSW mailbox address. This covers migrated users
+    // whose product-user email is an owner/recovery address rather than the mailbox
+    // address. Reconnect to the mailbox's existing owner instead of creating an
+    // empty product row for Mobile.
+    const selectedHasMailboxData = existing
+      ? (existing.id === directUser?.id ? directHasMailboxData : await hasMailboxData(existing.id))
+      : false;
+    if (!selectedHasMailboxData && alternateWithMailboxData.length === 0) {
+      const [mailbox] = await tx
+        .select({ id: emailAccounts.id, userId: emailAccounts.userId })
+        .from(emailAccounts)
+        .where(eq(emailAccounts.address, normalizedEmail))
+        .limit(1);
+      let mailboxOwnerUserId = mailbox?.userId ?? null;
+      if (mailbox && !mailboxOwnerUserId) {
+        const [ownerMembership] = await tx
+          .select({ userId: mailAccountMemberships.userId })
+          .from(mailAccountMemberships)
+          .where(and(eq(mailAccountMemberships.accountId, mailbox.id), eq(mailAccountMemberships.role, "owner")))
+          .limit(1);
+        mailboxOwnerUserId = ownerMembership?.userId ?? null;
+      }
+      if (mailboxOwnerUserId && mailboxOwnerUserId !== existing?.id) {
+        const [mailboxOwner] = await tx.select().from(users).where(eq(users.id, mailboxOwnerUserId)).limit(1);
+        if (!mailboxOwner || mailboxOwner.status !== "active") throw new Error("account linkage unavailable");
+        if (mailboxOwner.authUserId && mailboxOwner.authUserId !== identitySubject) throw new Error("account linkage unavailable");
+        await detachDirectAuthLink();
+        existing = mailboxOwner;
+        preserveExistingEmail = true;
+      }
+    }
+
     if (existing) {
       if (existing.status !== "active") throw new Error("account linkage unavailable");
       if (existing.authUserId && existing.authUserId !== identitySubject) throw new Error("account linkage unavailable");
-      await tx.update(users).set({ authUserId: identitySubject, email: normalizedEmail, name: existing.name ?? displayName, emailVerified: true, lastLoginAt: new Date() }).where(eq(users.id, existing.id));
+      await tx.update(users).set({ authUserId: identitySubject, email: preserveExistingEmail ? existing.email : normalizedEmail, name: existing.name ?? displayName, emailVerified: true, lastLoginAt: new Date() }).where(eq(users.id, existing.id));
       await tx.update(mailAccountMemberships).set({ authUserId: identitySubject }).where(eq(mailAccountMemberships.userId, existing.id));
       const owned = await tx.select().from(emailAccounts).where(eq(emailAccounts.userId, existing.id));
       for (const account of owned) {

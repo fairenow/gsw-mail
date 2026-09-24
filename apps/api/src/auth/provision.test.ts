@@ -71,6 +71,7 @@ test("fresh Better Auth row reconnects to one same-email mailbox owner", async (
     [],
     [],
     [{ id: "existing-mailbox" }],
+    [{ id: "existing-mailbox" }],
     [ownedMailbox],
   ]);
   const updates: unknown[] = [];
@@ -84,4 +85,37 @@ test("fresh Better Auth row reconnects to one same-email mailbox owner", async (
   assert.deepEqual(await provisionControlPlaneUser("mailbox-auth-id", "mail@example.com", undefined, database), { id: "legacy-user", email: "mail@example.com" });
   assert.ok(updates.some((entry) => (entry as { values?: { authUserId?: unknown } }).values?.authUserId === null));
   assert.ok(updates.some((entry) => (entry as { values?: { authUserId?: unknown } }).values?.authUserId === "mailbox-auth-id"));
+});
+
+test("mailbox OAuth address reconnects to its migrated product owner even when product email differs", async () => {
+  const mailboxAddress = "ramon@team.guidedstepswellness.com";
+  const freshUser = { id: "better-auth-mailbox-auth-id", status: "active", authUserId: "mailbox-auth-id", email: mailboxAddress, name: "Ramon" };
+  const legacyUser = { id: "legacy-user", status: "active", authUserId: null, email: "owner@example.com", name: "Ramon" };
+  const ownedMailbox = { id: "existing-mailbox", workspaceId: "existing-workspace", authSetupStatus: "ready" };
+  const selections = selectionQueue([
+    [freshUser],
+    [freshUser],
+    [],
+    [],
+    [{ id: "existing-mailbox", userId: "legacy-user" }],
+    [legacyUser],
+    [ownedMailbox],
+  ]);
+  const updates: Array<{ table: unknown; values: Record<string, unknown> }> = [];
+  const inserts: Array<{ table: unknown; values: Record<string, unknown> }> = [];
+  const tx = {
+    select: selections.select,
+    update: (table: unknown) => ({ set: (values: Record<string, unknown>) => ({ where: async () => { updates.push({ table, values }); } }) }),
+    insert: (table: unknown) => ({ values: (values: Record<string, unknown>) => {
+      inserts.push({ table, values });
+      return { onConflictDoNothing: async () => undefined };
+    } }),
+  };
+  const database = { transaction: async (run: (transaction: unknown) => Promise<unknown>) => run(tx) } as unknown as Parameters<typeof provisionControlPlaneUser>[3];
+
+  assert.deepEqual(await provisionControlPlaneUser("mailbox-auth-id", mailboxAddress, undefined, database), { id: "legacy-user", email: mailboxAddress });
+  assert.ok(updates.some((entry) => entry.values.authUserId === null));
+  const linkedUserUpdate = updates.find((entry) => entry.values.authUserId === "mailbox-auth-id" && entry.values.email === "owner@example.com");
+  assert.ok(linkedUserUpdate, "legacy product email should be preserved while attaching the mailbox auth identity");
+  assert.ok(inserts.some((entry) => entry.table === mailAccountMemberships && entry.values.accountId === "existing-mailbox" && entry.values.userId === "legacy-user" && entry.values.authUserId === "mailbox-auth-id"));
 });
