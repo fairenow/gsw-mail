@@ -3,6 +3,7 @@ import { listMobilePushDevices, removeMobilePushDevice } from "./pushDevices.js"
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
 type PushData = Record<string, string | number | boolean | null>;
+type PushCategory = "mail" | "calendar" | "general";
 
 type ExpoTicket = {
   status?: "ok" | "error";
@@ -26,8 +27,13 @@ export async function sendPushToUser(input: {
   badge?: number;
   sound?: "default" | null;
   channelId?: string;
+  category?: PushCategory;
 }): Promise<PushDeliveryResult> {
-  const devices = await listMobilePushDevices(input.userId);
+  const devices = (await listMobilePushDevices(input.userId)).filter((device) => {
+    if (input.category === "mail") return device.mailEnabled;
+    if (input.category === "calendar") return device.calendarEnabled;
+    return true;
+  });
   if (!devices.length) return { attempted: 0, accepted: 0, failed: 0, removedInvalidTokens: 0 };
 
   const messages = devices.map((device) => ({
