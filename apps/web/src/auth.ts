@@ -32,6 +32,25 @@ async function authRequest<T>(path: string, body?: unknown): Promise<T> {
   return result as T;
 }
 
+function currentOAuthQuery(): string | undefined {
+  const value = new URLSearchParams(window.location.search).get("oauth_query")?.trim();
+  return value || undefined;
+}
+
+function withOAuthQuery<T extends Record<string, unknown>>(body: T): T & { oauth_query?: string } {
+  const oauthQuery = currentOAuthQuery();
+  return oauthQuery ? { ...body, oauth_query: oauthQuery } : body;
+}
+
+type OAuthContinuation = { redirect?: boolean; url?: string };
+export interface SignInResult { continuedOAuth: boolean }
+
+function continueOAuth(result: OAuthContinuation): boolean {
+  if (result.redirect === false || typeof result.url !== "string" || !result.url) return false;
+  window.location.assign(result.url);
+  return true;
+}
+
 export function getSession(): Promise<AuthSession | null> {
   return authRequest<AuthSession | null>("/get-session?disableCookieCache=true");
 }
@@ -62,12 +81,14 @@ export function requestOneTimeCode(email: string): Promise<unknown> {
   return authRequest("/email-otp/send-verification-otp", { email, type: "sign-in" });
 }
 
-export function signInWithPassword(email: string, password: string): Promise<unknown> {
-  return authRequest("/sign-in/email", { email, password });
+export async function signInWithPassword(email: string, password: string): Promise<SignInResult> {
+  const result = await authRequest<OAuthContinuation>("/sign-in/email", withOAuthQuery({ email, password }));
+  return { continuedOAuth: continueOAuth(result) };
 }
 
-export function signInWithCode(email: string, otp: string, name?: string): Promise<unknown> {
-  return authRequest("/sign-in/email-otp", { email, otp, ...(name ? { name } : {}) });
+export async function signInWithCode(email: string, otp: string, name?: string): Promise<SignInResult> {
+  const result = await authRequest<OAuthContinuation>("/sign-in/email-otp", withOAuthQuery({ email, otp, ...(name ? { name } : {}) }));
+  return { continuedOAuth: continueOAuth(result) };
 }
 
 export interface PasswordResetRequest {
