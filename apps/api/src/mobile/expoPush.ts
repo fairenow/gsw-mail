@@ -94,6 +94,7 @@ export async function sendPushToUser(input: {
     return true;
   });
   if (!devices.length) {
+    console.warn("[push] no enabled devices", { userId: input.userId, category: input.category ?? "general" });
     return {
       attempted: 0,
       accepted: 0,
@@ -161,6 +162,15 @@ export async function sendPushToUser(input: {
     }
   }
 
+  console.info("[push] Expo tickets", {
+    userId: input.userId,
+    category: input.category ?? "general",
+    attempted: devices.length,
+    accepted,
+    failed,
+    diagnostics,
+  });
+
   let receiptChecked = 0;
   let receiptDelivered = 0;
   let receiptFailed = 0;
@@ -207,6 +217,49 @@ export async function sendPushToUser(input: {
         removedInvalidTokens += 1;
       }
     }
+  } else if (ticketDeviceIndexes.size) {
+    const ids = [...ticketDeviceIndexes.keys()];
+    void waitForReceipts(ids).then(async ({ receipts, pendingIds }) => {
+      for (const id of ids) {
+        const deviceIndex = ticketDeviceIndexes.get(id)!;
+        const device = devices[deviceIndex]!;
+        const receipt = receipts[id];
+        if (!receipt) continue;
+        if (receipt.status === "ok") {
+          console.info("[push:receipt] delivered", {
+            userId: input.userId,
+            category: input.category ?? "general",
+            token: maskPushToken(device.expoPushToken),
+            ticketId: id,
+          });
+          continue;
+        }
+        console.warn("[push:receipt] rejected", {
+          userId: input.userId,
+          category: input.category ?? "general",
+          token: maskPushToken(device.expoPushToken),
+          ticketId: id,
+          error: receipt.details?.error,
+          message: receipt.message,
+        });
+        if (receipt.details?.error === "DeviceNotRegistered") {
+          await removeMobilePushDevice(input.userId, device.expoPushToken);
+        }
+      }
+      if (pendingIds.length) {
+        console.warn("[push:receipt] pending", {
+          userId: input.userId,
+          category: input.category ?? "general",
+          count: pendingIds.length,
+        });
+      }
+    }).catch((error) => {
+      console.warn("[push:receipt] lookup failed", {
+        userId: input.userId,
+        category: input.category ?? "general",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   return {
