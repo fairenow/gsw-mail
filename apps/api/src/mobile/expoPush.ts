@@ -151,8 +151,8 @@ export async function sendPushToUser(input: {
       token: maskPushToken(device.expoPushToken),
       stage: "ticket",
       status: "error",
-      ticketId: ticket?.id,
-      error: ticket?.details?.error,
+      ...(ticket?.id ? { ticketId: ticket.id } : {}),
+      ...(ticket?.details?.error ? { error: ticket.details.error } : {}),
       message: ticket?.message ?? "Expo did not accept this push notification.",
     });
     if (ticket?.details?.error === "DeviceNotRegistered") {
@@ -199,7 +199,7 @@ export async function sendPushToUser(input: {
         stage: "receipt",
         status: "error",
         ticketId: id,
-        error: receipt.details?.error,
+        ...(receipt.details?.error ? { error: receipt.details.error } : {}),
         message: receipt.message ?? "APNs/FCM rejected this push notification.",
       });
       if (receipt.details?.error === "DeviceNotRegistered") {
