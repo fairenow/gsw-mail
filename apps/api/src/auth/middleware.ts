@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { and, eq, gt } from "drizzle-orm";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { authUsers, oauthAccessToken } from "../db/schema.js";
@@ -40,7 +41,54 @@ export interface OAuthBearerIdentity {
   scopes: string[];
 }
 
+export function normalizeOAuthScopes(value: unknown): string[] {
+  if (typeof value === "string") return value.split(/\s+/).map((scope) => scope.trim()).filter(Boolean);
+  if (Array.isArray(value)) return value.filter((scope): scope is string => typeof scope === "string" && scope.length > 0);
+  return [];
+}
+
+const oauthJwks = createRemoteJWKSet(new URL(`${config.auth.issuer}/jwks`));
+
+async function resolveJwtOAuthBearerIdentity(token: string): Promise<OAuthBearerIdentity | null> {
+  try {
+    const { payload } = await jwtVerify(token, oauthJwks, {
+      issuer: config.auth.issuer,
+      audience: config.auth.stalwartAudience,
+    });
+    const scopes = normalizeOAuthScopes(payload.scope);
+    if (!scopes.includes("openid") || !scopes.includes("email")) return null;
+    if (typeof payload.sub !== "string" || !payload.sub) return null;
+
+    const clientId = typeof payload.client_id === "string"
+      ? payload.client_id
+      : typeof payload.azp === "string"
+        ? payload.azp
+        : undefined;
+    if (clientId && clientId !== config.auth.mobileClientId) return null;
+
+    const [user] = await db
+      .select({ id: authUsers.id, email: authUsers.email, name: authUsers.name })
+      .from(authUsers)
+      .where(eq(authUsers.id, payload.sub))
+      .limit(1);
+    if (!user) return null;
+
+    return { authUserId: user.id, email: user.email, name: user.name, scopes };
+  } catch {
+    return null;
+  }
+}
+
 export async function resolveOAuthBearerIdentity(token: string): Promise<OAuthBearerIdentity | null> {
+  // When the OAuth request includes a `resource` and the Better Auth JWT plugin
+  // is enabled, the provider issues a self-contained JWT access token. Those
+  // tokens are intentionally not stored in oauth_access_token, so verify them
+  // against the provider JWKS before falling back to opaque-token lookup.
+  if (token.split(".").length === 3) {
+    const identity = await resolveJwtOAuthBearerIdentity(token);
+    if (identity) return identity;
+  }
+
   const [row] = await db
     .select({
       authUserId: authUsers.id,
@@ -88,7 +136,9 @@ export const requireUser = async (app: FastifyInstance, opts: { optional?: boole
             req.authUserId = identity.authUserId;
             req.accessToken = token;
             req.user = await provisionControlPlaneUser(identity.authUserId, identity.email, identity.name);
-            req.log.info({ authUserId: identity.authUserId, userId: req.user.id, durationMs: Date.now() - startedAt }, "OAuth bearer session confirmed");
+            req.log.info({ authUserId: identity.authUserId, userId: req.user.id, tokenFormat: token.split(".").length === 3 ? "jwt" : "opaque", durationMs: Date.now() - startedAt }, "OAuth bearer session confirmed");
+          } else {
+            req.log.warn({ tokenFormat: token.split(".").length === 3 ? "jwt" : "opaque", durationMs: Date.now() - startedAt }, "OAuth bearer token rejected");
           }
         } catch {
           req.log.warn({ durationMs: Date.now() - startedAt }, "OAuth bearer session resolution failed");
