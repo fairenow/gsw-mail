@@ -75,9 +75,20 @@ const bearerFromHeaders = (headers: Record<string, string>): string | null => {
   return authorization.slice("Bearer ".length).trim() || null;
 };
 
+const scopeIncludes = (scope: string | string[] | undefined, expected: string): boolean => {
+  if (Array.isArray(scope)) return scope.includes(expected);
+  return typeof scope === "string" && scope.split(/\s+/).includes(expected);
+};
+
+const audienceIncludes = (audience: string | string[] | undefined, expected: string): boolean => {
+  if (Array.isArray(audience)) return audience.includes(expected);
+  return audience === expected;
+};
+
 async function mobileStalwartBearer(input: StalwartTokenRequest): Promise<string | null> {
   const token = bearerFromHeaders(input.headers);
   if (!token) return null;
+
   const [record] = await db
     .select({ token: oauthAccessToken.token, scopes: oauthAccessToken.scopes })
     .from(oauthAccessToken)
@@ -88,8 +99,26 @@ async function mobileStalwartBearer(input: StalwartTokenRequest): Promise<string
       gt(oauthAccessToken.expiresAt, new Date()),
     ))
     .limit(1);
-  if (!record || !record.scopes.includes("email")) return null;
-  return record.token;
+  if (record?.scopes.includes("email")) return record.token;
+
+  // Native OAuth bearer tokens are already authenticated by requireUser before
+  // mail/calendar/draft routes reach this helper. When Better Auth's token row
+  // is unavailable after a deploy, reuse a JWT only when its own claims bind it
+  // to the same authenticated user and the Stalwart resource + email scope.
+  // This avoids incorrectly falling back to the cookie-based authorization-code
+  // flow, which native requests cannot complete because they do not carry a web
+  // session cookie.
+  const metadata = decodeStalwartTokenMetadata(token);
+  if (
+    metadata?.sub === input.authUserId
+    && audienceIncludes(metadata.aud, config.auth.stalwartAudience)
+    && scopeIncludes(metadata.scope, "email")
+    && (!metadata.exp || metadata.exp * 1000 > Date.now())
+  ) {
+    return token;
+  }
+
+  return null;
 }
 
 export async function getStalwartAccessToken(input: StalwartTokenRequest, request: typeof fetch = fetch): Promise<string> {
