@@ -43,6 +43,7 @@ export function createResendRelay(apiKey: string): OutboundRelay {
       const messageId = sanitizeOutboundHeaderValue(job.messageId);
       const inReplyTo = sanitizeOutboundHeaderValue(job.inReplyTo);
       const references = sanitizeOutboundHeaderValue(job.references);
+      const replyTo = sanitizeOutboundHeaderValue(job.replyTo);
       if (messageId) headers["Message-ID"] = messageId;
       if (inReplyTo) headers["In-Reply-To"] = inReplyTo;
       if (references) headers["References"] = references;
@@ -56,7 +57,7 @@ export function createResendRelay(apiKey: string): OutboundRelay {
         ...(job.cc ? { cc: job.cc } : {}),
         ...(job.bcc ? { bcc: job.bcc } : {}),
         ...(job.htmlBody ? { html: job.htmlBody } : {}),
-        ...(job.replyTo ? { replyTo: sanitizeOutboundHeaderValue(job.replyTo) } : {}),
+        ...(replyTo ? { replyTo } : {}),
         ...(attachments?.length
           ? {
               attachments: attachments.map((a) => ({
