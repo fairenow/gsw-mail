@@ -60,9 +60,12 @@
 }
 
 .gsw-calendar-day-modal {
+  display: flex;
+  flex-direction: column;
   width: min(760px, calc(100vw - 32px));
-  max-height: min(760px, calc(100vh - 48px));
-  overflow: auto;
+  height: min(560px, calc(100vh - 48px));
+  max-height: min(560px, calc(100vh - 48px));
+  overflow: hidden;
   padding: 26px;
   border: 1px solid var(--gsw-border);
   border-radius: 18px;
@@ -76,6 +79,10 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
+}
+
+.gsw-calendar-day-modal-head {
+  flex: 0 0 auto;
 }
 
 .gsw-calendar-day-modal-head h2,
@@ -92,6 +99,7 @@
 
 .gsw-calendar-day-modal-actions {
   display: flex;
+  flex: 0 0 auto;
   justify-content: flex-end;
   margin: 18px 0;
 }
@@ -99,6 +107,10 @@
 .gsw-calendar-day-modal-events {
   display: grid;
   gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+  overscroll-behavior: contain;
 }
 
 .gsw-calendar-day-modal-events article {
@@ -307,7 +319,13 @@
     min-height: 78px;
   }
 
-  .gsw-calendar-day-modal,
+  .gsw-calendar-day-modal {
+    width: calc(100vw - 20px);
+    height: min(560px, calc(100dvh - 20px));
+    max-height: calc(100dvh - 20px);
+    padding: 20px;
+  }
+
   .gsw-calendar-event-modal {
     width: calc(100vw - 20px);
     max-height: calc(100dvh - 20px);
