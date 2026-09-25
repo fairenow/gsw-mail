@@ -5,6 +5,7 @@ import { AuthPage } from "../components/auth/AuthPage";
 import { BrandMark } from "../components/auth/BrandMark";
 
 const steps = ["Workspace", "Domain", "DNS verification", "First mailbox"];
+type DomainSetupResponse = Pick<SetupState, "domain" | "currentStep"> & { infrastructureError?: string };
 
 export function SetupPage() {
   const [setup, setSetup] = useState<SetupState | null>(null);
@@ -32,7 +33,12 @@ export function SetupPage() {
   };
   const saveDomain = async () => {
     setBusy(true); setError("");
-    try { const result = await api.addSetupDomain(domain); setSetup((current) => current ? { ...current, ...result } : current); }
+    try {
+      const result = await api.addSetupDomain(domain) as DomainSetupResponse;
+      setSetup((current) => current ? { ...current, ...result } : current);
+      if (result.domain?.name) setDomain(result.domain.name);
+      if (result.infrastructureError) setError(`Domain saved, but mail infrastructure setup needs attention: ${result.infrastructureError}`);
+    }
     catch (err) { setError(err instanceof Error ? err.message : "Could not add domain."); }
     finally { setBusy(false); }
   };
@@ -45,7 +51,7 @@ export function SetupPage() {
     {setup.onboardingComplete && <section className="gsw-reconcile"><h2>Existing setup</h2><p><strong>{setup.workspace.name}</strong> ✓</p><p>{setup.domain ? `${setup.domain.name} ✓` : "No domain linked"}</p><p>{setup.mailbox ? `${setup.mailbox.address} ✓` : "No mailbox linked"}</p><button className="gsw-btn gsw-btn-primary gsw-btn-block" onClick={() => window.location.assign("/")}>Continue to Mail</button></section>}
     <div className="gsw-setup-steps">{steps.map((step, index) => <span className={index <= stepIndex ? "is-active" : ""} key={step}><b>{index + 1}</b>{step}</span>)}</div>
     {stepIndex === 0 && <section className="gsw-setup-section"><h2>Name your workspace</h2><label>Workspace name<input value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} placeholder="Guided Steps Wellness" /></label><button className="gsw-btn gsw-btn-primary gsw-btn-block" disabled={busy || !workspaceName.trim()} onClick={() => void saveWorkspace()}>Continue</button></section>}
-    {stepIndex >= 1 && <section className="gsw-setup-section"><h2>{setup.workspace.name}</h2><p className="gsw-setup-note">Workspace owner and mailbox identities are separate. You can recover this workspace with your backup email even if mail is unavailable.</p>{!setup.domain ? <><label>Domain you already own<input value={domain} onChange={(event) => setDomain(event.target.value)} placeholder="example.com" /></label><button className="gsw-btn gsw-btn-primary gsw-btn-block" disabled={busy || !domain.trim()} onClick={() => void saveDomain()}>Add domain</button></> : <><div className="gsw-setup-domain"><strong>{setup.domain.name}</strong><span>{setup.domain.status === "pending" ? "DNS verification is next" : setup.domain.status}</span></div><button className="gsw-btn gsw-btn-primary gsw-btn-block" onClick={() => window.location.assign("/")}>Continue to Mail</button></>}</section>}
+    {stepIndex >= 1 && <section className="gsw-setup-section"><h2>{setup.workspace.name}</h2><p className="gsw-setup-note">Workspace owner and mailbox identities are separate. You can recover this workspace with your backup email even if mail is unavailable.</p>{!setup.domain ? <><label>Domain you already own<input value={domain} onChange={(event) => setDomain(event.target.value)} placeholder="example.com or https://example.com" /></label><button className="gsw-btn gsw-btn-primary gsw-btn-block" disabled={busy || !domain.trim()} onClick={() => void saveDomain()}>{busy ? "Adding domain…" : "Add domain"}</button></> : <><div className="gsw-setup-domain"><strong>{setup.domain.name}</strong><span>{setup.domain.status === "pending" ? "Domain saved · DNS verification is next" : setup.domain.status}</span></div>{setup.currentStep === "domain_added" ? <button className="gsw-btn gsw-btn-primary gsw-btn-block" disabled={busy} onClick={() => void saveDomain()}>{busy ? "Checking…" : "Retry DNS setup"}</button> : <button className="gsw-btn gsw-btn-primary gsw-btn-block" onClick={() => window.location.assign("/")}>Continue to Mail</button>}</>}</section>}
     {error && <p className="gsw-login-error">{error}</p>}
   </AuthCard></AuthPage>;
 }
