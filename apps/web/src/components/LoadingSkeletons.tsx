@@ -3,14 +3,12 @@ export function MailListSkeleton({ rows = 7 }: { rows?: number }) {
     <div className="gsw-mail-skeleton-list" role="status" aria-label="Loading messages">
       {Array.from({ length: rows }, (_, index) => (
         <div className="gsw-mail-skeleton-row" key={index} aria-hidden="true">
-          <span className="gsw-skeleton gsw-mail-skeleton-check" />
           <span className="gsw-skeleton gsw-mail-skeleton-avatar" />
           <span className="gsw-mail-skeleton-copy">
             <span className="gsw-skeleton gsw-mail-skeleton-sender" />
             <span className="gsw-skeleton gsw-mail-skeleton-subject" />
             <span className="gsw-skeleton gsw-mail-skeleton-preview" />
           </span>
-          <span className="gsw-skeleton gsw-mail-skeleton-star" />
         </div>
       ))}
       <span className="gsw-sr-only">Loading messages</span>
