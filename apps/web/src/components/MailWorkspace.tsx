@@ -5,6 +5,8 @@ import { MailSidebar } from "./mail/MailSidebar";
 import { useAppShell } from "./AppShell";
 
 const emptyCounts = () => Object.fromEntries(FOLDERS.map((name) => [name, { total: 0, unread: 0 }])) as Record<Folder, { total: number; unread: number }>;
+const countsCache = new Map<string, Record<Folder, { total: number; unread: number }>>();
+const normalizeCounts = (stats: Record<string, { total: number; unread: number }>) => Object.fromEntries(FOLDERS.map((name) => [name, stats[name] ?? { total: 0, unread: 0 }])) as Record<Folder, { total: number; unread: number }>;
 const goToMailbox = () => {
   if (window.location.pathname === "/") return;
   window.history.pushState({}, "", "/");
@@ -13,13 +15,22 @@ const goToMailbox = () => {
 
 export function MailWorkspace({ section, children }: { section: "contacts" | "calendar" | "settings"; children: ReactNode }) {
   const { account, profileImageUrl, configureTopBar } = useAppShell();
-  const [counts, setCounts] = useState(emptyCounts);
+  const [counts, setCounts] = useState<Record<Folder, { total: number; unread: number }>>(() => account ? countsCache.get(account.id) ?? emptyCounts() : emptyCounts());
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("gsw-mail-sidebar-collapsed") === "true");
   const [foldersOpen, setFoldersOpen] = useState(false);
 
   useEffect(() => {
     if (!account) return;
-    void api.mailboxStats(account.id).then((stats) => setCounts(Object.fromEntries(FOLDERS.map((name) => [name, stats[name] ?? { total: 0, unread: 0 }])) as Record<Folder, { total: number; unread: number }>)).catch(() => undefined);
+    const cached = countsCache.get(account.id);
+    if (cached) setCounts(cached);
+    let cancelled = false;
+    void api.mailboxStats(account.id).then((stats) => {
+      if (cancelled) return;
+      const next = normalizeCounts(stats);
+      countsCache.set(account.id, next);
+      setCounts(next);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
   }, [account]);
   useEffect(() => {
     const toggle = () => {
