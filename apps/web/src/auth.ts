@@ -126,7 +126,17 @@ export function completeMailboxSetup(accountId: string, code: string, password: 
 }
 
 export function setPassword(password: string): Promise<unknown> {
-  return authRequest("/set-password", { newPassword: password });
+  return fetch("/api/account/set-password", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "include",
+    signal: AbortSignal.timeout(15000),
+    body: JSON.stringify({ newPassword: password }),
+  }).then(async (response) => {
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.message ?? result.error ?? "Could not set password.");
+    return result;
+  });
 }
 
 export function requestAccountDeletion(): Promise<unknown> {
