@@ -11,6 +11,7 @@ type AppShellContextValue = {
 };
 
 type ShellSnapshot = { accounts: Account[]; selectedAccountId: string | null; profileImageUrl: string };
+type IdleWindow = Window & { requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number };
 
 const AppShellContext = createContext<AppShellContextValue | null>(null);
 let shellSnapshot: ShellSnapshot = { accounts: [], selectedAccountId: null, profileImageUrl: "" };
@@ -34,18 +35,26 @@ const currentCalendarRange = () => {
 };
 
 const warmAccountData = (accountId: string) => {
-  // Mail is the primary workspace, so begin the Inbox and counts immediately
-  // instead of waiting for an idle callback. The API layer deduplicates these
-  // requests if MailPage mounts while they are still in flight.
+  // Mail is the primary workspace, so begin the Inbox and counts immediately.
   void Promise.allSettled([
     api.messages(accountId, "Inbox", 50, 0),
     api.mailboxStats(accountId),
   ]);
 
-  // Calendar remains prefetched in parallel, but it does not block mailbox data.
+  // Calendar stays prefetched in parallel.
   const range = currentCalendarRange();
   api.prefetchCalendarEvents(accountId, range.after, range.before);
   void api.calendars(accountId).catch(() => undefined);
+
+  // Warm contacts shortly after the critical mailbox request begins. This keeps
+  // the Inbox prioritized while making Contacts ready before the user opens it.
+  const warmContacts = () => {
+    api.prefetchContactsPage();
+    void Promise.allSettled([api.contactImports(), api.contactAddressBooks()]);
+  };
+  const idleCallback = (window as IdleWindow).requestIdleCallback;
+  if (idleCallback) idleCallback(warmContacts, { timeout: 500 });
+  else window.setTimeout(warmContacts, 250);
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
