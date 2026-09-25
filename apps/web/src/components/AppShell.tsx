@@ -10,12 +10,26 @@ type AppShellContextValue = {
   configureTopBar: (options: Partial<AppTopBarOptions>) => void;
 };
 
+type ShellSnapshot = { accounts: Account[]; selectedAccountId: string | null; profileImageUrl: string };
+
 const AppShellContext = createContext<AppShellContextValue | null>(null);
+let shellSnapshot: ShellSnapshot = { accounts: [], selectedAccountId: null, profileImageUrl: "" };
+
+const warmMailbox = (accountId: string) => {
+  const run = () => {
+    void Promise.allSettled([
+      api.messages(accountId, "Inbox", 50, 0),
+      api.mailboxStats(accountId),
+    ]);
+  };
+  if ("requestIdleCallback" in window) window.requestIdleCallback(run, { timeout: 800 });
+  else window.setTimeout(run, 0);
+};
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [account, setAccount] = useState<Account | null>(null);
-  const [profileImageUrl, setProfileImageUrl] = useState("");
+  const [accounts, setAccounts] = useState<Account[]>(() => shellSnapshot.accounts);
+  const [account, setAccount] = useState<Account | null>(() => shellSnapshot.accounts.find((item) => item.id === shellSnapshot.selectedAccountId) ?? shellSnapshot.accounts[0] ?? null);
+  const [profileImageUrl, setProfileImageUrl] = useState(() => shellSnapshot.profileImageUrl);
   const [topBar, setTopBar] = useState<AppTopBarOptions>({
     search: "",
     searchPlaceholder: "Search mail",
@@ -25,17 +39,38 @@ export function AppShell({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
-    void api.accounts().then((rows) => { setAccounts(rows); setAccount((current) => current ?? rows[0] ?? null); }).catch(() => undefined);
-    void api.settings().then((settings) => {
-      setProfileImageUrl(typeof settings.general.profileImageUrl === "string" ? settings.general.profileImageUrl : "");
+    let cancelled = false;
+    void api.accounts().then((rows) => {
+      if (cancelled) return;
+      setAccounts(rows);
+      setAccount((current) => {
+        const next = current && rows.some((item) => item.id === current.id) ? current : rows[0] ?? null;
+        shellSnapshot = { ...shellSnapshot, accounts: rows, selectedAccountId: next?.id ?? null };
+        if (next) warmMailbox(next.id);
+        return next;
+      });
     }).catch(() => undefined);
+    void api.settings().then((settings) => {
+      if (cancelled) return;
+      const nextProfileImageUrl = typeof settings.general.profileImageUrl === "string" ? settings.general.profileImageUrl : "";
+      setProfileImageUrl(nextProfileImageUrl);
+      shellSnapshot = { ...shellSnapshot, profileImageUrl: nextProfileImageUrl };
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
   }, []);
+
+  const selectAccount = (id: string) => {
+    const next = accounts.find((item) => item.id === id) ?? null;
+    setAccount(next);
+    shellSnapshot = { ...shellSnapshot, accounts, selectedAccountId: next?.id ?? null };
+    if (next) warmMailbox(next.id);
+  };
 
   const value = useMemo<AppShellContextValue>(() => ({
     account,
     accounts,
     profileImageUrl,
-    selectAccount: (id) => setAccount(accounts.find((item) => item.id === id) ?? null),
+    selectAccount,
     configureTopBar: (options) => setTopBar((current) => ({ ...current, ...options })),
   }), [account, accounts, profileImageUrl]);
 
