@@ -1,0 +1,57 @@
+.gsw-message-row {
+  grid-template-columns: 20px 36px minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: start;
+  padding: 11px 44px 11px 14px;
+}
+
+.gsw-message-select {
+  grid-column: 1;
+  grid-row: 1;
+  width: 16px;
+  height: 16px;
+  margin: 10px 0 0;
+  accent-color: #e89a12;
+  cursor: pointer;
+}
+
+.gsw-message-row > .gsw-avatar {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.gsw-message-row-content {
+  grid-column: 3;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.gsw-message-star {
+  position: absolute;
+  top: 13px;
+  right: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #9b978e;
+  cursor: pointer;
+}
+
+.gsw-message-star:hover {
+  background: var(--gsw-accent-soft);
+  color: var(--gsw-accent-dark);
+}
+
+.gsw-message-star:has(svg[fill="currentColor"]) {
+  color: #e89a12;
+}
+
+.gsw-message-row:hover .gsw-message-star {
+  visibility: hidden;
+}
