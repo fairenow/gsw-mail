@@ -25,6 +25,7 @@ import contactSuggestions from "./routes/contactSuggestions.js";
 import templates from "./routes/templates.js";
 import setup from "./routes/setup.js";
 import account from "./routes/account.js";
+import accountPassword from "./routes/accountPassword.js";
 import mailboxSetup from "./routes/mailboxSetup.js";
 import recovery from "./routes/recovery.js";
 import pushDevices from "./routes/pushDevices.js";
@@ -106,6 +107,7 @@ export function buildApp() {
   app.register(templates);
   app.register(setup);
   app.register(account);
+  app.register(accountPassword);
   app.register(mailboxSetup);
   app.register(recovery);
   app.register(pushDevices);
