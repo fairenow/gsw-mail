@@ -3,6 +3,11 @@
   100% { background-position: -200% 0; }
 }
 
+@keyframes gsw-skeleton-pulse {
+  0%, 100% { opacity: .62; }
+  50% { opacity: 1; }
+}
+
 .gsw-skeleton {
   display: block;
   border-radius: 999px;
@@ -61,6 +66,47 @@
 .gsw-mail-skeleton-preview { width: 92%; height: 10px; }
 .gsw-mail-skeleton-star { width: 16px; height: 16px; }
 
+.gsw-message-list-scroll[aria-busy="true"] {
+  position: relative;
+}
+
+.gsw-message-list-scroll[aria-busy="true"] > * {
+  visibility: hidden;
+}
+
+.gsw-message-list-scroll[aria-busy="true"]::before {
+  content: "";
+  display: block;
+  height: min(672px, 100%);
+  min-height: 480px;
+  background-image:
+    radial-gradient(circle 8px at 26px 23px, rgba(232,154,18,.14) 0 95%, transparent 100%),
+    radial-gradient(circle 18px at 66px 31px, rgba(232,154,18,.14) 0 95%, transparent 100%),
+    linear-gradient(rgba(232,154,18,.13), rgba(232,154,18,.13)),
+    linear-gradient(rgba(232,154,18,.10), rgba(232,154,18,.10)),
+    linear-gradient(rgba(232,154,18,.08), rgba(232,154,18,.08)),
+    radial-gradient(circle 8px at calc(100% - 24px) 24px, rgba(232,154,18,.12) 0 95%, transparent 100%),
+    linear-gradient(var(--gsw-border-soft), var(--gsw-border-soft));
+  background-size:
+    100% 96px,
+    100% 96px,
+    43% 10px,
+    66% 10px,
+    79% 9px,
+    100% 96px,
+    100% 1px;
+  background-position:
+    0 0,
+    0 0,
+    94px 17px,
+    94px 38px,
+    94px 58px,
+    0 0,
+    0 95px;
+  background-repeat: repeat-y;
+  animation: gsw-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
 .gsw-calendar-event-skeleton {
   display: grid;
   grid-template-columns: 54px minmax(0, 1fr);
@@ -103,5 +149,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .gsw-skeleton { animation: none; }
+  .gsw-skeleton,
+  .gsw-message-list-scroll[aria-busy="true"]::before { animation: none; }
 }
