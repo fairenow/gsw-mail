@@ -4,7 +4,17 @@ import { z } from "zod";
 import { requireOrgPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
 import { db, pingDatabase } from "../db/client.js";
-import { auditEvents, domains, emailAccounts, inboundMessages, outboundMessages } from "../db/schema.js";
+import {
+  auditEvents,
+  authUsers,
+  domains,
+  emailAccounts,
+  inboundMessages,
+  mailAccountMemberships,
+  organizationMemberships,
+  outboundMessages,
+  users,
+} from "../db/schema.js";
 import { config } from "../config.js";
 import { getRelay } from "../outbound/relay.js";
 
@@ -23,6 +33,117 @@ export default async (app: FastifyInstance) => {
       .where(eq(domains.organizationId, organizationId));
     return rows.map((r) => r.id);
   };
+
+  app.get("/admin/control-center", async (req) => {
+    const { organizationId } = orgQuery.parse(req.query ?? {});
+    await requireOrgPermission(req.user!.id, organizationId, ["owner", "admin"]);
+
+    const [domainRows, memberRows, mailboxRows, accessRows, auditRows, ownerRows] = await Promise.all([
+      db
+        .select({
+          id: domains.id,
+          name: domains.name,
+          status: domains.status,
+          mxStatus: domains.mxStatus,
+          spfStatus: domains.spfStatus,
+          dkimStatus: domains.dkimStatus,
+          dmarcStatus: domains.dmarcStatus,
+          dkimSelector: domains.dkimSelector,
+          updatedAt: domains.updatedAt,
+        })
+        .from(domains)
+        .where(eq(domains.organizationId, organizationId)),
+      db
+        .select({
+          membershipId: organizationMemberships.id,
+          userId: users.id,
+          name: users.name,
+          email: users.email,
+          emailVerified: users.emailVerified,
+          userStatus: users.status,
+          role: organizationMemberships.role,
+          membershipStatus: organizationMemberships.status,
+          lastLoginAt: users.lastLoginAt,
+          authEmail: authUsers.email,
+          authEmailVerified: authUsers.emailVerified,
+        })
+        .from(organizationMemberships)
+        .innerJoin(users, eq(organizationMemberships.userId, users.id))
+        .leftJoin(authUsers, eq(users.authUserId, authUsers.id))
+        .where(eq(organizationMemberships.organizationId, organizationId)),
+      db
+        .select({
+          id: emailAccounts.id,
+          address: emailAccounts.address,
+          displayName: emailAccounts.displayName,
+          status: emailAccounts.status,
+          authSetupStatus: emailAccounts.authSetupStatus,
+          userId: emailAccounts.userId,
+          usedBytes: emailAccounts.usedBytes,
+          quotaBytes: emailAccounts.quotaBytes,
+        })
+        .from(emailAccounts)
+        .where(eq(emailAccounts.workspaceId, organizationId)),
+      db
+        .select({
+          accountId: mailAccountMemberships.accountId,
+          userId: mailAccountMemberships.userId,
+          role: mailAccountMemberships.role,
+        })
+        .from(mailAccountMemberships)
+        .innerJoin(emailAccounts, eq(mailAccountMemberships.accountId, emailAccounts.id))
+        .where(eq(emailAccounts.workspaceId, organizationId)),
+      db
+        .select({
+          id: auditEvents.id,
+          actorUserId: auditEvents.actorUserId,
+          action: auditEvents.action,
+          resourceType: auditEvents.resourceType,
+          resourceId: auditEvents.resourceId,
+          metadata: auditEvents.metadata,
+          createdAt: auditEvents.createdAt,
+        })
+        .from(auditEvents)
+        .where(eq(auditEvents.organizationId, organizationId))
+        .orderBy(desc(auditEvents.createdAt))
+        .limit(12),
+      db
+        .select({
+          email: authUsers.email,
+          emailVerified: authUsers.emailVerified,
+          name: authUsers.name,
+        })
+        .from(organizationMemberships)
+        .innerJoin(users, eq(organizationMemberships.userId, users.id))
+        .innerJoin(authUsers, eq(users.authUserId, authUsers.id))
+        .where(and(
+          eq(organizationMemberships.organizationId, organizationId),
+          eq(organizationMemberships.role, "owner"),
+          eq(organizationMemberships.status, "active"),
+        ))
+        .limit(1),
+    ]);
+
+    const accessByUser = new Map<string, { accountId: string; address: string; role: string }[]>();
+    const addressByAccount = new Map(mailboxRows.map((mailbox) => [mailbox.id, mailbox.address]));
+    for (const access of accessRows) {
+      const list = accessByUser.get(access.userId) ?? [];
+      list.push({ accountId: access.accountId, address: addressByAccount.get(access.accountId) ?? access.accountId, role: access.role });
+      accessByUser.set(access.userId, list);
+    }
+
+    const accessCountByMailbox = new Map<string, number>();
+    for (const access of accessRows) accessCountByMailbox.set(access.accountId, (accessCountByMailbox.get(access.accountId) ?? 0) + 1);
+
+    return {
+      organizationId,
+      domains: domainRows,
+      users: memberRows.map((member) => ({ ...member, mailboxAccess: accessByUser.get(member.userId) ?? [] })),
+      mailboxes: mailboxRows.map((mailbox) => ({ ...mailbox, accessCount: accessCountByMailbox.get(mailbox.id) ?? 0 })),
+      recoveryAdmin: ownerRows[0] ?? null,
+      recentAudit: auditRows,
+    };
+  });
 
   app.get("/admin/health", async (req) => {
     const { organizationId } = orgQuery.parse(req.query ?? {});
