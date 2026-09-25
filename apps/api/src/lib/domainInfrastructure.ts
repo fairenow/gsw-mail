@@ -166,7 +166,7 @@ function resendRecords(domain: ResendDomainShape | null): DomainDnsRecord[] {
     const value = type === "TXT" ? normalizedValue(record.value) : normalizedHost(record.value);
     const priority = record.priority === undefined ? undefined : Number(record.priority);
     const purpose = recordPurpose(type, name, value, "resend");
-    return [{ source: "resend", type, name, value, ...(Number.isFinite(priority) ? { priority } : {}), purpose, required: isRequired("resend", purpose) }];
+    return [{ source: "resend", type, name, value, ...(priority !== undefined && Number.isFinite(priority) ? { priority } : {}), purpose, required: isRequired("resend", purpose) }];
   });
 }
 
