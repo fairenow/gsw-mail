@@ -109,12 +109,20 @@ export function resetPasswordWithCode(email: string, otp: string, password: stri
   return fetch("/api/account/complete-password-reset", { method: "POST", headers: { "content-type": "application/json" }, credentials: "include", body: JSON.stringify({ email, otp, newPassword: password }) }).then(async (response) => { const result = await response.json(); if (!response.ok) throw new Error(result.message ?? result.error ?? "Could not reset your password."); return result; });
 }
 
-export function requestMailboxSetup(accountId: string): Promise<unknown> {
-  return fetch(`/api/mailboxes/${accountId}/setup`, { method: "POST", credentials: "include" }).then(async (response) => { const result = await response.json(); if (!response.ok) throw new Error(result.error ?? "Could not send mailbox setup code."); return result; });
+export interface MailboxSetupRequest {
+  sent: true;
+  action: "setup" | "reset";
+  recoveryEmail: string;
+  maskedRecoveryEmail: string;
+  address: string;
+}
+
+export function requestMailboxSetup(accountId: string): Promise<MailboxSetupRequest> {
+  return fetch(`/api/mailboxes/${accountId}/setup`, { method: "POST", credentials: "include" }).then(async (response) => { const result = await response.json(); if (!response.ok) throw new Error(result.message ?? result.error ?? "Could not send mailbox setup code."); return result as MailboxSetupRequest; });
 }
 
 export function completeMailboxSetup(accountId: string, code: string, password: string): Promise<unknown> {
-  return fetch(`/api/mailboxes/${accountId}/setup/complete`, { method: "POST", headers: { "content-type": "application/json" }, credentials: "include", body: JSON.stringify({ code, password }) }).then(async (response) => { const result = await response.json(); if (!response.ok) throw new Error(result.error ?? "Could not set up mailbox login."); return result; });
+  return fetch(`/api/mailboxes/${accountId}/setup/complete`, { method: "POST", headers: { "content-type": "application/json" }, credentials: "include", body: JSON.stringify({ code, password }) }).then(async (response) => { const result = await response.json(); if (!response.ok) throw new Error(result.message ?? result.error ?? "Could not set up mailbox login."); return result; });
 }
 
 export function setPassword(password: string): Promise<unknown> {
