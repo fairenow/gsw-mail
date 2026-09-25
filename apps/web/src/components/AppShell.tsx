@@ -11,6 +11,7 @@ type AppShellContextValue = {
 };
 
 type ShellSnapshot = { accounts: Account[]; selectedAccountId: string | null; profileImageUrl: string };
+type IdleWindow = Window & { requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number };
 
 const AppShellContext = createContext<AppShellContextValue | null>(null);
 let shellSnapshot: ShellSnapshot = { accounts: [], selectedAccountId: null, profileImageUrl: "" };
@@ -22,7 +23,8 @@ const warmMailbox = (accountId: string) => {
       api.mailboxStats(accountId),
     ]);
   };
-  if ("requestIdleCallback" in window) window.requestIdleCallback(run, { timeout: 800 });
+  const idleCallback = (window as IdleWindow).requestIdleCallback;
+  if (idleCallback) idleCallback(run, { timeout: 800 });
   else window.setTimeout(run, 0);
 };
 
