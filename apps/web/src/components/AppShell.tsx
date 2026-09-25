@@ -16,15 +16,36 @@ type IdleWindow = Window & { requestIdleCallback?: (callback: () => void, option
 const AppShellContext = createContext<AppShellContextValue | null>(null);
 let shellSnapshot: ShellSnapshot = { accounts: [], selectedAccountId: null, profileImageUrl: "" };
 
-const warmMailbox = (accountId: string) => {
+const calendarBoundary = (date: Date) => {
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+};
+
+const currentCalendarRange = () => {
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  const after = new Date(first);
+  after.setDate(after.getDate() - after.getDay());
+  after.setHours(0, 0, 0, 0);
+  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const before = new Date(last);
+  before.setDate(before.getDate() - before.getDay() + 7);
+  before.setHours(0, 0, 0, 0);
+  return { after: calendarBoundary(after), before: calendarBoundary(before) };
+};
+
+const warmAccountData = (accountId: string) => {
   const run = () => {
+    const range = currentCalendarRange();
+    api.prefetchCalendarEvents(accountId, range.after, range.before);
     void Promise.allSettled([
       api.messages(accountId, "Inbox", 50, 0),
       api.mailboxStats(accountId),
+      api.calendars(accountId),
     ]);
   };
   const idleCallback = (window as IdleWindow).requestIdleCallback;
-  if (idleCallback) idleCallback(run, { timeout: 800 });
+  if (idleCallback) idleCallback(run, { timeout: 250 });
   else window.setTimeout(run, 0);
 };
 
@@ -48,7 +69,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       setAccount((current) => {
         const next = current && rows.some((item) => item.id === current.id) ? current : rows[0] ?? null;
         shellSnapshot = { ...shellSnapshot, accounts: rows, selectedAccountId: next?.id ?? null };
-        if (next) warmMailbox(next.id);
+        if (next) warmAccountData(next.id);
         return next;
       });
     }).catch(() => undefined);
@@ -65,7 +86,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     const next = accounts.find((item) => item.id === id) ?? null;
     setAccount(next);
     shellSnapshot = { ...shellSnapshot, accounts, selectedAccountId: next?.id ?? null };
-    if (next) warmMailbox(next.id);
+    if (next) warmAccountData(next.id);
   };
 
   const value = useMemo<AppShellContextValue>(() => ({
