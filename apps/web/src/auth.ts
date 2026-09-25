@@ -121,6 +121,10 @@ export function setPassword(password: string): Promise<unknown> {
   return authRequest("/set-password", { newPassword: password });
 }
 
+export function requestAccountDeletion(): Promise<unknown> {
+  return authRequest("/delete-user", { callbackURL: `${window.location.origin}/account-deleted` });
+}
+
 export async function logout(): Promise<void> {
   await authRequest("/sign-out", {}).catch(() => undefined);
   window.dispatchEvent(new Event("gsw-auth-change"));

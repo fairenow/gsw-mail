@@ -49,6 +49,27 @@ export const auth = betterAuth({
   basePath: "/api/auth",
   secret: config.auth.secret,
   trustedOrigins: [config.auth.baseUrl, config.auth.trustedOrigin],
+  user: {
+    deleteUser: {
+      enabled: true,
+      sendDeleteAccountVerification: async ({ user, url }) => sendAuthEmail(
+        user.email,
+        "Confirm deletion of your GSW Mail account",
+        renderGswAuthEmail({
+          title: "Confirm account deletion",
+          message: "You requested deletion of your GSW Mail account. This action removes your sign-in profile and personal product data and cannot be undone. If you did not request this, you can ignore this email.",
+          ctaUrl: url,
+          ctaLabel: "Delete my account",
+        }),
+      ),
+      afterDelete: async (authUser) => {
+        const [productUser] = await db.select({ id: users.id }).from(users).where(eq(users.authUserId, authUser.id)).limit(1);
+        if (!productUser) return;
+        await db.update(emailAccounts).set({ status: "disabled" }).where(eq(emailAccounts.userId, productUser.id));
+        await db.delete(users).where(eq(users.id, productUser.id));
+      },
+    },
+  },
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
