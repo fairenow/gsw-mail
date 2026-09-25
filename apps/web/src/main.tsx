@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import "./styles/globals.css";
 import "./styles/auth.css";
 import "./styles/mail.css";
+import "./styles/mail-row-fix.css";
 import "./styles/product.css";
 import "./styles/calendar.css";
 import { AuthGate } from "./AuthGate";
