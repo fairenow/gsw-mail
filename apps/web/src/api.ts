@@ -198,6 +198,7 @@ const cachedGet = <T,>(url: string, freshMs: number, staleMs = freshMs * 6): Pro
 const messageListPrefix = (accountId: string) => `/mail/messages?accountId=${accountId}&`;
 const messageDetailKey = (accountId: string, engineId: string) => `/mail/messages/${engineId}?accountId=${accountId}`;
 const calendarPrefix = (accountId: string) => `/product/calendar-events?accountId=${encodeURIComponent(accountId)}&`;
+const contactsPrefix = "/product/contacts";
 
 const mutateCachedMessages = (accountId: string, engineId: string, patch: Partial<MessageSummary>) => {
   for (const [key, cached] of readCache) {
@@ -231,6 +232,10 @@ const clearAccountMailCache = (accountId: string) => {
 const clearCalendarCache = (accountId: string) => {
   const prefix = calendarPrefix(accountId);
   for (const key of readCache.keys()) if (key.startsWith(prefix)) readCache.delete(key);
+};
+
+const clearContactsCache = () => {
+  for (const key of readCache.keys()) if (key.startsWith(contactsPrefix)) readCache.delete(key);
 };
 
 const request = async (url: string, init: RequestInit, timeoutMs?: number): Promise<Response> => {
@@ -285,14 +290,16 @@ export const api = {
   settings: () => get<ProductSettings>("/product/settings"),
   updateSettings: (body: { general?: Record<string, unknown>; compose?: Record<string, unknown>; contacts?: Record<string, unknown> }) => patch<ProductSettings>("/product/settings", body),
   saveSignature: (body: ProductSettings["signature"]) => request("/product/signature", { method: "PUT", headers: headers(true), body: JSON.stringify(body) }).then((res) => json<ProductSettings["signature"]>(res)),
-  contacts: (q = "") => get<ContactListResponse>(`/product/contacts?q=${encodeURIComponent(q)}`).then((r) => r.contacts),
-  contactsPage: (q = "", limit = 100, offset = 0) => get<ContactListResponse>(`/product/contacts?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
-  contact: (id: string) => get<Contact>(`/product/contacts/${id}`),
-  contactAddressBooks: () => get<{ addressBooks: { engineId: string; name: string; isDefault: boolean }[] }>("/product/contacts/address-books"),
-  createContact: (body: unknown) => post<Contact>("/product/contacts", body),
-  updateContact: (id: string, body: unknown) => patch<Contact>(`/product/contacts/${id}`, body),
-  importContacts: (body: unknown) => post<{ id: string; filename: string; rowCount: number; createdCount: number; updatedCount: number; skippedCount: number; duplicateCount: number; failedCount: number }>("/product/contact-imports", body, interactiveTimeout),
-  contactImports: () => get<{ imports: { id: string; filename: string; rowCount: number; createdCount: number; updatedCount: number; skippedCount: number; duplicateCount: number; failedCount: number; createdAt: string }[] }>("/product/contact-imports"),
+  contacts: (q = "") => cachedGet<ContactListResponse>(`/product/contacts?q=${encodeURIComponent(q)}`, 30_000, 5 * 60_000).then((r) => r.contacts),
+  contactsPage: (q = "", limit = 100, offset = 0) => cachedGet<ContactListResponse>(`/product/contacts?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`, 30_000, 5 * 60_000),
+  prefetchContactsPage: () => { void cachedGet<ContactListResponse>("/product/contacts?q=&limit=100&offset=0", 30_000, 5 * 60_000).catch(() => undefined); },
+  contact: (id: string) => cachedGet<Contact>(`/product/contacts/${id}`, 60_000, 10 * 60_000),
+  prefetchContact: (id: string) => { void cachedGet<Contact>(`/product/contacts/${id}`, 60_000, 10 * 60_000).catch(() => undefined); },
+  contactAddressBooks: () => cachedGet<{ addressBooks: { engineId: string; name: string; isDefault: boolean }[] }>("/product/contacts/address-books", 60_000, 10 * 60_000),
+  createContact: async (body: unknown) => { const result = await post<Contact>("/product/contacts", body); clearContactsCache(); return result; },
+  updateContact: async (id: string, body: unknown) => { const result = await patch<Contact>(`/product/contacts/${id}`, body); clearContactsCache(); return result; },
+  importContacts: async (body: unknown) => { const result = await post<{ id: string; filename: string; rowCount: number; createdCount: number; updatedCount: number; skippedCount: number; duplicateCount: number; failedCount: number }>("/product/contact-imports", body, interactiveTimeout); clearContactsCache(); return result; },
+  contactImports: () => cachedGet<{ imports: { id: string; filename: string; rowCount: number; createdCount: number; updatedCount: number; skippedCount: number; duplicateCount: number; failedCount: number; createdAt: string }[] }>("/product/contact-imports", 60_000, 10 * 60_000),
   contactImportRows: (id: string) => get<{ rows: { rowNumber: number; raw: Record<string, string>; status: string; error?: string | null }[] }>(`/product/contact-imports/${id}/rows`),
   calendars: (accountId?: string) => cachedGet<{ calendars: CalendarSummary[] }>(`/product/calendars${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ""}`, 60_000, 10 * 60_000),
   calendarEvents: (accountId: string, after: string, before: string) => cachedGet<{ events: CalendarEvent[] }>(`${calendarPrefix(accountId)}after=${encodeURIComponent(after)}&before=${encodeURIComponent(before)}`, 30_000, 5 * 60_000),
