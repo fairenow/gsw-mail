@@ -3,19 +3,6 @@
   100% { background-position: -200% 0; }
 }
 
-@keyframes gsw-skeleton-pulse {
-  0%, 100% { opacity: .58; }
-  50% { opacity: .9; }
-}
-
-@keyframes gsw-empty-reveal {
-  to { visibility: visible; opacity: 1; }
-}
-
-@keyframes gsw-empty-skeleton-hide {
-  to { opacity: 0; }
-}
-
 .gsw-skeleton {
   display: block;
   border-radius: 999px;
@@ -36,72 +23,10 @@
   border: 0;
 }
 
-.gsw-mail-skeleton-list { width: 100%; }
-
-.gsw-mail-skeleton-row {
-  min-height: 88px;
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
-  padding: 13px 16px;
-  border-bottom: 1px solid var(--gsw-border-soft);
-}
-
-.gsw-mail-skeleton-avatar { width: 36px; height: 36px; }
-.gsw-mail-skeleton-copy { display: grid; gap: 7px; min-width: 0; padding-top: 2px; }
-.gsw-mail-skeleton-sender { width: 42%; height: 10px; }
-.gsw-mail-skeleton-subject { width: 72%; height: 10px; }
-.gsw-mail-skeleton-preview { width: 88%; height: 9px; }
-
-/* Keep initial mailbox loading simple: one icon placeholder plus three
-   horizontal text bars per message row. */
-.gsw-message-list-scroll {
-  position: relative;
-}
-
-.gsw-message-list-scroll[aria-busy="true"] > *,
-.gsw-message-list-scroll:not([aria-busy="true"]):has(.gsw-list-empty) > .gsw-list-empty {
+/* Mailbox skeletons were intentionally removed. Mail now prioritizes immediate
+   data loading and keeps the message list visually quiet while requests finish. */
+.gsw-message-list-scroll[aria-busy="true"] .gsw-list-empty {
   visibility: hidden;
-}
-
-.gsw-message-list-scroll:not([aria-busy="true"]):has(.gsw-list-empty) > .gsw-list-empty {
-  opacity: 0;
-  animation: gsw-empty-reveal 0s linear .7s forwards;
-}
-
-.gsw-message-list-scroll[aria-busy="true"]::before,
-.gsw-message-list-scroll:not([aria-busy="true"]):has(.gsw-list-empty)::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  min-height: 440px;
-  background-image:
-    radial-gradient(circle 17px, rgba(232,154,18,.14) 0 95%, transparent 100%),
-    linear-gradient(90deg, rgba(232,154,18,.10), rgba(232,154,18,.10)),
-    linear-gradient(90deg, rgba(232,154,18,.085), rgba(232,154,18,.085)),
-    linear-gradient(90deg, rgba(232,154,18,.07), rgba(232,154,18,.07)),
-    linear-gradient(var(--gsw-border-soft), var(--gsw-border-soft));
-  background-size:
-    34px 34px,
-    110px 10px,
-    190px 10px,
-    235px 9px,
-    100% 1px;
-  background-position:
-    18px 15px,
-    66px 14px,
-    66px 34px,
-    66px 54px,
-    0 87px;
-  background-repeat: repeat-y;
-  animation: gsw-skeleton-pulse 1.15s ease-in-out infinite;
-}
-
-.gsw-message-list-scroll:not([aria-busy="true"]):has(.gsw-list-empty)::before {
-  animation: gsw-skeleton-pulse 1.15s ease-in-out infinite, gsw-empty-skeleton-hide 0s linear .7s forwards;
 }
 
 .gsw-calendar-event-skeleton {
@@ -131,7 +56,5 @@
 .gsw-calendar-loading-note { font-size: 11px; color: var(--gsw-text-muted); }
 
 @media (prefers-reduced-motion: reduce) {
-  .gsw-skeleton,
-  .gsw-message-list-scroll[aria-busy="true"]::before,
-  .gsw-message-list-scroll:not([aria-busy="true"]):has(.gsw-list-empty)::before { animation: none; }
+  .gsw-skeleton { animation: none; }
 }
