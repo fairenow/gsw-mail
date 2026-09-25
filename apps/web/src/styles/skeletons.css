@@ -4,8 +4,16 @@
 }
 
 @keyframes gsw-skeleton-pulse {
-  0%, 100% { opacity: .62; }
+  0%, 100% { opacity: .56; }
   50% { opacity: 1; }
+}
+
+@keyframes gsw-empty-reveal {
+  to { visibility: visible; opacity: 1; }
+}
+
+@keyframes gsw-empty-skeleton-hide {
+  to { opacity: 0; }
 }
 
 .gsw-skeleton {
@@ -28,9 +36,7 @@
   border: 0;
 }
 
-.gsw-mail-skeleton-list {
-  width: 100%;
-}
+.gsw-mail-skeleton-list { width: 100%; }
 
 .gsw-mail-skeleton-row {
   min-height: 96px;
@@ -42,69 +48,68 @@
   border-bottom: 1px solid var(--gsw-border-soft);
 }
 
-.gsw-mail-skeleton-check {
-  width: 16px;
-  height: 16px;
-  margin-top: 2px;
-  border-radius: 4px;
-}
+.gsw-mail-skeleton-check { width: 16px; height: 16px; margin-top: 9px; border-radius: 4px; }
+.gsw-mail-skeleton-avatar { width: 36px; height: 36px; }
+.gsw-mail-skeleton-copy { display: grid; gap: 7px; min-width: 0; padding-top: 2px; }
+.gsw-mail-skeleton-sender { width: 48%; height: 11px; }
+.gsw-mail-skeleton-subject { width: 76%; height: 10px; }
+.gsw-mail-skeleton-preview { width: 90%; height: 9px; }
+.gsw-mail-skeleton-star { width: 16px; height: 16px; margin-top: 8px; }
 
-.gsw-mail-skeleton-avatar {
-  width: 36px;
-  height: 36px;
-}
-
-.gsw-mail-skeleton-copy {
-  display: grid;
-  gap: 7px;
-  min-width: 0;
-  padding-top: 2px;
-}
-
-.gsw-mail-skeleton-sender { width: 48%; height: 12px; }
-.gsw-mail-skeleton-subject { width: 78%; height: 11px; }
-.gsw-mail-skeleton-preview { width: 92%; height: 10px; }
-.gsw-mail-skeleton-star { width: 16px; height: 16px; }
-
-.gsw-message-list-scroll[aria-busy="true"] {
+/* The mailbox can mount before account data resolves. Show the inbox-shaped
+   placeholder immediately so the empty-state never flashes first. */
+.gsw-message-list-scroll {
   position: relative;
 }
 
-.gsw-message-list-scroll[aria-busy="true"] > * {
+.gsw-message-list-scroll[aria-busy="true"] > *,
+.gsw-message-list-scroll:not([aria-busy="true"]):has(.gsw-list-empty) > .gsw-list-empty {
   visibility: hidden;
 }
 
-.gsw-message-list-scroll[aria-busy="true"]::before {
+.gsw-message-list-scroll:not([aria-busy="true"]):has(.gsw-list-empty) > .gsw-list-empty {
+  opacity: 0;
+  animation: gsw-empty-reveal 0s linear .7s forwards;
+}
+
+.gsw-message-list-scroll[aria-busy="true"]::before,
+.gsw-message-list-scroll:not([aria-busy="true"]):has(.gsw-list-empty)::before {
   content: "";
-  display: block;
-  height: min(672px, 100%);
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
   min-height: 480px;
   background-image:
-    radial-gradient(circle 8px at 26px 23px, rgba(232,154,18,.14) 0 95%, transparent 100%),
-    radial-gradient(circle 18px at 66px 31px, rgba(232,154,18,.14) 0 95%, transparent 100%),
-    linear-gradient(rgba(232,154,18,.13), rgba(232,154,18,.13)),
-    linear-gradient(rgba(232,154,18,.10), rgba(232,154,18,.10)),
-    linear-gradient(rgba(232,154,18,.08), rgba(232,154,18,.08)),
-    radial-gradient(circle 8px at calc(100% - 24px) 24px, rgba(232,154,18,.12) 0 95%, transparent 100%),
+    radial-gradient(circle 8px, rgba(232,154,18,.14) 0 95%, transparent 100%),
+    radial-gradient(circle 18px, rgba(232,154,18,.14) 0 95%, transparent 100%),
+    linear-gradient(90deg, rgba(232,154,18,.08), rgba(232,154,18,.17), rgba(232,154,18,.08)),
+    linear-gradient(90deg, rgba(232,154,18,.07), rgba(232,154,18,.14), rgba(232,154,18,.07)),
+    linear-gradient(90deg, rgba(232,154,18,.06), rgba(232,154,18,.12), rgba(232,154,18,.06)),
+    radial-gradient(circle 8px, rgba(232,154,18,.12) 0 95%, transparent 100%),
     linear-gradient(var(--gsw-border-soft), var(--gsw-border-soft));
   background-size:
-    100% 96px,
-    100% 96px,
-    43% 10px,
-    66% 10px,
-    79% 9px,
-    100% 96px,
+    16px 16px,
+    36px 36px,
+    112px 10px,
+    176px 10px,
+    214px 9px,
+    16px 16px,
     100% 1px;
   background-position:
-    0 0,
-    0 0,
-    94px 17px,
-    94px 38px,
-    94px 58px,
-    0 0,
+    18px 21px,
+    50px 13px,
+    94px 16px,
+    94px 37px,
+    94px 57px,
+    calc(100% - 30px) 21px,
     0 95px;
   background-repeat: repeat-y;
   animation: gsw-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+.gsw-message-list-scroll:not([aria-busy="true"]):has(.gsw-list-empty)::before {
+  animation: gsw-skeleton-pulse 1.2s ease-in-out infinite, gsw-empty-skeleton-hide 0s linear .7s forwards;
 }
 
 .gsw-calendar-event-skeleton {
@@ -128,27 +133,13 @@
 
 .gsw-calendar-skeleton-time { width: 100%; height: 8px; }
 .gsw-calendar-skeleton-title { width: 72%; height: 9px; }
-.gsw-calendar-skeleton-detail {
-  grid-column: 2;
-  width: 48%;
-  height: 8px;
-}
-
-.gsw-calendar-month-events .gsw-calendar-event-skeleton + .gsw-calendar-event-skeleton {
-  margin-top: 4px;
-}
-
-.gsw-calendar-grid-event-skeletons {
-  display: grid;
-  gap: 8px;
-}
-
-.gsw-calendar-loading-note {
-  font-size: 11px;
-  color: var(--gsw-text-muted);
-}
+.gsw-calendar-skeleton-detail { grid-column: 2; width: 48%; height: 8px; }
+.gsw-calendar-month-events .gsw-calendar-event-skeleton + .gsw-calendar-event-skeleton { margin-top: 4px; }
+.gsw-calendar-grid-event-skeletons { display: grid; gap: 8px; }
+.gsw-calendar-loading-note { font-size: 11px; color: var(--gsw-text-muted); }
 
 @media (prefers-reduced-motion: reduce) {
   .gsw-skeleton,
-  .gsw-message-list-scroll[aria-busy="true"]::before { animation: none; }
+  .gsw-message-list-scroll[aria-busy="true"]::before,
+  .gsw-message-list-scroll:not([aria-busy="true"]):has(.gsw-list-empty)::before { animation: none; }
 }
