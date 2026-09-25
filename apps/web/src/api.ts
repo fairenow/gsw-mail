@@ -128,6 +128,10 @@ export interface SetupState {
   migratedFromExisting: boolean;
 }
 
+export interface SetupDomainResult extends Pick<SetupState, "domain" | "currentStep"> {
+  infrastructureError?: string;
+}
+
 interface AccountsResponse { accounts: Account[]; }
 interface MessagesResponse { messages: MessageSummary[]; }
 
@@ -264,7 +268,7 @@ export type BulkMailAction = "archive" | "trash" | "restore" | "destroy" | "read
 export const api = {
   setup: () => get<SetupState>("/api/setup"),
   updateWorkspace: (name: string) => patch<Pick<SetupState, "workspace" | "currentStep">>("/api/setup/workspace", { name }),
-  addSetupDomain: (domain: string) => post<Pick<SetupState, "domain" | "currentStep">>("/api/setup/domain", { domain }),
+  addSetupDomain: (domain: string) => post<SetupDomainResult>("/api/setup/domain", { domain }),
   accounts: () => cachedGet<AccountsResponse>("/mail/accounts", 15_000, 120_000).then((r) => r.accounts),
   messages: (accountId: string, mailbox: string, limit = 50, offset = 0) => { activeMailAccountId = accountId; return cachedGet<MessagesResponse>(`/mail/messages?accountId=${accountId}&mailbox=${mailbox}&limit=${limit}&offset=${offset}`, 4_000, 30_000).then((r) => r.messages); },
   mailboxStats: (accountId: string) => { activeMailAccountId = accountId; return cachedGet<MailboxStatsResponse>(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`, 5_000, 30_000).then((r) => r.folders); },
@@ -294,7 +298,7 @@ export const api = {
   contactsPage: (q = "", limit = 100, offset = 0) => cachedGet<ContactListResponse>(`/product/contacts?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`, 30_000, 5 * 60_000),
   prefetchContactsPage: () => { void cachedGet<ContactListResponse>("/product/contacts?q=&limit=100&offset=0", 30_000, 5 * 60_000).catch(() => undefined); },
   contact: (id: string) => cachedGet<Contact>(`/product/contacts/${id}`, 60_000, 10 * 60_000),
-  prefetchContact: (id: string) => { void cachedGet<Contact>(`/product/contacts/${id}`, 60_000, 10 * 60_000).catch(() => undefined); },
+  prefetchContact: (id: string) => { if (!activeMailAccountId) return; void cachedGet<FullMessage>(messageDetailKey(activeMailAccountId, id), 30_000, 5 * 60_000).catch(() => undefined); },
   contactAddressBooks: () => cachedGet<{ addressBooks: { engineId: string; name: string; isDefault: boolean }[] }>("/product/contacts/address-books", 60_000, 10 * 60_000),
   createContact: async (body: unknown) => { const result = await post<Contact>("/product/contacts", body); clearContactsCache(); return result; },
   updateContact: async (id: string, body: unknown) => { const result = await patch<Contact>(`/product/contacts/${id}`, body); clearContactsCache(); return result; },
