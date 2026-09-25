@@ -5,6 +5,7 @@ import "./styles/auth.css";
 import "./styles/mail.css";
 import "./styles/mail-row-fix.css";
 import "./styles/product.css";
+import "./styles/control-center.css";
 import "./styles/calendar.css";
 import "./styles/skeletons.css";
 import "./styles/legal.css";
