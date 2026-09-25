@@ -75,22 +75,28 @@ async function releaseEvent(eventId: string): Promise<void> {
   await db.delete(processedEvents).where(eq(processedEvents.eventId, eventId));
 }
 
-async function resolveIncomingAccounts(data: Record<string, unknown>): Promise<IncomingAccount[]> {
-  const addressCandidates = new Set<string>([...extractEmailAddresses(data.accountName), ...extractEmailAddresses(data.to)]);
+async function resolveIncomingAccounts(data: Record<string, unknown>): Promise<{ accounts: IncomingAccount[]; addressCandidates: string[]; principalId: string | null }> {
+  const addressCandidates = [...new Set([
+    ...extractEmailAddresses(data.accountName),
+    ...extractEmailAddresses(data.to),
+  ])];
   const principalId = typeof data.accountId === "string" || typeof data.accountId === "number" ? String(data.accountId) : null;
   const found = new Map<string, IncomingAccount>();
+
   for (const address of addressCandidates) {
     const rows = await db.select({ id: emailAccounts.id, address: emailAccounts.address, ownerUserId: emailAccounts.userId }).from(emailAccounts).where(eq(emailAccounts.address, address)).limit(2);
     for (const row of rows) found.set(row.id, row);
   }
+
   if (principalId) {
     const rows = await db.select({ id: emailAccounts.id, address: emailAccounts.address, ownerUserId: emailAccounts.userId }).from(emailAccounts).where(or(eq(emailAccounts.stalwartPrincipalId, principalId), eq(emailAccounts.address, principalId))).limit(4);
     for (const row of rows) found.set(row.id, row);
   }
-  return [...found.values()];
+
+  return { accounts: [...found.values()], addressCandidates, principalId };
 }
 
-async function notifyAccount(account: IncomingAccount, data: Record<string, unknown>) {
+async function notifyAccount(app: FastifyInstance, account: IncomingAccount, data: Record<string, unknown>, traceId: string) {
   const memberships = await db.select({ userId: mailAccountMemberships.userId }).from(mailAccountMemberships).where(eq(mailAccountMemberships.accountId, account.id));
   const userIds = new Set(memberships.map((membership) => membership.userId));
   if (account.ownerUserId) userIds.add(account.ownerUserId);
@@ -100,23 +106,54 @@ async function notifyAccount(account: IncomingAccount, data: Record<string, unkn
   const messageId = firstText(data.emailId, data.messageId, data.jmapId);
   const title = sender ? `New email from ${sender}` : "New email";
   const body = subject || `New message for ${account.address}`;
+
+  app.log.info({
+    event: "PUSH_TRIGGER_STARTED",
+    traceId,
+    accountId: account.id,
+    mailbox: account.address,
+    messageId,
+    sender,
+    subject,
+    userIds: [...userIds],
+  }, "new-email push trigger started");
+
+  if (!userIds.size) {
+    app.log.warn({ event: "PUSH_SKIPPED", traceId, accountId: account.id, mailbox: account.address, reason: "NO_MAILBOX_USERS" }, "new-email push skipped");
+    return [];
+  }
+
   const results = [];
   for (const userId of userIds) {
-    results.push(await sendPushToUser({
-      userId,
-      title,
-      body,
-      sound: "gsw-mail-gong.wav",
-      channelId: "mail-gong",
-      category: "mail",
-      data: {
-        route: "mail",
-        kind: "new-email",
+    try {
+      results.push(await sendPushToUser({
+        userId,
+        title,
+        body,
+        sound: "gsw-mail-gong.wav",
+        channelId: "mail-gong",
+        category: "mail",
+        traceId,
+        data: {
+          route: "mail",
+          kind: "new-email",
+          accountId: account.id,
+          folder: "Inbox",
+          ...(messageId ? { messageId } : {}),
+        },
+      }));
+    } catch (error) {
+      app.log.error({
+        event: "PUSH_FAILED",
+        traceId,
         accountId: account.id,
-        folder: "Inbox",
-        ...(messageId ? { messageId } : {}),
-      },
-    }));
+        mailbox: account.address,
+        userId,
+        stage: "sendPushToUser",
+        error: error instanceof Error ? error.message : String(error),
+      }, "new-email push failed");
+      throw error;
+    }
   }
   return results;
 }
@@ -128,16 +165,24 @@ export default async (app: FastifyInstance) => {
     const raw = req.body as Buffer;
     const secret = config.stalwart.webhookSecret;
     if (!secret) {
-      req.log.error("STALWART_WEBHOOK_SECRET is not configured");
+      req.log.error({ event: "PUSH_FAILED", stage: "webhook_auth", reason: "STALWART_WEBHOOK_SECRET_MISSING" }, "STALWART_WEBHOOK_SECRET is not configured");
       return reply.code(503).send({ error: "stalwart_webhook_not_configured" });
     }
-    if (!verifyStalwartWebhookSignature(raw, req.headers["x-signature"], secret)) return reply.code(401).send({ error: "invalid webhook signature" });
+    if (!verifyStalwartWebhookSignature(raw, req.headers["x-signature"], secret)) {
+      req.log.warn({ event: "PUSH_FAILED", stage: "webhook_auth", reason: "INVALID_WEBHOOK_SIGNATURE" }, "Stalwart webhook signature rejected");
+      return reply.code(401).send({ error: "invalid webhook signature" });
+    }
 
     let payload: StalwartWebhookBody;
     try { payload = JSON.parse(raw.toString("utf8")) as StalwartWebhookBody; }
-    catch { return reply.code(400).send({ error: "invalid JSON body" }); }
+    catch {
+      req.log.warn({ event: "PUSH_FAILED", stage: "webhook_parse", reason: "INVALID_JSON" }, "Stalwart webhook JSON rejected");
+      return reply.code(400).send({ error: "invalid JSON body" });
+    }
 
     const events = Array.isArray(payload.events) ? payload.events as StalwartWebhookEvent[] : [];
+    req.log.info({ event: "STALWART_WEBHOOK_RECEIVED", eventCount: events.length, eventTypes: events.map((event) => typeof event.type === "string" ? event.type : "unknown") }, "Stalwart webhook received");
+
     let relevant = 0;
     let duplicate = 0;
     let unresolved = 0;
@@ -149,28 +194,77 @@ export default async (app: FastifyInstance) => {
       if (eventType !== "message-ingest.ham") continue;
       relevant += 1;
       const eventId = typeof event.id === "string" ? event.id : "";
+      const data = eventRecord(event);
+      const messageId = firstText(data.emailId, data.messageId, data.jmapId);
+
+      req.log.info({
+        event: "EMAIL_RECEIVED",
+        traceId: eventId || undefined,
+        eventType,
+        createdAt: event.createdAt,
+        messageId,
+        dataKeys: Object.keys(data),
+        from: extractEmailAddresses(data.from),
+        to: extractEmailAddresses(data.to),
+        accountName: extractEmailAddresses(data.accountName),
+        accountId: data.accountId,
+      }, "new email webhook event received");
+
+      req.log.info({ event: "EMAIL_PERSISTED", traceId: eventId || undefined, eventType, messageId }, "Stalwart confirmed message ingestion");
+
       if (!eventId) {
-        req.log.warn({ eventType }, "Stalwart ingest event omitted id; skipping push to preserve idempotency");
+        req.log.warn({ event: "PUSH_SKIPPED", eventType, messageId, reason: "MISSING_EVENT_ID" }, "Stalwart ingest event omitted id; skipping push to preserve idempotency");
         unresolved += 1;
         continue;
       }
-      if (!(await claimEvent(eventId, eventType))) { duplicate += 1; continue; }
+      if (!(await claimEvent(eventId, eventType))) {
+        duplicate += 1;
+        req.log.info({ event: "PUSH_SKIPPED", traceId: eventId, eventType, messageId, reason: "DUPLICATE_EVENT" }, "duplicate Stalwart event skipped");
+        continue;
+      }
 
       try {
-        const data = eventRecord(event);
-        const accounts = await resolveIncomingAccounts(data);
-        if (!accounts.length) {
+        const resolution = await resolveIncomingAccounts(data);
+        if (!resolution.accounts.length) {
           unresolved += 1;
-          req.log.warn({ eventId, eventType, dataKeys: Object.keys(data) }, "Could not map Stalwart ingest event to a GSW mailbox");
+          req.log.warn({
+            event: "PUSH_SKIPPED",
+            traceId: eventId,
+            eventType,
+            messageId,
+            reason: "MAILBOX_NOT_RESOLVED",
+            dataKeys: Object.keys(data),
+            addressCandidates: resolution.addressCandidates,
+            principalId: resolution.principalId,
+          }, "Could not map Stalwart ingest event to a GSW mailbox");
           continue;
         }
-        for (const account of accounts) {
-          const deliveries = await notifyAccount(account, data);
+
+        req.log.info({
+          event: "MAILBOX_RESOLVED",
+          traceId: eventId,
+          eventType,
+          messageId,
+          addressCandidates: resolution.addressCandidates,
+          principalId: resolution.principalId,
+          accounts: resolution.accounts.map((account) => ({ id: account.id, address: account.address, ownerUserId: account.ownerUserId })),
+        }, "Stalwart event mapped to GSW mailbox");
+
+        for (const account of resolution.accounts) {
+          const deliveries = await notifyAccount(app, account, data, eventId);
           notifiedUsers += deliveries.length;
           acceptedPushes += deliveries.reduce((sum, delivery) => sum + delivery.accepted, 0);
         }
       } catch (error) {
         await releaseEvent(eventId);
+        req.log.error({
+          event: "PUSH_FAILED",
+          traceId: eventId,
+          eventType,
+          messageId,
+          stage: "webhook_pipeline",
+          error: error instanceof Error ? error.message : String(error),
+        }, "new-email push pipeline failed");
         throw error;
       }
     }
