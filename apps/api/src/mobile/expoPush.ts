@@ -43,6 +43,14 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function logPush(stage: string, details: Record<string, unknown>) {
+  console.info(JSON.stringify({ event: stage, ...details }));
+}
+
+function warnPush(stage: string, details: Record<string, unknown>) {
+  console.warn(JSON.stringify({ event: stage, ...details }));
+}
+
 async function fetchReceipts(ids: string[]) {
   const response = await fetch(EXPO_RECEIPTS_URL, {
     method: "POST",
@@ -87,14 +95,37 @@ export async function sendPushToUser(input: {
   channelId?: string;
   category?: PushCategory;
   checkReceipts?: boolean;
+  traceId?: string;
 }): Promise<PushDeliveryResult> {
-  const devices = (await listMobilePushDevices(input.userId)).filter((device) => {
-    if (input.category === "mail") return device.mailEnabled;
-    if (input.category === "calendar") return device.calendarEnabled;
+  const category = input.category ?? "general";
+  const allDevices = await listMobilePushDevices(input.userId);
+  const devices = allDevices.filter((device) => {
+    if (category === "mail") return device.mailEnabled;
+    if (category === "calendar") return device.calendarEnabled;
     return true;
   });
+
+  logPush("PUSH_PREFERENCE_CHECKED", {
+    traceId: input.traceId,
+    userId: input.userId,
+    category,
+    registeredDeviceCount: allDevices.length,
+    enabledDeviceCount: devices.length,
+    preferences: allDevices.map((device) => ({
+      token: maskPushToken(device.expoPushToken),
+      platform: device.platform,
+      mailEnabled: device.mailEnabled,
+      calendarEnabled: device.calendarEnabled,
+    })),
+  });
+
+  if (!allDevices.length) {
+    warnPush("PUSH_SKIPPED", { traceId: input.traceId, userId: input.userId, category, reason: "NO_REGISTERED_DEVICES" });
+  } else if (!devices.length) {
+    warnPush("PUSH_SKIPPED", { traceId: input.traceId, userId: input.userId, category, reason: "CATEGORY_DISABLED_ON_ALL_DEVICES" });
+  }
+
   if (!devices.length) {
-    console.warn("[push] no enabled devices", { userId: input.userId, category: input.category ?? "general" });
     return {
       attempted: 0,
       accepted: 0,
@@ -108,6 +139,13 @@ export async function sendPushToUser(input: {
     };
   }
 
+  logPush("PUSH_TOKENS_FOUND", {
+    traceId: input.traceId,
+    userId: input.userId,
+    category,
+    tokens: devices.map((device) => maskPushToken(device.expoPushToken)),
+  });
+
   const messages = devices.map((device) => ({
     to: device.expoPushToken,
     title: input.title,
@@ -118,16 +156,40 @@ export async function sendPushToUser(input: {
     ...(input.data ? { data: input.data } : {}),
   }));
 
-  const response = await fetch(EXPO_PUSH_URL, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Accept-Encoding": "gzip, deflate",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(messages),
+  logPush("PUSH_REQUEST_SENT", {
+    traceId: input.traceId,
+    userId: input.userId,
+    category,
+    messageCount: messages.length,
+    kind: input.data?.kind,
   });
-  if (!response.ok) throw new Error(`Expo push request failed: HTTP ${response.status}`);
+
+  let response: Response;
+  try {
+    response = await fetch(EXPO_PUSH_URL, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Accept-Encoding": "gzip, deflate",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(messages),
+    });
+  } catch (error) {
+    warnPush("PUSH_FAILED", {
+      traceId: input.traceId,
+      userId: input.userId,
+      category,
+      stage: "expo_request",
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+  if (!response.ok) {
+    const error = new Error(`Expo push request failed: HTTP ${response.status}`);
+    warnPush("PUSH_FAILED", { traceId: input.traceId, userId: input.userId, category, stage: "expo_request", status: response.status, error: error.message });
+    throw error;
+  }
 
   const payload = await response.json() as { data?: ExpoPushResponse[] };
   const tickets = payload.data ?? [];
@@ -144,32 +206,39 @@ export async function sendPushToUser(input: {
       accepted += 1;
       ticketDeviceIndexes.set(ticket.id, index);
       diagnostics.push({ token: maskPushToken(device.expoPushToken), stage: "ticket", status: "ok", ticketId: ticket.id });
+      logPush("PUSH_TICKET_RECEIVED", {
+        traceId: input.traceId,
+        userId: input.userId,
+        category,
+        token: maskPushToken(device.expoPushToken),
+        ticketId: ticket.id,
+        status: "ok",
+      });
       continue;
     }
 
     failed += 1;
-    diagnostics.push({
+    const diagnostic: PushDiagnostic = {
       token: maskPushToken(device.expoPushToken),
       stage: "ticket",
       status: "error",
       ...(ticket?.id ? { ticketId: ticket.id } : {}),
       ...(ticket?.details?.error ? { error: ticket.details.error } : {}),
       message: ticket?.message ?? "Expo did not accept this push notification.",
+    };
+    diagnostics.push(diagnostic);
+    warnPush("PUSH_FAILED", {
+      traceId: input.traceId,
+      userId: input.userId,
+      category,
+      stage: "ticket",
+      ...diagnostic,
     });
     if (ticket?.details?.error === "DeviceNotRegistered") {
       await removeMobilePushDevice(input.userId, device.expoPushToken);
       removedInvalidTokens += 1;
     }
   }
-
-  console.info("[push] Expo tickets", {
-    userId: input.userId,
-    category: input.category ?? "general",
-    attempted: devices.length,
-    accepted,
-    failed,
-    diagnostics,
-  });
 
   let receiptChecked = 0;
   let receiptDelivered = 0;
@@ -194,24 +263,28 @@ export async function sendPushToUser(input: {
           ticketId: id,
           message: "Expo has not produced a delivery receipt yet. Retry the test shortly.",
         });
+        warnPush("PUSH_RECEIPT_RECEIVED", { traceId: input.traceId, userId: input.userId, category, token: maskPushToken(device.expoPushToken), ticketId: id, status: "pending" });
         continue;
       }
 
       if (receipt.status === "ok") {
         receiptDelivered += 1;
         diagnostics.push({ token: maskPushToken(device.expoPushToken), stage: "receipt", status: "ok", ticketId: id });
+        logPush("PUSH_RECEIPT_RECEIVED", { traceId: input.traceId, userId: input.userId, category, token: maskPushToken(device.expoPushToken), ticketId: id, status: "ok" });
         continue;
       }
 
       receiptFailed += 1;
-      diagnostics.push({
+      const diagnostic: PushDiagnostic = {
         token: maskPushToken(device.expoPushToken),
         stage: "receipt",
         status: "error",
         ticketId: id,
         ...(receipt.details?.error ? { error: receipt.details.error } : {}),
         message: receipt.message ?? "APNs/FCM rejected this push notification.",
-      });
+      };
+      diagnostics.push(diagnostic);
+      warnPush("PUSH_FAILED", { traceId: input.traceId, userId: input.userId, category, stage: "receipt", ...diagnostic });
       if (receipt.details?.error === "DeviceNotRegistered") {
         await removeMobilePushDevice(input.userId, device.expoPushToken);
         removedInvalidTokens += 1;
@@ -226,17 +299,21 @@ export async function sendPushToUser(input: {
         const receipt = receipts[id];
         if (!receipt) continue;
         if (receipt.status === "ok") {
-          console.info("[push:receipt] delivered", {
+          logPush("PUSH_RECEIPT_RECEIVED", {
+            traceId: input.traceId,
             userId: input.userId,
-            category: input.category ?? "general",
+            category,
             token: maskPushToken(device.expoPushToken),
             ticketId: id,
+            status: "ok",
           });
           continue;
         }
-        console.warn("[push:receipt] rejected", {
+        warnPush("PUSH_FAILED", {
+          traceId: input.traceId,
           userId: input.userId,
-          category: input.category ?? "general",
+          category,
+          stage: "receipt",
           token: maskPushToken(device.expoPushToken),
           ticketId: id,
           error: receipt.details?.error,
@@ -247,17 +324,22 @@ export async function sendPushToUser(input: {
         }
       }
       if (pendingIds.length) {
-        console.warn("[push:receipt] pending", {
+        warnPush("PUSH_RECEIPT_RECEIVED", {
+          traceId: input.traceId,
           userId: input.userId,
-          category: input.category ?? "general",
+          category,
+          status: "pending",
           count: pendingIds.length,
+          ticketIds: pendingIds,
         });
       }
     }).catch((error) => {
-      console.warn("[push:receipt] lookup failed", {
+      warnPush("PUSH_FAILED", {
+        traceId: input.traceId,
         userId: input.userId,
-        category: input.category ?? "general",
-        message: error instanceof Error ? error.message : String(error),
+        category,
+        stage: "receipt_lookup",
+        error: error instanceof Error ? error.message : String(error),
       });
     });
   }
