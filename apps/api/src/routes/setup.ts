@@ -44,12 +44,21 @@ export default async function setupRoutes(app: FastifyInstance) {
     const domainRows = await db.select({ id: domains.id, name: domains.name, status: domains.status }).from(domains).where(eq(domains.organizationId, workspace.id)).limit(1);
     const domain = domainRows[0] ?? null;
     const mailboxRows = domain ? await db.select({ id: emailAccounts.id, address: emailAccounts.address }).from(emailAccounts).where(eq(emailAccounts.domainId, domain.id)).limit(1) : [];
+
+    let currentStep = setup?.currentStep ?? "email_verified";
+    if (domain && (currentStep === "email_verified" || currentStep === "workspace_created")) {
+      currentStep = domain.status === "verified" ? "domain_verified" : "domain_added";
+      await db.insert(workspaceSetupStates)
+        .values({ organizationId: workspace.id, currentStep })
+        .onConflictDoUpdate({ target: workspaceSetupStates.organizationId, set: { currentStep } });
+    }
+
     return {
       workspace: { id: workspace.id, name: workspace.name, role: workspace.role },
       domain,
       mailbox: mailboxRows[0] ?? null,
-      currentStep: setup?.currentStep ?? "email_verified",
-      onboardingComplete: setup?.currentStep === "complete",
+      currentStep,
+      onboardingComplete: currentStep === "complete",
       migratedFromExisting: setup?.migratedFromExisting ?? false,
     };
   });
