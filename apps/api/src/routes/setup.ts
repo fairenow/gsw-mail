@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
 import { domains, emailAccounts, organizationMemberships, organizations, workspaceSetupStates } from "../db/schema.js";
+import { provisionDomainInfrastructure, verifyDomainInfrastructure } from "../lib/domainInfrastructure.js";
 import { badRequest, notFound } from "../lib/errors.js";
 
 const workspaceSchema = z.object({ name: z.string().trim().min(1).max(120) });
@@ -56,10 +57,13 @@ export default async function setupRoutes(app: FastifyInstance) {
     if (existing[0] && existing[0].organizationId !== workspace.id) throw badRequest("domain is already connected to another workspace");
     const [domain] = existing[0]
       ? [existing[0]]
-      : await db.insert(domains).values({ organizationId: workspace.id, name: input.domain }).returning({ id: domains.id, name: domains.name, status: domains.status });
+      : await db.insert(domains).values({ organizationId: workspace.id, name: input.domain, status: "pending" }).returning({ id: domains.id, name: domains.name, status: domains.status });
     if (!domain) throw new Error("failed to create domain");
-    await db.insert(workspaceSetupStates).values({ organizationId: workspace.id, currentStep: "domain_added" }).onConflictDoUpdate({ target: workspaceSetupStates.organizationId, set: { currentStep: "domain_added" } });
-    reply.code(201);
-    return { domain, currentStep: "domain_added" };
+
+    await provisionDomainInfrastructure(domain.id, domain.name);
+    const verification = await verifyDomainInfrastructure(domain.id, domain.name);
+    await db.insert(workspaceSetupStates).values({ organizationId: workspace.id, currentStep: verification.healthy ? "domain_verified" : "domain_added" }).onConflictDoUpdate({ target: workspaceSetupStates.organizationId, set: { currentStep: verification.healthy ? "domain_verified" : "domain_added" } });
+    reply.code(existing[0] ? 200 : 201);
+    return { domain: { ...domain, status: verification.healthy ? "verified" : "pending" }, verification, currentStep: verification.healthy ? "domain_verified" : "domain_added" };
   });
 }
