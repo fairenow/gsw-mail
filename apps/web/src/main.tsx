@@ -7,11 +7,14 @@ import "./styles/mail-row-fix.css";
 import "./styles/product.css";
 import "./styles/calendar.css";
 import "./styles/skeletons.css";
+import "./styles/legal.css";
 import { AuthGate } from "./AuthGate";
 import { App } from "./App";
 
+const publicPath = ["/privacy", "/terms", "/account-deleted"].includes(window.location.pathname);
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <AuthGate><App /></AuthGate>
+    {publicPath ? <App /> : <AuthGate><App /></AuthGate>}
   </React.StrictMode>,
 );
