@@ -4,8 +4,8 @@
 }
 
 @keyframes gsw-skeleton-pulse {
-  0%, 100% { opacity: .56; }
-  50% { opacity: 1; }
+  0%, 100% { opacity: .58; }
+  50% { opacity: .9; }
 }
 
 @keyframes gsw-empty-reveal {
@@ -39,25 +39,23 @@
 .gsw-mail-skeleton-list { width: 100%; }
 
 .gsw-mail-skeleton-row {
-  min-height: 96px;
+  min-height: 88px;
   display: grid;
-  grid-template-columns: 20px 36px minmax(0, 1fr) 20px;
-  gap: 0 8px;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 10px;
   align-items: start;
-  padding: 12px 14px;
+  padding: 13px 16px;
   border-bottom: 1px solid var(--gsw-border-soft);
 }
 
-.gsw-mail-skeleton-check { width: 16px; height: 16px; margin-top: 9px; border-radius: 4px; }
 .gsw-mail-skeleton-avatar { width: 36px; height: 36px; }
 .gsw-mail-skeleton-copy { display: grid; gap: 7px; min-width: 0; padding-top: 2px; }
-.gsw-mail-skeleton-sender { width: 48%; height: 11px; }
-.gsw-mail-skeleton-subject { width: 76%; height: 10px; }
-.gsw-mail-skeleton-preview { width: 90%; height: 9px; }
-.gsw-mail-skeleton-star { width: 16px; height: 16px; margin-top: 8px; }
+.gsw-mail-skeleton-sender { width: 42%; height: 10px; }
+.gsw-mail-skeleton-subject { width: 72%; height: 10px; }
+.gsw-mail-skeleton-preview { width: 88%; height: 9px; }
 
-/* The mailbox can mount before account data resolves. Show the inbox-shaped
-   placeholder immediately so the empty-state never flashes first. */
+/* Keep initial mailbox loading simple: one icon placeholder plus three
+   horizontal text bars per message row. */
 .gsw-message-list-scroll {
   position: relative;
 }
@@ -79,37 +77,31 @@
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  min-height: 480px;
+  min-height: 440px;
   background-image:
-    radial-gradient(circle 8px, rgba(232,154,18,.14) 0 95%, transparent 100%),
-    radial-gradient(circle 18px, rgba(232,154,18,.14) 0 95%, transparent 100%),
-    linear-gradient(90deg, rgba(232,154,18,.08), rgba(232,154,18,.17), rgba(232,154,18,.08)),
-    linear-gradient(90deg, rgba(232,154,18,.07), rgba(232,154,18,.14), rgba(232,154,18,.07)),
-    linear-gradient(90deg, rgba(232,154,18,.06), rgba(232,154,18,.12), rgba(232,154,18,.06)),
-    radial-gradient(circle 8px, rgba(232,154,18,.12) 0 95%, transparent 100%),
+    radial-gradient(circle 17px, rgba(232,154,18,.14) 0 95%, transparent 100%),
+    linear-gradient(90deg, rgba(232,154,18,.10), rgba(232,154,18,.10)),
+    linear-gradient(90deg, rgba(232,154,18,.085), rgba(232,154,18,.085)),
+    linear-gradient(90deg, rgba(232,154,18,.07), rgba(232,154,18,.07)),
     linear-gradient(var(--gsw-border-soft), var(--gsw-border-soft));
   background-size:
-    16px 16px,
-    36px 36px,
-    112px 10px,
-    176px 10px,
-    214px 9px,
-    16px 16px,
+    34px 34px,
+    110px 10px,
+    190px 10px,
+    235px 9px,
     100% 1px;
   background-position:
-    18px 21px,
-    50px 13px,
-    94px 16px,
-    94px 37px,
-    94px 57px,
-    calc(100% - 30px) 21px,
-    0 95px;
+    18px 15px,
+    66px 14px,
+    66px 34px,
+    66px 54px,
+    0 87px;
   background-repeat: repeat-y;
-  animation: gsw-skeleton-pulse 1.2s ease-in-out infinite;
+  animation: gsw-skeleton-pulse 1.15s ease-in-out infinite;
 }
 
 .gsw-message-list-scroll:not([aria-busy="true"]):has(.gsw-list-empty)::before {
-  animation: gsw-skeleton-pulse 1.2s ease-in-out infinite, gsw-empty-skeleton-hide 0s linear .7s forwards;
+  animation: gsw-skeleton-pulse 1.15s ease-in-out infinite, gsw-empty-skeleton-hide 0s linear .7s forwards;
 }
 
 .gsw-calendar-event-skeleton {
