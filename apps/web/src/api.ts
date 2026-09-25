@@ -197,6 +197,7 @@ const cachedGet = <T,>(url: string, freshMs: number, staleMs = freshMs * 6): Pro
 
 const messageListPrefix = (accountId: string) => `/mail/messages?accountId=${accountId}&`;
 const messageDetailKey = (accountId: string, engineId: string) => `/mail/messages/${engineId}?accountId=${accountId}`;
+const calendarPrefix = (accountId: string) => `/product/calendar-events?accountId=${encodeURIComponent(accountId)}&`;
 
 const mutateCachedMessages = (accountId: string, engineId: string, patch: Partial<MessageSummary>) => {
   for (const [key, cached] of readCache) {
@@ -225,6 +226,11 @@ const clearAccountMailCache = (accountId: string) => {
   for (const key of readCache.keys()) {
     if (key.includes(`accountId=${accountId}`) || key.includes(`accountId=${encodeURIComponent(accountId)}`)) readCache.delete(key);
   }
+};
+
+const clearCalendarCache = (accountId: string) => {
+  const prefix = calendarPrefix(accountId);
+  for (const key of readCache.keys()) if (key.startsWith(prefix)) readCache.delete(key);
 };
 
 const request = async (url: string, init: RequestInit, timeoutMs?: number): Promise<Response> => {
@@ -288,9 +294,10 @@ export const api = {
   importContacts: (body: unknown) => post<{ id: string; filename: string; rowCount: number; createdCount: number; updatedCount: number; skippedCount: number; duplicateCount: number; failedCount: number }>("/product/contact-imports", body, interactiveTimeout),
   contactImports: () => get<{ imports: { id: string; filename: string; rowCount: number; createdCount: number; updatedCount: number; skippedCount: number; duplicateCount: number; failedCount: number; createdAt: string }[] }>("/product/contact-imports"),
   contactImportRows: (id: string) => get<{ rows: { rowNumber: number; raw: Record<string, string>; status: string; error?: string | null }[] }>(`/product/contact-imports/${id}/rows`),
-  calendars: (accountId?: string) => get<{ calendars: CalendarSummary[] }>(`/product/calendars${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ""}`),
-  calendarEvents: (accountId: string, after: string, before: string) => get<{ events: CalendarEvent[] }>(`/product/calendar-events?accountId=${encodeURIComponent(accountId)}&after=${encodeURIComponent(after)}&before=${encodeURIComponent(before)}`),
-  createCalendarEvent: (body: { accountId: string; calendarId: string; title: string; description?: string; start: string; durationMinutes: number; location?: string; meetingLink?: string; attendees: string[]; sendSchedulingMessages: boolean; timeZone?: string; allDay: boolean }) => post<CalendarEvent>("/product/calendar-events", body),
-  updateCalendarEvent: (id: string, body: { accountId: string; calendarId: string; title: string; description?: string; start: string; durationMinutes: number; location?: string; meetingLink?: string; attendees: string[]; sendSchedulingMessages: boolean; timeZone?: string; allDay: boolean }) => patch<CalendarEvent>(`/product/calendar-events/${encodeURIComponent(id)}`, body),
-  deleteCalendarEvent: (id: string, accountId: string) => request(`/product/calendar-events/${encodeURIComponent(id)}?accountId=${encodeURIComponent(accountId)}`, { method: "DELETE" }).then((res) => json<{ deleted: boolean; eventId: string }>(res)),
+  calendars: (accountId?: string) => cachedGet<{ calendars: CalendarSummary[] }>(`/product/calendars${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ""}`, 60_000, 10 * 60_000),
+  calendarEvents: (accountId: string, after: string, before: string) => cachedGet<{ events: CalendarEvent[] }>(`${calendarPrefix(accountId)}after=${encodeURIComponent(after)}&before=${encodeURIComponent(before)}`, 30_000, 5 * 60_000),
+  prefetchCalendarEvents: (accountId: string, after: string, before: string) => { void cachedGet<{ events: CalendarEvent[] }>(`${calendarPrefix(accountId)}after=${encodeURIComponent(after)}&before=${encodeURIComponent(before)}`, 30_000, 5 * 60_000).catch(() => undefined); },
+  createCalendarEvent: async (body: { accountId: string; calendarId: string; title: string; description?: string; start: string; durationMinutes: number; location?: string; meetingLink?: string; attendees: string[]; sendSchedulingMessages: boolean; timeZone?: string; allDay: boolean }) => { const result = await post<CalendarEvent>("/product/calendar-events", body); clearCalendarCache(body.accountId); return result; },
+  updateCalendarEvent: async (id: string, body: { accountId: string; calendarId: string; title: string; description?: string; start: string; durationMinutes: number; location?: string; meetingLink?: string; attendees: string[]; sendSchedulingMessages: boolean; timeZone?: string; allDay: boolean }) => { const result = await patch<CalendarEvent>(`/product/calendar-events/${encodeURIComponent(id)}`, body); clearCalendarCache(body.accountId); return result; },
+  deleteCalendarEvent: async (id: string, accountId: string) => { const result = await request(`/product/calendar-events/${encodeURIComponent(id)}?accountId=${encodeURIComponent(accountId)}`, { method: "DELETE" }).then((res) => json<{ deleted: boolean; eventId: string }>(res)); clearCalendarCache(accountId); return result; },
 };
