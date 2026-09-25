@@ -78,6 +78,25 @@
 .gsw-control-modal { width: min(560px, 100%); max-height: 90vh; overflow: auto; padding: 28px; border-radius: 18px; background: var(--gsw-surface); box-shadow: var(--shadow-3); }
 .gsw-control-modal h3 { margin: 0 0 8px; font-size: 24px; }
 .gsw-control-modal-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 18px; }
+.gsw-domain-add-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 440px); gap: 20px; align-items: center; padding: 20px 22px; border: 1px solid var(--gsw-border); border-radius: 16px; background: var(--gsw-surface); box-shadow: var(--shadow-1); }
+.gsw-domain-add-card strong { font-size: 15px; }
+.gsw-domain-add-card p { margin: 5px 0 0; color: var(--gsw-text-muted); font-size: 12px; line-height: 1.45; }
+.gsw-domain-add-row { display: flex; gap: 8px; }
+.gsw-domain-add-row input { min-width: 0; flex: 1; }
+.gsw-domain-actions { display: flex; align-items: center; gap: 8px; }
+.gsw-domain-service-state { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+.gsw-domain-service-state span { display: grid; gap: 3px; padding: 10px 12px; border: 1px solid var(--gsw-border-soft); border-radius: 9px; color: var(--gsw-text-body); font-size: 11px; }
+.gsw-domain-service-state strong { color: var(--gsw-text-muted); font-size: 9px; letter-spacing: .06em; text-transform: uppercase; }
+.gsw-domain-warning { margin: 14px 0 0; padding: 10px 12px; border-radius: 9px; background: #fff8e8; color: #7a5510; font-size: 11px; }
+.gsw-dns-records { margin-top: 18px; border-top: 1px solid var(--gsw-border-soft); }
+.gsw-dns-records-head { display: flex; justify-content: space-between; gap: 14px; padding: 16px 0 10px; }
+.gsw-dns-records-head span { color: var(--gsw-text-muted); font-size: 11px; }
+.gsw-dns-record-row { display: grid; grid-template-columns: 150px minmax(150px, .8fr) 90px minmax(220px, 1.4fr) auto; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--gsw-border-soft); }
+.gsw-dns-record-row > div { min-width: 0; display: grid; gap: 3px; }
+.gsw-dns-record-row small { color: var(--gsw-text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
+.gsw-dns-record-row code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gsw-text-heading); font-size: 11px; }
+.gsw-dns-source { width: fit-content; padding: 2px 6px; border-radius: 999px; background: var(--gsw-accent-soft); color: var(--gsw-accent-dark); font-size: 9px; text-transform: uppercase; }
+.gsw-dns-value { min-width: 0; }
 
 @media (max-width: 900px) {
   .gsw-control-center { grid-template-columns: 1fr; }
@@ -86,6 +105,9 @@
   .gsw-control-nav nav button { flex: 0 0 auto; width: auto; }
   .gsw-control-nav > .gsw-btn { display: none; }
   .gsw-control-main { padding: 30px 20px 60px; }
+  .gsw-domain-add-card { grid-template-columns: 1fr; }
+  .gsw-dns-record-row { grid-template-columns: 120px minmax(0, 1fr); }
+  .gsw-dns-record-row .gsw-dns-value, .gsw-dns-record-row > button { grid-column: 1 / -1; }
 }
 
 @media (max-width: 700px) {
@@ -96,4 +118,6 @@
   .gsw-admin-list-row { grid-template-columns: 1fr; align-items: start; }
   .gsw-admin-meta { justify-content: flex-start; }
   .gsw-user-facts { grid-template-columns: 1fr; }
+  .gsw-domain-add-row, .gsw-domain-actions, .gsw-dns-records-head { align-items: stretch; flex-direction: column; }
+  .gsw-domain-service-state { grid-template-columns: 1fr; }
 }
