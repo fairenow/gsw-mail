@@ -5,7 +5,8 @@ import { badRequest, conflict } from "../lib/errors.js";
 import { generateMessageId } from "../lib/messageId.js";
 import type { AccessibleAccount } from "../auth/authorize.js";
 import { buildOutgoingMessage } from "../mail/messageBuilder.js";
-import { DEFAULT_MAIL_TEMPLATE_KEY, resolveMailTemplateKey } from "../mail/templates/index.js";
+import { resolveMailTemplateKey } from "../mail/templates/index.js";
+import { templateKeyAllowedForAddress } from "../lib/templatePolicy.js";
 import { checkSuppressions } from "./delivery.js";
 import { recordSentRecipients } from "../lib/contacts.js";
 import { storeOutboundAttachmentPayloads } from "./attachmentPayloadStore.js";
@@ -78,7 +79,10 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
     ? await getUserEngine({ productUserId: input.userId, authUserId: input.authUserId, accountId: input.account.id, headers: input.headers, permission: "send" })
     : (() => { throw new Error("user-scoped OAuth context required for sending"); })();
 
-  const templateKey = resolveMailTemplateKey(input.templateKey ?? DEFAULT_MAIL_TEMPLATE_KEY);
+  const templateKey = resolveMailTemplateKey(input.templateKey ?? "none");
+  if (!templateKeyAllowedForAddress(templateKey, input.account.address)) {
+    throw badRequest("template is not available for this mail domain");
+  }
   const rendered = buildOutgoingMessage({
     bodyHtml: input.htmlBody,
     bodyText: input.textBody,
