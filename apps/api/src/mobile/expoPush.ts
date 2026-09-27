@@ -66,6 +66,7 @@ async function waitForReceipts(ids: string[]) {
 export async function sendPushToUser(input: {
   userId: string;
   title: string;
+  subtitle?: string;
   body: string;
   data?: PushData;
   badge?: number;
@@ -102,6 +103,7 @@ export async function sendPushToUser(input: {
   const messages = devices.map((device) => ({
     to: device.expoPushToken,
     title: input.title,
+    ...(input.subtitle ? { subtitle: input.subtitle } : {}),
     body: input.body,
     sound: input.sound ?? "default",
     ...(typeof input.badge === "number" ? { badge: input.badge } : {}),

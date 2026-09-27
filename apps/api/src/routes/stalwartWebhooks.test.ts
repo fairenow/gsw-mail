@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import test from "node:test";
 
-import { extractEmailAddresses, verifyStalwartWebhookSignature } from "./stalwartWebhooks.js";
+import { extractEmailAddresses, formatIncomingMailPush, verifyStalwartWebhookSignature } from "./stalwartWebhooks.js";
 
 test("extractEmailAddresses handles strings, arrays, and nested values", () => {
   assert.deepEqual(
@@ -24,4 +24,38 @@ test("verifyStalwartWebhookSignature accepts the signed raw body", () => {
   assert.equal(verifyStalwartWebhookSignature(raw, `sha256=${signature}`, secret), true);
   assert.equal(verifyStalwartWebhookSignature(Buffer.from("different"), signature, secret), false);
   assert.equal(verifyStalwartWebhookSignature(raw, undefined, secret), false);
+});
+
+test("formats incoming mail push with sender subject and preview", () => {
+  const push = formatIncomingMailPush({
+    from: "Ramon Williams <ramon@example.com>",
+    subject: "Re: What is it doing?",
+    preview: "Hey family, this is the opening of the message body with enough context to decide whether to open it.",
+  }, "member@team.guidedstepswellness.com");
+
+  assert.deepEqual(push, {
+    sender: "Ramon Williams",
+    senderEmail: "ramon@example.com",
+    subject: "Re: What is it doing?",
+    preview: "Hey family, this is the opening of the message body with enough context to decide whether to open it.",
+  });
+});
+
+test("cleans html and limits long push previews", () => {
+  const push = formatIncomingMailPush({
+    from: "sender@example.com",
+    subject: "Update",
+    body: `<p>Hello <strong>team</strong>.</p><p>${"Details ".repeat(80)}</p>`,
+  }, "member@team.guidedstepswellness.com");
+
+  assert.equal(push.sender, "sender@example.com");
+  assert.match(push.preview, /^Hello team\s*\. Details/);
+  assert.ok(push.preview.length <= 280);
+  assert.ok(push.preview.endsWith("…"));
+});
+
+test("falls back cleanly when webhook has no subject or body preview", () => {
+  const push = formatIncomingMailPush({ from: "sender@example.com" }, "member@team.guidedstepswellness.com");
+  assert.equal(push.subject, "(No subject)");
+  assert.equal(push.preview, "New message for member@team.guidedstepswellness.com");
 });

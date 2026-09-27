@@ -30,6 +30,7 @@ type StalwartWebhookBody = { events?: unknown };
 type IncomingAccount = { id: string; address: string; ownerUserId: string | null };
 
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+const PUSH_PREVIEW_LIMIT = 280;
 
 function stringsFrom(value: unknown): string[] {
   if (typeof value === "string") return [value];
@@ -42,12 +43,68 @@ function firstText(...values: unknown[]): string | undefined {
   return values.flatMap(stringsFrom).map((value) => value.trim()).find(Boolean);
 }
 
+function cleanPreview(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const plain = value
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!plain) return undefined;
+  return plain.length > PUSH_PREVIEW_LIMIT ? `${plain.slice(0, PUSH_PREVIEW_LIMIT - 1).trimEnd()}…` : plain;
+}
+
+function senderDisplayName(value: unknown, fallbackEmail?: string): string | undefined {
+  const raw = firstText(value);
+  if (!raw) return fallbackEmail;
+  const angleMatch = raw.match(/^\s*"?([^"<]+?)"?\s*<[^>]+>\s*$/);
+  const name = angleMatch?.[1]?.trim();
+  if (name && !name.includes("@")) return name;
+  if (!raw.includes("@")) return raw;
+  return fallbackEmail ?? extractEmailAddresses(raw)[0] ?? raw;
+}
+
+function messagePreview(data: Record<string, unknown>): string | undefined {
+  const message = data.message && typeof data.message === "object" && !Array.isArray(data.message)
+    ? data.message as Record<string, unknown>
+    : undefined;
+  return cleanPreview(firstText(
+    data.preview,
+    data.snippet,
+    data.bodyText,
+    data.textBody,
+    data.body,
+    data.contents,
+    message?.preview,
+    message?.snippet,
+    message?.bodyText,
+    message?.textBody,
+    message?.body,
+    message?.contents,
+  ));
+}
+
 export function extractEmailAddresses(value: unknown): string[] {
   const found = new Set<string>();
   for (const candidate of stringsFrom(value)) {
     for (const match of candidate.match(EMAIL_PATTERN) ?? []) found.add(match.toLowerCase());
   }
   return [...found];
+}
+
+export function formatIncomingMailPush(data: Record<string, unknown>, mailbox: string) {
+  const senderEmail = extractEmailAddresses(data.from)[0];
+  const sender = senderDisplayName(data.from, senderEmail) ?? "New email";
+  const subject = firstText(data.subject, data.Subject) ?? "(No subject)";
+  const preview = messagePreview(data) ?? `New message for ${mailbox}`;
+  return { sender, senderEmail, subject, preview };
 }
 
 export function verifyStalwartWebhookSignature(raw: Buffer, signature: string | string[] | undefined, secret: string): boolean {
@@ -101,11 +158,8 @@ async function notifyAccount(app: FastifyInstance, account: IncomingAccount, dat
   const userIds = new Set(memberships.map((membership) => membership.userId));
   if (account.ownerUserId) userIds.add(account.ownerUserId);
 
-  const sender = extractEmailAddresses(data.from)[0];
-  const subject = firstText(data.subject, data.Subject);
+  const formatted = formatIncomingMailPush(data, account.address);
   const messageId = firstText(data.emailId, data.messageId, data.jmapId);
-  const title = sender ? `New email from ${sender}` : "New email";
-  const body = subject || `New message for ${account.address}`;
 
   app.log.info({
     event: "PUSH_TRIGGER_STARTED",
@@ -113,8 +167,10 @@ async function notifyAccount(app: FastifyInstance, account: IncomingAccount, dat
     accountId: account.id,
     mailbox: account.address,
     messageId,
-    sender,
-    subject,
+    sender: formatted.senderEmail,
+    senderDisplayName: formatted.sender,
+    subject: formatted.subject,
+    previewAvailable: !formatted.preview.startsWith("New message for "),
     userIds: [...userIds],
   }, "new-email push trigger started");
 
@@ -128,8 +184,9 @@ async function notifyAccount(app: FastifyInstance, account: IncomingAccount, dat
     try {
       results.push(await sendPushToUser({
         userId,
-        title,
-        body,
+        title: formatted.sender,
+        subtitle: formatted.subject,
+        body: formatted.preview,
         badge: 1,
         sound: "gsw-mail-gong.wav",
         channelId: "mail-gong",
