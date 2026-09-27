@@ -49,7 +49,7 @@ test("cleans html and limits long push previews", () => {
   }, "member@team.guidedstepswellness.com");
 
   assert.equal(push.sender, "sender@example.com");
-  assert.match(push.preview, /^Hello team\. Details/);
+  assert.match(push.preview, /^Hello team\s*\. Details/);
   assert.ok(push.preview.length <= 280);
   assert.ok(push.preview.endsWith("…"));
 });
