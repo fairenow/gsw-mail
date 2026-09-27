@@ -130,6 +130,7 @@ async function notifyAccount(app: FastifyInstance, account: IncomingAccount, dat
         userId,
         title,
         body,
+        badge: 1,
         sound: "gsw-mail-gong.wav",
         channelId: "mail-gong",
         category: "mail",
