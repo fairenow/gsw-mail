@@ -1,0 +1,30 @@
+.gsw-settings-legal-footer {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: center;
+  align-items: center;
+  gap: 8px 18px;
+  margin-top: 26px;
+  text-align: center;
+}
+
+.gsw-settings-legal-footer > a,
+.gsw-settings-legal-footer > .gsw-settings-text-button {
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.gsw-settings-legal-footer > .gsw-settings-text-button.danger {
+  grid-column: 1 / -1;
+  justify-self: center;
+  padding: 0;
+  color: var(--gsw-danger, #c0392b);
+  background: transparent;
+  border: 0;
+  text-align: center;
+}
+
+.gsw-settings-legal-footer > .gsw-settings-text-button.danger:hover {
+  text-decoration: underline;
+}
