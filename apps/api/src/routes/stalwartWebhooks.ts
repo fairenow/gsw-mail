@@ -6,6 +6,7 @@ import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { emailAccounts, mailAccountMemberships } from "../db/schema.js";
 import { sendPushToUser } from "../mobile/expoPush.js";
+import { resolveIncomingMailForPush } from "../mobile/incomingMailEnrichment.js";
 
 const processedEvents = pgTable("stalwart_push_events", {
   eventId: text("event_id").primaryKey(),
@@ -153,13 +154,47 @@ async function resolveIncomingAccounts(data: Record<string, unknown>): Promise<{
   return { accounts: [...found.values()], addressCandidates, principalId };
 }
 
-async function notifyAccount(app: FastifyInstance, account: IncomingAccount, data: Record<string, unknown>, traceId: string) {
+async function notifyAccount(app: FastifyInstance, account: IncomingAccount, data: Record<string, unknown>, traceId: string, eventCreatedAt?: unknown) {
   const memberships = await db.select({ userId: mailAccountMemberships.userId }).from(mailAccountMemberships).where(eq(mailAccountMemberships.accountId, account.id));
   const userIds = new Set(memberships.map((membership) => membership.userId));
   if (account.ownerUserId) userIds.add(account.ownerUserId);
 
-  const formatted = formatIncomingMailPush(data, account.address);
-  const messageId = firstText(data.emailId, data.messageId, data.jmapId);
+  const webhookFormatted = formatIncomingMailPush(data, account.address);
+  const enrichment = await resolveIncomingMailForPush({
+    productAccountId: account.id,
+    mailbox: account.address,
+    senderEmail: webhookFormatted.senderEmail,
+    eventCreatedAt,
+  });
+  const resolved = enrichment.status === "resolved" ? enrichment.message : null;
+  const formatted = resolved
+    ? { sender: resolved.sender, senderEmail: resolved.senderEmail ?? undefined, subject: resolved.subject, preview: resolved.preview }
+    : webhookFormatted;
+  const messageId = resolved?.messageId ?? firstText(data.emailId, data.messageId, data.jmapId);
+  const createdAt = resolved?.receivedAt ?? (typeof eventCreatedAt === "string" ? eventCreatedAt : undefined);
+
+  if (resolved) {
+    app.log.info({
+      event: "PUSH_CONTENT_RESOLVED",
+      traceId,
+      accountId: account.id,
+      mailbox: account.address,
+      messageId: resolved.messageId,
+      sender: resolved.senderEmail,
+      subject: resolved.subject,
+      previewLength: resolved.preview.length,
+      receivedAt: resolved.receivedAt,
+    }, "resolved new-email push content from JMAP");
+  } else {
+    app.log.warn({
+      event: "PUSH_CONTENT_FALLBACK",
+      traceId,
+      accountId: account.id,
+      mailbox: account.address,
+      reason: enrichment.status === "unavailable" ? enrichment.reason : "UNKNOWN",
+      webhookDataKeys: Object.keys(data),
+    }, "using webhook-only new-email push content");
+  }
 
   app.log.info({
     event: "PUSH_TRIGGER_STARTED",
@@ -170,7 +205,7 @@ async function notifyAccount(app: FastifyInstance, account: IncomingAccount, dat
     sender: formatted.senderEmail,
     senderDisplayName: formatted.sender,
     subject: formatted.subject,
-    previewAvailable: !formatted.preview.startsWith("New message for "),
+    previewAvailable: Boolean(resolved) || !formatted.preview.startsWith("New message for "),
     userIds: [...userIds],
   }, "new-email push trigger started");
 
@@ -197,6 +232,9 @@ async function notifyAccount(app: FastifyInstance, account: IncomingAccount, dat
           kind: "new-email",
           accountId: account.id,
           folder: "Inbox",
+          subject: formatted.subject,
+          ...(formatted.senderEmail ? { sender: formatted.senderEmail } : {}),
+          ...(createdAt ? { createdAt } : {}),
           ...(messageId ? { messageId } : {}),
         },
       }));
@@ -309,7 +347,7 @@ export default async (app: FastifyInstance) => {
         }, "Stalwart event mapped to GSW mailbox");
 
         for (const account of resolution.accounts) {
-          const deliveries = await notifyAccount(app, account, data, eventId);
+          const deliveries = await notifyAccount(app, account, data, eventId, event.createdAt);
           notifiedUsers += deliveries.length;
           acceptedPushes += deliveries.reduce((sum, delivery) => sum + delivery.accepted, 0);
         }

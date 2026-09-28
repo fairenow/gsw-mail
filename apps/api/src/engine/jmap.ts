@@ -20,6 +20,7 @@ export type JmapMethodCall = [string, Record<string, unknown>, string];
 export interface JmapClientOptions {
   baseUrl: string;
   token?: string;
+  authorization?: string;
   sessionTtlMs: number;
   fetchImpl?: typeof fetch;
   onSlowOperation?: (operation: string, durationMs: number) => void;
@@ -32,10 +33,9 @@ const abs = (base: string, url: string): string => {
 };
 
 const authorizationHeader = (opts: JmapClientOptions): string => {
-  if (opts.token) {
-    return `Bearer ${opts.token}`;
-  }
-  throw new Error("JMAP client requires a user-scoped Bearer token");
+  if (opts.authorization) return opts.authorization;
+  if (opts.token) return `Bearer ${opts.token}`;
+  throw new Error("JMAP client requires an Authorization header or user-scoped Bearer token");
 };
 
 export class JmapClient {
@@ -100,7 +100,7 @@ export class JmapClient {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: authorizationHeader(this.opts) },
       body: JSON.stringify({
-      using: ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail", "urn:ietf:params:jmap:submission", ...(methods.some(([name]) => name.startsWith("AddressBook/") || name.startsWith("ContactCard/")) ? ["urn:ietf:params:jmap:contacts"] : []), ...(methods.some(([name]) => name.startsWith("Calendar/") || name.startsWith("CalendarEvent/")) ? ["urn:ietf:params:jmap:calendars"] : [])],
+        using: ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail", "urn:ietf:params:jmap:submission", ...(methods.some(([name]) => name.startsWith("AddressBook/") || name.startsWith("ContactCard/")) ? ["urn:ietf:params:jmap:contacts"] : []), ...(methods.some(([name]) => name.startsWith("Calendar/") || name.startsWith("CalendarEvent/")) ? ["urn:ietf:params:jmap:calendars"] : [])],
         methodCalls: methods,
       }),
     });
