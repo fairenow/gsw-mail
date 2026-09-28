@@ -60,10 +60,19 @@ export default async function domainAdminRoutes(app: FastifyInstance) {
     return { domainId: domain.id, name: domain.name, infrastructure, verification };
   });
 
-  app.post<{ Params: { id: string } }>("/admin/domains/:id/verify", async (req) => {
+  app.post<{ Params: { id: string } }>("/admin/domains/:id/verify", async (req, reply) => {
     const [domain] = await db.select({ id: domains.id, name: domains.name, organizationId: domains.organizationId }).from(domains).where(eq(domains.id, req.params.id)).limit(1);
     if (!domain) throw notFound("domain not found");
     await requireOrgPermission(req.user!.id, domain.organizationId, ["owner", "admin"]);
-    return verifyDomainInfrastructure(domain.id, domain.name);
+    try {
+      return await verifyDomainInfrastructure(domain.id, domain.name);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Domain provider setup failed";
+      req.log.warn({ err: error, domainId: domain.id, domain: domain.name }, "domain DNS verification blocked by provider setup");
+      return reply.code(424).send({
+        error: message,
+        code: "domain_provider_setup_required",
+      });
+    }
   });
 }
