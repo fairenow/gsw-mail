@@ -159,7 +159,7 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function resolveIncomingMailWithRetry(input: {
   productAccountId: string;
   mailbox: string;
-  senderEmail?: string;
+  senderEmail?: string | undefined;
   eventCreatedAt?: unknown;
 }) {
   let result = await resolveIncomingMailForPush(input);
