@@ -1,0 +1,139 @@
+.gsw-setup-dns {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--gsw-border);
+  border-radius: 14px;
+  background: #fffdf9;
+}
+
+.gsw-setup-dns-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.gsw-setup-dns-head p,
+.gsw-setup-dns-summary,
+.gsw-setup-dns-note,
+.gsw-setup-dns-message {
+  margin: 0;
+}
+
+.gsw-setup-dns-head p {
+  margin-top: 4px;
+  color: var(--gsw-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.gsw-setup-dns-status,
+.gsw-setup-dns-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.gsw-setup-dns-status span,
+.gsw-setup-dns-summary span {
+  padding: 10px;
+  border: 1px solid var(--gsw-border);
+  border-radius: 10px;
+  background: white;
+  color: var(--gsw-text-muted);
+  font-size: 12px;
+}
+
+.gsw-setup-dns-status b,
+.gsw-setup-dns-summary b {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--gsw-text-heading);
+}
+
+.gsw-setup-dns-summary em {
+  font-style: normal;
+}
+
+.gsw-setup-dns-note,
+.gsw-setup-dns-message {
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  background: #fff7e6;
+  border: 1px solid #efd9a9;
+  color: #775018;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.gsw-setup-dns-message {
+  background: #f4f8ef;
+  border-color: #d6e4c7;
+  color: #42602a;
+}
+
+.gsw-setup-dns-records {
+  display: grid;
+  gap: 10px;
+}
+
+.gsw-setup-dns-record {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--gsw-border);
+  border-radius: 12px;
+  background: white;
+}
+
+.gsw-setup-dns-record > div {
+  min-width: 0;
+}
+
+.gsw-setup-dns-record-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.gsw-setup-dns-record small {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--gsw-text-muted);
+  font-size: 11px;
+}
+
+.gsw-setup-dns-record code {
+  display: block;
+  padding: 7px 8px;
+  border-radius: 7px;
+  background: #f7f4ee;
+  color: var(--gsw-text-heading);
+  font-size: 11.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.gsw-setup-dns-record .gsw-btn-quiet {
+  justify-self: start;
+}
+
+.gsw-setup-dns-summary .tone-good { color: #356b3d; }
+.gsw-setup-dns-summary .tone-warn { color: #986711; }
+.gsw-setup-dns-summary .tone-bad { color: #9c3428; }
+
+@media (max-width: 560px) {
+  .gsw-setup-dns-head,
+  .gsw-setup-dns-record-title {
+    display: grid;
+  }
+  .gsw-setup-dns-status,
+  .gsw-setup-dns-summary {
+    grid-template-columns: 1fr;
+  }
+}
