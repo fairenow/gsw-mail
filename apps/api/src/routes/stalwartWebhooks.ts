@@ -154,47 +154,75 @@ async function resolveIncomingAccounts(data: Record<string, unknown>): Promise<{
   return { accounts: [...found.values()], addressCandidates, principalId };
 }
 
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function resolveIncomingMailWithRetry(input: {
+  productAccountId: string;
+  mailbox: string;
+  senderEmail?: string;
+  eventCreatedAt?: unknown;
+}) {
+  let result = await resolveIncomingMailForPush(input);
+  if (result.status === "resolved") return result;
+  if (result.reason === "BACKGROUND_JMAP_CREDENTIALS_NOT_CONFIGURED") return result;
+
+  for (const waitMs of [350, 900, 1_800, 3_000]) {
+    await delay(waitMs);
+    result = await resolveIncomingMailForPush(input);
+    if (result.status === "resolved") return result;
+    if (result.reason === "BACKGROUND_JMAP_CREDENTIALS_NOT_CONFIGURED") return result;
+  }
+  return result;
+}
+
 async function notifyAccount(app: FastifyInstance, account: IncomingAccount, data: Record<string, unknown>, traceId: string, eventCreatedAt?: unknown) {
   const memberships = await db.select({ userId: mailAccountMemberships.userId }).from(mailAccountMemberships).where(eq(mailAccountMemberships.accountId, account.id));
   const userIds = new Set(memberships.map((membership) => membership.userId));
   if (account.ownerUserId) userIds.add(account.ownerUserId);
 
   const webhookFormatted = formatIncomingMailPush(data, account.address);
-  const enrichment = await resolveIncomingMailForPush({
+  const enrichment = await resolveIncomingMailWithRetry({
     productAccountId: account.id,
     mailbox: account.address,
     senderEmail: webhookFormatted.senderEmail,
     eventCreatedAt,
   });
-  const resolved = enrichment.status === "resolved" ? enrichment.message : null;
-  const formatted = resolved
-    ? { sender: resolved.sender, senderEmail: resolved.senderEmail ?? undefined, subject: resolved.subject, preview: resolved.preview }
-    : webhookFormatted;
-  const messageId = resolved?.messageId ?? firstText(data.emailId, data.messageId, data.jmapId);
-  const createdAt = resolved?.receivedAt ?? (typeof eventCreatedAt === "string" ? eventCreatedAt : undefined);
 
-  if (resolved) {
-    app.log.info({
-      event: "PUSH_CONTENT_RESOLVED",
-      traceId,
-      accountId: account.id,
-      mailbox: account.address,
-      messageId: resolved.messageId,
-      sender: resolved.senderEmail,
-      subject: resolved.subject,
-      previewLength: resolved.preview.length,
-      receivedAt: resolved.receivedAt,
-    }, "resolved new-email push content from JMAP");
-  } else {
+  if (enrichment.status !== "resolved") {
     app.log.warn({
-      event: "PUSH_CONTENT_FALLBACK",
+      event: "PUSH_SKIPPED",
       traceId,
       accountId: account.id,
       mailbox: account.address,
-      reason: enrichment.status === "unavailable" ? enrichment.reason : "UNKNOWN",
+      reason: "CONTENT_NOT_RESOLVED",
+      enrichmentReason: enrichment.reason,
+      sender: webhookFormatted.senderEmail,
       webhookDataKeys: Object.keys(data),
-    }, "using webhook-only new-email push content");
+    }, "new-email push skipped because JMAP content was not resolved");
+    return [];
   }
+
+  const resolved = enrichment.message;
+  const formatted = {
+    sender: resolved.sender,
+    senderEmail: resolved.senderEmail ?? undefined,
+    subject: resolved.subject,
+    preview: resolved.preview,
+  };
+  const messageId = resolved.messageId;
+  const createdAt = resolved.receivedAt ?? (typeof eventCreatedAt === "string" ? eventCreatedAt : undefined);
+
+  app.log.info({
+    event: "PUSH_CONTENT_RESOLVED",
+    traceId,
+    accountId: account.id,
+    mailbox: account.address,
+    messageId,
+    sender: resolved.senderEmail,
+    subject: resolved.subject,
+    previewLength: resolved.preview.length,
+    receivedAt: resolved.receivedAt,
+  }, "resolved new-email push content from JMAP");
 
   app.log.info({
     event: "PUSH_TRIGGER_STARTED",
@@ -205,7 +233,7 @@ async function notifyAccount(app: FastifyInstance, account: IncomingAccount, dat
     sender: formatted.senderEmail,
     senderDisplayName: formatted.sender,
     subject: formatted.subject,
-    previewAvailable: Boolean(resolved) || !formatted.preview.startsWith("New message for "),
+    previewAvailable: true,
     userIds: [...userIds],
   }, "new-email push trigger started");
 
@@ -235,7 +263,7 @@ async function notifyAccount(app: FastifyInstance, account: IncomingAccount, dat
           subject: formatted.subject,
           ...(formatted.senderEmail ? { sender: formatted.senderEmail } : {}),
           ...(createdAt ? { createdAt } : {}),
-          ...(messageId ? { messageId } : {}),
+          messageId,
         },
       }));
     } catch (error) {
