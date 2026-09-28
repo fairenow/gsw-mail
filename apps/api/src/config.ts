@@ -19,6 +19,8 @@ const config = {
     adminToken: env("STALWART_ADMIN_TOKEN", "change-me-stalwart-admin"),
     sessionTtlSeconds: Number(env("STALWART_SESSION_TTL_SECONDS", "60")),
     webhookSecret: process.env.STALWART_WEBHOOK_SECRET,
+    pushJmapUsername: process.env.STALWART_PUSH_JMAP_USERNAME,
+    pushJmapPassword: process.env.STALWART_PUSH_JMAP_PASSWORD,
   },
   outbound: {
     relay: env("OUTBOUND_RELAY", "null"),
@@ -75,6 +77,10 @@ function assertNotPlaceholder(key: string, value: string): void {
   }
 }
 
+if (Boolean(config.stalwart.pushJmapUsername) !== Boolean(config.stalwart.pushJmapPassword)) {
+  throw new Error("[config] STALWART_PUSH_JMAP_USERNAME and STALWART_PUSH_JMAP_PASSWORD must be configured together");
+}
+
 if (isProduction) {
   assertExplicit("DATABASE_URL", explicit("DATABASE_URL"));
   assertExplicit("MAIL_ENGINE", explicit("MAIL_ENGINE"));
@@ -93,6 +99,7 @@ if (isProduction) {
   assertExplicit("BETTER_AUTH_SECRET", explicit("BETTER_AUTH_SECRET"));
   assertNotPlaceholder("BETTER_AUTH_SECRET", config.auth.secret);
   assertNotPlaceholder("DATABASE_URL", config.databaseUrl);
+  if (config.stalwart.pushJmapPassword) assertNotPlaceholder("STALWART_PUSH_JMAP_PASSWORD", config.stalwart.pushJmapPassword);
   if (config.send.delaySeconds < 0 || config.send.maxRecipients < 1) {
     throw new Error("[config] invalid send settings: SEND_DELAY_SECONDS must be >= 0 and MAX_RECIPIENTS >= 1");
   }
