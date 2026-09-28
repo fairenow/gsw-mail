@@ -33,11 +33,12 @@ async function managementUrl(): Promise<string> {
 
   for (const discoveryUrl of discoveryUrls) {
     try {
+      // JMAP session discovery is endpoint discovery, not an authenticated
+      // management operation. Do not let a stale/invalid admin token prevent
+      // us from learning the server's advertised apiUrl and incorrectly
+      // falling back to the legacy /api endpoint.
       const response = await fetch(discoveryUrl, {
-        headers: {
-          authorization: `Bearer ${config.stalwart.adminToken}`,
-          accept: "application/json",
-        },
+        headers: { accept: "application/json" },
         signal: AbortSignal.timeout(8_000),
       });
       if (!response.ok) continue;
@@ -50,7 +51,8 @@ async function managementUrl(): Promise<string> {
     }
   }
 
-  // Preserve compatibility with Stalwart releases that expose management JMAP at /api.
+  // Preserve compatibility with older Stalwart releases that expose
+  // management JMAP at /api. Current releases advertise /jmap/ via session.
   discoveredManagementUrl = `${origin}/api`;
   return discoveredManagementUrl;
 }
