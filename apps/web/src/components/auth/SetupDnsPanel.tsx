@@ -32,6 +32,12 @@ type Props = {
   onVerified: () => Promise<void> | void;
 };
 
+type SetupDomainResult = {
+  currentStep?: string;
+  infrastructureError?: string;
+  verification?: { healthy?: boolean };
+};
+
 const human = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const tone = (value: string) => value === "verified" || value === "ready" || value === "active" ? "good" : value === "failed" ? "bad" : "warn";
 
@@ -60,6 +66,36 @@ export function SetupDnsPanel({ organizationId, domainId, domainName, onVerified
 
   const records = domain?.expectedRecords ?? [];
   const requiredCount = useMemo(() => records.filter((record) => record.required).length, [records]);
+
+  const prepare = async () => {
+    if (busy) return;
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const response = await fetch("/api/setup/domain", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ domain: domainName }),
+      });
+      const result = await response.json() as SetupDomainResult & { error?: string; message?: string };
+      if (!response.ok) throw new Error(result.error ?? result.message ?? "Could not prepare DNS records.");
+      const refreshed = await load();
+      if (result.infrastructureError) {
+        setError(result.infrastructureError);
+      } else if (result.verification?.healthy || refreshed?.status === "verified") {
+        setMessage(`${domainName} is verified. All required DNS records match.`);
+        await onVerified();
+      } else if (refreshed?.expectedRecords?.length) {
+        setMessage("DNS records are ready. Publish the required records below, then run Check DNS.");
+      } else {
+        setMessage("The domain was saved, but its DNS requirements are not available yet. Retry provider provisioning.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not prepare DNS records.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const verify = async () => {
     if (busy) return;
@@ -120,6 +156,6 @@ export function SetupDnsPanel({ organizationId, domainId, domainName, onVerified
       <p className="gsw-setup-note">{requiredCount} required record{requiredCount === 1 ? "" : "s"} must match before this domain is ready.</p>
     </> : <p className="gsw-setup-note">DNS records are not available yet. Prepare the domain to retrieve Stalwart and outbound-mail requirements.</p>}
 
-    <button className="gsw-btn gsw-btn-primary gsw-btn-block" disabled={busy} onClick={() => void verify()}>{busy ? "Checking DNS…" : records.length ? "Check DNS" : "Prepare DNS"}</button>
+    <button className="gsw-btn gsw-btn-primary gsw-btn-block" disabled={busy} onClick={() => void (records.length ? verify() : prepare())}>{busy ? (records.length ? "Checking DNS…" : "Preparing DNS…") : records.length ? "Check DNS" : "Prepare DNS"}</button>
   </div>;
 }
