@@ -41,6 +41,19 @@ type SetupDomainResult = {
 const human = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const tone = (value: string) => value === "verified" || value === "ready" || value === "active" ? "good" : value === "failed" ? "bad" : "warn";
 
+async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 30_000) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("Provider setup took too long. Please retry.");
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 export function SetupDnsPanel({ organizationId, domainId, domainName, onVerified }: Props) {
   const [domain, setDomain] = useState<DomainRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,7 +62,7 @@ export function SetupDnsPanel({ organizationId, domainId, domainName, onVerified
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    const response = await fetch(`/admin/domains?organizationId=${encodeURIComponent(organizationId)}`, { credentials: "include" });
+    const response = await fetchWithTimeout(`/admin/domains?organizationId=${encodeURIComponent(organizationId)}`, { credentials: "include" }, 15_000);
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? "Could not load DNS setup.");
     const row = (result.domains as DomainRow[]).find((item) => item.id === domainId) ?? null;
@@ -71,12 +84,12 @@ export function SetupDnsPanel({ organizationId, domainId, domainName, onVerified
     if (busy) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const response = await fetch("/api/setup/domain", {
+      const response = await fetchWithTimeout("/api/setup/domain", {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ domain: domainName }),
-      });
+      }, 30_000);
       const result = await response.json() as SetupDomainResult & { error?: string; message?: string };
       if (!response.ok) throw new Error(result.error ?? result.message ?? "Could not prepare DNS records.");
       const refreshed = await load();
@@ -101,7 +114,7 @@ export function SetupDnsPanel({ organizationId, domainId, domainName, onVerified
     if (busy) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const response = await fetch(`/admin/domains/${domainId}/verify`, { method: "POST", credentials: "include" });
+      const response = await fetchWithTimeout(`/admin/domains/${domainId}/verify`, { method: "POST", credentials: "include" }, 30_000);
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? result.message ?? "Could not verify DNS.");
       await load();
