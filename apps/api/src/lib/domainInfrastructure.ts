@@ -9,6 +9,9 @@ const STALWART_USING = ["urn:ietf:params:jmap:core", "urn:stalwart:jmap"];
 
 type StalwartDomain = { id: string; name: string; dnsZoneFile?: string | null };
 type ProviderSync = { stalwartDomainId: string | null; stalwartDnsZoneFile: string | null; resendDomainId: string | null; records: DomainDnsRecord[]; warnings: string[] };
+type StalwartSession = { apiUrl?: string };
+
+let discoveredManagementUrl: string | null = null;
 
 function normalizedHost(value: string): string {
   return value.trim().toLowerCase().replace(/\.$/, "");
@@ -18,13 +21,52 @@ function normalizedValue(value: string): string {
   return value.trim().replace(/^"|"$/g, "").replace(/\s+/g, " ");
 }
 
-function managementUrl(): string {
-  const url = new URL(config.stalwart.jmapUrl);
-  return `${url.origin}/api`;
+async function managementUrl(): Promise<string> {
+  if (discoveredManagementUrl) return discoveredManagementUrl;
+
+  const configured = new URL(config.stalwart.jmapUrl);
+  const origin = configured.origin;
+  const discoveryUrls = [
+    new URL("/jmap/session", origin).toString(),
+    new URL("/.well-known/jmap", origin).toString(),
+  ];
+
+  for (const discoveryUrl of discoveryUrls) {
+    try {
+      const response = await fetch(discoveryUrl, {
+        headers: {
+          authorization: `Bearer ${config.stalwart.adminToken}`,
+          accept: "application/json",
+        },
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!response.ok) continue;
+      const session = await response.json().catch(() => ({})) as StalwartSession;
+      if (!session.apiUrl) continue;
+      discoveredManagementUrl = new URL(session.apiUrl, discoveryUrl).toString();
+      return discoveredManagementUrl;
+    } catch {
+      // Try the next discovery endpoint before falling back.
+    }
+  }
+
+  // Preserve compatibility with Stalwart releases that expose management JMAP at /api.
+  discoveredManagementUrl = `${origin}/api`;
+  return discoveredManagementUrl;
+}
+
+function stalwartMethodError(methodResponses: any[]): string | null {
+  for (const response of methodResponses) {
+    if (!Array.isArray(response) || response[0] !== "error") continue;
+    const payload = response[1] as { type?: string; description?: string; detail?: string } | undefined;
+    return payload?.description ?? payload?.detail ?? payload?.type ?? "unknown JMAP error";
+  }
+  return null;
 }
 
 async function stalwartCall(methodCalls: unknown[]): Promise<any[]> {
-  const response = await fetch(managementUrl(), {
+  const endpoint = await managementUrl();
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       authorization: `Bearer ${config.stalwart.adminToken}`,
@@ -33,9 +75,14 @@ async function stalwartCall(methodCalls: unknown[]): Promise<any[]> {
     body: JSON.stringify({ methodCalls, using: STALWART_USING }),
     signal: AbortSignal.timeout(12_000),
   });
-  const result = await response.json().catch(() => ({})) as { methodResponses?: any[]; error?: string };
-  if (!response.ok) throw new Error(`Stalwart domain request failed (${response.status})`);
+  const result = await response.json().catch(() => ({})) as { methodResponses?: any[]; error?: string; title?: string; detail?: string };
+  if (!response.ok) {
+    const detail = result.detail ?? result.error ?? result.title;
+    throw new Error(`Stalwart domain request failed (${response.status})${detail ? `: ${detail}` : ""}`);
+  }
   if (!Array.isArray(result.methodResponses)) throw new Error(result.error ?? "Stalwart domain response was incomplete");
+  const methodError = stalwartMethodError(result.methodResponses);
+  if (methodError) throw new Error(`Stalwart JMAP request failed: ${methodError}`);
   return result.methodResponses;
 }
 
