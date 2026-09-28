@@ -191,7 +191,7 @@ async function notifyAccount(app: FastifyInstance, account: IncomingAccount, dat
       traceId,
       accountId: account.id,
       mailbox: account.address,
-      reason: enrichment.reason,
+      reason: enrichment.status === "unavailable" ? enrichment.reason : "UNKNOWN",
       webhookDataKeys: Object.keys(data),
     }, "using webhook-only new-email push content");
   }
