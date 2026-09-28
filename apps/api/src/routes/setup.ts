@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
 import { domains, emailAccounts, organizationMemberships, organizations, workspaceSetupStates } from "../db/schema.js";
-import { provisionDomainInfrastructure, verifyDomainInfrastructure } from "../lib/domainInfrastructure.js";
+import { provisionDomainInfrastructure } from "../lib/domainInfrastructure.js";
 import { badRequest, notFound } from "../lib/errors.js";
 
 const workspaceSchema = z.object({ name: z.string().trim().min(1).max(120) });
@@ -47,14 +47,14 @@ export default async function setupRoutes(app: FastifyInstance) {
     const mailbox = mailboxRows[0] ?? null;
 
     let currentStep = setup?.currentStep ?? "email_verified";
-    let reconciledStep = currentStep;
-    if (domain) {
-      if (domain.status === "verified" && mailbox && currentStep !== "complete") reconciledStep = "first_mailbox_created";
-      else if (domain.status === "verified" && ["email_verified", "workspace_created", "domain_added"].includes(currentStep)) reconciledStep = "domain_verified";
-      else if (domain.status !== "verified" && ["email_verified", "workspace_created"].includes(currentStep)) reconciledStep = "domain_added";
+    if (domain && (currentStep === "email_verified" || currentStep === "workspace_created")) {
+      currentStep = domain.status === "verified" ? "domain_verified" : "domain_added";
+      await db.insert(workspaceSetupStates)
+        .values({ organizationId: workspace.id, currentStep })
+        .onConflictDoUpdate({ target: workspaceSetupStates.organizationId, set: { currentStep } });
     }
-    if (reconciledStep !== currentStep) {
-      currentStep = reconciledStep;
+    if (domain?.status === "verified" && currentStep === "domain_added") {
+      currentStep = mailbox ? "first_mailbox_created" : "domain_verified";
       await db.insert(workspaceSetupStates)
         .values({ organizationId: workspace.id, currentStep })
         .onConflictDoUpdate({ target: workspaceSetupStates.organizationId, set: { currentStep } });
@@ -90,21 +90,24 @@ export default async function setupRoutes(app: FastifyInstance) {
       : await db.insert(domains).values({ organizationId: workspace.id, name: input.domain, status: "pending" }).returning({ id: domains.id, name: domains.name, status: domains.status });
     if (!domain) throw new Error("failed to create domain");
 
-    await db.insert(workspaceSetupStates).values({ organizationId: workspace.id, currentStep: "domain_added" }).onConflictDoUpdate({ target: workspaceSetupStates.organizationId, set: { currentStep: "domain_added" } });
+    const currentStep = domain.status === "verified" ? "domain_verified" : "domain_added";
+    await db.insert(workspaceSetupStates).values({ organizationId: workspace.id, currentStep }).onConflictDoUpdate({ target: workspaceSetupStates.organizationId, set: { currentStep } });
 
     try {
-      await provisionDomainInfrastructure(domain.id, domain.name);
-      const verification = await verifyDomainInfrastructure(domain.id, domain.name);
-      await db.insert(workspaceSetupStates).values({ organizationId: workspace.id, currentStep: verification.healthy ? "domain_verified" : "domain_added" }).onConflictDoUpdate({ target: workspaceSetupStates.organizationId, set: { currentStep: verification.healthy ? "domain_verified" : "domain_added" } });
+      const infrastructure = await provisionDomainInfrastructure(domain.id, domain.name);
       reply.code(existing[0] ? 200 : 201);
-      return { domain: { ...domain, status: verification.healthy ? "verified" : "pending" }, verification, currentStep: verification.healthy ? "domain_verified" : "domain_added" };
+      return {
+        domain: { ...domain, status: domain.status === "verified" ? "verified" : "pending" },
+        infrastructure,
+        currentStep,
+      };
     } catch (error) {
       const infrastructureError = error instanceof Error ? error.message : "Mail infrastructure setup failed";
       req.log.error({ err: error, domainId: domain.id, domain: domain.name }, "domain was saved but infrastructure provisioning failed");
       reply.code(existing[0] ? 200 : 201);
       return {
-        domain: { ...domain, status: "pending" as const },
-        currentStep: "domain_added" as const,
+        domain: { ...domain, status: domain.status === "verified" ? "verified" as const : "pending" as const },
+        currentStep,
         infrastructureError,
       };
     }
