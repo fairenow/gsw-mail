@@ -4,7 +4,6 @@ type VerifiedDomain = { id: string; name: string; status: "pending" | "verified"
 
 type Props = {
   organizationId: string;
-  ownerUserId: string;
   domains: VerifiedDomain[];
   isFirstMailbox: boolean;
   onCreated: (address: string) => Promise<void> | void;
@@ -12,7 +11,7 @@ type Props = {
 
 const LOCAL_PART = /^[a-z0-9._%+-]+$/i;
 
-export function MailboxCreatePanel({ organizationId, ownerUserId, domains, isFirstMailbox, onCreated }: Props) {
+export function MailboxCreatePanel({ organizationId, domains, isFirstMailbox, onCreated }: Props) {
   const verifiedDomains = useMemo(() => domains.filter((domain) => domain.status === "verified"), [domains]);
   const [domainId, setDomainId] = useState("");
   const [localPart, setLocalPart] = useState("");
@@ -39,14 +38,13 @@ export function MailboxCreatePanel({ organizationId, ownerUserId, domains, isFir
           domainId: selectedDomain.id,
           localPart: normalizedLocalPart,
           displayName: displayName.trim() || undefined,
-          ownerUserId,
         }),
         signal: AbortSignal.timeout(20_000),
       });
       const result = await response.json().catch(() => ({})) as { address?: string; error?: string; message?: string };
       if (!response.ok) throw new Error(result.message ?? result.error ?? "Could not create mailbox.");
       const address = result.address ?? `${normalizedLocalPart}@${selectedDomain.name}`;
-      setMessage(`${address} was created. Finish login setup below to choose its password.`);
+      setMessage(`${address} was created as a separate mailbox identity. Finish login setup below to choose its password.`);
       setLocalPart("");
       setDisplayName("");
       await onCreated(address);
@@ -62,7 +60,7 @@ export function MailboxCreatePanel({ organizationId, ownerUserId, domains, isFir
   return <article className="gsw-control-action-card">
     <p className="gsw-setup-kicker">{isFirstMailbox ? "First mailbox" : "New mailbox"}</p>
     <h3>{isFirstMailbox ? "Create your first email address" : "Create another mailbox"}</h3>
-    <p>Choose the username that appears before @. GSW will use your verified domain and then guide you through secure login setup.</p>
+    <p>Choose the username that appears before @. The mailbox stays separate from your workspace recovery identity and will get its own sign-in password.</p>
     <label className="gsw-auth-field">Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Ramon Williams" /></label>
     <label className="gsw-auth-field">Email username<input value={localPart} onChange={(event) => setLocalPart(event.target.value.replace(/\s+/g, "").toLowerCase())} placeholder="ramon" autoCapitalize="none" /></label>
     {verifiedDomains.length > 1 && <label className="gsw-auth-field">Verified domain<select value={selectedDomain?.id ?? ""} onChange={(event) => setDomainId(event.target.value)}>{verifiedDomains.map((domain) => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></label>}
