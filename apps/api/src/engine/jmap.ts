@@ -56,24 +56,35 @@ export class JmapClient {
       return this.sessionCache.session;
     }
     this.opts.onSessionEvent?.("start");
-    const res = await this.fetchImpl(abs(this.opts.baseUrl, "/.well-known/jmap"), {
-      method: "GET",
-      headers: { Accept: "application/json", Authorization: authorizationHeader(this.opts) },
-    });
+
+    const headers = { Accept: "application/json", Authorization: authorizationHeader(this.opts) };
+    const candidates = ["/jmap/session", "/.well-known/jmap"];
+    let res: Response | undefined;
+    let sessionUrl = "";
+
+    for (const candidate of candidates) {
+      sessionUrl = abs(this.opts.baseUrl, candidate);
+      res = await this.fetchImpl(sessionUrl, { method: "GET", headers });
+      if (res.ok) break;
+    }
+
     this.reportSlow("JMAP session", started);
-    if (!res.ok) {
-      this.opts.onSessionEvent?.("rejected", res.status);
+    if (!res || !res.ok) {
+      const status = res?.status ?? 500;
+      const statusText = res?.statusText ?? "Unknown Error";
+      this.opts.onSessionEvent?.("rejected", status);
       throw new JmapError(
-        `JMAP session request failed: HTTP ${res.status} ${res.statusText}`,
-        res.status === 401 ? "mail_identity_rejected" : "session_failed",
+        `JMAP session request failed: HTTP ${status} ${statusText}`,
+        status === 401 ? "mail_identity_rejected" : "session_failed",
         undefined,
-        undefined,
-        res.status,
+        { sessionUrl },
+        status,
       );
     }
+
     const body = (await res.json()) as JmapSession;
     if (!body.apiUrl || typeof body.apiUrl !== "string") {
-      throw new JmapError("JMAP session response missing apiUrl", "session_invalid");
+      throw new JmapError("JMAP session response missing apiUrl", "session_invalid", undefined, { sessionUrl });
     }
     body.apiUrl = abs(this.opts.baseUrl, body.apiUrl);
     body.uploadUrl = body.uploadUrl ? abs(this.opts.baseUrl, body.uploadUrl) : `${body.apiUrl}/upload/`;
