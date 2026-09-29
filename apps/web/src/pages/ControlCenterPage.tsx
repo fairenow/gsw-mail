@@ -118,7 +118,7 @@ export function ControlCenterPage() {
     </aside>
 
     <section className="gsw-control-main">
-      <header><div><p className="gsw-setup-kicker">Control center</p><h2>{workspace?.name ?? "Guided Steps Wellness"}</h2><p>{workspace?.role ?? "member"} · {adminEmail}</p></div><button className="gsw-btn gsw-btn-primary" onClick={() => window.location.assign("/mail")}>Open Mail</button></header>
+      <header><div><p className="gsw-setup-kicker">Control center</p><h2>{workspace?.name ?? "Guided Steps Wellness"}</h2><p>{workspace?.role ?? "member"} · {adminEmail}</p></div><button className="gsw-btn gsw-btn-primary" onClick={() => void logout().then(() => window.location.assign("/sign-in"))}>Open Mail</button></header>
       {adminError && <div className="gsw-control-alert"><strong>Some admin details could not load.</strong><span>{adminError}</span></div>}
 
       {section === "overview" && <>
