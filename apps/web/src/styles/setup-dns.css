@@ -89,6 +89,18 @@
   background: white;
 }
 
+.gsw-setup-dns-record.is-required {
+  border-width: 2px;
+  border-color: #d39216;
+  background: #fffdf8;
+}
+
+.gsw-setup-dns-record.is-required .gsw-setup-dns-record-title > strong {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
 .gsw-setup-dns-record > div {
   min-width: 0;
 }
@@ -107,6 +119,30 @@
   font-size: 11px;
 }
 
+.gsw-dns-required {
+  font-weight: 700;
+  color: #8b5b05 !important;
+}
+
+.gsw-dns-optional {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 5px;
+}
+
+.gsw-dns-info {
+  cursor: help;
+  font-size: 13px;
+  color: #7d7569;
+}
+
+.gsw-setup-dns-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  align-items: stretch;
+  gap: 6px;
+}
+
 .gsw-setup-dns-record code {
   display: block;
   padding: 7px 8px;
@@ -119,8 +155,18 @@
   white-space: normal;
 }
 
-.gsw-setup-dns-record .gsw-btn-quiet {
-  justify-self: start;
+.gsw-dns-copy-icon {
+  border: 1px solid var(--gsw-border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--gsw-text-heading);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.gsw-dns-copy-icon:hover {
+  background: #f7f4ee;
 }
 
 .gsw-setup-dns-summary .tone-good { color: #356b3d; }
