@@ -49,12 +49,14 @@ export default async function setupRoutes(app: FastifyInstance) {
     let currentStep = setup?.currentStep ?? "email_verified";
     if (domain && (currentStep === "email_verified" || currentStep === "workspace_created")) {
       currentStep = domain.status === "verified" ? "domain_verified" : "domain_added";
-      await db.insert(workspaceSetupStates)
-        .values({ organizationId: workspace.id, currentStep })
-        .onConflictDoUpdate({ target: workspaceSetupStates.organizationId, set: { currentStep } });
     }
     if (domain?.status === "verified" && currentStep === "domain_added") {
       currentStep = mailbox ? "first_mailbox_created" : "domain_verified";
+    }
+    if (domain?.status === "verified" && mailbox && currentStep === "domain_verified") {
+      currentStep = "first_mailbox_created";
+    }
+    if (currentStep !== (setup?.currentStep ?? "email_verified")) {
       await db.insert(workspaceSetupStates)
         .values({ organizationId: workspace.id, currentStep })
         .onConflictDoUpdate({ target: workspaceSetupStates.organizationId, set: { currentStep } });
