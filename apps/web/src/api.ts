@@ -289,26 +289,23 @@ export const api = {
   cancelSend: (sendId: string) => post<{ status: string }>(`/mail/sends/${sendId}/cancel`),
   retrySend: (sendId: string, accountId: string) => post<{ status: string }>(`/mail/sends/${sendId}/retry`, { accountId }),
   settings: () => get<ProductSettings>("/product/settings"),
-  updateSettings: (body: Record<string, unknown>) => patch<ProductSettings>("/product/settings", body),
-  contacts: (params: { q?: string; limit?: number; offset?: number; tag?: string; addressBookId?: string } = {}) => {
-    const query = new URLSearchParams();
-    if (params.q) query.set("q", params.q);
-    if (params.limit !== undefined) query.set("limit", String(params.limit));
-    if (params.offset !== undefined) query.set("offset", String(params.offset));
-    if (params.tag) query.set("tag", params.tag);
-    if (params.addressBookId) query.set("addressBookId", params.addressBookId);
-    return get<ContactListResponse>(`/product/contacts${query.size ? `?${query}` : ""}`);
-  },
-  contact: (id: string) => get<Contact>(`/product/contacts/${id}`),
-  createContact: (body: Partial<Contact>) => post<Contact>("/product/contacts", body),
-  updateContact: (id: string, body: Partial<Contact>) => patch<Contact>(`/product/contacts/${id}`, body),
-  deleteContact: (id: string) => request(`/product/contacts/${id}`, { method: "DELETE", headers: headers() }).then((res) => json<void>(res)),
-  importContacts: (body: { content: string; format: "csv" | "vcf"; sourceFile?: string }) => post<{ imported: number; skipped: number; errors: string[] }>("/product/contacts/import", body, 60_000),
-  calendars: (accountId: string) => cachedGet<{ calendars: CalendarSummary[] }>(`/product/calendars?accountId=${encodeURIComponent(accountId)}`, 60_000, 10 * 60_000).then((r) => r.calendars),
-  calendarEvents: (accountId: string, start: string, end: string) => cachedGet<{ events: CalendarEvent[] }>(`${calendarPrefix(accountId)}start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`, 20_000, 5 * 60_000).then((r) => r.events),
-  createCalendarEvent: async (body: Partial<CalendarEvent> & { accountId: string }) => { const result = await post<CalendarEvent>("/product/calendar-events", body, interactiveTimeout); clearCalendarCache(body.accountId); return result; },
-  updateCalendarEvent: async (id: string, body: Partial<CalendarEvent> & { accountId: string }) => { const result = await patch<CalendarEvent>(`/product/calendar-events/${id}`, body, interactiveTimeout); clearCalendarCache(body.accountId); return result; },
-  deleteCalendarEvent: async (id: string, accountId: string) => { const result = await request(`/product/calendar-events/${id}?accountId=${encodeURIComponent(accountId)}`, { method: "DELETE", headers: headers() }, interactiveTimeout).then((res) => json<void>(res)); clearCalendarCache(accountId); return result; },
-  prefetchCalendarWindow: (accountId: string, start: string, end: string) => { void cachedGet<{ events: CalendarEvent[] }>(`${calendarPrefix(accountId)}start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`, 20_000, 5 * 60_000).catch(() => undefined); },
-  prefetchCalendars: (accountId: string) => { void cachedGet<{ calendars: CalendarSummary[] }>(`/product/calendars?accountId=${encodeURIComponent(accountId)}`, 60_000, 10 * 60_000).catch(() => undefined); },
+  updateSettings: (body: { general?: Record<string, unknown>; compose?: Record<string, unknown>; contacts?: Record<string, unknown> }) => patch<ProductSettings>("/product/settings", body),
+  saveSignature: (body: ProductSettings["signature"]) => request("/product/signature", { method: "PUT", headers: headers(true), body: JSON.stringify(body) }).then((res) => json<ProductSettings["signature"]>(res)),
+  contacts: (q = "") => cachedGet<ContactListResponse>(`/product/contacts?q=${encodeURIComponent(q)}`, 30_000, 5 * 60_000).then((r) => r.contacts),
+  contactsPage: (q = "", limit = 100, offset = 0) => cachedGet<ContactListResponse>(`/product/contacts?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`, 30_000, 5 * 60_000),
+  prefetchContactsPage: () => { void cachedGet<ContactListResponse>("/product/contacts?q=&limit=100&offset=0", 30_000, 5 * 60_000).catch(() => undefined); },
+  contact: (id: string) => cachedGet<Contact>(`/product/contacts/${id}`, 60_000, 10 * 60_000),
+  prefetchContact: (id: string) => { void cachedGet<Contact>(`/product/contacts/${id}`, 60_000, 10 * 60_000).catch(() => undefined); },
+  contactAddressBooks: () => cachedGet<{ addressBooks: { engineId: string; name: string; isDefault: boolean }[] }>("/product/contacts/address-books", 60_000, 10 * 60_000),
+  createContact: async (body: unknown) => { const result = await post<Contact>("/product/contacts", body); clearContactsCache(); return result; },
+  updateContact: async (id: string, body: unknown) => { const result = await patch<Contact>(`/product/contacts/${id}`, body); clearContactsCache(); return result; },
+  importContacts: async (body: unknown) => { const result = await post<{ id: string; filename: string; rowCount: number; createdCount: number; updatedCount: number; skippedCount: number; duplicateCount: number; failedCount: number }>("/product/contact-imports", body, interactiveTimeout); clearContactsCache(); return result; },
+  contactImports: () => cachedGet<{ imports: { id: string; filename: string; rowCount: number; createdCount: number; updatedCount: number; skippedCount: number; duplicateCount: number; failedCount: number; createdAt: string }[] }>("/product/contact-imports", 60_000, 10 * 60_000),
+  contactImportRows: (id: string) => get<{ rows: { rowNumber: number; raw: Record<string, string>; status: string; error?: string | null }[] }>(`/product/contact-imports/${id}/rows`),
+  calendars: (accountId?: string) => cachedGet<{ calendars: CalendarSummary[] }>(`/product/calendars${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ""}`, 60_000, 10 * 60_000),
+  calendarEvents: (accountId: string, after: string, before: string) => cachedGet<{ events: CalendarEvent[] }>(`${calendarPrefix(accountId)}after=${encodeURIComponent(after)}&before=${encodeURIComponent(before)}`, 30_000, 5 * 60_000),
+  prefetchCalendarEvents: (accountId: string, after: string, before: string) => { void cachedGet<{ events: CalendarEvent[] }>(`${calendarPrefix(accountId)}after=${encodeURIComponent(after)}&before=${encodeURIComponent(before)}`, 30_000, 5 * 60_000).catch(() => undefined); },
+  createCalendarEvent: async (body: { accountId: string; calendarId: string; title: string; description?: string; start: string; durationMinutes: number; location?: string; meetingLink?: string; attendees: string[]; sendSchedulingMessages: boolean; timeZone?: string; allDay: boolean }) => { const result = await post<CalendarEvent>("/product/calendar-events", body); clearCalendarCache(body.accountId); return result; },
+  updateCalendarEvent: async (id: string, body: { accountId: string; calendarId: string; title: string; description?: string; start: string; durationMinutes: number; location?: string; meetingLink?: string; attendees: string[]; sendSchedulingMessages: boolean; timeZone?: string; allDay: boolean }) => { const result = await patch<CalendarEvent>(`/product/calendar-events/${encodeURIComponent(id)}`, body); clearCalendarCache(body.accountId); return result; },
+  deleteCalendarEvent: async (id: string, accountId: string) => { const result = await request(`/product/calendar-events/${encodeURIComponent(id)}?accountId=${encodeURIComponent(accountId)}`, { method: "DELETE" }).then((res) => json<{ deleted: boolean; eventId: string }>(res)); clearCalendarCache(accountId); return result; },
 };
