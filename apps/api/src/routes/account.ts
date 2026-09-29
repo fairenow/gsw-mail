@@ -77,24 +77,24 @@ export default async function accountRoutes(app: FastifyInstance) {
       .innerJoin(organizations, eq(emailAccounts.workspaceId, organizations.id))
       .innerJoin(domains, and(eq(emailAccounts.domainId, domains.id), eq(emailAccounts.workspaceId, domains.organizationId)))
       .where(eq(mailAccountMemberships.userId, userId));
-    const ownedMailboxes = await db.select({ id: emailAccounts.id }).from(emailAccounts).where(eq(emailAccounts.userId, userId));
-    if (ownedMailboxes.some((account) => !mailboxMemberships.some((membership) => membership.id === account.id))) throw conflict("Mailbox membership unavailable");
-    const membershipCount = await db.select({ id: mailAccountMemberships.accountId }).from(mailAccountMemberships).where(eq(mailAccountMemberships.userId, userId));
-    if (membershipCount.length !== mailboxMemberships.length || mailboxMemberships.some((mailbox) => mailbox.authSetupStatus !== "ready" || mailbox.status !== "active" || mailbox.membershipAuthUserId !== productUser.authUserId || !workspaces.some((workspace) => workspace.id === mailbox.workspaceId && workspace.status === "active"))) throw conflict("Your login is ready, but we couldn't connect it to your mailbox.");
+    const readyMailboxMemberships = mailboxMemberships.filter((mailbox) => mailbox.authSetupStatus === "ready" && mailbox.status === "active" && mailbox.membershipAuthUserId === productUser.authUserId && workspaces.some((workspace) => workspace.id === mailbox.workspaceId && workspace.status === "active"));
+    const invalidReadyMailbox = mailboxMemberships.some((mailbox) => mailbox.authSetupStatus === "ready" && !readyMailboxMemberships.some((ready) => ready.id === mailbox.id));
+    if (invalidReadyMailbox) throw conflict("Your login is ready, but we couldn't connect it to your mailbox.");
     const workspaceAdmin = workspaces.some((workspace) => workspace.status === "active" && (workspace.role === "owner" || workspace.role === "admin"));
-    const mailboxUser = mailboxMemberships.length > 0;
+    const adminReadyForControlCenter = workspaces.some((workspace) => workspace.status === "active" && (workspace.role === "owner" || workspace.role === "admin") && ["domain_verified", "first_mailbox_created", "complete"].includes(workspace.setupStep ?? ""));
+    const mailboxUser = readyMailboxMemberships.length > 0;
     const incomplete = workspaces.some((workspace) => workspace.status === "active" && workspace.setupStep !== "complete");
-    const defaultDestination = incomplete && !mailboxUser ? "setup" : workspaceAdmin ? "control-center" : mailboxUser ? "mail" : "setup";
+    const defaultDestination = adminReadyForControlCenter ? "control-center" : incomplete && !mailboxUser ? "setup" : workspaceAdmin ? "control-center" : mailboxUser ? "mail" : "setup";
     const managedMailboxes = workspaceAdmin && workspaces.length > 0
       ? await db.select({ id: emailAccounts.id, address: emailAccounts.address, displayName: emailAccounts.displayName, workspaceId: emailAccounts.workspaceId, authUserId: users.authUserId, authSetupStatus: emailAccounts.authSetupStatus, status: emailAccounts.status }).from(emailAccounts).innerJoin(users, eq(emailAccounts.userId, users.id)).where(inArray(emailAccounts.workspaceId, workspaces.filter((workspace) => workspace.status === "active" && (workspace.role === "owner" || workspace.role === "admin")).map((workspace) => workspace.id)))
       : [];
-    req.log.info({ userId, authUserId: productUser.authUserId, mailboxCount: mailboxMemberships.length, workspaceCount: workspaces.length, defaultDestination, durationMs: Date.now() - startedAt }, "account context resolved");
+    req.log.info({ userId, authUserId: productUser.authUserId, mailboxCount: readyMailboxMemberships.length, workspaceCount: workspaces.length, defaultDestination, durationMs: Date.now() - startedAt }, "account context resolved");
     return {
       resolved: true,
       authUserId: productUser.authUserId,
       user: { id: userId, email: req.user!.email ?? null },
       workspaceMemberships: workspaces,
-      mailboxMemberships,
+      mailboxMemberships: readyMailboxMemberships,
       managedMailboxes,
       onboardingComplete: workspaces.length > 0 && workspaces.every((workspace) => workspace.setupStep === "complete"),
       defaultDestination,
