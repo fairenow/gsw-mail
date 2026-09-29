@@ -40,6 +40,22 @@ type SetupDomainResult = {
 
 const human = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const tone = (value: string) => value === "verified" || value === "ready" || value === "active" ? "good" : value === "failed" ? "bad" : "warn";
+const purposeOrder: Record<DnsRecord["purpose"], number> = { mx: 0, dmarc: 1, spf: 2, dkim: 3, other: 4 };
+
+function recordLabel(record: DnsRecord) {
+  if (record.purpose === "mx") return "MX record";
+  return `${record.type} · ${record.purpose.toUpperCase()}`;
+}
+
+function optionalReason(record: DnsRecord) {
+  if (record.source === "stalwart" && (record.purpose === "spf" || record.purpose === "dkim")) {
+    return `${record.purpose.toUpperCase()} is optional here because outbound mail is handled by Resend. Stalwart does not need this record to pass inbound-domain verification.`;
+  }
+  if (record.purpose === "other") {
+    return "This record supports extra mail-client, MTA-STS, TLS reporting, or autodiscovery behavior. It is useful, but it does not block domain verification or mailbox creation.";
+  }
+  return "This record is recommended for the provider integration but is not required to finish domain verification.";
+}
 
 async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 30_000) {
   const controller = new AbortController();
@@ -54,12 +70,23 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs =
   }
 }
 
+function DnsField({ label, value, onCopy }: { label: string; value: string; onCopy: (value: string) => void }) {
+  return <div>
+    <small>{label}</small>
+    <div className="gsw-setup-dns-field">
+      <code>{value}</code>
+      <button type="button" className="gsw-dns-copy-icon" aria-label={`Copy ${label}`} title={`Copy ${label}`} onClick={() => onCopy(value)}>⧉</button>
+    </div>
+  </div>;
+}
+
 export function SetupDnsPanel({ organizationId, domainId, domainName, onVerified }: Props) {
   const [domain, setDomain] = useState<DomainRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [showMore, setShowMore] = useState(false);
 
   const load = useCallback(async () => {
     const response = await fetchWithTimeout(`/admin/domains?organizationId=${encodeURIComponent(organizationId)}`, { credentials: "include" }, 15_000);
@@ -78,7 +105,10 @@ export function SetupDnsPanel({ organizationId, domainId, domainName, onVerified
   }, [load]);
 
   const records = domain?.expectedRecords ?? [];
-  const requiredCount = useMemo(() => records.filter((record) => record.required).length, [records]);
+  const sortedRecords = useMemo(() => [...records].sort((a, b) => Number(b.required) - Number(a.required) || purposeOrder[a.purpose] - purposeOrder[b.purpose] || a.name.localeCompare(b.name)), [records]);
+  const requiredRecords = useMemo(() => sortedRecords.filter((record) => record.required), [sortedRecords]);
+  const optionalRecords = useMemo(() => sortedRecords.filter((record) => !record.required), [sortedRecords]);
+  const visibleRecords = showMore ? sortedRecords : requiredRecords;
 
   const prepare = async () => {
     if (busy) return;
@@ -140,7 +170,7 @@ export function SetupDnsPanel({ organizationId, domainId, domainName, onVerified
 
   return <div className="gsw-setup-dns">
     <div className="gsw-setup-dns-head">
-      <div><strong>DNS verification</strong><p>Publish these records with the DNS provider for {domainName}. GSW will verify them publicly before mailbox creation.</p></div>
+      <div><strong>DNS verification</strong><p>Publish the required records first. Optional records can be added later without blocking mailbox creation.</p></div>
       {domain?.status === "verified" && <span className="gsw-status-pill">Verified</span>}
     </div>
 
@@ -155,18 +185,21 @@ export function SetupDnsPanel({ organizationId, domainId, domainName, onVerified
 
     {records.length > 0 ? <>
       <div className="gsw-setup-dns-summary">
-        {[["MX", domain?.mxStatus], ["SPF", domain?.spfStatus], ["DKIM", domain?.dkimStatus], ["DMARC", domain?.dmarcStatus]].map(([label, value]) => <span key={label}><b>{label}</b><em className={`tone-${tone(value ?? "not_configured")}`}>{human(value ?? "not_configured")}</em></span>)}
+        {[["MX", domain?.mxStatus], ["DMARC", domain?.dmarcStatus], ["SPF", domain?.spfStatus], ["DKIM", domain?.dkimStatus]].map(([label, value]) => <span key={label}><b>{label}</b><em className={`tone-${tone(value ?? "not_configured")}`}>{human(value ?? "not_configured")}</em></span>)}
       </div>
       <div className="gsw-setup-dns-records">
-        {records.map((record, index) => <div className="gsw-setup-dns-record" key={`${record.source}-${record.type}-${record.name}-${index}`}>
-          <div className="gsw-setup-dns-record-title"><strong>{record.purpose.toUpperCase()} · {record.type}</strong><small>{record.required ? "Required" : "Optional"} · {record.source}</small></div>
-          <div><small>Host / Name</small><code>{record.name}</code></div>
-          {record.type === "MX" && <div><small>Priority</small><code>{record.priority ?? 0}</code></div>}
-          <div><small>Value</small><code>{record.value}</code></div>
-          <button className="gsw-btn gsw-btn-quiet" onClick={() => void copy(record.value)}>Copy value</button>
+        {visibleRecords.map((record, index) => <div className={`gsw-setup-dns-record ${record.required ? "is-required" : "is-optional"}`} key={`${record.source}-${record.type}-${record.name}-${index}`}>
+          <div className="gsw-setup-dns-record-title">
+            <strong>{recordLabel(record)}</strong>
+            <small className={record.required ? "gsw-dns-required" : "gsw-dns-optional"}>{record.required ? "Required" : "Optional"} · {record.source}{!record.required && <span className="gsw-dns-info" title={optionalReason(record)} aria-label={optionalReason(record)}>ⓘ</span>}</small>
+          </div>
+          <DnsField label="Host / Name" value={record.name} onCopy={(value) => void copy(value)} />
+          {record.type === "MX" && <DnsField label="Priority" value={String(record.priority ?? 0)} onCopy={(value) => void copy(value)} />}
+          <DnsField label="Value" value={record.value} onCopy={(value) => void copy(value)} />
         </div>)}
       </div>
-      <p className="gsw-setup-note">{requiredCount} required record{requiredCount === 1 ? "" : "s"} must match before this domain is ready.</p>
+      {optionalRecords.length > 0 && <button className="gsw-btn gsw-btn-quiet gsw-btn-block" type="button" onClick={() => setShowMore((value) => !value)}>{showMore ? "Hide Optional DNS Values" : `Show More DNS Values (${optionalRecords.length})`}</button>}
+      <p className="gsw-setup-note"><strong>{requiredRecords.length} required record{requiredRecords.length === 1 ? "" : "s"}</strong> must match before this domain is ready. SPF/DKIM from Stalwart and the additional service records remain optional while Resend handles outbound mail.</p>
     </> : <p className="gsw-setup-note">DNS records are not available yet. Prepare the domain to retrieve Stalwart and outbound-mail requirements.</p>}
 
     <button className="gsw-btn gsw-btn-primary gsw-btn-block" disabled={busy} onClick={() => void (records.length ? verify() : prepare())}>{busy ? (records.length ? "Checking DNS…" : "Preparing DNS…") : records.length ? "Check DNS" : "Prepare DNS"}</button>
