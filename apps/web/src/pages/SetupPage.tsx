@@ -94,14 +94,20 @@ export function SetupPage() {
       <h2>{setup.workspace.name}</h2>
       <p className="gsw-setup-note">Workspace owner and mailbox identities are separate. You can recover this workspace with your backup email even if mail is unavailable.</p>
       <div className="gsw-setup-domain"><strong>{setup.domain.name}</strong><span>{setup.domain.status === "pending" ? "Domain saved · DNS verification is next" : setup.domain.status}</span></div>
-      <SetupDnsPanel organizationId={setup.workspace.id} domainId={setup.domain.id} domainName={setup.domain.name} onVerified={refreshSetup} />
+      <SetupDnsPanel organizationId={setup.workspace.id} domainId={setup.domain.id} domainName={setup.domain.name} onVerified={async () => { await refreshSetup(); setViewStep(3); }} />
       <button className="gsw-btn gsw-btn-quiet gsw-btn-block" disabled={busy} onClick={() => void saveDomain()}>{busy ? "Preparing…" : "Retry provider provisioning"}</button>
       <button className="gsw-btn gsw-btn-quiet gsw-btn-block" disabled={busy} onClick={goBack}>← Back to domain</button>
     </section>}
 
     {stepIndex === 3 && <section className="gsw-setup-section">
       <h2>{setup.workspace.name}</h2>
-      {setup.mailbox ? <button className="gsw-btn gsw-btn-primary gsw-btn-block" onClick={() => window.location.assign("/")}>Continue to Mail</button> : <button className="gsw-btn gsw-btn-primary gsw-btn-block" onClick={() => window.location.assign("/control-center#mailboxes")}>Continue to first mailbox</button>}
+      {setup.mailbox ? <>
+        <p className="gsw-setup-note">Your first mailbox is connected. Continue to the Admin Control Center to finish or manage its login.</p>
+        <button className="gsw-btn gsw-btn-primary gsw-btn-block" onClick={() => window.location.assign("/control-center#mailboxes")}>Open Admin Control Center</button>
+      </> : <>
+        <p className="gsw-setup-note"><strong>{setup.domain?.name}</strong> is verified. Continue to the Admin Control Center to choose the username for your first email address and create the mailbox.</p>
+        <button className="gsw-btn gsw-btn-primary gsw-btn-block" onClick={() => window.location.assign("/control-center#mailboxes")}>Create first mailbox in Admin Control Center</button>
+      </>}
       <button className="gsw-btn gsw-btn-quiet gsw-btn-block" onClick={goBack}>← Back to DNS verification</button>
     </section>}
 
