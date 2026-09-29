@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { completeMailboxSetup, getAccountContext, requestMailboxSetup, type AccountContext } from "../auth";
 import { logout } from "../auth";
 import { DomainAdminPanel } from "../components/admin/DomainAdminPanel";
+import { MailboxCreatePanel } from "../components/admin/MailboxCreatePanel";
 import { AuthCard } from "../components/auth/AuthCard";
 import { AuthPage } from "../components/auth/AuthPage";
 import { BrandMark } from "../components/auth/BrandMark";
@@ -74,6 +75,10 @@ export function ControlCenterPage() {
     const response = await fetch(`/admin/control-center?organizationId=${encodeURIComponent(workspace.id)}`, { credentials: "include", signal: AbortSignal.timeout(15000) });
     const result = await response.json(); if (!response.ok) throw new Error(result.error ?? "Could not refresh workspace administration."); setAdmin(result as AdminSummary);
   };
+  const refreshControlCenter = async () => {
+    setContext(await getAccountContext());
+    await reloadAdmin().catch(() => undefined);
+  };
 
   const startMailboxSetup = async (mailbox: AccountContext["managedMailboxes"][number]) => {
     if (setupBusy) return;
@@ -90,7 +95,7 @@ export function ControlCenterPage() {
     try {
       await completeMailboxSetup(setupMailbox.id, setupCode, setupPassword);
       setSetupMessage(`${setupMailbox.address} login is ready. The mailbox can now sign in with its address and new password.`);
-      setContext(await getAccountContext()); await reloadAdmin().catch(() => undefined); setSetupMailbox(null); setSetupCode(""); setSetupPassword(""); setSetupConfirm("");
+      await refreshControlCenter(); setSetupMailbox(null); setSetupCode(""); setSetupPassword(""); setSetupConfirm("");
     } catch (error) { setSetupMessage(error instanceof Error ? error.message : "Could not finish mailbox login setup."); }
     finally { setSetupBusy(false); }
   };
@@ -133,9 +138,10 @@ export function ControlCenterPage() {
       {section === "domains" && workspace?.id && <DomainAdminPanel organizationId={workspace.id} />}
 
       {section === "mailboxes" && <section className="gsw-control-section">
-        <div className="gsw-control-section-head"><div><p className="gsw-setup-kicker">Mailboxes</p><h3>Mailbox administration</h3><p>Set up or reset mailbox logins. Verification is sent to the workspace admin recovery email.</p></div></div>
+        <div className="gsw-control-section-head"><div><p className="gsw-setup-kicker">Mailboxes</p><h3>Mailbox administration</h3><p>Create mailboxes on verified domains, then set up or reset their logins. Verification is sent to the workspace admin recovery email.</p></div></div>
+        {workspace?.id && admin && <MailboxCreatePanel organizationId={workspace.id} ownerUserId={context.user.id} domains={admin.domains} isFirstMailbox={context.managedMailboxes.length === 0} onCreated={refreshControlCenter} />}
         <div className="gsw-admin-list">
-          {context.managedMailboxes.length ? context.managedMailboxes.map((mailbox) => { const details = admin?.mailboxes.find((item) => item.id === mailbox.id); return <article className="gsw-admin-list-row" key={mailbox.id}><div className="gsw-admin-primary"><strong>{mailbox.address}</strong><span>{mailbox.displayName ?? "Mailbox"}</span></div><div className="gsw-admin-meta"><span className={`gsw-status-pill tone-${statusTone(mailbox.authSetupStatus)}`}>{mailbox.authSetupStatus === "ready" ? "Login ready" : "Setup required"}</span><small>{details?.accessCount ?? 0} user{(details?.accessCount ?? 0) === 1 ? "" : "s"} with access</small>{details ? <small>{formatBytes(details.usedBytes)} used{details.quotaBytes ? ` of ${formatBytes(details.quotaBytes)}` : ""}</small> : null}</div><button className="gsw-btn gsw-btn-quiet" disabled={setupBusy} onClick={() => void startMailboxSetup(mailbox)}>{mailbox.authSetupStatus === "ready" ? "Reset login" : "Set up login"}</button></article>; }) : <div className="gsw-control-empty">No mailboxes connected.</div>}
+          {context.managedMailboxes.length ? context.managedMailboxes.map((mailbox) => { const details = admin?.mailboxes.find((item) => item.id === mailbox.id); return <article className="gsw-admin-list-row" key={mailbox.id}><div className="gsw-admin-primary"><strong>{mailbox.address}</strong><span>{mailbox.displayName ?? "Mailbox"}</span></div><div className="gsw-admin-meta"><span className={`gsw-status-pill tone-${statusTone(mailbox.authSetupStatus)}`}>{mailbox.authSetupStatus === "ready" ? "Login ready" : "Setup required"}</span><small>{details?.accessCount ?? 0} user{(details?.accessCount ?? 0) === 1 ? "" : "s"} with access</small>{details ? <small>{formatBytes(details.usedBytes)} used{details.quotaBytes ? ` of ${formatBytes(details.quotaBytes)}` : ""}</small> : null}</div><button className="gsw-btn gsw-btn-quiet" disabled={setupBusy} onClick={() => void startMailboxSetup(mailbox)}>{mailbox.authSetupStatus === "ready" ? "Reset login" : "Set up login"}</button></article>; }) : <div className="gsw-control-empty">No mailboxes connected yet. Create the first mailbox above.</div>}
         </div>
       </section>}
 
