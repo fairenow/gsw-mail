@@ -8,7 +8,7 @@ import { renderGswAuthEmail } from "../auth/email.js";
 import { upsertMailboxCredential } from "../auth/mailboxCredential.js";
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
-import { authUsers, emailAccounts, mailboxAuthSetupTokens } from "../db/schema.js";
+import { authUsers, emailAccounts, mailboxAuthSetupTokens, workspaceSetupStates } from "../db/schema.js";
 import { badRequest, notFound } from "../lib/errors.js";
 
 const passwordSchema = z.object({ code: z.string().regex(/^\d{6}$/), password: z.string().min(8).max(200) });
@@ -120,6 +120,9 @@ export default async function mailboxSetupRoutes(app: FastifyInstance) {
         password: input.password,
       });
       await tx.update(mailboxAuthSetupTokens).set({ usedAt: new Date() }).where(eq(mailboxAuthSetupTokens.id, token.id));
+      await tx.insert(workspaceSetupStates)
+        .values({ organizationId: row.workspaceId, currentStep: "complete" })
+        .onConflictDoUpdate({ target: workspaceSetupStates.organizationId, set: { currentStep: "complete" } });
     });
 
     req.log.info({
