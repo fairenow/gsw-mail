@@ -16,7 +16,9 @@ const config = {
   mailEngine: env("MAIL_ENGINE", "demo"),
   stalwart: {
     jmapUrl: env("STALWART_JMAP_URL", "https://localhost:443"),
-    adminToken: env("STALWART_ADMIN_TOKEN", "change-me-stalwart-admin"),
+    adminToken: process.env.STALWART_ADMIN_TOKEN,
+    adminUsername: process.env.STALWART_ADMIN_USERNAME,
+    adminPassword: process.env.STALWART_ADMIN_PASSWORD,
     sessionTtlSeconds: Number(env("STALWART_SESSION_TTL_SECONDS", "60")),
     webhookSecret: process.env.STALWART_WEBHOOK_SECRET,
     pushJmapUsername: process.env.STALWART_PUSH_JMAP_USERNAME,
@@ -81,16 +83,23 @@ if (Boolean(config.stalwart.pushJmapUsername) !== Boolean(config.stalwart.pushJm
   throw new Error("[config] STALWART_PUSH_JMAP_USERNAME and STALWART_PUSH_JMAP_PASSWORD must be configured together");
 }
 
+if (Boolean(config.stalwart.adminUsername) !== Boolean(config.stalwart.adminPassword)) {
+  throw new Error("[config] STALWART_ADMIN_USERNAME and STALWART_ADMIN_PASSWORD must be configured together");
+}
+
 if (isProduction) {
   assertExplicit("DATABASE_URL", explicit("DATABASE_URL"));
   assertExplicit("MAIL_ENGINE", explicit("MAIL_ENGINE"));
   if (config.mailEngine !== "stalwart") {
     throw new Error("[config] MAIL_ENGINE must be stalwart in production");
   }
-  assertExplicit("STALWART_ADMIN_TOKEN", explicit("STALWART_ADMIN_TOKEN"));
   assertExplicit("STALWART_JMAP_URL", explicit("STALWART_JMAP_URL"));
-  assertNotPlaceholder("STALWART_ADMIN_TOKEN", config.stalwart.adminToken);
   assertNotPlaceholder("STALWART_JMAP_URL", config.stalwart.jmapUrl);
+  if (!config.stalwart.adminUsername && !config.stalwart.adminToken) {
+    throw new Error("[config] configure STALWART_ADMIN_USERNAME/STALWART_ADMIN_PASSWORD or STALWART_ADMIN_TOKEN in production");
+  }
+  if (config.stalwart.adminToken) assertNotPlaceholder("STALWART_ADMIN_TOKEN", config.stalwart.adminToken);
+  if (config.stalwart.adminPassword) assertNotPlaceholder("STALWART_ADMIN_PASSWORD", config.stalwart.adminPassword);
   assertExplicit("BETTER_AUTH_STALWART_CLIENT_ID", explicit("BETTER_AUTH_STALWART_CLIENT_ID"));
   assertExplicit("BETTER_AUTH_STALWART_CLIENT_SECRET", explicit("BETTER_AUTH_STALWART_CLIENT_SECRET"));
   assertNotPlaceholder("BETTER_AUTH_STALWART_CLIENT_SECRET", config.auth.oauthClientSecret!);
