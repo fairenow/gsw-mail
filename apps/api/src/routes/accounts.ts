@@ -83,8 +83,8 @@ export default async (app: FastifyInstance) => {
 
   app.get<{ Params: Params }>("/mail/accounts/:id/mailboxes", async (req) => {
     await requireAccountPermission(req.user!.id, req.params.id, "read");
-     const engine = await getUserEngine({ productUserId: req.user!.id, authUserId: req.authUserId ?? req.user!.id, accountId: req.params.id, headers: req.headers as Record<string, string> });
-     return { mailboxes: await engine.listMailboxes(req.params.id) };
+    const engine = await getUserEngine({ productUserId: req.user!.id, authUserId: req.authUserId ?? req.user!.id, accountId: req.params.id, headers: req.headers as Record<string, string> });
+    return { mailboxes: await engine.listMailboxes(req.params.id) };
   });
 
   app.post("/mail/accounts", async (req, reply) => {
@@ -103,6 +103,7 @@ export default async (app: FastifyInstance) => {
       const [owner] = await db.select({ id: users.id }).from(users).where(eq(users.id, input.ownerUserId)).limit(1);
       if (!owner) throw badRequest("ownerUserId must reference an existing user");
     }
+    const ownerUserId = input.ownerUserId ?? req.user!.id;
     const address = `${input.localPart}@${domain.name}`;
 
     const account = await db.transaction(async (tx) => {
@@ -111,7 +112,7 @@ export default async (app: FastifyInstance) => {
         .values({
           workspaceId: domain.organizationId,
           domainId: input.domainId,
-          userId: input.ownerUserId,
+          userId: ownerUserId,
           localPart: input.localPart,
           address,
           displayName: input.displayName,
@@ -127,10 +128,10 @@ export default async (app: FastifyInstance) => {
         { accountId: created.id, role: "trash", engineName: "Trash" },
         { accountId: created.id, role: "archive", engineName: "Archive" },
       ]);
-      const [owner] = await tx.select({ id: users.id, authUserId: users.authUserId }).from(users).where(eq(users.id, input.ownerUserId ?? req.user!.id)).limit(1);
+      const [owner] = await tx.select({ id: users.id, authUserId: users.authUserId }).from(users).where(eq(users.id, ownerUserId)).limit(1);
       await tx.insert(mailAccountMemberships).values({
         accountId: created.id,
-        userId: input.ownerUserId ?? req.user!.id,
+        userId: ownerUserId,
         ...(owner?.authUserId ? { authUserId: owner.authUserId } : {}),
         role: "owner",
       });
