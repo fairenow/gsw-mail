@@ -110,6 +110,14 @@ export default async (app: FastifyInstance) => {
       if (ownerUserId) {
         const [owner] = await tx.select({ id: users.id, authUserId: users.authUserId }).from(users).where(eq(users.id, ownerUserId)).limit(1);
         if (!owner) throw badRequest("ownerUserId must reference an existing user");
+        const [membership] = await tx
+          .select({ role: organizationMemberships.role })
+          .from(organizationMemberships)
+          .where(and(eq(organizationMemberships.organizationId, orgId), eq(organizationMemberships.userId, ownerUserId)))
+          .limit(1);
+        if (membership?.role === "owner" || membership?.role === "admin") {
+          throw badRequest("workspace owner/admin identities cannot be used as mailbox identities");
+        }
         ownerAuthUserId = owner.authUserId;
       } else {
         ownerUserId = `mailbox-user-${randomUUID()}`;
