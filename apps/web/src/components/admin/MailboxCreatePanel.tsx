@@ -4,6 +4,7 @@ type VerifiedDomain = { id: string; name: string; status: "pending" | "verified"
 
 type Props = {
   organizationId: string;
+  ownerUserId?: string;
   domains: VerifiedDomain[];
   isFirstMailbox: boolean;
   onCreated: (address: string) => Promise<void> | void;
