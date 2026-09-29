@@ -33,10 +33,6 @@ async function managementUrl(): Promise<string> {
 
   for (const discoveryUrl of discoveryUrls) {
     try {
-      // JMAP session discovery is endpoint discovery, not an authenticated
-      // management operation. Do not let a stale/invalid admin token prevent
-      // us from learning the server's advertised apiUrl and incorrectly
-      // falling back to the legacy /api endpoint.
       const response = await fetch(discoveryUrl, {
         headers: { accept: "application/json" },
         signal: AbortSignal.timeout(8_000),
@@ -51,10 +47,16 @@ async function managementUrl(): Promise<string> {
     }
   }
 
-  // Preserve compatibility with older Stalwart releases that expose
-  // management JMAP at /api. Current releases advertise /jmap/ via session.
   discoveredManagementUrl = `${origin}/api`;
   return discoveredManagementUrl;
+}
+
+function stalwartAuthorization(): string {
+  if (config.stalwart.adminUsername && config.stalwart.adminPassword) {
+    return `Basic ${Buffer.from(`${config.stalwart.adminUsername}:${config.stalwart.adminPassword}`, "utf8").toString("base64")}`;
+  }
+  if (config.stalwart.adminToken) return `Bearer ${config.stalwart.adminToken}`;
+  throw new Error("Stalwart admin credentials are not configured");
 }
 
 function stalwartMethodError(methodResponses: any[]): string | null {
@@ -71,7 +73,7 @@ async function stalwartCall(methodCalls: unknown[]): Promise<any[]> {
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
-      authorization: `Bearer ${config.stalwart.adminToken}`,
+      authorization: stalwartAuthorization(),
       "content-type": "application/json",
     },
     body: JSON.stringify({ methodCalls, using: STALWART_USING }),
