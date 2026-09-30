@@ -56,7 +56,7 @@ export function SetupPage() {
       const result = await api.addSetupDomain(domain) as DomainSetupResponse;
       setSetup((current) => current ? { ...current, ...result } : current);
       if (result.domain?.name) setDomain(result.domain.name);
-      if (result.infrastructureError) setNotice(`Domain saved. Provider setup still needs attention: ${result.infrastructureError}`);
+      if (result.infrastructureError) setNotice(`Domain saved. Mail setup still needs attention: ${result.infrastructureError}`);
       setViewStep(2);
     }
     catch (err) { setError(err instanceof Error ? err.message : "Could not add domain."); }
@@ -95,7 +95,7 @@ export function SetupPage() {
       <p className="gsw-setup-note">Workspace owner and mailbox identities are separate. You can recover this workspace with your backup email even if mail is unavailable.</p>
       <div className="gsw-setup-domain"><strong>{setup.domain.name}</strong><span>{setup.domain.status === "pending" ? "Domain saved · DNS verification is next" : setup.domain.status}</span></div>
       <SetupDnsPanel organizationId={setup.workspace.id} domainId={setup.domain.id} domainName={setup.domain.name} onVerified={async () => { await refreshSetup(); setViewStep(3); }} />
-      <button className="gsw-btn gsw-btn-quiet gsw-btn-block" disabled={busy} onClick={() => void saveDomain()}>{busy ? "Preparing…" : "Retry provider provisioning"}</button>
+      <button className="gsw-btn gsw-btn-quiet gsw-btn-block" disabled={busy} onClick={() => void saveDomain()}>{busy ? "Preparing…" : "Retry mail provisioning"}</button>
       <button className="gsw-btn gsw-btn-quiet gsw-btn-block" disabled={busy} onClick={goBack}>← Back to domain</button>
     </section>}
 
