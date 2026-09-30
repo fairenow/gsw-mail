@@ -148,16 +148,16 @@ async function resolveMailboxAccountId(authorization: string, productAccountId: 
   const matches = accounts.filter(
     (account) => account.name?.toLowerCase() === localPart && account.domainId === stalwartDomainId,
   );
-  if (matches.length !== 1 || !matches[0]?.id) {
+  const matchId = matches.length === 1 ? matches[0]?.id : undefined;
+  if (!matchId) {
     throw new Error(`Stalwart account lookup did not uniquely resolve ${address}`);
   }
-  const match = matches[0];
 
   await db.update(emailAccounts)
-    .set({ stalwartPrincipalId: match.id })
+    .set({ stalwartPrincipalId: matchId })
     .where(eq(emailAccounts.id, productAccountId));
 
-  return match.id;
+  return matchId;
 }
 
 export function createMailboxTargetedStalwartRelay(): OutboundRelay {
