@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { config } from "../config.js";
+import { formatMessageIdHeader } from "../lib/messageId.js";
 import { createMailboxTargetedStalwartRelay } from "./stalwartRelay.js";
 import type { OutboundJob, OutboundRelay, RelayAttachment, RelayResult } from "./types.js";
 
@@ -45,7 +46,7 @@ export function createResendRelay(apiKey: string): OutboundRelay {
       const inReplyTo = sanitizeOutboundHeaderValue(job.inReplyTo);
       const references = sanitizeOutboundHeaderValue(job.references);
       const replyTo = sanitizeOutboundHeaderValue(job.replyTo);
-      if (messageId) headers["Message-ID"] = messageId;
+      if (messageId) headers["Message-ID"] = formatMessageIdHeader(messageId);
       if (inReplyTo) headers["In-Reply-To"] = inReplyTo;
       if (references) headers["References"] = references;
 
