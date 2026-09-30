@@ -26,6 +26,21 @@ test("concatenates split TXT chunks without losing DKIM content", () => {
   assert.equal(record?.value, "v=DKIM1; k=rsa; p=AAABBB");
 });
 
+test("parses multiline parenthesized DKIM records as one TXT value", () => {
+  const records = parseStalwartZoneFile([
+    "$ORIGIN example.com.",
+    "v1-rsa._domainkey IN TXT (",
+    '  "v=DKIM1; k=rsa; h=sha256; "',
+    '  "p=AAA"',
+    '  "BBB"',
+    ")",
+  ].join("\n"), "example.com");
+
+  const dkim = records.find((record) => record.name === "v1-rsa._domainkey.example.com");
+  assert.equal(dkim?.value, "v=DKIM1; k=rsa; h=sha256; p=AAABBB");
+  assert.equal(dkim?.purpose, "dkim");
+});
+
 test("replaces Stalwart DMARC skeleton with the GSW onboarding policy", () => {
   const records = normalizeManagedDnsRecords([
     { source: "stalwart", type: "TXT", name: "_dmarc.example.com", value: "v=DMARC1", purpose: "dmarc", required: true },
@@ -42,6 +57,16 @@ test("replaces Stalwart DMARC skeleton with the GSW onboarding policy", () => {
     purpose: "dmarc",
     required: true,
   });
+});
+
+test("drops malformed DKIM placeholders instead of treating them as verifiable records", () => {
+  const records = normalizeManagedDnsRecords([
+    { source: "stalwart", type: "TXT", name: "v1-rsa._domainkey.example.com", value: "(", purpose: "dkim", required: true },
+    { source: "stalwart", type: "TXT", name: "v1-ed25519._domainkey.example.com", value: "v=DKIM1; k=ed25519; p=ABC", purpose: "dkim", required: true },
+  ], "example.com", { includeResend: false });
+
+  assert.equal(records.some((record) => record.value === "("), false);
+  assert.equal(records.some((record) => record.value === "v=DKIM1; k=ed25519; p=ABC"), true);
 });
 
 test("removes stale Resend and SES DNS records when mailbox relay is Stalwart", () => {
