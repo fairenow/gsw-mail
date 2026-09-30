@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { outboundDeliveryEvents, outboundMessages, outboundRecipients } from "../db/schema.js";
+import { domains, emailAccounts, outboundDeliveryEvents, outboundMessages, outboundRecipients } from "../db/schema.js";
+import { recordSuppression } from "./delivery.js";
 
 export type StalwartDeliveryDisposition = "queued" | "delivered" | "deferred" | "bounced" | "completed";
 
@@ -10,9 +11,11 @@ const trackedEventTypes = new Map<string, StalwartDeliveryDisposition>([
   ["delivery.delivered", "delivered"],
   ["delivery.failed", "deferred"],
   ["delivery.rcpt-to-failed", "deferred"],
+  ["delivery.dsn-temp-fail", "deferred"],
   ["delivery.rcpt-to-rejected", "bounced"],
   ["delivery.message-rejected", "bounced"],
   ["delivery.null-mx", "bounced"],
+  ["delivery.dsn-perm-fail", "bounced"],
   ["delivery.completed", "completed"],
 ]);
 
@@ -131,6 +134,17 @@ async function recipientTargets(outboundMessageId: string, data: Record<string, 
   return rows.length === 1 ? [rows[0]!.email.toLowerCase()] : [];
 }
 
+async function organizationIdForSend(outboundMessageId: string): Promise<string | null> {
+  const rows = await db
+    .select({ organizationId: domains.organizationId })
+    .from(outboundMessages)
+    .innerJoin(emailAccounts, eq(outboundMessages.accountId, emailAccounts.id))
+    .innerJoin(domains, eq(emailAccounts.domainId, domains.id))
+    .where(eq(outboundMessages.id, outboundMessageId))
+    .limit(1);
+  return rows[0]?.organizationId ?? null;
+}
+
 async function recomputeMessageDelivery(outboundMessageId: string): Promise<void> {
   const recipients = await db
     .select({ status: outboundRecipients.deliveryStatus })
@@ -211,6 +225,15 @@ export async function recordStalwartDeliveryEvent(input: {
         eq(outboundRecipients.outboundMessageId, outboundMessageId),
         or(...recipients.map((recipient) => sql`lower(${outboundRecipients.email}) = ${recipient.toLowerCase()}`)),
       ));
+  }
+
+  if (disposition === "bounced" && recipients.length) {
+    const organizationId = await organizationIdForSend(outboundMessageId);
+    if (organizationId) {
+      for (const recipient of recipients) {
+        await recordSuppression(organizationId, recipient, "hard_bounce", `stalwart:${input.eventId}`);
+      }
+    }
   }
 
   await recomputeMessageDelivery(outboundMessageId);
