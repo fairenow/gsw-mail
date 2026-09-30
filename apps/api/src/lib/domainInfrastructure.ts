@@ -150,12 +150,34 @@ function isRequired(source: DomainDnsRecord["source"], purpose: DomainDnsRecord[
   return false;
 }
 
+export function stripZoneComment(raw: string): string {
+  let quoted = false;
+  let escaped = false;
+  for (let i = 0; i < raw.length; i += 1) {
+    const ch = raw[i]!;
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (ch === ";" && !quoted) return raw.slice(0, i).trim();
+  }
+  return raw.trim();
+}
+
 export function parseStalwartZoneFile(zoneFile: string | null | undefined, domain: string): DomainDnsRecord[] {
   if (!zoneFile) return [];
   let origin = normalizedHost(domain);
   const records: DomainDnsRecord[] = [];
   for (const rawLine of zoneFile.split(/\r?\n/)) {
-    const line = rawLine.replace(/;.*/, "").trim();
+    const line = stripZoneComment(rawLine);
     if (!line) continue;
     const originMatch = line.match(/^\$ORIGIN\s+(.+)$/i);
     if (originMatch) { origin = normalizedHost(originMatch[1]!); continue; }
