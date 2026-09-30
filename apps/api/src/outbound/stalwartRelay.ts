@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
+import { domainDnsState } from "../db/domainDnsSchema.js";
 import { emailAccounts, outboundMessages } from "../db/schema.js";
 import type { OutboundJob, OutboundRelay, RelayResult } from "./types.js";
 
@@ -9,7 +10,7 @@ type JmapResponse = [string, Record<string, unknown>, string | null];
 type StalwartAccount = {
   id?: string;
   name?: string;
-  emailAddress?: string;
+  domainId?: string;
 };
 
 function adminAuthorization(): string {
@@ -72,28 +73,65 @@ async function callStalwart(authorization: string, methodCalls: unknown[]): Prom
 async function accountById(authorization: string, id: string): Promise<StalwartAccount | null> {
   const response = await callStalwart(authorization, [[
     "x:Account/get",
-    { ids: [id], properties: ["id", "name", "emailAddress"] },
+    { ids: [id], properties: ["id", "name", "domainId"] },
     "account-get",
   ]]);
   const list = response[0]?.[1]?.list;
   return Array.isArray(list) ? (list[0] as StalwartAccount | undefined) ?? null : null;
 }
 
+async function resolveStalwartDomainId(authorization: string, productDomainId: string, domainName: string): Promise<string> {
+  const [state] = await db
+    .select({ stalwartDomainId: domainDnsState.stalwartDomainId })
+    .from(domainDnsState)
+    .where(eq(domainDnsState.domainId, productDomainId))
+    .limit(1);
+  if (state?.stalwartDomainId) return state.stalwartDomainId;
+
+  const query = await callStalwart(authorization, [[
+    "x:Domain/query",
+    { filter: { name: domainName }, limit: 2 },
+    "domain-query",
+  ]]);
+  const ids = Array.isArray(query[0]?.[1]?.ids)
+    ? (query[0]![1].ids as unknown[]).filter((value): value is string => typeof value === "string")
+    : [];
+  if (ids.length !== 1) throw new Error(`No unique Stalwart domain found for ${domainName}`);
+  return ids[0]!;
+}
+
 async function resolveMailboxAccountId(authorization: string, productAccountId: string, address: string): Promise<string> {
   const [mailbox] = await db
-    .select({ stalwartPrincipalId: emailAccounts.stalwartPrincipalId })
+    .select({
+      stalwartPrincipalId: emailAccounts.stalwartPrincipalId,
+      localPart: emailAccounts.localPart,
+      domainId: emailAccounts.domainId,
+    })
     .from(emailAccounts)
     .where(eq(emailAccounts.id, productAccountId))
     .limit(1);
+  if (!mailbox) throw new Error(`GSW mailbox record not found for ${address}`);
 
-  if (mailbox?.stalwartPrincipalId) {
+  const at = address.lastIndexOf("@");
+  if (at <= 0 || at === address.length - 1) throw new Error(`Invalid mailbox address ${address}`);
+  const domainName = address.slice(at + 1).toLowerCase();
+  const localPart = mailbox.localPart.toLowerCase();
+  const stalwartDomainId = await resolveStalwartDomainId(authorization, mailbox.domainId, domainName);
+
+  if (mailbox.stalwartPrincipalId) {
     const cached = await accountById(authorization, mailbox.stalwartPrincipalId);
-    if (cached?.id && cached.emailAddress?.toLowerCase() === address.toLowerCase()) return cached.id;
+    if (
+      cached?.id
+      && cached.name?.toLowerCase() === localPart
+      && cached.domainId === stalwartDomainId
+    ) {
+      return cached.id;
+    }
   }
 
   const query = await callStalwart(authorization, [[
     "x:Account/query",
-    { filter: { text: address }, limit: 25 },
+    { filter: { name: mailbox.localPart, domainId: stalwartDomainId }, limit: 2 },
     "account-query",
   ]]);
   const ids = Array.isArray(query[0]?.[1]?.ids)
@@ -103,12 +141,17 @@ async function resolveMailboxAccountId(authorization: string, productAccountId: 
 
   const lookup = await callStalwart(authorization, [[
     "x:Account/get",
-    { ids, properties: ["id", "name", "emailAddress"] },
+    { ids, properties: ["id", "name", "domainId"] },
     "account-get-many",
   ]]);
   const accounts = Array.isArray(lookup[0]?.[1]?.list) ? lookup[0]![1].list as StalwartAccount[] : [];
-  const match = accounts.find((account) => account.emailAddress?.toLowerCase() === address.toLowerCase());
-  if (!match?.id) throw new Error(`Stalwart account lookup did not resolve ${address}`);
+  const matches = accounts.filter(
+    (account) => account.name?.toLowerCase() === localPart && account.domainId === stalwartDomainId,
+  );
+  if (matches.length !== 1 || !matches[0]?.id) {
+    throw new Error(`Stalwart account lookup did not uniquely resolve ${address}`);
+  }
+  const match = matches[0];
 
   await db.update(emailAccounts)
     .set({ stalwartPrincipalId: match.id })
@@ -172,7 +215,7 @@ export function createMailboxTargetedStalwartRelay(): OutboundRelay {
         return { accepted: true, deliveryId: created.id };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const permanent = /not found|did not resolve|no stalwart jmap identity/i.test(message);
+        const permanent = /not found|did not uniquely resolve|no stalwart jmap identity/i.test(message);
         return { accepted: false, permanent, message };
       }
     },
