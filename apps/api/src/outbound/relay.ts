@@ -1,9 +1,6 @@
-import { eq } from "drizzle-orm";
 import { Resend } from "resend";
 import { config } from "../config.js";
-import { db } from "../db/client.js";
-import { outboundMessages } from "../db/schema.js";
-import { JmapClient, JmapError } from "../engine/jmap.js";
+import { createMailboxTargetedStalwartRelay } from "./stalwartRelay.js";
 import type { OutboundJob, OutboundRelay, RelayAttachment, RelayResult } from "./types.js";
 
 /**
@@ -95,86 +92,8 @@ export function createResendRelay(apiKey: string): OutboundRelay {
   };
 }
 
-function stalwartAdminAuthorization(): string {
-  if (config.stalwart.adminUsername && config.stalwart.adminPassword) {
-    return `Basic ${Buffer.from(`${config.stalwart.adminUsername}:${config.stalwart.adminPassword}`, "utf8").toString("base64")}`;
-  }
-  if (config.stalwart.adminToken) return `Bearer ${config.stalwart.adminToken}`;
-  throw new Error("Stalwart admin credentials are not configured");
-}
-
-/**
- * Submits the already-persisted Stalwart Email object directly through
- * EmailSubmission/set. The normal send flow stores the message in Stalwart
- * before it reaches the outbound worker, so attachments/body data do not need
- * to be re-uploaded here.
- *
- * The worker intentionally uses the server-side Stalwart administrator
- * credential rather than storing a user's short-lived OAuth token in the
- * outbound queue. This keeps Undo Send/retries asynchronous without persisting
- * user bearer credentials.
- */
 export function createStalwartRelay(): OutboundRelay {
-  return {
-    name: "stalwart",
-    async send(job: OutboundJob): Promise<RelayResult> {
-      try {
-        const [row] = await db
-          .select({ engineMessageId: outboundMessages.engineMessageId })
-          .from(outboundMessages)
-          .where(eq(outboundMessages.id, job.id))
-          .limit(1);
-        const emailId = row?.engineMessageId;
-        if (!emailId) {
-          return { accepted: false, permanent: true, message: "Stalwart email id is unavailable for outbound submission" };
-        }
-
-        const client = new JmapClient({
-          baseUrl: config.stalwart.jmapUrl,
-          authorization: stalwartAdminAuthorization(),
-          sessionTtlMs: config.stalwart.sessionTtlSeconds * 1000,
-        });
-        const session = await client.session();
-        const accountId = client.resolveAccountId(session, job.fromAddress);
-        const identityResponse = await client.call([
-          ["Identity/get", { accountId, ids: null }, "i1"],
-        ]);
-        const identities = (identityResponse[0]?.[1]?.list ?? []) as { id?: unknown; email?: unknown }[];
-        const identity = identities.find(
-          (item) => typeof item.email === "string" && item.email.toLowerCase() === job.fromAddress.toLowerCase(),
-        );
-        if (!identity || typeof identity.id !== "string") {
-          return { accepted: false, permanent: true, message: `No Stalwart JMAP identity found for ${job.fromAddress}` };
-        }
-
-        const response = await client.call([
-          [
-            "EmailSubmission/set",
-            {
-              accountId,
-              create: {
-                outbound: {
-                  emailId,
-                  identityId: identity.id,
-                },
-              },
-            },
-            "s1",
-          ],
-        ]);
-        const created = (response[0]?.[1]?.created as Record<string, { id?: string }> | undefined)?.outbound;
-        if (!created?.id) {
-          const notCreated = response[0]?.[1]?.notCreated;
-          return { accepted: false, message: `Stalwart submission was not created: ${JSON.stringify(notCreated ?? {})}` };
-        }
-        return { accepted: true, deliveryId: created.id };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        const permanent = error instanceof JmapError && ["invalidArguments", "notFound", "forbidden"].includes(error.type);
-        return { accepted: false, permanent, message };
-      }
-    },
-  };
+  return createMailboxTargetedStalwartRelay();
 }
 
 export function getRelay(): OutboundRelay {
