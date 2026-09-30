@@ -115,6 +115,9 @@ if (isProduction) {
   if (config.outbound.relay === "null") {
     throw new Error("[config] OUTBOUND_RELAY=null is not allowed in production; configure a real relay");
   }
+  if (config.outbound.relay !== "resend" && config.outbound.relay !== "stalwart") {
+    throw new Error(`[config] unsupported OUTBOUND_RELAY=${config.outbound.relay}; expected resend or stalwart`);
+  }
   if (config.outbound.relay === "resend") {
     assertExplicit("RESEND_API_KEY", explicit("RESEND_API_KEY"));
     assertNotPlaceholder("RESEND_API_KEY", config.outbound.resendApiKey!);
