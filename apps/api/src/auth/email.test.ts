@@ -4,7 +4,7 @@ import { renderGswAuthEmail } from "./email.js";
 
 test("renders branded sign-in OTP email", () => {
   const email = renderGswAuthEmail({ title: "Your sign-in code", message: "Use this code.", code: "213879", expiryMinutes: 10 });
-  assert.match(email.html, /guided_steps_logo\.png/);
+  assert.match(email.html, /https:\/\/mail\.guidedstepswellness\.com\/favicon\.png/);
   assert.match(email.html, /Your sign-in code/);
   assert.match(email.html, /213879/);
   assert.match(email.html, /10 minutes/);
