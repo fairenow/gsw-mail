@@ -7,12 +7,14 @@ test("classifies final Stalwart delivery outcomes", () => {
   assert.equal(classifyStalwartDeliveryEvent("delivery.rcpt-to-rejected"), "bounced");
   assert.equal(classifyStalwartDeliveryEvent("delivery.message-rejected"), "bounced");
   assert.equal(classifyStalwartDeliveryEvent("delivery.null-mx"), "bounced");
+  assert.equal(classifyStalwartDeliveryEvent("delivery.dsn-perm-fail"), "bounced");
   assert.equal(classifyStalwartDeliveryEvent("delivery.completed"), "completed");
 });
 
 test("classifies retryable delivery outcomes as deferred", () => {
   assert.equal(classifyStalwartDeliveryEvent("delivery.failed"), "deferred");
   assert.equal(classifyStalwartDeliveryEvent("delivery.rcpt-to-failed"), "deferred");
+  assert.equal(classifyStalwartDeliveryEvent("delivery.dsn-temp-fail"), "deferred");
 });
 
 test("tracks queue correlation events but ignores unrelated telemetry", () => {
