@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 import { FOLDERS, FOLDER_ICON, type Folder } from "../folders";
 import type { MailFolder } from "../../api";
-import { CalendarDays, ContactRound, Folder as FolderIcon, FolderPlus, Plus } from "lucide-react";
+import { CalendarDays, ContactRound, Folder as FolderIcon } from "lucide-react";
 
 const childrenOf = (folders: MailFolder[], parentId: string | null) => folders
   .filter((item) => !item.system && item.parentId === parentId)
   .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 
-export function FolderNav({ folder, counts, customFolders = [], collapsed, section = "mail", onSelect, onPrefetch, onCreateFolder }: {
+export function FolderNav({ folder, counts, customFolders = [], collapsed, section = "mail", onSelect, onPrefetch }: {
   folder: Folder;
   counts: Record<Folder, { total: number; unread: number }>;
   customFolders?: MailFolder[];
@@ -33,7 +33,6 @@ export function FolderNav({ folder, counts, customFolders = [], collapsed, secti
           <span>{item.name}</span>
           {item.total > 0 && <span className="gsw-badge">{item.total}</span>}
         </button>
-        {!collapsed && onCreateFolder && <button className="gsw-icon-btn" style={{ width: 28, height: 28, flex: "0 0 auto" }} onClick={() => onCreateFolder(item.id)} aria-label={`Add subfolder to ${item.name}`} title="Add subfolder"><Plus size={14} /></button>}
       </div>
       {renderCustom(item.id, depth + 1)}
     </div>;
@@ -49,10 +48,7 @@ export function FolderNav({ folder, counts, customFolders = [], collapsed, secti
         </button>;
       })}
       <div className="gsw-folder-nav-divider" />
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: collapsed ? "0" : "2px 10px 6px 12px" }}>
-        {!collapsed && <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.62 }}>Folders</span>}
-        {onCreateFolder && <button className="gsw-icon-btn" onClick={() => onCreateFolder(null)} aria-label="Create folder" title="Create folder"><FolderPlus size={16} /></button>}
-      </div>
+      {!collapsed && <div style={{ padding: "2px 10px 6px 12px" }}><span style={{ fontSize: 12, fontWeight: 600, opacity: 0.62 }}>Folders</span></div>}
       {renderCustom(null)}
       <div className="gsw-folder-nav-divider" />
       <a className={`gsw-folder gsw-folder-link ${section === "contacts" ? "active" : ""}`} href="/contacts" title={collapsed ? "Contacts" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><ContactRound size={18} strokeWidth={1.75} /></span><span>Contacts</span></a>
