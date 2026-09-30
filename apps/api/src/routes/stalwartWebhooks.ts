@@ -7,6 +7,7 @@ import { db } from "../db/client.js";
 import { emailAccounts, mailAccountMemberships } from "../db/schema.js";
 import { sendPushToUser } from "../mobile/expoPush.js";
 import { resolveIncomingMailForPush } from "../mobile/incomingMailEnrichment.js";
+import { isStalwartOutboundDeliveryEvent, recordStalwartDeliveryEvent } from "../outbound/stalwartDelivery.js";
 
 const processedEvents = pgTable("stalwart_push_events", {
   eventId: text("event_id").primaryKey(),
@@ -312,13 +313,63 @@ export default async (app: FastifyInstance) => {
     let unresolved = 0;
     let notifiedUsers = 0;
     let acceptedPushes = 0;
+    let outboundEvents = 0;
+    let outboundMatched = 0;
 
     for (const event of events) {
       const eventType = typeof event.type === "string" ? event.type : "";
-      if (eventType !== "message-ingest.ham") continue;
-      relevant += 1;
       const eventId = typeof event.id === "string" ? event.id : "";
       const data = eventRecord(event);
+
+      if (isStalwartOutboundDeliveryEvent(eventType)) {
+        relevant += 1;
+        outboundEvents += 1;
+        if (!eventId) {
+          unresolved += 1;
+          req.log.warn({ event: "OUTBOUND_DELIVERY_UNRESOLVED", eventType, dataKeys: Object.keys(data), reason: "MISSING_EVENT_ID" }, "Stalwart outbound delivery event omitted id");
+          continue;
+        }
+        try {
+          const result = await recordStalwartDeliveryEvent({ eventId, eventType, createdAt: event.createdAt, data });
+          if (result.duplicate) duplicate += 1;
+          if (!result.matched) {
+            unresolved += 1;
+            req.log.warn({
+              event: "OUTBOUND_DELIVERY_UNRESOLVED",
+              traceId: eventId,
+              eventType,
+              messageId: firstText(data.messageId),
+              queueId: firstText(data.queueId),
+              dataKeys: Object.keys(data),
+            }, "Could not correlate Stalwart outbound event to a GSW send");
+          } else {
+            outboundMatched += 1;
+            req.log.info({
+              event: "OUTBOUND_DELIVERY_UPDATED",
+              traceId: eventId,
+              eventType,
+              outboundMessageId: result.outboundMessageId,
+              disposition: result.disposition,
+              recipients: result.recipients ?? [],
+              duplicate: result.duplicate,
+              queueId: firstText(data.queueId),
+              messageId: firstText(data.messageId),
+            }, "Stalwart outbound delivery event applied");
+          }
+        } catch (error) {
+          req.log.error({
+            event: "OUTBOUND_DELIVERY_FAILED",
+            traceId: eventId,
+            eventType,
+            error: error instanceof Error ? error.message : String(error),
+          }, "Stalwart outbound delivery telemetry failed");
+          throw error;
+        }
+        continue;
+      }
+
+      if (eventType !== "message-ingest.ham") continue;
+      relevant += 1;
       const messageId = firstText(data.emailId, data.messageId, data.jmapId);
 
       req.log.info({
@@ -393,6 +444,6 @@ export default async (app: FastifyInstance) => {
       }
     }
 
-    return { received: true, events: events.length, relevant, duplicate, unresolved, notifiedUsers, acceptedPushes };
+    return { received: true, events: events.length, relevant, duplicate, unresolved, notifiedUsers, acceptedPushes, outboundEvents, outboundMatched };
   });
 };
