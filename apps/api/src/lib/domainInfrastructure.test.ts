@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { parseStalwartZoneFile, stripZoneComment } from "./domainInfrastructure.js";
+import { DEFAULT_DMARC_POLICY, normalizeManagedDnsRecords, parseStalwartZoneFile, stripZoneComment } from "./domainInfrastructure.js";
 
 test("preserves semicolons inside quoted TXT values", () => {
   const records = parseStalwartZoneFile([
@@ -24,4 +24,35 @@ test("concatenates split TXT chunks without losing DKIM content", () => {
   );
 
   assert.equal(record?.value, "v=DKIM1; k=rsa; p=AAABBB");
+});
+
+test("replaces Stalwart DMARC skeleton with the GSW onboarding policy", () => {
+  const records = normalizeManagedDnsRecords([
+    { source: "stalwart", type: "TXT", name: "_dmarc.example.com", value: "v=DMARC1", purpose: "dmarc", required: true },
+    { source: "stalwart", type: "MX", name: "example.com", value: "mx1.guidedstepswellness.com", priority: 10, purpose: "mx", required: true },
+  ], "example.com", { includeResend: false });
+
+  const dmarc = records.filter((record) => record.purpose === "dmarc");
+  assert.equal(dmarc.length, 1);
+  assert.deepEqual(dmarc[0], {
+    source: "gsw",
+    type: "TXT",
+    name: "_dmarc.example.com",
+    value: DEFAULT_DMARC_POLICY,
+    purpose: "dmarc",
+    required: true,
+  });
+});
+
+test("removes stale Resend and SES DNS records when mailbox relay is Stalwart", () => {
+  const records = normalizeManagedDnsRecords([
+    { source: "stalwart", type: "MX", name: "example.com", value: "mx1.guidedstepswellness.com", priority: 10, purpose: "mx", required: true },
+    { source: "stalwart", type: "TXT", name: "example.com", value: "v=spf1 ip4:2.28.120.166 -all", purpose: "spf", required: true },
+    { source: "resend", type: "MX", name: "send.example.com", value: "feedback-smtp.us-east-1.amazonses.com", priority: 10, purpose: "spf", required: true },
+    { source: "resend", type: "TXT", name: "send.example.com", value: "v=spf1 include:amazonses.com ~all", purpose: "spf", required: true },
+  ], "example.com", { includeResend: false });
+
+  assert.equal(records.some((record) => record.source === "resend"), false);
+  assert.equal(records.some((record) => record.value.includes("amazonses.com")), false);
+  assert.equal(records.some((record) => record.value === "v=spf1 ip4:2.28.120.166 -all"), true);
 });

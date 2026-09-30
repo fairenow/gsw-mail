@@ -3,10 +3,11 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireOrgPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
+import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { domainDnsState } from "../db/domainDnsSchema.js";
 import { domains } from "../db/schema.js";
-import { provisionDomainInfrastructure, verifyDomainInfrastructure } from "../lib/domainInfrastructure.js";
+import { normalizeManagedDnsRecords, provisionDomainInfrastructure, verifyDomainInfrastructure } from "../lib/domainInfrastructure.js";
 import { badRequest, notFound } from "../lib/errors.js";
 
 const domainName = z.string().trim().toLowerCase().regex(/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/);
@@ -42,7 +43,17 @@ export default async function domainAdminRoutes(app: FastifyInstance) {
       .from(domains)
       .leftJoin(domainDnsState, eq(domainDnsState.domainId, domains.id))
       .where(eq(domains.organizationId, organizationId));
-    return { organizationId, domains: rows };
+
+    const includeResend = config.outbound.relay === "resend";
+    return {
+      organizationId,
+      domains: rows.map((row) => ({
+        ...row,
+        resendDomainId: includeResend ? row.resendDomainId : null,
+        expectedRecords: normalizeManagedDnsRecords(row.expectedRecords ?? [], row.name, { includeResend }),
+        observedRecords: includeResend ? row.observedRecords : (row.observedRecords ?? []).filter((record) => record.source !== "resend"),
+      })),
+    };
   });
 
   app.post("/admin/domains", async (req, reply) => {
