@@ -134,6 +134,18 @@ interface MessagesResponse { messages: MessageSummary[]; }
 export interface MailboxFolderStats { total: number; unread: number; }
 interface MailboxStatsResponse { folders: Record<string, MailboxFolderStats>; }
 
+export interface MailFolder {
+  id: string;
+  name: string;
+  parentId: string | null;
+  role: string | null;
+  sortOrder: number;
+  total: number;
+  unread: number;
+  system: boolean;
+}
+interface MailFoldersResponse { folders: MailFolder[]; }
+
 export interface DraftInput {
   accountId: string;
   to?: string[];
@@ -267,8 +279,11 @@ export const api = {
   updateWorkspace: (name: string) => patch<Pick<SetupState, "workspace" | "currentStep">>("/api/setup/workspace", { name }),
   addSetupDomain: (domain: string) => post<Pick<SetupState, "domain" | "currentStep">>("/api/setup/domain", { domain }, setupProvisioningTimeout),
   accounts: () => cachedGet<AccountsResponse>("/mail/accounts", 15_000, 120_000).then((r) => r.accounts),
-  messages: (accountId: string, mailbox: string, limit = 50, offset = 0) => { activeMailAccountId = accountId; return cachedGet<MessagesResponse>(`/mail/messages?accountId=${accountId}&mailbox=${mailbox}&limit=${limit}&offset=${offset}`, 4_000, 30_000).then((r) => r.messages); },
+  messages: (accountId: string, mailbox: string, limit = 50, offset = 0) => { activeMailAccountId = accountId; return cachedGet<MessagesResponse>(`/mail/messages?accountId=${accountId}&mailbox=${encodeURIComponent(mailbox)}&limit=${limit}&offset=${offset}`, 4_000, 30_000).then((r) => r.messages); },
   mailboxStats: (accountId: string) => { activeMailAccountId = accountId; return cachedGet<MailboxStatsResponse>(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`, 5_000, 30_000).then((r) => r.folders); },
+  folders: (accountId: string) => { activeMailAccountId = accountId; return cachedGet<MailFoldersResponse>(`/mail/folders?accountId=${encodeURIComponent(accountId)}`, 5_000, 30_000).then((r) => r.folders); },
+  createFolder: async (accountId: string, name: string, parentId?: string | null) => { const result = await post<{ folder: MailFolder }>("/mail/folders", { accountId, name, parentId: parentId ?? null }, interactiveTimeout); clearAccountMailCache(accountId); return result.folder; },
+  updateFolder: async (accountId: string, id: string, patchBody: { name?: string; parentId?: string | null }) => { const result = await patch<{ folder: MailFolder }>(`/mail/folders/${encodeURIComponent(id)}`, { accountId, ...patchBody }, interactiveTimeout); clearAccountMailCache(accountId); return result.folder; },
   message: (accountId: string, engineId: string) => { activeMailAccountId = accountId; return cachedGet<FullMessage>(messageDetailKey(accountId, engineId), 30_000, 5 * 60_000); },
   prefetchActiveMessage: (engineId: string) => { if (!activeMailAccountId) return; void cachedGet<FullMessage>(messageDetailKey(activeMailAccountId, engineId), 30_000, 5 * 60_000).catch(() => undefined); },
   read: async (accountId: string, engineId: string, seen: boolean) => { const result = await post(`/mail/messages/${engineId}/read`, { accountId, seen }); mutateCachedMessages(accountId, engineId, { read: seen }); readCache.delete(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`); return result; },
