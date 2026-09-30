@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { FOLDERS, FOLDER_ICON, type Folder } from "../folders";
 import type { MailFolder } from "../../api";
 import { CalendarDays, ContactRound, Folder as FolderIcon, FolderPlus, Plus } from "lucide-react";
@@ -7,33 +8,36 @@ const childrenOf = (folders: MailFolder[], parentId: string | null) => folders
   .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 
 export function FolderNav({ folder, counts, customFolders = [], collapsed, section = "mail", onSelect, onPrefetch, onCreateFolder }: {
-  folder: string;
-  counts: Record<string, { total: number; unread: number }>;
+  folder: Folder;
+  counts: Record<Folder, { total: number; unread: number }>;
   customFolders?: MailFolder[];
   collapsed: boolean;
   section?: "mail" | "contacts" | "calendar" | "settings";
-  onSelect: (folder: string) => void;
-  onPrefetch?: (folder: string) => void;
+  onSelect: (folder: Folder) => void;
+  onPrefetch?: (folder: Folder) => void;
   onCreateFolder?: (parentId: string | null) => void;
 }) {
-  const renderCustom = (parentId: string | null, depth = 0): React.ReactNode => childrenOf(customFolders, parentId).map((item) => <div key={item.id}>
-    <div style={{ display: "flex", alignItems: "center", paddingLeft: collapsed ? 0 : depth * 16 }}>
-      <button
-        className={`gsw-folder ${folder === item.name ? "active" : ""}`}
-        style={{ flex: 1, minWidth: 0 }}
-        onPointerEnter={() => onPrefetch?.(item.name)}
-        onFocus={() => onPrefetch?.(item.name)}
-        onClick={() => onSelect(item.name)}
-        title={collapsed ? item.name : undefined}
-      >
-        <span className="gsw-folder-icon" aria-hidden="true"><FolderIcon size={18} strokeWidth={1.75} /></span>
-        <span>{item.name}</span>
-        {item.total > 0 && <span className="gsw-badge">{item.total}</span>}
-      </button>
-      {!collapsed && onCreateFolder && <button className="gsw-icon-btn" style={{ width: 28, height: 28, flex: "0 0 auto" }} onClick={() => onCreateFolder(item.id)} aria-label={`Add subfolder to ${item.name}`} title="Add subfolder"><Plus size={14} /></button>}
-    </div>
-    {renderCustom(item.id, depth + 1)}
-  </div>);
+  const renderCustom = (parentId: string | null, depth = 0): ReactNode => childrenOf(customFolders, parentId).map((item) => {
+    const customName = item.name as Folder;
+    return <div key={item.id}>
+      <div style={{ display: "flex", alignItems: "center", paddingLeft: collapsed ? 0 : depth * 16 }}>
+        <button
+          className={`gsw-folder ${folder === customName ? "active" : ""}`}
+          style={{ flex: 1, minWidth: 0 }}
+          onPointerEnter={() => onPrefetch?.(customName)}
+          onFocus={() => onPrefetch?.(customName)}
+          onClick={() => onSelect(customName)}
+          title={collapsed ? item.name : undefined}
+        >
+          <span className="gsw-folder-icon" aria-hidden="true"><FolderIcon size={18} strokeWidth={1.75} /></span>
+          <span>{item.name}</span>
+          {item.total > 0 && <span className="gsw-badge">{item.total}</span>}
+        </button>
+        {!collapsed && onCreateFolder && <button className="gsw-icon-btn" style={{ width: 28, height: 28, flex: "0 0 auto" }} onClick={() => onCreateFolder(item.id)} aria-label={`Add subfolder to ${item.name}`} title="Add subfolder"><Plus size={14} /></button>}
+      </div>
+      {renderCustom(item.id, depth + 1)}
+    </div>;
+  });
 
   return (
     <nav className="gsw-folder-nav" aria-label="Folders">
