@@ -1,6 +1,5 @@
 import { api, type MessageSummary } from "../../api";
 import { Archive, Ellipsis, Mail, MailOpen, RotateCcw, Star, Trash2 } from "lucide-react";
-import type { Folder } from "../folders";
 import { SenderAvatar } from "./SenderAvatar";
 
 const rowDate = (value: string) => new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -9,7 +8,7 @@ export function MessageRow({ message, active, selected, folder, onOpen, onPrefet
   message: MessageSummary;
   active: boolean;
   selected: boolean;
-  folder: Folder;
+  folder: string;
   onOpen: () => void;
   onPrefetch?: () => void;
   onSelect: () => void;
