@@ -17,7 +17,6 @@ export interface RelayAttachment {
 export interface OutboundJob {
   id: string;
   accountId: string;
-  engineMessageId?: string | undefined;
   fromAddress: string;
   to: string[];
   cc?: string[] | undefined;
