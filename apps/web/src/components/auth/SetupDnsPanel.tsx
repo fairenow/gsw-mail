@@ -48,13 +48,13 @@ function recordLabel(record: DnsRecord) {
 }
 
 function optionalReason(record: DnsRecord) {
-  if (record.source === "stalwart" && (record.purpose === "spf" || record.purpose === "dkim")) {
-    return `${record.purpose.toUpperCase()} is optional here because outbound mail is handled by Resend. Stalwart does not need this record to pass inbound-domain verification.`;
+  if (record.purpose === "spf" || record.purpose === "dkim") {
+    return `${record.purpose.toUpperCase()} authenticates outbound mail. Publish it before using direct outbound delivery, even when it is not required to complete the current setup step.`;
   }
   if (record.purpose === "other") {
-    return "This record supports extra mail-client, MTA-STS, TLS reporting, or autodiscovery behavior. It is useful, but it does not block domain verification or mailbox creation.";
+    return "This record supports extra mail-client, transport security, reporting, or autodiscovery behavior. It is useful, but it does not block domain verification or mailbox creation.";
   }
-  return "This record is recommended for the provider integration but is not required to finish domain verification.";
+  return "This record is recommended for your mail configuration but is not required to finish domain verification.";
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 30_000) {
@@ -63,7 +63,7 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs =
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } catch (error) {
-    if (controller.signal.aborted) throw new Error("Provider setup took too long. Please retry.");
+    if (controller.signal.aborted) throw new Error("Mail setup took too long. Please retry.");
     throw error;
   } finally {
     window.clearTimeout(timeout);
@@ -131,7 +131,7 @@ export function SetupDnsPanel({ organizationId, domainId, domainName, onVerified
       } else if (refreshed?.expectedRecords?.length) {
         setMessage("DNS records are ready. Publish the required records below, then run Check DNS.");
       } else {
-        setMessage("The domain was saved, but its DNS requirements are not available yet. Retry provider provisioning.");
+        setMessage("The domain was saved, but its DNS requirements are not available yet. Retry mail provisioning.");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not prepare DNS records.");
@@ -174,12 +174,7 @@ export function SetupDnsPanel({ organizationId, domainId, domainName, onVerified
       {domain?.status === "verified" && <span className="gsw-status-pill">Verified</span>}
     </div>
 
-    {domain && <div className="gsw-setup-dns-status">
-      <span><b>Stalwart</b>{domain.stalwartDomainId ? "Provisioned" : "Needs provisioning"}</span>
-      <span><b>Outbound</b>{domain.resendDomainId ? "Resend connected" : "Needs setup"}</span>
-    </div>}
-
-    {domain?.lastError && <div className="gsw-setup-dns-note"><strong>Provider setup note</strong><span>{domain.lastError}</span></div>}
+    {domain?.lastError && <div className="gsw-setup-dns-note"><strong>Mail setup note</strong><span>{domain.lastError}</span></div>}
     {error && <div className="gsw-login-error">{error}</div>}
     {message && <div className="gsw-setup-dns-message">{message}</div>}
 
@@ -191,7 +186,7 @@ export function SetupDnsPanel({ organizationId, domainId, domainName, onVerified
         {visibleRecords.map((record, index) => <div className={`gsw-setup-dns-record ${record.required ? "is-required" : "is-optional"}`} key={`${record.source}-${record.type}-${record.name}-${index}`}>
           <div className="gsw-setup-dns-record-title">
             <strong>{recordLabel(record)}</strong>
-            <small className={record.required ? "gsw-dns-required" : "gsw-dns-optional"}>{record.required ? "Required" : "Optional"} · {record.source}{!record.required && <span className="gsw-dns-info" title={optionalReason(record)} aria-label={optionalReason(record)}>ⓘ</span>}</small>
+            <small className={record.required ? "gsw-dns-required" : "gsw-dns-optional"}>{record.required ? "Required" : "Optional"}{!record.required && <span className="gsw-dns-info" title={optionalReason(record)} aria-label={optionalReason(record)}>ⓘ</span>}</small>
           </div>
           <DnsField label="Host / Name" value={record.name} onCopy={(value) => void copy(value)} />
           {record.type === "MX" && <DnsField label="Priority" value={String(record.priority ?? 0)} onCopy={(value) => void copy(value)} />}
@@ -199,8 +194,8 @@ export function SetupDnsPanel({ organizationId, domainId, domainName, onVerified
         </div>)}
       </div>
       {optionalRecords.length > 0 && <button className="gsw-btn gsw-btn-quiet gsw-btn-block" type="button" onClick={() => setShowMore((value) => !value)}>{showMore ? "Hide Optional DNS Values" : `Show More DNS Values (${optionalRecords.length})`}</button>}
-      <p className="gsw-setup-note"><strong>{requiredRecords.length} required record{requiredRecords.length === 1 ? "" : "s"}</strong> must match before this domain is ready. SPF/DKIM from Stalwart and the additional service records remain optional while Resend handles outbound mail.</p>
-    </> : <p className="gsw-setup-note">DNS records are not available yet. Prepare the domain to retrieve Stalwart and outbound-mail requirements.</p>}
+      <p className="gsw-setup-note"><strong>{requiredRecords.length} required record{requiredRecords.length === 1 ? "" : "s"}</strong> must match before this domain is ready. SPF and DKIM authenticate outbound mail; additional service records can remain optional.</p>
+    </> : <p className="gsw-setup-note">DNS records are not available yet. Prepare the domain to retrieve your mail configuration requirements.</p>}
 
     <button className="gsw-btn gsw-btn-primary gsw-btn-block" disabled={busy} onClick={() => void (records.length ? verify() : prepare())}>{busy ? (records.length ? "Checking DNS…" : "Preparing DNS…") : records.length ? "Check DNS" : "Prepare DNS"}</button>
   </div>;
