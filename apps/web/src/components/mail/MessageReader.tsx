@@ -2,7 +2,6 @@ import { plainTextToHtml, sanitizeHtml } from "../../lib/richText";
 import { api, type Contact, type FullMessage } from "../../api";
 import { Archive, ArrowLeft, Copy, Download, Ellipsis, Forward, Mail, Paperclip, Reply, RotateCcw, Star, Trash2, UserPlus } from "lucide-react";
 import { useState } from "react";
-import type { Folder } from "../folders";
 import { SenderAvatar } from "./SenderAvatar";
 
 const fmtDate = (value: string) => new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -10,7 +9,7 @@ export function MessageReader({ message, accountId, accountAddress, folder, onBa
   message: FullMessage;
   accountId?: string;
   accountAddress?: string;
-  folder: Folder;
+  folder: string;
   onBack: () => void;
   onReply: () => void;
   onReplyAll: () => void;
