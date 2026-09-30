@@ -10,6 +10,7 @@ import admin from "./routes/admin.js";
 import aliases from "./routes/aliases.js";
 import attachments from "./routes/attachments.js";
 import drafts from "./routes/drafts.js";
+import folders from "./routes/folders.js";
 import messages from "./routes/messages.js";
 import mailActions from "./routes/mailActions.js";
 import search from "./routes/search.js";
@@ -89,6 +90,7 @@ export function buildApp() {
   app.register(accounts);
   app.register(aliases);
   app.register(messages);
+  app.register(folders);
   app.register(attachments);
   app.register(mailActions);
   app.register(threads);
