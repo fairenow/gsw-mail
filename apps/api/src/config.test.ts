@@ -14,13 +14,14 @@ const runProductionConfig = (overrides: Record<string, string>): { code: number;
     "MAIL_ENGINE",
     "STALWART_ADMIN_TOKEN",
     "STALWART_JMAP_URL",
-     "BETTER_AUTH_STALWART_CLIENT_ID",
-     "BETTER_AUTH_STALWART_CLIENT_SECRET",
-     "BETTER_AUTH_URL",
+    "BETTER_AUTH_STALWART_CLIENT_ID",
+    "BETTER_AUTH_STALWART_CLIENT_SECRET",
+    "BETTER_AUTH_URL",
     "DELIVERY_WEBHOOK_SECRET",
     "OIDC_ISSUER",
     "OIDC_CLIENT_ID",
     "BETTER_AUTH_SECRET",
+    "OUTBOUND_RELAY",
     "RESEND_API_KEY",
   ]) {
     delete env[key];
@@ -41,9 +42,9 @@ const prodOkVars = {
   MAIL_ENGINE: "stalwart",
   STALWART_ADMIN_TOKEN: "prod-stalwart-key-2026",
   STALWART_JMAP_URL: "https://mx1.guidedstepswellness.com",
-   BETTER_AUTH_STALWART_CLIENT_ID: "stalwart-resource-client",
-   BETTER_AUTH_STALWART_CLIENT_SECRET: "prod-oauth-client-key-2026",
-   BETTER_AUTH_URL: "https://mail.guidedstepswellness.com",
+  BETTER_AUTH_STALWART_CLIENT_ID: "stalwart-resource-client",
+  BETTER_AUTH_STALWART_CLIENT_SECRET: "prod-oauth-client-key-2026",
+  BETTER_AUTH_URL: "https://mail.guidedstepswellness.com",
   DELIVERY_WEBHOOK_SECRET: "whsec_3f4a9c1b8e7d2f6a",
   OIDC_ISSUER: "https://identity.guidedstepswellness.com",
   OIDC_CLIENT_ID: "gsw-mail-web",
@@ -67,6 +68,18 @@ test("production refuses to start without MAIL_ENGINE", () => {
 test("a fully-specified valid configuration starts", () => {
   const valid = runProductionConfig(prodOkVars);
   assert.equal(valid.code, 0);
+});
+
+test("production accepts Stalwart as the outbound relay without a Resend API key", () => {
+  const { RESEND_API_KEY: _resend, ...stalwartVars } = prodOkVars;
+  const valid = runProductionConfig({ ...stalwartVars, OUTBOUND_RELAY: "stalwart" });
+  assert.equal(valid.code, 0);
+});
+
+test("production refuses an unsupported outbound relay", () => {
+  const { code, stderr } = runProductionConfig({ ...prodOkVars, OUTBOUND_RELAY: "other" });
+  assert.notEqual(code, 0);
+  assert.match(stderr, /unsupported OUTBOUND_RELAY/);
 });
 
 test("production refuses a placeholder admin token", () => {
