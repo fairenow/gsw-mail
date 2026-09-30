@@ -6,6 +6,7 @@ import { domainDnsState, type DomainDnsRecord, type ObservedDnsRecord } from "..
 import { domains } from "../db/schema.js";
 
 const STALWART_USING = ["urn:ietf:params:jmap:core", "urn:stalwart:jmap"];
+export const DEFAULT_DMARC_POLICY = "v=DMARC1; p=none; adkim=r; aspf=r; pct=100";
 
 type StalwartDomain = { id: string; name: string; dnsZoneFile?: string | null };
 type ProviderSync = { stalwartDomainId: string | null; stalwartDnsZoneFile: string | null; resendDomainId: string | null; records: DomainDnsRecord[]; warnings: string[] };
@@ -253,15 +254,44 @@ function uniqueRecords(records: DomainDnsRecord[]): DomainDnsRecord[] {
   });
 }
 
+export function normalizeManagedDnsRecords(
+  records: DomainDnsRecord[],
+  domain: string,
+  options: { includeResend?: boolean } = {},
+): DomainDnsRecord[] {
+  const includeResend = options.includeResend ?? config.outbound.relay === "resend";
+  const active = records.filter((record) => {
+    if (!includeResend && record.source === "resend") return false;
+    if (record.purpose === "dmarc") return false;
+    return true;
+  });
+  active.push({
+    source: "gsw",
+    type: "TXT",
+    name: `_dmarc.${normalizedHost(domain)}`,
+    value: DEFAULT_DMARC_POLICY,
+    purpose: "dmarc",
+    required: true,
+  });
+  return uniqueRecords(active);
+}
+
 async function syncProviders(name: string): Promise<ProviderSync> {
   const warnings: string[] = [];
   let stalwart: StalwartDomain | null = null;
   let resend: ResendDomainShape | null = null;
   try { stalwart = await ensureStalwartDomain(name); } catch (error) { warnings.push(error instanceof Error ? error.message : "Stalwart domain sync failed"); }
   try { resend = await ensureResendDomain(name); } catch (error) { warnings.push(error instanceof Error ? error.message : "Resend domain sync failed"); }
-  const records = uniqueRecords([...parseStalwartZoneFile(stalwart?.dnsZoneFile, name), ...resendRecords(resend)]);
+  const rawRecords = [...parseStalwartZoneFile(stalwart?.dnsZoneFile, name), ...resendRecords(resend)];
+  const records = normalizeManagedDnsRecords(rawRecords, name);
   if (!stalwart) throw new Error(warnings.join(" · ") || "Stalwart domain sync failed");
-  return { stalwartDomainId: stalwart.id, stalwartDnsZoneFile: stalwart.dnsZoneFile ?? null, resendDomainId: resend?.id ?? null, records, warnings };
+  return {
+    stalwartDomainId: stalwart.id,
+    stalwartDnsZoneFile: stalwart.dnsZoneFile ?? null,
+    resendDomainId: config.outbound.relay === "resend" ? resend?.id ?? null : null,
+    records,
+    warnings,
+  };
 }
 
 async function observe(record: DomainDnsRecord): Promise<ObservedDnsRecord> {
