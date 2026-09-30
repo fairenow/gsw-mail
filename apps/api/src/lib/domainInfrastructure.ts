@@ -173,13 +173,54 @@ export function stripZoneComment(raw: string): string {
   return raw.trim();
 }
 
+function parenthesisDelta(raw: string): number {
+  let quoted = false;
+  let escaped = false;
+  let delta = 0;
+  for (let i = 0; i < raw.length; i += 1) {
+    const ch = raw[i]!;
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (quoted) continue;
+    if (ch === "(") delta += 1;
+    if (ch === ")") delta -= 1;
+  }
+  return delta;
+}
+
+export function logicalZoneRecords(zoneFile: string): string[] {
+  const records: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (const rawLine of zoneFile.split(/\r?\n/)) {
+    const line = stripZoneComment(rawLine);
+    if (!line) continue;
+    current = current ? `${current} ${line}` : line;
+    depth += parenthesisDelta(line);
+    if (depth <= 0) {
+      records.push(current.trim());
+      current = "";
+      depth = 0;
+    }
+  }
+  return records;
+}
+
 export function parseStalwartZoneFile(zoneFile: string | null | undefined, domain: string): DomainDnsRecord[] {
   if (!zoneFile) return [];
   let origin = normalizedHost(domain);
   const records: DomainDnsRecord[] = [];
-  for (const rawLine of zoneFile.split(/\r?\n/)) {
-    const line = stripZoneComment(rawLine);
-    if (!line) continue;
+  for (const line of logicalZoneRecords(zoneFile)) {
     const originMatch = line.match(/^\$ORIGIN\s+(.+)$/i);
     if (originMatch) { origin = normalizedHost(originMatch[1]!); continue; }
     const match = line.match(/^(\S+)\s+(?:(\d+)\s+)?(?:IN\s+)?(MX|TXT|CNAME)\s+(.+)$/i);
@@ -254,6 +295,13 @@ function uniqueRecords(records: DomainDnsRecord[]): DomainDnsRecord[] {
   });
 }
 
+function validDkimValue(value: string): boolean {
+  const trimmed = value.trim();
+  if (!/^v=DKIM1(?:;|$)/i.test(trimmed)) return false;
+  const publicKey = trimmed.match(/(?:^|;)\s*p=([^;\s]+)/i)?.[1]?.trim();
+  return Boolean(publicKey);
+}
+
 export function normalizeManagedDnsRecords(
   records: DomainDnsRecord[],
   domain: string,
@@ -263,6 +311,7 @@ export function normalizeManagedDnsRecords(
   const active = records.filter((record) => {
     if (!includeResend && record.source === "resend") return false;
     if (record.purpose === "dmarc") return false;
+    if (record.purpose === "dkim" && !validDkimValue(record.value)) return false;
     return true;
   });
   active.push({
