@@ -1,9 +1,8 @@
 import { Archive, Mail, MailOpen, RefreshCw, RotateCcw, Star, Trash2, X } from "lucide-react";
 import type { BulkMailAction } from "../../api";
-import type { Folder } from "../folders";
 
 export function MessageListHeader({ folder, count, selectedCount, allSelected, onToggleSelectAll, onClearSelection, onBulkAction, onRefresh, onEmptyTrash }: {
-  folder: Folder;
+  folder: string;
   count: number;
   selectedCount: number;
   allSelected: boolean;
