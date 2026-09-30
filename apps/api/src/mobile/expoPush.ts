@@ -2,6 +2,10 @@ import { listMobilePushDevices, removeMobilePushDevice } from "./pushDevices.js"
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 const EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
+const LEGACY_MAIL_SOUND = "gsw-mail-gong.wav";
+const HARMONY_MAIL_SOUND = "gsw_mail_harmony.wav";
+const LEGACY_MAIL_CHANNEL = "mail-gong";
+const HARMONY_MAIL_CHANNEL = "mail-harmony";
 
 type PushData = Record<string, string | number | boolean | null>;
 type PushCategory = "mail" | "calendar" | "general";
@@ -100,17 +104,19 @@ export async function sendPushToUser(input: {
   }
 
   logPush("PUSH_TOKENS_FOUND", { traceId: input.traceId, userId: input.userId, category, tokens: devices.map((device) => maskPushToken(device.expoPushToken)) });
+  const resolvedSound = input.sound === LEGACY_MAIL_SOUND ? HARMONY_MAIL_SOUND : input.sound ?? "default";
+  const resolvedChannelId = input.channelId === LEGACY_MAIL_CHANNEL ? HARMONY_MAIL_CHANNEL : input.channelId;
   const messages = devices.map((device) => ({
     to: device.expoPushToken,
     title: input.title,
     ...(input.subtitle ? { subtitle: input.subtitle } : {}),
     body: input.body,
-    sound: input.sound ?? "default",
+    sound: resolvedSound,
     ...(typeof input.badge === "number" ? { badge: input.badge } : {}),
-    ...(input.channelId ? { channelId: input.channelId } : {}),
+    ...(resolvedChannelId ? { channelId: resolvedChannelId } : {}),
     ...(input.data ? { data: input.data } : {}),
   }));
-  logPush("PUSH_REQUEST_SENT", { traceId: input.traceId, userId: input.userId, category, messageCount: messages.length, kind: input.data?.kind });
+  logPush("PUSH_REQUEST_SENT", { traceId: input.traceId, userId: input.userId, category, messageCount: messages.length, kind: input.data?.kind, sound: resolvedSound, channelId: resolvedChannelId });
 
   let response: Response;
   try {
