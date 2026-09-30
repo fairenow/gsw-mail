@@ -136,9 +136,8 @@ export function createStalwartRelay(): OutboundRelay {
         });
         const session = await client.session();
         const accountId = client.resolveAccountId(session, job.fromAddress);
-        const submissionAccountId = session.primaryAccounts["urn:ietf:params:jmap:submission"] ?? accountId;
         const identityResponse = await client.call([
-          ["Identity/get", { accountId: submissionAccountId, ids: null }, "i1"],
+          ["Identity/get", { accountId, ids: null }, "i1"],
         ]);
         const identities = (identityResponse[0]?.[1]?.list ?? []) as { id?: unknown; email?: unknown }[];
         const identity = identities.find(
@@ -152,7 +151,7 @@ export function createStalwartRelay(): OutboundRelay {
           [
             "EmailSubmission/set",
             {
-              accountId: submissionAccountId,
+              accountId,
               create: {
                 outbound: {
                   emailId,
