@@ -1,4 +1,4 @@
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { outboundDeliveryEvents, outboundMessages, outboundRecipients } from "../db/schema.js";
 
@@ -37,6 +37,12 @@ function emailAddresses(value: unknown): string[] {
   return [...values];
 }
 
+function sameAddressSet(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+  const expected = new Set(left.map((value) => value.toLowerCase()));
+  return right.every((value) => expected.has(value.toLowerCase()));
+}
+
 function messageIdCandidates(value: unknown): string[] {
   const raw = firstString(value);
   if (!raw) return [];
@@ -62,6 +68,34 @@ function eventDetail(eventType: string, data: Record<string, unknown>): Record<s
   return detail;
 }
 
+async function findRecentOutboundByEnvelope(data: Record<string, unknown>): Promise<string | null> {
+  const sender = emailAddresses(data.from)[0];
+  const eventRecipients = emailAddresses(data.to);
+  if (!sender || !eventRecipients.length) return null;
+
+  const candidates = await db
+    .select({ id: outboundMessages.id })
+    .from(outboundMessages)
+    .where(and(
+      sql`lower(${outboundMessages.fromAddress}) = ${sender.toLowerCase()}`,
+      gte(outboundMessages.createdAt, sql`now() - interval '10 minutes'`),
+      inArray(outboundMessages.transportStatus, ["sending", "accepted"]),
+    ))
+    .orderBy(desc(outboundMessages.createdAt))
+    .limit(12);
+
+  const matches: string[] = [];
+  for (const candidate of candidates) {
+    const rows = await db
+      .select({ email: outboundRecipients.email })
+      .from(outboundRecipients)
+      .where(eq(outboundRecipients.outboundMessageId, candidate.id));
+    const candidateRecipients = rows.map((row) => row.email.toLowerCase());
+    if (sameAddressSet(eventRecipients, candidateRecipients)) matches.push(candidate.id);
+  }
+  return matches.length === 1 ? matches[0]! : null;
+}
+
 async function findOutboundMessageId(data: Record<string, unknown>): Promise<string | null> {
   const candidates = messageIdCandidates(data.messageId);
   if (candidates.length) {
@@ -74,13 +108,16 @@ async function findOutboundMessageId(data: Record<string, unknown>): Promise<str
   }
 
   const queueId = firstString(data.queueId);
-  if (!queueId) return null;
-  const rows = await db
-    .select({ outboundMessageId: outboundDeliveryEvents.outboundMessageId })
-    .from(outboundDeliveryEvents)
-    .where(sql`${outboundDeliveryEvents.detail}->>'queueId' = ${queueId}`)
-    .limit(2);
-  return rows.length === 1 ? rows[0]!.outboundMessageId : null;
+  if (queueId) {
+    const rows = await db
+      .select({ outboundMessageId: outboundDeliveryEvents.outboundMessageId })
+      .from(outboundDeliveryEvents)
+      .where(sql`${outboundDeliveryEvents.detail}->>'queueId' = ${queueId}`)
+      .limit(2);
+    if (rows.length === 1) return rows[0]!.outboundMessageId;
+  }
+
+  return findRecentOutboundByEnvelope(data);
 }
 
 async function recipientTargets(outboundMessageId: string, data: Record<string, unknown>): Promise<string[]> {
