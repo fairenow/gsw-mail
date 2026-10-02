@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, KeyRound, LogOut, Mail, Plus, Settings, Users } from "lucide-react";
 import { getSession, listDeviceSessions, logout, switchDeviceSession, type DeviceSession } from "../../auth";
 import type { Account } from "../../api";
+import { getRememberedIdentities, setAuthPrefillEmail } from "../../lib/rememberedIdentities";
 import { SenderAvatar } from "./SenderAvatar";
 
 export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { account: Account | null; accounts: Account[]; profileImageUrl?: string; onSelect: (id: string) => void }) {
@@ -9,6 +10,7 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
   const [deviceSessions, setDeviceSessions] = useState<DeviceSession[]>([]);
   const [currentAuthUserId, setCurrentAuthUserId] = useState<string | null>(null);
   const [switching, setSwitching] = useState<string | null>(null);
+  const remembered = useMemo(() => getRememberedIdentities(), [open]);
 
   useEffect(() => {
     let cancelled = false;
@@ -29,6 +31,13 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
     catch { setSwitching(null); }
   };
 
+  const liveUserIds = new Set(deviceSessions.map((session) => session.user.id));
+  const signedOut = remembered.filter((identity) => !liveUserIds.has(identity.id));
+  const reauthenticate = (email: string) => {
+    setAuthPrefillEmail(email);
+    window.location.assign("/sign-in#use-another-account");
+  };
+
   return (
     <div className="gsw-avatar-wrap">
       <button className="gsw-account-trigger" onClick={() => setOpen((value) => !value)} aria-label="Open account menu" aria-expanded={open}>
@@ -44,7 +53,7 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
           </div>
 
           <div className="gsw-account-menu-rule" />
-          {deviceSessions.length > 0 && <div style={{ padding: "4px 14px 6px", fontSize: 11, fontWeight: 700, opacity: 0.58, letterSpacing: ".06em", textTransform: "uppercase" }}>GSW accounts</div>}
+          {(deviceSessions.length > 0 || signedOut.length > 0) && <div style={{ padding: "4px 14px 6px", fontSize: 11, fontWeight: 700, opacity: 0.58, letterSpacing: ".06em", textTransform: "uppercase" }}>GSW accounts</div>}
           {deviceSessions.map((session) => {
             const current = session.user.id === currentAuthUserId;
             return (
@@ -55,6 +64,13 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
               </button>
             );
           })}
+          {signedOut.map((identity) => (
+            <button key={identity.id} className="gsw-account-menu-item" onClick={() => reauthenticate(identity.email)}>
+              <SenderAvatar name={identity.name} email={identity.email} imageUrl={identity.image ?? undefined} />
+              <span style={{ minWidth: 0, flex: 1, textAlign: "left" }}><strong>{identity.name || identity.email}</strong><span>{identity.email}</span></span>
+              <span style={{ fontSize: 11, opacity: 0.58 }}>Signed out</span>
+            </button>
+          ))}
           <a className="gsw-menu-action" href="/sign-in#use-another-account" onClick={() => setOpen(false)}><Plus size={16} strokeWidth={1.75} aria-hidden="true" />Add another account</a>
 
           <div className="gsw-account-menu-rule" />
