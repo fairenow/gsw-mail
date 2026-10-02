@@ -1,0 +1,65 @@
+name: Production Auth Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/production-auth-smoke.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify production health and OAuth boundary
+        shell: bash
+        env:
+          BASE_URL: https://mail.guidedstepswellness.com
+        run: |
+          set -euo pipefail
+
+          status() {
+            curl --silent --show-error --output "$2" --write-out '%{http_code}' "$1"
+          }
+
+          health_body=$(mktemp)
+          health_code=$(status "$BASE_URL/health" "$health_body")
+          test "$health_code" = "200"
+          echo "health: $health_code"
+
+          discovery_body=$(mktemp)
+          discovery_code=$(status "$BASE_URL/api/auth/.well-known/openid-configuration" "$discovery_body")
+          test "$discovery_code" = "200"
+          python - "$discovery_body" "$BASE_URL" <<'PY'
+          import json, sys
+          path, base = sys.argv[1:]
+          data = json.load(open(path))
+          assert data.get('issuer') == f'{base}/api/auth', data.get('issuer')
+          jwks_uri = data.get('jwks_uri')
+          assert jwks_uri == f'{base}/api/auth/jwks', jwks_uri
+          print('discovery: 200, issuer/jwks_uri verified')
+          PY
+
+          jwks_body=$(mktemp)
+          jwks_code=$(status "$BASE_URL/api/auth/jwks" "$jwks_body")
+          test "$jwks_code" = "200"
+          python - "$jwks_body" <<'PY'
+          import json, sys
+          data = json.load(open(sys.argv[1]))
+          keys = data.get('keys') or []
+          assert keys, 'JWKS contains no public keys'
+          assert all('d' not in key for key in keys), 'JWKS exposed a private key parameter'
+          print(f'jwks: 200, {len(keys)} public key(s), no private d parameter')
+          PY
+
+          unauth_body=$(mktemp)
+          unauth_code=$(curl --silent --show-error --output "$unauth_body" --write-out '%{http_code}' "$BASE_URL/api/account/diagnostics")
+          test "$unauth_code" = "401"
+          echo "protected endpoint without auth: $unauth_code"
+
+          external_body=$(mktemp)
+          external_code=$(curl --silent --show-error --output "$external_body" --write-out '%{http_code}' \
+            -H 'Authorization: Bearer phase1-external-client-smoke-token' \
+            "$BASE_URL/api/account/diagnostics")
+          test "$external_code" = "401"
+          echo "protected endpoint with untrusted bearer: $external_code"
