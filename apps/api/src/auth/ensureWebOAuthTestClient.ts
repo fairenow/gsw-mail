@@ -11,12 +11,13 @@ export function webOAuthTestRedirectUri(): string {
 }
 
 export async function ensureWebOAuthTestClient(): Promise<void> {
+  const origin = config.auth.trustedOrigin.replace(/\/$/, "");
   const redirectUri = webOAuthTestRedirectUri();
   const values = {
     redirectUris: [redirectUri],
     scopes: ["openid", "profile", "email"],
-    name: "GSW Mail OAuth Test",
-    uri: `${config.auth.trustedOrigin.replace(/\/$/, "")}/oauth/test`,
+    name: "GSW Mail",
+    uri: `${origin}/#oauth`,
     grantTypes: ["authorization_code"],
     responseTypes: ["code"],
     skipConsent: false,
