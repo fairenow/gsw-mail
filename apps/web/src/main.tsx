@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import "./styles/globals.css";
 import "./styles/auth.css";
 import "./styles/oauth-consent.css";
+import "./styles/oauth-test.css";
 import "./styles/setup-dns.css";
 import "./styles/mail.css";
 import "./styles/scheduled-send.css";
@@ -16,7 +17,7 @@ import "./styles/legal.css";
 import { AuthGate } from "./AuthGate";
 import { App } from "./App";
 
-const publicPath = ["/privacy", "/terms", "/account-deleted"].includes(window.location.pathname);
+const publicPath = ["/privacy", "/terms", "/account-deleted", "/oauth/test", "/oauth/test/callback"].includes(window.location.pathname);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
