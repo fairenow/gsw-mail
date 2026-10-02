@@ -11,6 +11,7 @@ import { MessageListHeader } from "../components/mail/MessageListHeader";
 import { MessageReader } from "../components/mail/MessageReader";
 import { MessageRow } from "../components/mail/MessageRow";
 import { appendDraftAttachments, listDraftAttachments, removeDraftAttachment, type DraftAttachmentMeta } from "../lib/draftAttachments";
+import { browserTimeZone, scheduleDraft, type ScheduleDraftInput } from "../lib/scheduledSend";
 
 type MobileView = "messages" | "reader";
 const pageSize = 50;
@@ -146,12 +147,21 @@ export function MailPage() {
   };
   const selectMessage = async (message: MessageSummary) => {
     if (!account) return;
-    try { const full = await api.message(account.id, message.engineId); if (folder === "Drafts") { openDraft(full); return; } setOpen(full); setMobileView("reader"); if (!message.read) { const timer = window.setTimeout(() => { void api.read(account.id, message.engineId, true).then(() => { setMessages((prev) => prev.map((item) => item.engineId === message.engineId ? { ...item, read: true } : item)); setOpen((current) => current?.engineId === message.engineId ? { ...current, read: true } : current); void loadFolderCounts(account.id); }).catch((err) => setError(err instanceof Error ? err.message : String(err))); readTimers.current.delete(message.engineId); }, 400); readTimers.current.set(message.engineId, timer); } }
+    try { const full = await api.message(account.id, message.engineId); if (folder === "Drafts") { openDraft(full); return; } setOpen(full); setMobileView("reader"); if (!message.read && folder !== "Outbox") { const timer = window.setTimeout(() => { void api.read(account.id, message.engineId, true).then(() => { setMessages((prev) => prev.map((item) => item.engineId === message.engineId ? { ...item, read: true } : item)); setOpen((current) => current?.engineId === message.engineId ? { ...current, read: true } : current); void loadFolderCounts(account.id); }).catch((err) => setError(err instanceof Error ? err.message : String(err))); readTimers.current.delete(message.engineId); }, 400); readTimers.current.set(message.engineId, timer); } }
     catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   };
-  const toggleRead = async (message: MessageSummary | FullMessage) => { if (!account) return; const read = !message.read; const pending = readTimers.current.get(message.engineId); if (pending !== undefined) { window.clearTimeout(pending); readTimers.current.delete(message.engineId); } try { await api.read(account.id, message.engineId, read); setMessages((prev) => prev.map((item) => item.engineId === message.engineId ? { ...item, read } : item)); setOpen((current) => current?.engineId === message.engineId ? { ...current, read } : current); void loadFolderCounts(account.id); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
-  const toggleFlag = async (message: MessageSummary | FullMessage) => { if (!account) return; const flagged = !message.flagged; try { await api.flag(account.id, message.engineId, flagged); setMessages((prev) => prev.map((item) => item.engineId === message.engineId ? { ...item, flagged } : item)); setOpen((current) => current?.engineId === message.engineId ? { ...current, flagged } : current); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
-  const runAction = async (action: "archive" | "trash", engineId: string) => { if (!account) return; const message = messages.find((item) => item.engineId === engineId) ?? (open?.engineId === engineId ? open : undefined); try { await (action === "archive" ? api.archive(account.id, engineId) : api.trash(account.id, engineId)); setMessages((prev) => prev.filter((item) => item.engineId !== engineId)); adjustFolderCounts(folder, action === "archive" ? "Archive" : "Trash", message); setOpen(null); setMobileView("messages"); void loadFolderCounts(account.id); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
+  const toggleRead = async (message: MessageSummary | FullMessage) => { if (!account || folder === "Outbox") return; const read = !message.read; const pending = readTimers.current.get(message.engineId); if (pending !== undefined) { window.clearTimeout(pending); readTimers.current.delete(message.engineId); } try { await api.read(account.id, message.engineId, read); setMessages((prev) => prev.map((item) => item.engineId === message.engineId ? { ...item, read } : item)); setOpen((current) => current?.engineId === message.engineId ? { ...current, read } : current); void loadFolderCounts(account.id); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
+  const toggleFlag = async (message: MessageSummary | FullMessage) => { if (!account || folder === "Outbox") return; const flagged = !message.flagged; try { await api.flag(account.id, message.engineId, flagged); setMessages((prev) => prev.map((item) => item.engineId === message.engineId ? { ...item, flagged } : item)); setOpen((current) => current?.engineId === message.engineId ? { ...current, flagged } : current); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
+  const cancelOutbox = async (engineId: string) => {
+    if (!account || !engineId.startsWith("outbox:")) return;
+    try {
+      await api.cancelSend(engineId.slice("outbox:".length));
+      setMessages((current) => current.filter((item) => item.engineId !== engineId));
+      setOpen(null); setMobileView("messages");
+      void loadFolderCounts(account.id);
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+  };
+  const runAction = async (action: "archive" | "trash", engineId: string) => { if (!account) return; if (folder === "Outbox") { await cancelOutbox(engineId); return; } const message = messages.find((item) => item.engineId === engineId) ?? (open?.engineId === engineId ? open : undefined); try { await (action === "archive" ? api.archive(account.id, engineId) : api.trash(account.id, engineId)); setMessages((prev) => prev.filter((item) => item.engineId !== engineId)); adjustFolderCounts(folder, action === "archive" ? "Archive" : "Trash", message); setOpen(null); setMobileView("messages"); void loadFolderCounts(account.id); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
   const restoreMessage = async (engineId: string) => { if (!account) return; const message = messages.find((item) => item.engineId === engineId) ?? (open?.engineId === engineId ? open : undefined); try { await api.move(account.id, engineId, "Inbox"); setMessages((prev) => prev.filter((item) => item.engineId !== engineId)); adjustFolderCounts(folder, "Inbox", message); setOpen(null); setMobileView("messages"); void loadFolderCounts(account.id); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
   const destroyMessage = async (engineId: string) => { if (!account || !window.confirm("Permanently delete this message?\nThis cannot be undone.")) return; const message = messages.find((item) => item.engineId === engineId) ?? (open?.engineId === engineId ? open : undefined); try { await api.destroy(account.id, engineId); setMessages((prev) => prev.filter((item) => item.engineId !== engineId)); adjustFolderCounts(folder, undefined, message); setOpen(null); setMobileView("messages"); void loadFolderCounts(account.id); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
   const emptyTrash = async () => { if (!account || !window.confirm("Permanently delete all messages in Trash?\nThis cannot be undone.")) return; try { await api.emptyTrash(account.id); setMessages([]); setFolderCounts((current) => ({ ...current, Trash: { total: 0, unread: 0 } })); setOpen(null); setSelectedIds(new Set()); void loadFolderCounts(account.id); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
@@ -159,7 +169,7 @@ export function MailPage() {
   const toggleSelected = (engineId: string) => setSelectedIds((current) => { const next = new Set(current); if (next.has(engineId)) next.delete(engineId); else next.add(engineId); return next; });
   const toggleSelectAll = () => setSelectedIds((current) => current.size === messages.length ? new Set() : new Set(messages.map((message) => message.engineId)));
   const runBulkAction = async (action: BulkMailAction) => {
-    if (!account || selectedIds.size === 0) return;
+    if (!account || selectedIds.size === 0 || folder === "Outbox") return;
     if (action === "destroy" && !window.confirm(`Permanently delete ${selectedIds.size} selected message${selectedIds.size === 1 ? "" : "s"}?\nThis cannot be undone.`)) return;
     const ids = [...selectedIds];
     try {
@@ -252,6 +262,12 @@ export function MailPage() {
   useEffect(() => { if (!compose || !draftDirty || draftSaveBlocked) return; const timer = window.setTimeout(() => { void saveDraft(); }, 1500); return () => window.clearTimeout(timer); }, [compose, draftDirty, draftSaveBlocked, to, cc, bcc, subject, html, saveDraft]);
   useEffect(() => { const saveOnHide = () => { if (document.visibilityState === "hidden") void saveDraft(); }; document.addEventListener("visibilitychange", saveOnHide); return () => document.removeEventListener("visibilitychange", saveOnHide); }, [saveDraft]);
 
+  const clearCompose = () => {
+    if (account) localStorage.removeItem(localDraftKey(account.id));
+    setCompose(false); setComposeMinimized(false); setDraftId(null); setDraftDirty(false); setDraftSaveBlocked(false); setSendRequestId(null);
+    setTo(""); setCc(""); setBcc(""); setSubject(""); setHtml(""); setAttachments([]); setPersistedAttachments([]); setInReplyTo(undefined); setReferences(undefined);
+  };
+
   const runSend = async () => {
     if (!account) return;
     try {
@@ -261,11 +277,37 @@ export function MailPage() {
       if (!savedId) throw new Error("Your draft could not be synced. It was not sent.");
       if (attachments.length > 0) await syncLocalAttachments(attachments, savedId);
       const result = await api.sendDraft(savedId, account.id, clientRequestId, composeMode, templateKey);
-      setLastSend(result); setSendError(null); setCompose(false); setComposeMinimized(false); setDraftId(null); setDraftDirty(false); setDraftSaveBlocked(false); setSendRequestId(null); localStorage.removeItem(localDraftKey(account.id)); setTo(""); setCc(""); setBcc(""); setSubject(""); setHtml(""); setAttachments([]); setPersistedAttachments([]); setInReplyTo(undefined); setReferences(undefined);
+      setLastSend(result); setSendError(null); clearCompose();
     } catch (err) { const message = err instanceof Error ? err.message : String(err); setSendError(message); setError(message); }
     finally { setSending(false); }
   };
-  const runUndo = async () => { if (!lastSend) return; try { const result = await api.cancelSend(lastSend.sendId); setLastSend({ ...lastSend, status: result.status }); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
+
+  const runSchedule = async (schedule: ScheduleDraftInput) => {
+    if (!account) return;
+    try {
+      setError(null); setSendError(null); setSending(true);
+      const clientRequestId = `schedule:${crypto.randomUUID()}`;
+      const savedId = await saveDraft(true);
+      if (!savedId) throw new Error("Your draft could not be synced. It was not scheduled.");
+      if (attachments.length > 0) await syncLocalAttachments(attachments, savedId);
+      const result = await scheduleDraft(savedId, {
+        accountId: account.id,
+        clientRequestId,
+        mode: composeMode,
+        templateKey,
+        bcc: draftRecipients(bcc),
+        ...schedule,
+      });
+      setLastSend({ sendId: result.sendId, messageId: null, threadId: null, status: "scheduled", undoUntil: null });
+      setSendError(null);
+      clearCompose();
+      void loadFolderCounts(account.id);
+      if (folder === "Outbox") void loadFolder(account.id, "Outbox");
+    } catch (err) { const message = err instanceof Error ? err.message : String(err); setSendError(message); setError(message); }
+    finally { setSending(false); }
+  };
+
+  const runUndo = async () => { if (!lastSend) return; try { const result = await api.cancelSend(lastSend.sendId); setLastSend({ ...lastSend, status: result.status }); if (account) void loadFolderCounts(account.id); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
 
   return <>
     <main className={`gsw-mail-body ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
@@ -279,6 +321,6 @@ export function MailPage() {
       </section>
       <section className={`gsw-reading-pane ${mobileView === "reader" ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} aria-label="Message reader">{open ? <MessageReader message={open} accountId={account?.id} accountAddress={account?.address} folder={folder} onBack={() => setMobileView("messages")} onReply={() => openCompose("reply", open)} onReplyAll={() => openCompose("replyAll", open)} onForward={() => openCompose("forward", open)} onArchive={() => void runAction("archive", open.engineId)} onTrash={() => void runAction("trash", open.engineId)} onToggleRead={() => void toggleRead(open)} onRestore={() => void restoreMessage(open.engineId)} onDestroy={() => void destroyMessage(open.engineId)} onComposeEmail={openComposeTo} /> : <EmptyReader />}</section>
     </main>
-    {compose && <ComposeWindow mode={composeMode} minimized={composeMinimized} to={to} cc={cc} bcc={bcc} subject={subject} html={html} attachments={attachments} persistedAttachments={persistedAttachments} attachmentSyncing={attachmentSyncing} sending={sending} draftStatus={draftStatus} sendError={sendError} sendNote={lastSend ? `Sent · ${lastSend.status}` : undefined} onToChange={(value) => { setTo(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onCcChange={(value) => { setCc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onBccChange={(value) => { setBcc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onSubjectChange={(value) => { setSubject(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onHtmlChange={(value) => { setHtml(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onAttachmentsChange={changeAttachments} onRemovePersistedAttachment={(attachment) => { void removePersisted(attachment); }} onMinimize={() => { void saveDraft(true); setComposeMinimized((current) => !current); }} onClose={() => { void saveDraft(true); setCompose(false); }} onSubmit={() => void runSend()} onRetry={() => void runSend()} onUndo={lastSend ? () => void runUndo() : undefined} />}
+    {compose && <ComposeWindow mode={composeMode} minimized={composeMinimized} to={to} cc={cc} bcc={bcc} subject={subject} html={html} attachments={attachments} persistedAttachments={persistedAttachments} attachmentSyncing={attachmentSyncing} sending={sending} draftStatus={draftStatus} sendError={sendError} sendNote={lastSend ? `${lastSend.status === "scheduled" ? "Scheduled" : "Sent"} · ${lastSend.status}` : undefined} defaultTimeZone={browserTimeZone()} onToChange={(value) => { setTo(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onCcChange={(value) => { setCc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onBccChange={(value) => { setBcc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onSubjectChange={(value) => { setSubject(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onHtmlChange={(value) => { setHtml(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onAttachmentsChange={changeAttachments} onRemovePersistedAttachment={(attachment) => { void removePersisted(attachment); }} onMinimize={() => { void saveDraft(true); setComposeMinimized((current) => !current); }} onClose={() => { void saveDraft(true); setCompose(false); }} onSubmit={() => void runSend()} onSchedule={(schedule) => void runSchedule(schedule)} onRetry={() => void runSend()} onUndo={lastSend ? () => void runUndo() : undefined} />}
   </>;
 }
