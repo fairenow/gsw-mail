@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "./styles/globals.css";
 import "./styles/auth.css";
+import "./styles/oauth-account-chooser.css";
 import "./styles/oauth-consent.css";
 import "./styles/oauth-test.css";
 import "./styles/landing.css";
