@@ -94,6 +94,7 @@ export const auth = betterAuth({
       consentPage: GSW_OAUTH_CONSENT_PAGE,
       selectAccount: {
         page: "/oauth/select-account",
+        shouldRedirect: async () => false,
       },
       scopes: [...GSW_OIDC_SUPPORTED_SCOPES],
       validAudiences: [config.auth.stalwartAudience],
