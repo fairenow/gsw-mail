@@ -3,6 +3,8 @@ import { reconcilePreparing } from "./reconcile.js";
 import { getRelay, isInvalidHeaderError } from "./relay.js";
 import { clearOutboundAttachmentPayloads, loadOutboundAttachmentPayloads } from "./attachmentPayloadStore.js";
 import { claimDueJobs, loadJob, markAccepted, markFailed, markTransportRetry } from "./queue.js";
+import { scheduleNextRecurringOccurrence, scheduledMetadata } from "./schedule.js";
+import { moveScheduledEmailToSent } from "./scheduledStalwart.js";
 import type { RelayAttachment } from "./types.js";
 
 export interface OutboundWorker {
@@ -53,7 +55,45 @@ export function createOutboundWorker(intervalMs = 5_000): OutboundWorker {
             message: result.message,
           });
           if (result.accepted) {
+            const schedule = await scheduledMetadata(job.id);
             await markAccepted(job.id, result.deliveryId);
+
+            // Recurring sends need their next staged Email object while the current
+            // occurrence and attachment payloads still exist. Failure to prepare a
+            // later occurrence never changes the fact that this occurrence sent.
+            if (schedule?.kind === "recurring") {
+              try {
+                const nextId = await scheduleNextRecurringOccurrence(job.id);
+                console.info("[outbound:schedule] recurring occurrence prepared", { sendId: job.id, nextSendId: nextId, seriesId: schedule.seriesId });
+              } catch (error) {
+                console.warn("[outbound:schedule] could not prepare next recurring occurrence", {
+                  sendId: job.id,
+                  seriesId: schedule.seriesId,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              }
+            }
+
+            if (schedule && job.messageId) {
+              const engineMessageId = (await loadJob(job.id))?.messageId ? (await import("../db/client.js"), undefined) : undefined;
+              void engineMessageId;
+            }
+            if (schedule) {
+              try {
+                const refreshed = await loadJob(job.id);
+                const rowEngineId = await (async () => {
+                  const { db } = await import("../db/client.js");
+                  const { outboundMessages } = await import("../db/schema.js");
+                  const { eq } = await import("drizzle-orm");
+                  const [row] = await db.select({ engineMessageId: outboundMessages.engineMessageId }).from(outboundMessages).where(eq(outboundMessages.id, job.id)).limit(1);
+                  return row?.engineMessageId ?? null;
+                })();
+                void refreshed;
+                if (rowEngineId) await moveScheduledEmailToSent({ productAccountId: job.accountId, address: job.fromAddress, engineMessageId: rowEngineId });
+              } catch (error) {
+                console.warn("[outbound:schedule] sent copy finalization failed", { sendId: job.id, error: error instanceof Error ? error.message : String(error) });
+              }
+            }
             await clearOutboundAttachmentPayloads(job.id);
           } else if (result.permanent) {
             await markFailed(job.id, "relay_rejected", result.message ?? "relay rejected permanently");
