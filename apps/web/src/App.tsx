@@ -8,6 +8,7 @@ import { ControlCenterPage } from "./pages/ControlCenterPage";
 import { CalendarPage } from "./pages/CalendarPage";
 import { AccountDeletedPage, LegalPage } from "./pages/LegalPage";
 import { LandingPage } from "./pages/LandingPage";
+import { OAuthAccountChooserPage } from "./pages/OAuthAccountChooserPage";
 import { OAuthConsentPage } from "./pages/OAuthConsentPage";
 import { OAuthTestPage } from "./pages/OAuthTestPage";
 
@@ -47,6 +48,7 @@ export function App() {
   if (path === "/privacy") return <LegalPage kind="privacy" />;
   if (path === "/terms") return <LegalPage kind="terms" />;
   if (path === "/account-deleted") return <AccountDeletedPage />;
+  if (path === "/oauth/select-account") return <OAuthAccountChooserPage />;
   if (path === "/oauth/consent") return <OAuthConsentPage />;
   if (path === "/oauth/test" || path === "/oauth/test/callback") return <OAuthTestPage />;
   if (path === "/setup") return <SetupPage />;
