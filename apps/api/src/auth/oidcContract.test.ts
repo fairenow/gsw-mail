@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { config } from "../config.js";
 import {
+  GSW_OAUTH_CONSENT_PAGE,
   GSW_OIDC_SUPPORTED_SCOPES,
   gswOidcSubject,
   isLegacyInternalOidcClient,
@@ -11,6 +12,11 @@ import {
 
 test("GSW OIDC supports the standard identity scopes while preserving offline access for Mobile", () => {
   assert.deepEqual([...GSW_OIDC_SUPPORTED_SCOPES], ["openid", "profile", "email", "offline_access"]);
+});
+
+test("external OAuth consent uses the dedicated consent route", () => {
+  assert.equal(GSW_OAUTH_CONSENT_PAGE, "/oauth/consent");
+  assert.notEqual(GSW_OAUTH_CONSENT_PAGE, "/sign-in");
 });
 
 test("OIDC subject is the immutable Better Auth user id, never email", () => {
