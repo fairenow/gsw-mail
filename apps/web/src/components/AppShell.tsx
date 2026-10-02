@@ -10,11 +10,9 @@ type AppShellContextValue = {
   configureTopBar: (options: Partial<AppTopBarOptions>) => void;
 };
 
-type ShellSnapshot = { accounts: Account[]; selectedAccountId: string | null; profileImageUrl: string };
 type IdleWindow = Window & { requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number };
 
 const AppShellContext = createContext<AppShellContextValue | null>(null);
-let shellSnapshot: ShellSnapshot = { accounts: [], selectedAccountId: null, profileImageUrl: "" };
 
 const calendarBoundary = (date: Date) => {
   const offset = date.getTimezoneOffset() * 60_000;
@@ -35,19 +33,15 @@ const currentCalendarRange = () => {
 };
 
 const warmAccountData = (accountId: string) => {
-  // Mail is the primary workspace, so begin the Inbox and counts immediately.
   void Promise.allSettled([
     api.messages(accountId, "Inbox", 50, 0),
     api.mailboxStats(accountId),
   ]);
 
-  // Calendar stays prefetched in parallel.
   const range = currentCalendarRange();
   api.prefetchCalendarEvents(accountId, range.after, range.before);
   void api.calendars(accountId).catch(() => undefined);
 
-  // Warm contacts shortly after the critical mailbox request begins. This keeps
-  // the Inbox prioritized while making Contacts ready before the user opens it.
   const warmContacts = () => {
     api.prefetchContactsPage();
     void Promise.allSettled([api.contactImports(), api.contactAddressBooks()]);
@@ -58,9 +52,11 @@ const warmAccountData = (accountId: string) => {
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const [accounts, setAccounts] = useState<Account[]>(() => shellSnapshot.accounts);
-  const [account, setAccount] = useState<Account | null>(() => shellSnapshot.accounts.find((item) => item.id === shellSnapshot.selectedAccountId) ?? shellSnapshot.accounts[0] ?? null);
-  const [profileImageUrl, setProfileImageUrl] = useState(() => shellSnapshot.profileImageUrl);
+  // Never seed product state from a previous mount. Auth identities can change
+  // in the same tab, so cached mailbox/profile state must not cross that boundary.
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [account, setAccount] = useState<Account | null>(null);
+  const [profileImageUrl, setProfileImageUrl] = useState("");
   const [topBar, setTopBar] = useState<AppTopBarOptions>({
     search: "",
     searchPlaceholder: "Search mail",
@@ -76,16 +72,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       setAccounts(rows);
       setAccount((current) => {
         const next = current && rows.some((item) => item.id === current.id) ? current : rows[0] ?? null;
-        shellSnapshot = { ...shellSnapshot, accounts: rows, selectedAccountId: next?.id ?? null };
         if (next) warmAccountData(next.id);
         return next;
       });
     }).catch(() => undefined);
     void api.settings().then((settings) => {
       if (cancelled) return;
-      const nextProfileImageUrl = typeof settings.general.profileImageUrl === "string" ? settings.general.profileImageUrl : "";
-      setProfileImageUrl(nextProfileImageUrl);
-      shellSnapshot = { ...shellSnapshot, profileImageUrl: nextProfileImageUrl };
+      setProfileImageUrl(typeof settings.general.profileImageUrl === "string" ? settings.general.profileImageUrl : "");
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, []);
@@ -93,7 +86,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const selectAccount = (id: string) => {
     const next = accounts.find((item) => item.id === id) ?? null;
     setAccount(next);
-    shellSnapshot = { ...shellSnapshot, accounts, selectedAccountId: next?.id ?? null };
     if (next) warmAccountData(next.id);
   };
 
