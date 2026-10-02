@@ -139,7 +139,7 @@ export function LandingPage() {
     <section className="landing-final-cta">
       <span>Ready when you are.</span>
       <h2>Make email feel like your workspace again.</h2>
-      <div><a className="landing-primary" href="/sign-up">Start free</a><a className="landing-secondary light" href="/mail">Open GSW Mail</a></div>
+      <div><a className="landing-primary" href="/sign-up">Start free</a><a className="landing-secondary light" href="/sign-in">Sign in</a></div>
     </section>
 
     <footer className="landing-footer">
