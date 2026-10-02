@@ -1,5 +1,5 @@
 export interface AuthSession {
-  user: { id: string; email: string; name: string; emailVerified: boolean };
+  user: { id: string; email: string; name: string; emailVerified: boolean; image?: string | null };
   session: { expiresAt: string };
 }
 
@@ -33,9 +33,10 @@ async function authRequest<T>(path: string, body?: unknown): Promise<T> {
 }
 
 function currentOAuthQuery(): string | undefined {
-  // Better Auth's OAuth Provider signs the authorization parameters directly into
-  // the login-page query string. Custom sign-in endpoints must forward that whole
-  // signed query as `oauth_query`; it is not a nested `oauth_query` URL parameter.
+  // Better Auth signs the provider-owned query before redirecting into custom
+  // OAuth pages. Hash fragments are intentionally excluded so GSW can use them
+  // for presentation-only state such as "use another account" without adding
+  // anything to the signed OAuth transaction.
   const value = window.location.search.replace(/^\?/, "").trim();
   return value || undefined;
 }
@@ -68,8 +69,35 @@ export interface OAuthConsentResult {
   url?: string;
 }
 
+export interface DeviceSession {
+  session: {
+    token: string;
+    expiresAt: string;
+    userId?: string;
+  };
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    image?: string | null;
+  };
+}
+
 export function getSession(): Promise<AuthSession | null> {
   return authRequest<AuthSession | null>("/get-session?disableCookieCache=true");
+}
+
+export function listDeviceSessions(): Promise<DeviceSession[]> {
+  return authRequest<DeviceSession[]>("/multi-session/list-device-sessions");
+}
+
+export function setActiveDeviceSession(sessionToken: string): Promise<unknown> {
+  return authRequest("/multi-session/set-active", { sessionToken });
+}
+
+export async function continueOAuthAfterAccountSelection(): Promise<void> {
+  const result = await authRequest<OAuthContinuation>("/oauth2/continue", withOAuthQuery({ selected: true }));
+  if (!continueOAuth(result)) throw new Error("The OAuth account selection could not be continued.");
 }
 
 export function getOAuthPublicClient(clientId: string): Promise<OAuthPublicClient> {
