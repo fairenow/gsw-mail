@@ -4,16 +4,17 @@ import { AuthCard } from "./components/auth/AuthCard";
 import { AuthError } from "./components/auth/AuthError";
 import { AuthPage } from "./components/auth/AuthPage";
 import { BrandMark } from "./components/auth/BrandMark";
-
 import { AccountResolutionLoader, type ResolutionState } from "./components/auth/AccountResolutionLoader";
+import { consumeAuthPrefillEmail, rememberIdentity } from "./lib/rememberedIdentities";
 
 type Mode = "sign-in" | "sign-up";
 
 export function AuthGate({ children }: { children: ReactNode }) {
+  const forceAccountSignIn = window.location.pathname === "/sign-in" && window.location.hash === "#use-another-account";
   const [session, setSession] = useState<AuthSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<Mode>(window.location.pathname === "/sign-up" ? "sign-up" : "sign-in");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => consumeAuthPrefillEmail());
   const [name, setName] = useState("");
   const [password, setPasswordValue] = useState("");
   const [code, setCode] = useState("");
@@ -37,10 +38,17 @@ export function AuthGate({ children }: { children: ReactNode }) {
     try {
       const current = await getSession();
       if (attempt !== generation.current) return;
+      if (current) rememberIdentity({ id: current.user.id, email: current.user.email, name: current.user.name || current.user.email, image: current.user.image });
+      if (forceAccountSignIn) {
+        setSession(null);
+        setResolution("resolved");
+        setLoading(false);
+        return;
+      }
       setSession(current);
       if (!current) { setLoading(false); return; }
       if (window.location.pathname === "/create-password") { setLoading(false); return; }
-      if (window.location.pathname === "/oauth/consent") { setResolution("resolved"); setLoading(false); return; }
+      if (["/oauth/consent", "/oauth/select-account"].includes(window.location.pathname)) { setResolution("resolved"); setLoading(false); return; }
       setResolution("connecting");
       const context = await resolveAccountContext();
       if (attempt !== generation.current) return;
@@ -131,8 +139,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <button className="gsw-btn gsw-btn-quiet gsw-btn-block" onClick={() => { setResetMode(false); setResetRequested(false); setError(""); }}>Back to sign in</button>
     </> : !otpRequested ? <>
       <p className="gsw-setup-kicker">GSW Account</p>
-      <h1 className="gsw-login-title">{mode === "sign-up" ? "Create your GSW Account" : "Welcome back"}</h1>
-      <p className="gsw-login-sub">{mode === "sign-up" ? "Your backup email manages your workspace and recovery. It will not become a mailbox on your domain." : "Sign in to manage your workspace or open your mailbox."}</p>
+      <h1 className="gsw-login-title">{mode === "sign-up" ? "Create your GSW Account" : forceAccountSignIn && email ? `Sign in as ${email}` : "Welcome back"}</h1>
+      <p className="gsw-login-sub">{mode === "sign-up" ? "Your backup email manages your workspace and recovery. It will not become a mailbox on your domain." : forceAccountSignIn ? "Authenticate this GSW Account to continue the application request. Your other signed-in GSW Accounts stay available on this device." : "Sign in to manage your workspace or open your mailbox."}</p>
       {mode === "sign-up" && <label className="gsw-auth-field">Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Ramon Williams" /></label>}
       <label className="gsw-auth-field">Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>
       {mode === "sign-in" && <><label className="gsw-auth-field">Password<input type="password" value={password} onChange={(event) => setPasswordValue(event.target.value)} /></label><button className="gsw-btn gsw-btn-primary gsw-btn-block" disabled={busy || !email || !password} onClick={() => void submitPassword()}>Sign in</button><button className="gsw-btn gsw-btn-quiet gsw-btn-block" onClick={() => { setResetMode(true); setError(""); }}>Forgot password?</button><div className="gsw-auth-divider">or</div></>}
@@ -159,5 +167,5 @@ function PasswordSetup({ session, onComplete }: { session: AuthSession; onComple
     if (password.length < 8 || password !== confirm) { setError("Use at least 8 characters and make both passwords match."); return; }
     try { await setPassword(password); onComplete(); } catch (err) { setError(err instanceof Error ? err.message : "Could not set password."); }
   };
-  return <AuthPage><AuthCard><BrandMark size={64} /><p className="gsw-setup-kicker">Email verified</p><h1 className="gsw-login-title">Secure your account</h1><p className="gsw-login-sub">Create a password for {session.user.email}. You can still use one-time email codes later.</p><label className="gsw-auth-field">Password<input type="password" value={password} onChange={(event) => setPasswordValue(event.target.value)} /></label><label className="gsw-auth-field">Confirm password<input type="password" value={confirm} onChange={(event) => setConfirm(event.target.value)} /></label><button className="gsw-btn gsw-btn-primary gsw-btn-block" onClick={() => void submit()}>Continue to workspace</button>{error && <AuthError>{error}</AuthError>}</AuthCard></AuthPage>;
+  return <AuthPage><AuthCard><BrandMark size={64} /><p className="gsw-setup-kicker">Email verified</p><h1 className="gsw-login-title">Secure your account</h1><p className="gsw-login-sub">Create a password for {session.user.email}. You can still use one-time email codes later.</p><label className="gsw-auth-field">Password<input type="password" value={password} onChange={(event) => setPasswordValue(event.target.value)} /></label><label className="gsw-auth-field">Confirm password<input type="password" value={confirm} onChange={(event) => setConfirm(event.target.value)} /></label><button className="gsw-btn gsw-btn-primary gsw-btn-block" onClick={() => void submit()}>Continue to workspace</button>{error && <AuthError>{error}</AuthCard></AuthPage>;
 }
