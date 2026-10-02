@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import "./styles/globals.css";
 import "./styles/auth.css";
@@ -19,10 +19,23 @@ import "./styles/legal.css";
 import { AuthGate } from "./AuthGate";
 import { App } from "./App";
 
-const publicPath = ["/", "/privacy", "/terms", "/account-deleted", "/oauth/test", "/oauth/test/callback"].includes(window.location.pathname);
+const PUBLIC_PATHS = new Set(["/", "/privacy", "/terms", "/account-deleted", "/oauth/test", "/oauth/test/callback"]);
+
+function Root() {
+  const [path, setPath] = useState(() => window.location.pathname);
+
+  useEffect(() => {
+    const sync = () => setPath(window.location.pathname);
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+
+  const publicPath = PUBLIC_PATHS.has(path);
+  return publicPath ? <App /> : <AuthGate key={path}><App /></AuthGate>;
+}
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    {publicPath ? <App /> : <AuthGate><App /></AuthGate>}
+    <Root />
   </React.StrictMode>,
 );
