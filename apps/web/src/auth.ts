@@ -54,8 +54,38 @@ function continueOAuth(result: OAuthContinuation): boolean {
   return true;
 }
 
+export interface OAuthPublicClient {
+  client_id: string;
+  client_name?: string | null;
+  client_uri?: string | null;
+  logo_uri?: string | null;
+  policy_uri?: string | null;
+  tos_uri?: string | null;
+}
+
+export interface OAuthConsentResult {
+  redirect?: boolean;
+  url?: string;
+}
+
 export function getSession(): Promise<AuthSession | null> {
   return authRequest<AuthSession | null>("/get-session?disableCookieCache=true");
+}
+
+export function getOAuthPublicClient(clientId: string): Promise<OAuthPublicClient> {
+  return authRequest<OAuthPublicClient>(`/oauth2/public-client?client_id=${encodeURIComponent(clientId)}`);
+}
+
+export async function submitOAuthConsent(accept: boolean): Promise<void> {
+  // Better Auth binds this decision to its signed pending-consent transaction.
+  // We intentionally do not submit client_id, redirect_uri, state, or scopes
+  // from the page, so query-string tampering cannot change what is approved.
+  const result = await authRequest<OAuthConsentResult>("/oauth2/consent", { accept });
+  if (result.redirect !== false && typeof result.url === "string" && result.url) {
+    window.location.assign(result.url);
+    return;
+  }
+  throw new Error("The authorization request could not be completed.");
 }
 
 export function getAccountContext(): Promise<AccountContext> {
