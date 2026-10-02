@@ -90,7 +90,7 @@ export const auth = betterAuth({
     }),
     oauthProvider({
       loginPage: "/sign-in",
-      consentPage: "/sign-in",
+      consentPage: "/oauth/consent",
       scopes: [...GSW_OIDC_SUPPORTED_SCOPES],
       validAudiences: [config.auth.stalwartAudience],
       accessTokenExpiresIn: config.auth.tokenTtlSeconds,
