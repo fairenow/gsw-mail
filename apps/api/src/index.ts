@@ -1,12 +1,14 @@
 import { buildApp } from "./app.js";
 import { config } from "./config.js";
 import { pool } from "./db/client.js";
+import { ensureScheduledSendSchema } from "./outbound/ensureScheduledSchema.js";
 import { getOutboundWorker } from "./outbound/worker.js";
 
 const app = buildApp();
 const worker = getOutboundWorker();
 
 async function main() {
+  await ensureScheduledSendSchema();
   worker.start();
   await app.listen({ port: config.port, host: "0.0.0.0" });
 }
