@@ -9,6 +9,10 @@
       "destination": "/index.html"
     },
     {
+      "source": "/oauth/select-account",
+      "destination": "/index.html"
+    },
+    {
       "source": "/oauth/consent",
       "destination": "/index.html"
     },
