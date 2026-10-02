@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { BrandMark } from "../components/auth/BrandMark";
 
 const featureRows = [
@@ -21,30 +22,144 @@ const featureRows = [
   },
 ] as const;
 
-function ProductPreview() {
-  return <div className="landing-preview-window" aria-label="GSW Mail product preview">
-    <div className="landing-preview-topbar">
-      <span /><span /><span />
-      <div className="landing-preview-search">Search mail</div>
+const showcaseSteps = [
+  { key: "inbox", label: "Inbox", title: "Move through what matters." },
+  { key: "compose", label: "Compose", title: "Write and send without leaving your flow." },
+  { key: "calendar", label: "Calendar", title: "Turn messages into time on your calendar." },
+  { key: "contacts", label: "Contacts", title: "Keep people and context close." },
+  { key: "templates", label: "Templates", title: "Reuse the messages you send most." },
+  { key: "assistant", label: "Assistant", title: "Ask for help and keep work moving." },
+] as const;
+
+type ShowcaseKey = (typeof showcaseSteps)[number]["key"];
+
+function InboxScreen() {
+  return <section className="landing-preview-mail">
+    <div className="landing-preview-title"><div><strong>Inbox</strong><small>Stay focused on what needs you.</small></div><span>RW</span></div>
+    {[
+      ['Danielle Carter','Re: Anchored Learning partnership','Thanks Ramon — I took a look at the proposal and would love to keep the conversation moving.','2:18 PM'],
+      ['Project Team','Launch checklist for Friday','The final review is ready. I added the deployment notes and ownership for each remaining item.','11:42 AM'],
+      ['Jordan Lee','Coffee next week?','Tuesday morning works well for me. Want to meet near downtown?','9:06 AM'],
+      ['GSW Calendar','Tomorrow: Product review','Your meeting starts tomorrow at 10:00 AM.','Yesterday'],
+    ].map((row, index) => <div className={`landing-preview-row ${index === 0 ? 'selected' : ''}`} key={row[0]}>
+      <span className="landing-preview-avatar">{row[0].slice(0,1)}</span>
+      <div><strong>{row[0]}</strong><b>{row[1]}</b><small>{row[2]}</small></div>
+      <time>{row[3]}</time>
+    </div>)}
+  </section>;
+}
+
+function ComposeScreen() {
+  return <section className="landing-showcase-panel landing-showcase-compose">
+    <div className="landing-compose-window">
+      <div className="landing-compose-head"><strong>New message</strong><span>×</span></div>
+      <div className="landing-compose-field"><span>To</span><strong>danielle@example.org</strong></div>
+      <div className="landing-compose-field"><span>Subject</span><strong>Following up on our conversation</strong></div>
+      <div className="landing-compose-body">Hi Danielle,<br /><br />Thanks again for taking the time to connect. I wanted to follow up with the next steps we discussed and keep things moving.</div>
+      <div className="landing-compose-footer"><button>Send</button><button className="quiet">Schedule</button><span>Saved</span></div>
     </div>
-    <div className="landing-preview-body">
-      <aside className="landing-preview-sidebar">
-        <button>＋ Compose</button>
-        {['Inbox','Starred','Sent','Drafts','Outbox','Archive'].map((item, index) => <div key={item} className={index === 0 ? 'active' : ''}><span>{item}</span><small>{index === 0 ? '8' : index === 3 ? '3' : ''}</small></div>)}
-      </aside>
-      <section className="landing-preview-mail">
-        <div className="landing-preview-title"><div><strong>Inbox</strong><small>Stay focused on what needs you.</small></div><span>RW</span></div>
-        {[
-          ['Danielle Carter','Re: Anchored Learning partnership','Thanks Ramon — I took a look at the proposal and would love to keep the conversation moving.','2:18 PM'],
-          ['Project Team','Launch checklist for Friday','The final review is ready. I added the deployment notes and ownership for each remaining item.','11:42 AM'],
-          ['Jordan Lee','Coffee next week?','Tuesday morning works well for me. Want to meet near downtown?','9:06 AM'],
-          ['GSW Calendar','Tomorrow: Product review','Your meeting starts tomorrow at 10:00 AM.','Yesterday'],
-        ].map((row, index) => <div className={`landing-preview-row ${index === 0 ? 'selected' : ''}`} key={row[0]}>
-          <span className="landing-preview-avatar">{row[0].slice(0,1)}</span>
-          <div><strong>{row[0]}</strong><b>{row[1]}</b><small>{row[2]}</small></div>
-          <time>{row[3]}</time>
-        </div>)}
-      </section>
+  </section>;
+}
+
+function CalendarScreen() {
+  return <section className="landing-showcase-panel landing-showcase-calendar">
+    <div className="landing-calendar-head"><strong>October</strong><span>Week</span></div>
+    <div className="landing-calendar-grid">
+      {['Mon 5','Tue 6','Wed 7','Thu 8','Fri 9'].map((day) => <div className="landing-calendar-day" key={day}><b>{day}</b></div>)}
+      <div className="landing-calendar-event event-a"><strong>Product review</strong><span>10:00 AM</span></div>
+      <div className="landing-calendar-event event-b"><strong>Ministry outreach</strong><span>1:30 PM</span></div>
+      <div className="landing-calendar-event event-c"><strong>Team check-in</strong><span>3:00 PM</span></div>
+    </div>
+    <div className="landing-calendar-pop"><small>New event</small><strong>Follow-up call</strong><span>Thursday · 2:00 PM</span><button>Add event</button></div>
+  </section>;
+}
+
+function ContactsScreen() {
+  return <section className="landing-showcase-panel landing-showcase-contacts">
+    <div className="landing-contacts-list">
+      {[
+        ['DC','Danielle Carter','Anchored Learning'],
+        ['JL','Jordan Lee','Community Partner'],
+        ['MB','Marcus Brooks','Project Lead'],
+        ['SR','Sophia Reed','Ministry Network'],
+      ].map((contact, index) => <div className={`landing-contact-row ${index === 0 ? 'active' : ''}`} key={contact[1]}><span>{contact[0]}</span><div><strong>{contact[1]}</strong><small>{contact[2]}</small></div></div>)}
+    </div>
+    <div className="landing-contact-detail"><span className="landing-contact-avatar">DC</span><h3>Danielle Carter</h3><p>danielle@example.org</p><div><button>Email</button><button>Schedule</button></div><small>Last contacted 2 days ago</small></div>
+  </section>;
+}
+
+function TemplatesScreen() {
+  return <section className="landing-showcase-panel landing-showcase-templates">
+    <div className="landing-template-list">
+      {['Warm introduction','Meeting follow-up','Partnership outreach','Thank you'].map((name, index) => <button className={index === 1 ? 'active' : ''} key={name}><strong>{name}</strong><small>{index === 1 ? 'Used 18 times' : 'Saved template'}</small></button>)}
+    </div>
+    <div className="landing-template-editor"><small>Template</small><h3>Meeting follow-up</h3><div className="landing-template-subject">Subject: Great speaking with you</div><p>Hi {'{{first_name}}'},</p><p>Thanks again for taking the time to meet. I wanted to follow up with the next steps we discussed.</p><div className="landing-template-actions"><button>Use template</button><span>Updated today</span></div></div>
+  </section>;
+}
+
+function AssistantScreen() {
+  return <section className="landing-showcase-panel landing-showcase-assistant">
+    <div className="landing-ai-sidebar"><BrandMark size={38} /><strong>GSW Assistant</strong><span>Inbox</span><span>Calendar</span><span>Contacts</span></div>
+    <div className="landing-ai-chat">
+      <div className="landing-ai-message user">Find the people I owe a follow-up to this week.</div>
+      <div className="landing-ai-message assistant"><strong>I found 4 conversations.</strong><span>Danielle Carter · partnership follow-up</span><span>Jordan Lee · coffee scheduling</span><span>Marcus Brooks · project review</span><button>Draft follow-ups</button></div>
+      <div className="landing-ai-input">Ask GSW to help with your work… <span>↑</span></div>
+    </div>
+  </section>;
+}
+
+function ShowcaseScreen({ active }: { active: ShowcaseKey }) {
+  if (active === "compose") return <ComposeScreen />;
+  if (active === "calendar") return <CalendarScreen />;
+  if (active === "contacts") return <ContactsScreen />;
+  if (active === "templates") return <TemplatesScreen />;
+  if (active === "assistant") return <AssistantScreen />;
+  return <InboxScreen />;
+}
+
+function ProductShowcase() {
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    const update = () => {
+      const section = sectionRef.current;
+      if (!section || window.matchMedia('(max-width: 900px)').matches) return;
+      const rect = section.getBoundingClientRect();
+      const travel = section.offsetHeight - window.innerHeight;
+      if (travel <= 0) return;
+      const progress = Math.max(0, Math.min(1, -rect.top / travel));
+      setActiveIndex(Math.min(showcaseSteps.length - 1, Math.floor(progress * showcaseSteps.length)));
+    };
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => { window.removeEventListener('scroll', update); window.removeEventListener('resize', update); };
+  }, []);
+
+  const active = showcaseSteps[activeIndex];
+  return <div ref={sectionRef} className="landing-showcase-scroll">
+    <div className="landing-showcase-sticky">
+      <div className="landing-showcase-copy">
+        <span>{active.label}</span>
+        <h2 key={active.key}>{active.title}</h2>
+        <div className="landing-showcase-progress" aria-label={`Step ${activeIndex + 1} of ${showcaseSteps.length}`}>
+          {showcaseSteps.map((step, index) => <button key={step.key} className={index === activeIndex ? 'active' : ''} onClick={() => setActiveIndex(index)} aria-label={step.label}><span /></button>)}
+        </div>
+      </div>
+      <div className="landing-preview-window landing-showcase-window" aria-label="GSW Mail product preview">
+        <div className="landing-preview-topbar">
+          <span /><span /><span />
+          <div className="landing-preview-search">Search GSW Mail</div>
+        </div>
+        <div className="landing-preview-body">
+          <aside className="landing-preview-sidebar">
+            <button>＋ Compose</button>
+            {['Inbox','Calendar','Contacts','Templates','Assistant'].map((item) => <div key={item} className={item.toLowerCase() === active.key ? 'active' : ''}><span>{item}</span><small>{item === 'Inbox' ? '8' : ''}</small></div>)}
+          </aside>
+          <div className="landing-showcase-stage" key={active.key}><ShowcaseScreen active={active.key} /></div>
+        </div>
+      </div>
     </div>
   </div>;
 }
@@ -92,8 +207,9 @@ export function LandingPage() {
         <a className="landing-secondary" href="/sign-in">Sign in to GSW Mail</a>
       </div>
       <div className="landing-hero-proof"><span>Custom domains</span><span>Scheduled + recurring mail</span><span>Web + mobile</span></div>
-      <ProductPreview />
     </section>
+
+    <ProductShowcase />
 
     <section className="landing-value-strip" aria-label="GSW Mail highlights">
       <div><strong>Your domain</strong><span>Professional email without giving up your identity.</span></div>
