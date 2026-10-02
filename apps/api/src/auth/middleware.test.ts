@@ -6,6 +6,7 @@ import {
   isTrustedProductJwtBearer,
   normalizeOAuthScopes,
   resolveOrProvisionUser,
+  selectRequestAuthSource,
 } from "./middleware.js";
 
 test("existing authenticated users do not run provisioning", async () => {
@@ -32,6 +33,13 @@ test("unknown authenticated users are provisioned once", async () => {
   });
   assert.deepEqual(result, { user: { id: "user-2", email: "new@example.com" }, provisioned: true });
   assert.equal(provisions, 1);
+});
+
+test("browser session remains authoritative over bearer authentication", () => {
+  assert.equal(selectRequestAuthSource(true, false), "session");
+  assert.equal(selectRequestAuthSource(true, true), "session");
+  assert.equal(selectRequestAuthSource(false, true), "bearer");
+  assert.equal(selectRequestAuthSource(false, false), "none");
 });
 
 test("GSW Mobile is the only explicitly trusted opaque product bearer client", () => {
