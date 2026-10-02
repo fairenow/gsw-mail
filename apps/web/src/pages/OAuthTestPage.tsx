@@ -147,7 +147,7 @@ export function OAuthTestPage() {
       authorize.searchParams.set("nonce", nonce);
       authorize.searchParams.set("code_challenge", challenge);
       authorize.searchParams.set("code_challenge_method", "S256");
-      authorize.searchParams.set("prompt", "consent");
+      authorize.searchParams.set("prompt", "select_account consent");
       window.location.assign(authorize.toString());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start GSW sign-in.");
