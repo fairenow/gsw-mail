@@ -7,6 +7,7 @@ import { SetupPage } from "./pages/SetupPage";
 import { ControlCenterPage } from "./pages/ControlCenterPage";
 import { CalendarPage } from "./pages/CalendarPage";
 import { AccountDeletedPage, LegalPage } from "./pages/LegalPage";
+import { LandingPage } from "./pages/LandingPage";
 import { OAuthConsentPage } from "./pages/OAuthConsentPage";
 import { OAuthTestPage } from "./pages/OAuthTestPage";
 
@@ -42,6 +43,7 @@ export function App() {
     };
   }, []);
 
+  if (path === "/") return <LandingPage />;
   if (path === "/privacy") return <LegalPage kind="privacy" />;
   if (path === "/terms") return <LegalPage kind="terms" />;
   if (path === "/account-deleted") return <AccountDeletedPage />;
