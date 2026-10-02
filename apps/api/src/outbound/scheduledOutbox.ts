@@ -5,7 +5,7 @@ import { scheduledSends } from "./scheduledSchema.js";
 
 const activeScheduledStatuses = ["preparing", "queued", "sending", "failed"] as const;
 
-export async function scheduledOutboxCount(accountId: string): Promise<number> {
+export async function outboxCount(accountId: string): Promise<number> {
   const rows = await db.select({ id: outboundMessages.id })
     .from(outboundMessages)
     .innerJoin(scheduledSends, eq(scheduledSends.outboundMessageId, outboundMessages.id))
@@ -16,7 +16,7 @@ export async function scheduledOutboxCount(accountId: string): Promise<number> {
   return rows.length;
 }
 
-export async function listScheduledOutboxMessages(accountId: string, limit: number, offset: number) {
+export async function listOutboxMessages(accountId: string, limit: number, offset: number) {
   const rows = await db.select({ message: outboundMessages, schedule: scheduledSends })
     .from(outboundMessages)
     .innerJoin(scheduledSends, eq(scheduledSends.outboundMessageId, outboundMessages.id))
@@ -46,7 +46,7 @@ export async function listScheduledOutboxMessages(accountId: string, limit: numb
   }));
 }
 
-export async function getScheduledOutboxMessage(accountId: string, virtualId: string) {
+export async function getOutboxMessage(accountId: string, virtualId: string) {
   if (!virtualId.startsWith("outbox:")) return null;
   const id = virtualId.slice("outbox:".length);
   const [row] = await db.select({ message: outboundMessages, schedule: scheduledSends })
