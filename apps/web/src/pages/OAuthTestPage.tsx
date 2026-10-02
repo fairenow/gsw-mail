@@ -239,7 +239,7 @@ export function OAuthTestPage() {
         <h1>Sign in with your GSW Account</h1>
         <p className="oauth-test-copy">This page acts like a separate app so we can test the same OAuth flow another GSW-connected product will use.</p>
         <button className="oauth-test-google-button" disabled={busy} onClick={() => void begin()}>
-          <span className="oauth-test-mark">G</span>
+          <BrandMark size={22} />
           {busy ? "Opening GSW…" : "Continue with GSW"}
         </button>
         <div className="oauth-test-note">
