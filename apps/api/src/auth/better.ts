@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { emailOTP } from "better-auth/plugins/email-otp";
-import { jwt } from "better-auth/plugins";
+import { jwt, multiSession } from "better-auth/plugins";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { Resend } from "resend";
 import { config } from "../config.js";
@@ -80,6 +80,7 @@ export const auth = betterAuth({
     sendVerificationEmail: async ({ user, url }) => sendAuthEmail(user.email, "Verify your GSW Account", renderGswAuthEmail({ title: "Verify your email", message: "Confirm your email address to continue to GSW.", ctaUrl: url, ctaLabel: "Verify email" })),
   },
   plugins: [
+    multiSession({ maximumSessions: 5 }),
     jwt({
       jwks: { keyPairConfig: { alg: "ES256" } },
       jwt: {
@@ -91,6 +92,9 @@ export const auth = betterAuth({
     oauthProvider({
       loginPage: "/sign-in",
       consentPage: GSW_OAUTH_CONSENT_PAGE,
+      selectAccount: {
+        page: "/oauth/select-account",
+      },
       scopes: [...GSW_OIDC_SUPPORTED_SCOPES],
       validAudiences: [config.auth.stalwartAudience],
       accessTokenExpiresIn: config.auth.tokenTtlSeconds,
