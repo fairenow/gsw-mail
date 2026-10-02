@@ -1,20 +1,19 @@
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { requireAccountPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
 import { inboundMessages, mailboxRole } from "../db/schema.js";
 import { getUserEngine } from "../engine/index.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { hasRemoteMailImages, sanitizeInboundMailHtml, sanitizeRichText } from "../lib/richText.js";
+import { activeScheduledEngineIds, getOutboxMessage, listOutboxMessages, outboxCount } from "../outbound/schedule.js";
 
 type MailboxRole = (typeof mailboxRole.enumValues)[number];
 type StandardMailboxRole = Exclude<MailboxRole, null>;
 
-interface Params {
-  id: string;
-}
-
+interface Params { id: string; }
 interface Query {
   accountId: string;
   mailbox?: string;
@@ -23,11 +22,7 @@ interface Query {
   threadId?: string;
   remoteImages?: string;
 }
-
-interface StatsQuery {
-  accountId: string;
-}
-
+interface StatsQuery { accountId: string; }
 type ActionBody = { accountId?: string; seen?: boolean; flagged?: boolean; mailbox?: string };
 
 const seenSchema = z.object({ accountId: z.string(), seen: z.boolean() });
@@ -41,29 +36,25 @@ const folderNames: Record<StandardMailboxRole, string> = {
   trash: "Trash",
   archive: "Archive",
 };
-
-const roleFromName = (name: string): MailboxRole | null => {
-  const found = mailboxRole.enumValues.find((r) => r === name.toLowerCase());
-  return found ?? null;
-};
+const roleFromName = (name: string): MailboxRole | null => mailboxRole.enumValues.find((r) => r === name.toLowerCase()) ?? null;
+const isOutbox = (name?: string) => name?.toLowerCase() === "outbox";
+const isVirtualOutboxId = (id: string) => id.startsWith("outbox:");
 
 export default async (app: FastifyInstance) => {
   await requireUser(app, { optional: false });
 
   app.get<{ Querystring: StatsQuery }>("/mail/mailboxes/stats", async (req) => {
     if (!req.query.accountId) throw badRequest("accountId is required");
+    await requireAccountPermission(req.user!.id, req.query.accountId, "read");
     const engine = await getUserEngine({
       productUserId: req.user!.id,
       authUserId: req.authUserId ?? req.user!.id,
       accountId: req.query.accountId,
       headers: req.headers as Record<string, string>,
     });
-    const folders = Object.fromEntries(
-      Object.values(folderNames).map((name) => [name, { total: 0, unread: 0 }]),
-    ) as Record<string, { total: number; unread: number }>;
-    for (const stats of await engine.listMailboxStats(req.query.accountId)) {
-      folders[folderNames[stats.role]] = { total: stats.total, unread: stats.unread };
-    }
+    const folders = Object.fromEntries(Object.values(folderNames).map((name) => [name, { total: 0, unread: 0 }])) as Record<string, { total: number; unread: number }>;
+    for (const stats of await engine.listMailboxStats(req.query.accountId)) folders[folderNames[stats.role]] = { total: stats.total, unread: stats.unread };
+    folders.Outbox = { total: await outboxCount(req.query.accountId), unread: 0 };
     return { folders };
   });
 
@@ -71,51 +62,46 @@ export default async (app: FastifyInstance) => {
     const { query, user } = req;
     if (!query.accountId) throw badRequest("accountId is required");
     const accountId = query.accountId;
-    const engine = await getUserEngine({
-      productUserId: user!.id,
-      authUserId: req.authUserId ?? user!.id,
-      accountId,
-      headers: req.headers as Record<string, string>,
-    });
-
     const requestedLimit = query.limit ? Number(query.limit) : 50;
     const requestedOffset = query.offset ? Number(query.offset) : 0;
     const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 100) : 50;
     const offset = Number.isFinite(requestedOffset) ? Math.max(Math.trunc(requestedOffset), 0) : 0;
-    const messages = await engine.listMessages(accountId, {
-      mailbox: query.mailbox ?? "Inbox",
-      limit,
-      offset,
-      threadId: query.threadId,
-    });
+
+    if (isOutbox(query.mailbox)) {
+      await requireAccountPermission(user!.id, accountId, "read");
+      return { messages: await listOutboxMessages(accountId, limit, offset) };
+    }
+
+    const engine = await getUserEngine({ productUserId: user!.id, authUserId: req.authUserId ?? user!.id, accountId, headers: req.headers as Record<string, string> });
+    let messages = await engine.listMessages(accountId, { mailbox: query.mailbox ?? "Inbox", limit, offset, threadId: query.threadId });
+    if (query.mailbox?.toLowerCase() === "drafts") {
+      const hidden = await activeScheduledEngineIds(accountId);
+      messages = messages.filter((message) => !hidden.has(message.engineId));
+    }
     return { messages };
   });
 
   app.get<{ Params: Params; Querystring: Query }>("/mail/messages/:id", async (req) => {
     const { params, query, user } = req;
     if (!query.accountId) throw badRequest("accountId is required");
-    const engine = await getUserEngine({
-      productUserId: user!.id,
-      authUserId: req.authUserId ?? user!.id,
-      accountId: query.accountId,
-      headers: req.headers as Record<string, string>,
-    });
+    if (isVirtualOutboxId(params.id)) {
+      await requireAccountPermission(user!.id, query.accountId, "read");
+      const message = await getOutboxMessage(query.accountId, params.id);
+      if (!message) throw notFound("message not found");
+      return message;
+    }
+    const engine = await getUserEngine({ productUserId: user!.id, authUserId: req.authUserId ?? user!.id, accountId: query.accountId, headers: req.headers as Record<string, string> });
     const message = await engine.getMessage(query.accountId, params.id);
     if (!message) throw notFound("message not found");
     const rawHtmlBody = message.htmlBody;
     const allowRemoteImages = query.remoteImages === "1" || query.remoteImages === "true";
     const hasRemoteImages = rawHtmlBody ? hasRemoteMailImages(rawHtmlBody) : false;
-    return {
-      ...message,
-      ...(rawHtmlBody ? {
-        htmlBody: allowRemoteImages ? sanitizeRichText(rawHtmlBody) : sanitizeInboundMailHtml(rawHtmlBody),
-        remoteImagesBlocked: hasRemoteImages && !allowRemoteImages,
-      } : {}),
-    };
+    return { ...message, ...(rawHtmlBody ? { htmlBody: allowRemoteImages ? sanitizeRichText(rawHtmlBody) : sanitizeInboundMailHtml(rawHtmlBody), remoteImagesBlocked: hasRemoteImages && !allowRemoteImages } : {}) };
   });
 
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/read", async (req) => {
     const input = seenSchema.parse(req.body);
+    if (isVirtualOutboxId(req.params.id)) throw badRequest("outbox messages cannot be marked read");
     const engine = await getUserEngine({ productUserId: req.user!.id, authUserId: req.authUserId ?? req.user!.id, accountId: input.accountId, headers: req.headers as Record<string, string> });
     await engine.setSeen(input.accountId, [req.params.id], input.seen);
     await syncCache(input.accountId, req.params.id, { read: input.seen });
@@ -124,6 +110,7 @@ export default async (app: FastifyInstance) => {
 
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/flag", async (req) => {
     const input = flagSchema.parse(req.body);
+    if (isVirtualOutboxId(req.params.id)) throw badRequest("outbox messages cannot be flagged");
     const engine = await getUserEngine({ productUserId: req.user!.id, authUserId: req.authUserId ?? req.user!.id, accountId: input.accountId, headers: req.headers as Record<string, string> });
     await engine.setFlagged(input.accountId, [req.params.id], input.flagged);
     await syncCache(input.accountId, req.params.id, { flagged: input.flagged });
@@ -132,6 +119,7 @@ export default async (app: FastifyInstance) => {
 
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/move", async (req) => {
     const input = moveSchema.parse(req.body);
+    if (isVirtualOutboxId(req.params.id)) throw badRequest("cancel the outbox send instead of moving it");
     const engine = await getUserEngine({ productUserId: req.user!.id, authUserId: req.authUserId ?? req.user!.id, accountId: input.accountId, headers: req.headers as Record<string, string>, permission: "send" });
     await engine.move(input.accountId, [req.params.id], input.mailbox);
     const role = roleFromName(input.mailbox);
@@ -142,6 +130,7 @@ export default async (app: FastifyInstance) => {
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/archive", async (req) => {
     const { params, body, user } = req;
     if (!body.accountId) throw badRequest("accountId is required");
+    if (isVirtualOutboxId(params.id)) throw badRequest("cancel the outbox send instead of archiving it");
     const engine = await getUserEngine({ productUserId: user!.id, authUserId: req.authUserId ?? user!.id, accountId: body.accountId, headers: req.headers as Record<string, string>, permission: "send" });
     await engine.move(body.accountId, [params.id], "Archive");
     await syncCache(body.accountId, params.id, { mailboxRole: "archive" });
@@ -151,6 +140,7 @@ export default async (app: FastifyInstance) => {
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/trash", async (req) => {
     const { params, body, user } = req;
     if (!body.accountId) throw badRequest("accountId is required");
+    if (isVirtualOutboxId(params.id)) throw badRequest("cancel the outbox send instead of trashing it");
     const engine = await getUserEngine({ productUserId: user!.id, authUserId: req.authUserId ?? user!.id, accountId: body.accountId, headers: req.headers as Record<string, string>, permission: "send" });
     await engine.move(body.accountId, [params.id], "Trash");
     await syncCache(body.accountId, params.id, { mailboxRole: "trash" });
@@ -160,6 +150,7 @@ export default async (app: FastifyInstance) => {
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/destroy", async (req) => {
     const { params, body, user } = req;
     if (!body.accountId) throw badRequest("accountId is required");
+    if (isVirtualOutboxId(params.id)) throw badRequest("cancel the outbox send instead of deleting it");
     await (await getUserEngine({ productUserId: user!.id, authUserId: req.authUserId ?? user!.id, accountId: body.accountId, headers: req.headers as Record<string, string>, permission: "send" })).destroy(body.accountId, [params.id]);
     return { messageId: params.id, deleted: true };
   });
@@ -172,9 +163,7 @@ export default async (app: FastifyInstance) => {
     while (true) {
       const messages = await engine.listMessages(body.accountId, { mailbox: "Trash", limit: 100, offset: 0 });
       if (messages.length === 0) break;
-      for (let index = 0; index < messages.length; index += 50) {
-        await engine.destroy(body.accountId, messages.slice(index, index + 50).map((message) => message.engineId));
-      }
+      for (let index = 0; index < messages.length; index += 50) await engine.destroy(body.accountId, messages.slice(index, index + 50).map((message) => message.engineId));
       deleted += messages.length;
     }
     return { deleted };
@@ -182,14 +171,8 @@ export default async (app: FastifyInstance) => {
 
   async function syncCache(accountId: string, engineId: string, patch: Partial<{ read: boolean; flagged: boolean; mailboxRole: MailboxRole }>) {
     try {
-      const [cached] = await db
-        .select({ id: inboundMessages.id })
-        .from(inboundMessages)
-        .where(and(eq(inboundMessages.accountId, accountId), eq(inboundMessages.engineId, engineId)))
-        .limit(1);
-      if (cached) {
-        await db.update(inboundMessages).set(patch).where(eq(inboundMessages.id, cached.id));
-      }
+      const [cached] = await db.select({ id: inboundMessages.id }).from(inboundMessages).where(and(eq(inboundMessages.accountId, accountId), eq(inboundMessages.engineId, engineId))).limit(1);
+      if (cached) await db.update(inboundMessages).set(patch).where(eq(inboundMessages.id, cached.id));
     } catch (err) {
       app.log.warn(err, "inbound-message index sync failed; mail action still succeeded");
     }
