@@ -1,0 +1,196 @@
+.oauth-test-shell {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 28px 18px;
+  background: #f8fafd;
+  color: #202124;
+}
+
+.oauth-test-card {
+  width: min(100%, 470px);
+  padding: 42px 40px 30px;
+  border: 1px solid #dadce0;
+  border-radius: 28px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, .08);
+  text-align: center;
+}
+
+.oauth-test-eyebrow {
+  margin: 18px 0 8px;
+  color: #5f6368;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.oauth-test-card h1 {
+  margin: 0;
+  color: #202124;
+  font-size: 30px;
+  line-height: 1.22;
+  font-weight: 500;
+}
+
+.oauth-test-copy {
+  margin: 14px auto 26px;
+  max-width: 38ch;
+  color: #5f6368;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.oauth-test-google-button,
+.oauth-test-primary {
+  width: 100%;
+  min-height: 50px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.oauth-test-google-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 1px solid #dadce0;
+  background: #fff;
+  color: #3c4043;
+}
+
+.oauth-test-google-button:hover:not(:disabled) {
+  background: #f8fafd;
+  border-color: #c9ccd1;
+}
+
+.oauth-test-google-button:disabled { opacity: .65; cursor: default; }
+
+.oauth-test-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff3d7;
+  color: var(--gsw-accent-dark);
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.oauth-test-note {
+  display: grid;
+  gap: 5px;
+  margin-top: 22px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f8fafd;
+  color: #5f6368;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.oauth-test-note strong { color: #202124; }
+
+.oauth-test-account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 24px 0 18px;
+  padding: 14px;
+  border: 1px solid #dadce0;
+  border-radius: 12px;
+  text-align: left;
+}
+
+.oauth-test-account > span,
+.oauth-test-account img {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+}
+
+.oauth-test-account > span {
+  display: grid;
+  place-items: center;
+  background: #f4a100;
+  color: #fff;
+  font-weight: 700;
+}
+
+.oauth-test-account img { object-fit: cover; }
+.oauth-test-account div { min-width: 0; display: grid; gap: 2px; }
+.oauth-test-account strong,
+.oauth-test-account small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oauth-test-account small { color: #5f6368; }
+
+.oauth-test-results {
+  display: grid;
+  gap: 0;
+  margin: 0 0 22px;
+  border: 1px solid #dadce0;
+  border-radius: 12px;
+  overflow: hidden;
+  text-align: left;
+}
+
+.oauth-test-results div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #eceff1;
+}
+
+.oauth-test-results div:last-child { border-bottom: 0; }
+.oauth-test-results dt { color: #5f6368; }
+.oauth-test-results dd { margin: 0; color: #188038; font-weight: 600; }
+.oauth-test-results .oauth-test-mono { max-width: 190px; color: #3c4043; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.oauth-test-primary {
+  border: 0;
+  background: var(--gsw-accent);
+  color: #fff;
+}
+.oauth-test-primary:hover { filter: brightness(.97); }
+
+.oauth-test-success {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: #e6f4ea;
+  color: #188038;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.oauth-test-error {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid #f1c7c2;
+  border-radius: 10px;
+  background: #fce8e6;
+  color: #b3261e;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.oauth-test-card footer {
+  margin-top: 24px;
+  color: #80868b;
+  font-size: 12px;
+}
+
+@media (max-width: 520px) {
+  .oauth-test-card { padding: 32px 22px 24px; border-radius: 20px; }
+  .oauth-test-card h1 { font-size: 26px; }
+}
