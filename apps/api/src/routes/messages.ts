@@ -8,7 +8,8 @@ import { inboundMessages, mailboxRole } from "../db/schema.js";
 import { getUserEngine } from "../engine/index.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { hasRemoteMailImages, sanitizeInboundMailHtml, sanitizeRichText } from "../lib/richText.js";
-import { activeScheduledEngineIds, getOutboxMessage, listOutboxMessages, outboxCount } from "../outbound/schedule.js";
+import { activeScheduledEngineIds } from "../outbound/schedule.js";
+import { getOutboxMessage, listOutboxMessages, outboxCount } from "../outbound/scheduledOutbox.js";
 
 type MailboxRole = (typeof mailboxRole.enumValues)[number];
 type StandardMailboxRole = Exclude<MailboxRole, null>;
