@@ -73,6 +73,6 @@ export function LandingPage() {
 
     <section className="landing-final-cta" data-reveal="cta"><span>Ready when you are.</span><h2>Make email feel like your workspace again.</h2><div><a className="landing-primary" href="/sign-up">Start free</a><a className="landing-secondary light" href="/sign-in">Sign in</a></div></section>
 
-    <footer className="landing-footer" data-reveal="footer"><a className="landing-brand" href="/"><BrandMark size={28}/><span>GSW Mail</span></a><div><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/sign-in">Sign in</a></div><span>Guided Steps Wellness</span></footer>
+    <footer className="landing-footer" data-reveal="footer"><a className="landing-brand" href="/"><BrandMark size={28}/><span>GSW Mail</span></a><div><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/sign-in">Sign in</a></div><span>Guided Steps Wellness: The Community · A non-profit Est. 2025 to build community by meeting them where they are.</span></footer>
   </main>;
 }
