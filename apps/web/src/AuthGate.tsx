@@ -40,6 +40,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       setSession(current);
       if (!current) { setLoading(false); return; }
       if (window.location.pathname === "/create-password") { setLoading(false); return; }
+      if (window.location.pathname === "/oauth/consent") { setResolution("resolved"); setLoading(false); return; }
       setResolution("connecting");
       const context = await resolveAccountContext();
       if (attempt !== generation.current) return;
