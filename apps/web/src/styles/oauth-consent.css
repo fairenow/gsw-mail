@@ -1,3 +1,48 @@
+.gsw-consent-card {
+  width: min(100%, 760px);
+  max-height: calc(100dvh - 72px);
+  padding: 30px 32px 26px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.gsw-consent-layout {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  gap: 30px;
+  align-items: start;
+  text-align: left;
+}
+
+.gsw-consent-intro {
+  position: sticky;
+  top: 0;
+  display: grid;
+  align-content: start;
+}
+
+.gsw-consent-intro .gsw-intro-logo {
+  margin: 0;
+}
+
+.gsw-consent-intro .gsw-setup-kicker {
+  margin-top: 14px;
+}
+
+.gsw-consent-intro .gsw-login-title {
+  margin: 12px 0 8px;
+  max-width: 13ch;
+  font-size: 30px;
+  line-height: 1.04;
+}
+
+.gsw-consent-intro .gsw-login-sub {
+  margin: 0 0 18px;
+  max-width: 34ch;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 .gsw-consent-account,
 .gsw-consent-access,
 .gsw-consent-boundary {
@@ -6,33 +51,71 @@
 
 .gsw-consent-account {
   display: grid;
-  gap: 3px;
-  margin: 8px 0 20px;
-  padding: 14px 16px;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  margin: 4px 0 0;
+  padding: 12px 14px;
   border: 1px solid var(--gsw-border);
   border-radius: 14px;
   background: #fffdf9;
 }
 
-.gsw-consent-account span,
-.gsw-consent-account small {
-  color: var(--gsw-text-muted);
-  font-size: 12px;
+.gsw-consent-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--gsw-accent), var(--gsw-accent-dark));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
 }
 
-.gsw-consent-account strong {
+.gsw-consent-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.gsw-consent-account-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.gsw-consent-account-copy span,
+.gsw-consent-account-copy small {
+  color: var(--gsw-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gsw-consent-account-copy strong {
   color: var(--gsw-text-heading);
   font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gsw-consent-details {
+  min-width: 0;
 }
 
 .gsw-consent-access {
   display: grid;
-  gap: 12px;
-  margin: 22px 0;
+  gap: 2px;
+  margin: 0;
 }
 
 .gsw-consent-access h2 {
-  margin: 0;
+  margin: 0 0 4px;
   font-size: 17px;
 }
 
@@ -41,7 +124,7 @@
   grid-template-columns: 24px 1fr;
   gap: 10px;
   align-items: start;
-  padding: 12px 0;
+  padding: 9px 0;
   border-bottom: 1px solid var(--gsw-border);
 }
 
@@ -56,7 +139,7 @@
 
 .gsw-consent-scope strong {
   display: block;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
   color: var(--gsw-text-heading);
   font-size: 14px;
 }
@@ -65,21 +148,21 @@
 .gsw-consent-boundary p {
   margin: 0;
   color: var(--gsw-text-muted);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12.5px;
+  line-height: 1.4;
 }
 
 .gsw-consent-boundary {
-  margin: 20px 0;
-  padding: 14px 16px;
+  margin: 12px 0;
+  padding: 11px 13px;
   border: 1px solid #e7dcc8;
-  border-radius: 14px;
+  border-radius: 13px;
   background: #fffaf0;
 }
 
 .gsw-consent-boundary strong {
   display: block;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
   color: var(--gsw-text-heading);
   font-size: 13px;
 }
@@ -88,14 +171,55 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-  margin-top: 22px;
+  margin-top: 12px;
 }
 
 .gsw-consent-actions .gsw-btn {
   width: 100%;
+  min-height: 44px;
+}
+
+.gsw-consent-details .gsw-login-hint {
+  padding-top: 10px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.gsw-consent-loading {
+  max-width: 440px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+@media (max-width: 720px), (max-height: 720px) {
+  .gsw-consent-card {
+    width: min(100%, 640px);
+    max-height: calc(100dvh - 32px);
+    padding: 24px 22px;
+  }
+
+  .gsw-consent-layout {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .gsw-consent-intro {
+    position: static;
+  }
+
+  .gsw-consent-intro .gsw-login-title {
+    max-width: none;
+    font-size: 26px;
+  }
 }
 
 @media (max-width: 480px) {
+  .gsw-consent-card {
+    max-height: calc(100dvh - 20px);
+    padding: 20px 18px;
+    border-radius: 20px;
+  }
+
   .gsw-consent-actions {
     grid-template-columns: 1fr;
   }
