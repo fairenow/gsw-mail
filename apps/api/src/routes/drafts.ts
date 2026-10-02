@@ -6,6 +6,7 @@ import { getUserEngine } from "../engine/index.js";
 import { describeJmapFailure } from "../lib/jmapError.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { submitSend } from "../outbound/sendFlow.js";
+import { createScheduledSendFromDraft } from "../outbound/schedule.js";
 import { DEFAULT_MAIL_TEMPLATE_KEY } from "../mail/templates/index.js";
 import { sanitizeRichText } from "../lib/richText.js";
 import {
@@ -48,6 +49,22 @@ const sendDraftSchema = z.object({
   mode: z.enum(["new", "reply", "replyAll", "forward"]).optional(),
   templateKey: z.string().optional(),
   attachments: z.array(attachmentSchema).max(20).optional(),
+});
+
+const scheduleDraftSchema = z.object({
+  accountId: z.string().uuid(),
+  clientRequestId: z.string().trim().min(1).max(200).optional(),
+  mode: z.enum(["new", "reply", "replyAll", "forward"]).optional(),
+  templateKey: z.string().optional(),
+  bcc: z.array(z.string().email()).optional(),
+  scheduledFor: z.string().datetime({ offset: true }),
+  timeZone: z.string().trim().min(1).max(100),
+  recurrence: z.object({
+    frequency: z.enum(["daily", "weekdays", "weekly", "monthly"]),
+    interval: z.number().int().min(1).max(365),
+    endAt: z.string().datetime({ offset: true }).optional(),
+    maxOccurrences: z.number().int().min(2).max(1000).optional(),
+  }).optional(),
 });
 
 const draftAttachmentsSchema = z.object({
@@ -237,6 +254,64 @@ export default async (app: FastifyInstance) => {
       status: result.transportStatus,
       undoUntil: result.undoUntil,
     };
+  });
+
+  app.post<{ Params: { id: string } }>("/mail/drafts/:id/schedule", async (req, reply) => {
+    const body = scheduleDraftSchema.parse(req.body);
+    const account = await requireAccountPermission(req.user!.id, body.accountId, "send");
+    const engine = await getUserEngine({
+      productUserId: req.user!.id,
+      authUserId: req.authUserId ?? req.user!.id,
+      accountId: account.id,
+      headers: req.headers as Record<string, string>,
+      permission: "send",
+    });
+    const draft = await engine.getMessage(body.accountId, req.params.id);
+    if (!draft) throw notFound("draft not found");
+    const attachments = await loadDraftAttachments(body.accountId, req.params.id);
+    const sanitizedDraft = {
+      ...draft,
+      ...(draft.htmlBody ? { htmlBody: sanitizeRichText(draft.htmlBody) } : {}),
+    };
+
+    let result: Awaited<ReturnType<typeof createScheduledSendFromDraft>>;
+    try {
+      result = await createScheduledSendFromDraft({
+        userId: req.user!.id,
+        account,
+        engine,
+        draft: sanitizedDraft,
+        attachments,
+        bcc: body.bcc,
+        templateKey: body.templateKey ?? DEFAULT_MAIL_TEMPLATE_KEY,
+        clientRequestId: body.clientRequestId,
+        schedule: {
+          scheduledFor: new Date(body.scheduledFor),
+          timeZone: body.timeZone,
+          recurrence: body.recurrence,
+        },
+      });
+    } catch (error) {
+      req.log.error({
+        err: error,
+        accountId: body.accountId,
+        draftId: req.params.id,
+        scheduledFor: body.scheduledFor,
+        timeZone: body.timeZone,
+        recurring: Boolean(body.recurrence),
+      }, "draft scheduling failed");
+      throw error;
+    }
+
+    try {
+      await engine.move(body.accountId, [req.params.id], "Trash");
+      await clearDraftAttachments(body.accountId, req.params.id);
+    } catch {
+      app.log.warn({ draftId: req.params.id }, "draft cleanup failed after scheduling");
+    }
+
+    reply.code(202);
+    return result;
   });
 };
 
