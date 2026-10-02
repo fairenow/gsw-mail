@@ -33,10 +33,6 @@ async function authRequest<T>(path: string, body?: unknown): Promise<T> {
 }
 
 function currentOAuthQuery(): string | undefined {
-  // Better Auth signs the provider-owned query before redirecting into custom
-  // OAuth pages. Hash fragments are intentionally excluded so GSW can use them
-  // for presentation-only state such as "use another account" without adding
-  // anything to the signed OAuth transaction.
   const value = window.location.search.replace(/^\?/, "").trim();
   return value || undefined;
 }
@@ -95,6 +91,13 @@ export function setActiveDeviceSession(sessionToken: string): Promise<unknown> {
   return authRequest("/multi-session/set-active", { sessionToken });
 }
 
+export async function switchDeviceSession(sessionToken: string): Promise<void> {
+  await setActiveDeviceSession(sessionToken);
+  // Identity changes are a hard client-state boundary. A document navigation
+  // destroys cached mailbox data and in-flight requests from the prior user.
+  window.location.replace("/mail");
+}
+
 export async function continueOAuthAfterAccountSelection(): Promise<void> {
   const result = await authRequest<OAuthContinuation>("/oauth2/continue", withOAuthQuery({ selected: true }));
   if (!continueOAuth(result)) throw new Error("The OAuth account selection could not be continued.");
@@ -105,9 +108,6 @@ export function getOAuthPublicClient(clientId: string): Promise<OAuthPublicClien
 }
 
 export async function submitOAuthConsent(accept: boolean, acceptedScope?: string): Promise<void> {
-  // Better Auth binds this decision to its signed pending-consent transaction.
-  // Keep the signed oauth_query intact through the consent decision instead of
-  // rebuilding authorization state from client-visible fields.
   const result = await authRequest<OAuthConsentResult>("/oauth2/consent", withOAuthQuery({
     accept,
     ...(accept && acceptedScope ? { scope: acceptedScope } : {}),
@@ -147,12 +147,19 @@ export function requestOneTimeCode(email: string): Promise<unknown> {
 
 export async function signInWithPassword(email: string, password: string): Promise<SignInResult> {
   const result = await authRequest<OAuthContinuation>("/sign-in/email", withOAuthQuery({ email, password }));
-  return { continuedOAuth: continueOAuth(result) };
+  const continuedOAuth = continueOAuth(result);
+  if (!continuedOAuth) window.location.replace("/mail");
+  return { continuedOAuth };
 }
 
 export async function signInWithCode(email: string, otp: string, name?: string): Promise<SignInResult> {
   const result = await authRequest<OAuthContinuation>("/sign-in/email-otp", withOAuthQuery({ email, otp, ...(name ? { name } : {}) }));
-  return { continuedOAuth: continueOAuth(result) };
+  const continuedOAuth = continueOAuth(result);
+  // Existing-account sign-in must start a fresh document so product caches can
+  // never survive from a different GSW identity. New accounts still continue
+  // to password setup before entering product routes.
+  if (!continuedOAuth && !name) window.location.replace("/mail");
+  return { continuedOAuth };
 }
 
 export interface PasswordResetRequest {
@@ -206,5 +213,7 @@ export function requestAccountDeletion(): Promise<unknown> {
 
 export async function logout(): Promise<void> {
   await authRequest("/sign-out", {}).catch(() => undefined);
-  window.dispatchEvent(new Event("gsw-auth-change"));
+  // Never leave a signed-out user's product state resident while another GSW
+  // identity signs in. A hard navigation clears all module and response caches.
+  window.location.replace("/sign-in");
 }
