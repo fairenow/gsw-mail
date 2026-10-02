@@ -133,7 +133,7 @@ export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, att
   const fileInput = useRef<HTMLInputElement>(null);
   const submit = (event: FormEvent) => { event.preventDefault(); onSubmit(); };
   const title = mode === "new" ? "New message" : mode === "forward" ? "Forward message" : mode === "replyAll" ? "Reply all" : "Reply";
-  const status = attachmentSyncing ? "Syncing attachments..." : draftStatus === "saving" ? "Saving..." : draftStatus === "saved" ? "Saved" : draftStatus === "notSaved" ? "Not saved" : "";
+  const status = attachmentSyncing ? "Syncing attachments..." : draftStatus === "saving" ? "Saving..." : draftStatus === "saved" ? "Saved to Drafts" : draftStatus === "notSaved" ? "Saved on this device" : "";
   const totalAttachmentCount = persistedAttachments.length + attachments.length;
   const totalAttachmentBytes = persistedAttachments.reduce((sum, item) => sum + item.size, 0) + attachments.reduce((sum, item) => sum + item.size, 0);
   const pickFiles = async (files: FileList | null) => {
