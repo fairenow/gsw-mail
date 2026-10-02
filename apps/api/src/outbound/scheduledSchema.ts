@@ -4,8 +4,8 @@ import { outboundMessages, users } from "../db/schema.js";
 export type RecurrenceRule = {
   frequency: "daily" | "weekdays" | "weekly" | "monthly";
   interval: number;
-  endAt?: string;
-  maxOccurrences?: number;
+  endAt?: string | undefined;
+  maxOccurrences?: number | undefined;
 };
 
 export const scheduledSends = pgTable(
