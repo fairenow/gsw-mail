@@ -76,9 +76,10 @@ export function ScheduleSendModal({ defaultTimeZone, onClose, onSchedule }: Prop
 
   const hour12 = hour24 % 12 || 12;
   const meridiem = hour24 >= 12 ? "PM" : "AM";
-  const setHour12 = (value: number) => setHour24(meridiem === "PM" ? value % 12 + 12 : value % 12);
-  const setMeridiem = (value: "AM" | "PM") => setHour24(value === "PM" ? (hour12 % 12) + 12 : hour12 % 12);
-  const setMinuteText = (value: string) => setMinute(Math.min(59, Math.max(0, Number(value.replace(/\D/g, "")) || 0)));
+  const setHour12 = (value: number) => { setQuick("custom"); setHour24(meridiem === "PM" ? value % 12 + 12 : value % 12); };
+  const setMeridiem = (value: "AM" | "PM") => { setQuick("custom"); setHour24(value === "PM" ? (hour12 % 12) + 12 : hour12 % 12); };
+  const setMinuteText = (value: string) => { setQuick("custom"); setMinute(Math.min(59, Math.max(0, Number(value.replace(/\D/g, "")) || 0))); };
+  const setHour24Custom = (value: number) => { setQuick("custom"); setHour24(value); };
 
   return <div className="gsw-schedule-backdrop" role="presentation" onMouseDown={onClose}>
     <section className="gsw-schedule-modal" role="dialog" aria-modal="true" aria-labelledby="schedule-title" onMouseDown={(event) => event.stopPropagation()}>
@@ -104,7 +105,7 @@ export function ScheduleSendModal({ defaultTimeZone, onClose, onSchedule }: Prop
 
       <div className="gsw-schedule-custom">
         <label><span><CalendarDays size={15} /> Date</span><input type="date" value={date} min={dateInput(now)} onChange={(event) => { setQuick("custom"); setDate(event.target.value); }} /></label>
-        <label><span><Clock3 size={15} /> Time</span><div className="gsw-time-fields">{use24Hour ? <><input aria-label="Hour" type="number" min={0} max={23} value={hour24} onChange={(event) => setHour24(Math.min(23, Math.max(0, Number(event.target.value) || 0)))} /><span>:</span><input aria-label="Minute" inputMode="numeric" value={pad(minute)} onChange={(event) => setMinuteText(event.target.value)} /></> : <><input aria-label="Hour" type="number" min={1} max={12} value={hour12} onChange={(event) => setHour12(Math.min(12, Math.max(1, Number(event.target.value) || 1)))} /><span>:</span><input aria-label="Minute" inputMode="numeric" value={pad(minute)} onChange={(event) => setMinuteText(event.target.value)} /><select aria-label="AM or PM" value={meridiem} onChange={(event) => setMeridiem(event.target.value as "AM" | "PM")}><option>AM</option><option>PM</option></select></>}</div></label>
+        <label><span><Clock3 size={15} /> Time</span><div className="gsw-time-fields">{use24Hour ? <><input aria-label="Hour" type="number" min={0} max={23} value={hour24} onChange={(event) => setHour24Custom(Math.min(23, Math.max(0, Number(event.target.value) || 0)))} /><span>:</span><input aria-label="Minute" inputMode="numeric" value={pad(minute)} onChange={(event) => setMinuteText(event.target.value)} /></> : <><input aria-label="Hour" type="number" min={1} max={12} value={hour12} onChange={(event) => setHour12(Math.min(12, Math.max(1, Number(event.target.value) || 1)))} /><span>:</span><input aria-label="Minute" inputMode="numeric" value={pad(minute)} onChange={(event) => setMinuteText(event.target.value)} /><select aria-label="AM or PM" value={meridiem} onChange={(event) => setMeridiem(event.target.value as "AM" | "PM")}><option>AM</option><option>PM</option></select></>}</div></label>
         <label className="gsw-timezone-field"><span>Time zone</span><select value={timeZone} onChange={(event) => setTimeZone(event.target.value)}>{zones.map((zone) => <option key={zone} value={zone}>{zone.replaceAll("_", " ")}</option>)}</select></label>
         <label className="gsw-24hour-toggle"><input type="checkbox" checked={use24Hour} onChange={(event) => setUse24Hour(event.target.checked)} /><span>Use 24-hour time</span></label>
       </div>
