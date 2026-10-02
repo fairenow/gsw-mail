@@ -14,6 +14,7 @@ import { config } from "../config.js";
  *   not implied for future external clients.
  */
 export const GSW_OIDC_SUPPORTED_SCOPES = ["openid", "profile", "email", "offline_access"] as const;
+export const GSW_OAUTH_CONSENT_PAGE = "/oauth/consent" as const;
 
 export type GswOidcScope = (typeof GSW_OIDC_SUPPORTED_SCOPES)[number];
 
