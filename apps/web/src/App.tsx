@@ -8,6 +8,7 @@ import { ControlCenterPage } from "./pages/ControlCenterPage";
 import { CalendarPage } from "./pages/CalendarPage";
 import { AccountDeletedPage, LegalPage } from "./pages/LegalPage";
 import { OAuthConsentPage } from "./pages/OAuthConsentPage";
+import { OAuthTestPage } from "./pages/OAuthTestPage";
 
 const navigate = (href: string) => {
   const url = new URL(href, window.location.href);
@@ -45,6 +46,7 @@ export function App() {
   if (path === "/terms") return <LegalPage kind="terms" />;
   if (path === "/account-deleted") return <AccountDeletedPage />;
   if (path === "/oauth/consent") return <OAuthConsentPage />;
+  if (path === "/oauth/test" || path === "/oauth/test/callback") return <OAuthTestPage />;
   if (path === "/setup") return <SetupPage />;
   if (path === "/control-center") return <ControlCenterPage />;
   const page = path === "/settings" ? <SettingsPage /> : path === "/contacts" ? <ContactsPage /> : path === "/calendar" ? <CalendarPage /> : <MailPage />;
