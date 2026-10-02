@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "./styles/globals.css";
 import "./styles/auth.css";
+import "./styles/oauth-consent.css";
 import "./styles/setup-dns.css";
 import "./styles/mail.css";
 import "./styles/mail-row-fix.css";
