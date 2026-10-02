@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { config } from "../config.js";
+import { WEB_OAUTH_TEST_CLIENT_ID } from "./ensureWebOAuthTestClient.js";
 import {
   isTrustedProductBearerClient,
   isTrustedProductJwtBearer,
@@ -45,6 +46,7 @@ test("browser session remains authoritative over bearer authentication", () => {
 test("GSW Mobile is the only explicitly trusted opaque product bearer client", () => {
   assert.equal(isTrustedProductBearerClient(config.auth.mobileClientId), true);
   assert.equal(isTrustedProductBearerClient("tc-remote"), false);
+  assert.equal(isTrustedProductBearerClient(WEB_OAUTH_TEST_CLIENT_ID), false);
   assert.equal(isTrustedProductBearerClient(config.auth.oauthClientId), false);
   assert.equal(isTrustedProductBearerClient(undefined), false);
 });
@@ -58,6 +60,11 @@ test("TC Remote-style external JWT is rejected even with the current product sco
   const scopes = normalizeOAuthScopes("openid email");
   assert.deepEqual(scopes, ["openid", "email"]);
   assert.equal(isTrustedProductJwtBearer("tc-remote", config.auth.stalwartAudience), false);
+});
+
+test("web OAuth test client is identity-only and cannot authenticate GSW product APIs", () => {
+  assert.equal(isTrustedProductBearerClient(WEB_OAUTH_TEST_CLIENT_ID), false);
+  assert.equal(isTrustedProductJwtBearer(WEB_OAUTH_TEST_CLIENT_ID, config.auth.stalwartAudience), false);
 });
 
 test("token with correct scopes but wrong client is rejected", () => {
