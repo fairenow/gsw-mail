@@ -5,15 +5,29 @@ import { scheduledSends } from "./scheduledSchema.js";
 
 const activeScheduledStatuses = ["preparing", "queued", "sending", "failed"] as const;
 
+const isMissingScheduledSendsTable = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: string; cause?: { code?: string } };
+  return candidate.code === "42P01" || candidate.cause?.code === "42P01";
+};
+
 export async function outboxCount(accountId: string): Promise<number> {
-  const rows = await db.select({ id: outboundMessages.id })
-    .from(outboundMessages)
-    .innerJoin(scheduledSends, eq(scheduledSends.outboundMessageId, outboundMessages.id))
-    .where(and(
-      eq(outboundMessages.accountId, accountId),
-      inArray(outboundMessages.transportStatus, [...activeScheduledStatuses]),
-    ));
-  return rows.length;
+  try {
+    const rows = await db.select({ id: outboundMessages.id })
+      .from(outboundMessages)
+      .innerJoin(scheduledSends, eq(scheduledSends.outboundMessageId, outboundMessages.id))
+      .where(and(
+        eq(outboundMessages.accountId, accountId),
+        inArray(outboundMessages.transportStatus, [...activeScheduledStatuses]),
+      ));
+    return rows.length;
+  } catch (error) {
+    // Keep the rest of the mailbox usable while a production instance is
+    // between app deployment and migration 0015. Once the migration lands,
+    // the normal scheduled-only Outbox count is used automatically.
+    if (isMissingScheduledSendsTable(error)) return 0;
+    throw error;
+  }
 }
 
 export async function listOutboxMessages(accountId: string, limit: number, offset: number) {
