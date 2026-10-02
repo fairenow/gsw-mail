@@ -41,6 +41,8 @@ type VerifiedIdentity = {
   productApiIsolated: boolean;
 };
 
+type SigningJwk = JsonWebKey & { kid?: string };
+
 function base64Url(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -95,14 +97,15 @@ async function verifyIdToken(idToken: string, discovery: Discovery, expectedNonc
 
   const jwksResponse = await fetch(discovery.jwks_uri, { credentials: "omit" });
   if (!jwksResponse.ok) throw new Error("Could not load GSW signing keys.");
-  const jwks = await jwksResponse.json() as { keys?: JsonWebKey[] };
+  const jwks = await jwksResponse.json() as { keys?: SigningJwk[] };
   const key = jwks.keys?.find((candidate) => candidate.kid === header.kid);
   if (!key) throw new Error("The ID token signing key was not found.");
   const cryptoKey = await crypto.subtle.importKey("jwk", key, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+  const signature = Uint8Array.from(decodeBase64Url(parts[2]));
   const signatureVerified = await crypto.subtle.verify(
     { name: "ECDSA", hash: "SHA-256" },
     cryptoKey,
-    decodeBase64Url(parts[2]),
+    signature,
     new TextEncoder().encode(`${parts[0]}.${parts[1]}`),
   );
   if (!signatureVerified) throw new Error("The ID token signature could not be verified.");
