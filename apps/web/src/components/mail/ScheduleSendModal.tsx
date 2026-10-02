@@ -30,7 +30,7 @@ export function ScheduleSendModal({ defaultTimeZone, onClose, onSchedule }: Prop
   const [quick, setQuick] = useState<QuickChoice>("1h");
   const [date, setDate] = useState(dateInput(initial));
   const [hour24, setHour24] = useState(initial.getHours());
-  const [minute, setMinute] = useState(Math.ceil(initial.getMinutes() / 5) * 5 % 60);
+  const [minute, setMinute] = useState(initial.getMinutes());
   const [use24Hour, setUse24Hour] = useState(false);
   const [timeZone, setTimeZone] = useState(defaultTimeZone || browserTimeZone());
   const [frequency, setFrequency] = useState<RecurrenceFrequency>("daily");
@@ -44,7 +44,7 @@ export function ScheduleSendModal({ defaultTimeZone, onClose, onSchedule }: Prop
   const setCustomFrom = (value: Date) => {
     setDate(dateInput(value));
     setHour24(value.getHours());
-    setMinute(Math.round(value.getMinutes() / 5) * 5 % 60);
+    setMinute(value.getMinutes());
   };
 
   const chooseQuick = (choice: QuickChoice) => {
@@ -76,8 +76,9 @@ export function ScheduleSendModal({ defaultTimeZone, onClose, onSchedule }: Prop
 
   const hour12 = hour24 % 12 || 12;
   const meridiem = hour24 >= 12 ? "PM" : "AM";
-  const setHour12 = (value: number) => setHour24((meridiem === "PM" ? value % 12 + 12 : value % 12));
+  const setHour12 = (value: number) => setHour24(meridiem === "PM" ? value % 12 + 12 : value % 12);
   const setMeridiem = (value: "AM" | "PM") => setHour24(value === "PM" ? (hour12 % 12) + 12 : hour12 % 12);
+  const setMinuteText = (value: string) => setMinute(Math.min(59, Math.max(0, Number(value.replace(/\D/g, "")) || 0)));
 
   return <div className="gsw-schedule-backdrop" role="presentation" onMouseDown={onClose}>
     <section className="gsw-schedule-modal" role="dialog" aria-modal="true" aria-labelledby="schedule-title" onMouseDown={(event) => event.stopPropagation()}>
@@ -92,16 +93,7 @@ export function ScheduleSendModal({ defaultTimeZone, onClose, onSchedule }: Prop
       </div>
 
       {tab === "schedule" && <div className="gsw-schedule-quick">
-        {([
-          ["10m", "In 10 minutes"],
-          ["1h", "In 1 hour"],
-          ["tomorrow", "Tomorrow at 10:00 AM"],
-          ["monday", "Next Monday at 10:00 AM"],
-          ["custom", "Custom date and time"],
-        ] as const).map(([value, label]) => <label key={value} className={quick === value ? "selected" : ""}>
-          <input type="radio" name="schedule-quick" checked={quick === value} onChange={() => chooseQuick(value)} />
-          <span>{label}</span>
-        </label>)}
+        {([["10m", "In 10 minutes"], ["1h", "In 1 hour"], ["tomorrow", "Tomorrow at 10:00 AM"], ["monday", "Next Monday at 10:00 AM"], ["custom", "Custom date and time"]] as const).map(([value, label]) => <label key={value} className={quick === value ? "selected" : ""}><input type="radio" name="schedule-quick" checked={quick === value} onChange={() => chooseQuick(value)} /><span>{label}</span></label>)}
       </div>}
 
       {tab === "recurring" && <div className="gsw-recurring-grid">
@@ -112,7 +104,7 @@ export function ScheduleSendModal({ defaultTimeZone, onClose, onSchedule }: Prop
 
       <div className="gsw-schedule-custom">
         <label><span><CalendarDays size={15} /> Date</span><input type="date" value={date} min={dateInput(now)} onChange={(event) => { setQuick("custom"); setDate(event.target.value); }} /></label>
-        <label><span><Clock3 size={15} /> Time</span><div className="gsw-time-fields">{use24Hour ? <input aria-label="Hour" type="number" min={0} max={23} value={hour24} onChange={(event) => setHour24(Math.min(23, Math.max(0, Number(event.target.value) || 0)))} /> : <><input aria-label="Hour" type="number" min={1} max={12} value={hour12} onChange={(event) => setHour12(Math.min(12, Math.max(1, Number(event.target.value) || 1)))} /><select aria-label="AM or PM" value={meridiem} onChange={(event) => setMeridiem(event.target.value as "AM" | "PM")}><option>AM</option><option>PM</option></select></>}<span>:</span><input aria-label="Minute" type="number" min={0} max={59} step={5} value={minute} onChange={(event) => setMinute(Math.min(59, Math.max(0, Number(event.target.value) || 0)))} /></div></label>
+        <label><span><Clock3 size={15} /> Time</span><div className="gsw-time-fields">{use24Hour ? <><input aria-label="Hour" type="number" min={0} max={23} value={hour24} onChange={(event) => setHour24(Math.min(23, Math.max(0, Number(event.target.value) || 0)))} /><span>:</span><input aria-label="Minute" inputMode="numeric" value={pad(minute)} onChange={(event) => setMinuteText(event.target.value)} /></> : <><input aria-label="Hour" type="number" min={1} max={12} value={hour12} onChange={(event) => setHour12(Math.min(12, Math.max(1, Number(event.target.value) || 1)))} /><span>:</span><input aria-label="Minute" inputMode="numeric" value={pad(minute)} onChange={(event) => setMinuteText(event.target.value)} /><select aria-label="AM or PM" value={meridiem} onChange={(event) => setMeridiem(event.target.value as "AM" | "PM")}><option>AM</option><option>PM</option></select></>}</div></label>
         <label className="gsw-timezone-field"><span>Time zone</span><select value={timeZone} onChange={(event) => setTimeZone(event.target.value)}>{zones.map((zone) => <option key={zone} value={zone}>{zone.replaceAll("_", " ")}</option>)}</select></label>
         <label className="gsw-24hour-toggle"><input type="checkbox" checked={use24Hour} onChange={(event) => setUse24Hour(event.target.checked)} /><span>Use 24-hour time</span></label>
       </div>
