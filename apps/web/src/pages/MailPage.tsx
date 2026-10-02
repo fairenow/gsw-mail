@@ -147,8 +147,29 @@ export function MailPage() {
   };
   const selectMessage = async (message: MessageSummary) => {
     if (!account) return;
-    try { const full = await api.message(account.id, message.engineId); if (folder === "Drafts") { openDraft(full); return; } setOpen(full); setMobileView("reader"); if (!message.read && folder !== "Outbox") { const timer = window.setTimeout(() => { void api.read(account.id, message.engineId, true).then(() => { setMessages((prev) => prev.map((item) => item.engineId === message.engineId ? { ...item, read: true } : item)); setOpen((current) => current?.engineId === message.engineId ? { ...current, read: true } : current); void loadFolderCounts(account.id); }).catch((err) => setError(err instanceof Error ? err.message : String(err))); readTimers.current.delete(message.engineId); }, 400); readTimers.current.set(message.engineId, timer); } }
-    catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    try {
+      const full = await api.message(account.id, message.engineId);
+      if (folder === "Outbox") {
+        const stagedDraftId = full.headers?.["X-GSW-Draft-ID"];
+        if (!stagedDraftId) throw new Error("This scheduled message is not available for editing.");
+        const stagedDraft = await api.message(account.id, stagedDraftId);
+        openDraft(stagedDraft);
+        return;
+      }
+      if (folder === "Drafts") { openDraft(full); return; }
+      setOpen(full); setMobileView("reader");
+      if (!message.read) {
+        const timer = window.setTimeout(() => {
+          void api.read(account.id, message.engineId, true).then(() => {
+            setMessages((prev) => prev.map((item) => item.engineId === message.engineId ? { ...item, read: true } : item));
+            setOpen((current) => current?.engineId === message.engineId ? { ...current, read: true } : current);
+            void loadFolderCounts(account.id);
+          }).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+          readTimers.current.delete(message.engineId);
+        }, 400);
+        readTimers.current.set(message.engineId, timer);
+      }
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   };
   const toggleRead = async (message: MessageSummary | FullMessage) => { if (!account || folder === "Outbox") return; const read = !message.read; const pending = readTimers.current.get(message.engineId); if (pending !== undefined) { window.clearTimeout(pending); readTimers.current.delete(message.engineId); } try { await api.read(account.id, message.engineId, read); setMessages((prev) => prev.map((item) => item.engineId === message.engineId ? { ...item, read } : item)); setOpen((current) => current?.engineId === message.engineId ? { ...current, read } : current); void loadFolderCounts(account.id); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
   const toggleFlag = async (message: MessageSummary | FullMessage) => { if (!account || folder === "Outbox") return; const flagged = !message.flagged; try { await api.flag(account.id, message.engineId, flagged); setMessages((prev) => prev.map((item) => item.engineId === message.engineId ? { ...item, flagged } : item)); setOpen((current) => current?.engineId === message.engineId ? { ...current, flagged } : current); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
