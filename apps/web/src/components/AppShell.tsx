@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, type Account } from "../api";
+import { getSession } from "../auth";
+import { rememberIdentity } from "../lib/rememberedIdentities";
 import { AppTopBar, type AppTopBarOptions } from "./AppTopBar";
 
 type AppShellContextValue = {
@@ -52,8 +54,6 @@ const warmAccountData = (accountId: string) => {
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
-  // Never seed product state from a previous mount. Auth identities can change
-  // in the same tab, so cached mailbox/profile state must not cross that boundary.
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [account, setAccount] = useState<Account | null>(null);
   const [profileImageUrl, setProfileImageUrl] = useState("");
@@ -76,9 +76,18 @@ export function AppShell({ children }: { children: ReactNode }) {
         return next;
       });
     }).catch(() => undefined);
-    void api.settings().then((settings) => {
+    void Promise.all([api.settings(), getSession()]).then(([settings, session]) => {
       if (cancelled) return;
-      setProfileImageUrl(typeof settings.general.profileImageUrl === "string" ? settings.general.profileImageUrl : "");
+      const nextProfileImageUrl = typeof settings.general.profileImageUrl === "string" ? settings.general.profileImageUrl : "";
+      setProfileImageUrl(nextProfileImageUrl);
+      if (session) {
+        rememberIdentity({
+          id: session.user.id,
+          email: session.user.email,
+          name: session.user.name || session.user.email,
+          image: nextProfileImageUrl || session.user.image,
+        });
+      }
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, []);
