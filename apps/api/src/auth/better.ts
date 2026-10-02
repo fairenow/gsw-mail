@@ -9,6 +9,7 @@ import { db } from "../db/client.js";
 import { authAccounts, authSessions, authUsers, authVerifications, domains, emailAccounts, jwks, oauthAccessToken, oauthClient, oauthConsent, oauthRefreshToken, organizationMemberships, users } from "../db/schema.js";
 import { and, eq } from "drizzle-orm";
 import { renderGswAuthEmail } from "./email.js";
+import { GSW_OIDC_SUPPORTED_SCOPES, legacyInternalUserInfoClaims, oidcClientIdFromJwt } from "./oidcContract.js";
 
 const resend = config.outbound.resendApiKey ? new Resend(config.outbound.resendApiKey) : null;
 
@@ -90,15 +91,14 @@ export const auth = betterAuth({
     oauthProvider({
       loginPage: "/sign-in",
       consentPage: "/sign-in",
-      scopes: ["openid", "email", "offline_access"],
+      scopes: [...GSW_OIDC_SUPPORTED_SCOPES],
       validAudiences: [config.auth.stalwartAudience],
       accessTokenExpiresIn: config.auth.tokenTtlSeconds,
       refreshTokenReuseInterval: 30,
-      customUserInfoClaims: ({ user }) => ({
-        email: user.email,
-        email_verified: user.emailVerified,
-        name: user.name,
-        preferred_username: user.email,
+      customUserInfoClaims: ({ user, scopes, jwt }) => legacyInternalUserInfoClaims({
+        clientId: oidcClientIdFromJwt(jwt),
+        scopes,
+        user,
       }),
       customAccessTokenClaims: ({ user, resource, scopes }) => resource === config.auth.stalwartAudience && user && scopes.includes("email")
         ? { email: user.email, preferred_username: user.email, name: user.name }
