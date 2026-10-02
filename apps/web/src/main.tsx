@@ -7,6 +7,7 @@ import "./styles/oauth-consent.css";
 import "./styles/oauth-test.css";
 import "./styles/landing.css";
 import "./styles/landing-showcase-motion.css";
+import "./styles/landing-page-motion.css";
 import "./styles/setup-dns.css";
 import "./styles/mail.css";
 import "./styles/scheduled-send.css";
