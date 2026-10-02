@@ -47,6 +47,19 @@ export function normalizeOAuthScopes(value: unknown): string[] {
   return [];
 }
 
+const audienceIncludes = (audience: unknown, expected: string): boolean => {
+  if (typeof audience === "string") return audience === expected;
+  return Array.isArray(audience) && audience.some((value) => value === expected);
+};
+
+export function isTrustedProductBearerClient(clientId: string | undefined): boolean {
+  return clientId === config.auth.mobileClientId;
+}
+
+export function isTrustedProductJwtBearer(clientId: string | undefined, audience: unknown): boolean {
+  return isTrustedProductBearerClient(clientId) && audienceIncludes(audience, config.auth.stalwartAudience);
+}
+
 const oauthJwks = createRemoteJWKSet(new URL(`${config.auth.issuer}/jwks`));
 
 async function resolveJwtOAuthBearerIdentity(token: string): Promise<OAuthBearerIdentity | null> {
@@ -64,7 +77,7 @@ async function resolveJwtOAuthBearerIdentity(token: string): Promise<OAuthBearer
       : typeof payload.azp === "string"
         ? payload.azp
         : undefined;
-    if (clientId && clientId !== config.auth.mobileClientId) return null;
+    if (!isTrustedProductJwtBearer(clientId, payload.aud)) return null;
 
     const [user] = await db
       .select({ id: authUsers.id, email: authUsers.email, name: authUsers.name })
@@ -80,27 +93,33 @@ async function resolveJwtOAuthBearerIdentity(token: string): Promise<OAuthBearer
 }
 
 export async function resolveOAuthBearerIdentity(token: string): Promise<OAuthBearerIdentity | null> {
-  // When the OAuth request includes a `resource` and the Better Auth JWT plugin
-  // is enabled, the provider issues a self-contained JWT access token. Those
-  // tokens are intentionally not stored in oauth_access_token, so verify them
-  // against the provider JWKS before falling back to opaque-token lookup.
+  // Resource-bound Better Auth JWT access tokens are intentionally not stored in
+  // oauth_access_token. Verify them cryptographically, then require both the
+  // explicitly trusted first-party mobile client and the expected Stalwart
+  // resource audience before treating them as GSW product API authentication.
   if (token.split(".").length === 3) {
     const identity = await resolveJwtOAuthBearerIdentity(token);
     if (identity) return identity;
+    return null;
   }
 
+  // Opaque access-token rows do not currently persist a resource/audience. Do
+  // not infer product authorization from scopes or user identity: only the
+  // explicitly trusted GSW Mobile OAuth client may authenticate product APIs
+  // through this legacy opaque-token path.
   const [row] = await db
     .select({
       authUserId: authUsers.id,
       email: authUsers.email,
       name: authUsers.name,
       scopes: oauthAccessToken.scopes,
+      clientId: oauthAccessToken.clientId,
     })
     .from(oauthAccessToken)
     .innerJoin(authUsers, eq(oauthAccessToken.userId, authUsers.id))
     .where(and(eq(oauthAccessToken.token, token), gt(oauthAccessToken.expiresAt, new Date())))
     .limit(1);
-  if (!row) return null;
+  if (!row || !isTrustedProductBearerClient(row.clientId)) return null;
   const scopes = row.scopes ?? [];
   if (!scopes.includes("openid") || !scopes.includes("email")) return null;
   return { authUserId: row.authUserId, email: row.email, name: row.name, scopes };
