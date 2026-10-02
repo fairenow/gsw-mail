@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, KeyRound, LogOut, Mail, Plus, Settings, Users } from "lucide-react";
+import { Check, ChevronDown, LogOut, Mail, Plus, Settings, Users } from "lucide-react";
 import { getSession, listDeviceSessions, logout, switchDeviceSession, type DeviceSession } from "../../auth";
 import type { Account } from "../../api";
 import { getRememberedIdentities, setAuthPrefillEmail } from "../../lib/rememberedIdentities";
 import { SenderAvatar } from "./SenderAvatar";
+
+const identityCopyStyle = { minWidth: 0, flex: 1, textAlign: "left" as const };
+const emailStyle = { display: "block", minWidth: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, fontSize: 11 };
 
 export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { account: Account | null; accounts: Account[]; profileImageUrl?: string; onSelect: (id: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -33,6 +36,10 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
 
   const liveUserIds = new Set(deviceSessions.map((session) => session.user.id));
   const signedOut = remembered.filter((identity) => !liveUserIds.has(identity.id));
+  const imageForSession = (session: DeviceSession) => {
+    if (session.user.id === currentAuthUserId && profileImageUrl) return profileImageUrl;
+    return remembered.find((identity) => identity.id === session.user.id)?.image ?? session.user.image ?? undefined;
+  };
   const reauthenticate = (email: string) => {
     setAuthPrefillEmail(email);
     window.location.assign("/sign-in#use-another-account");
@@ -42,14 +49,14 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
     <div className="gsw-avatar-wrap">
       <button className="gsw-account-trigger" onClick={() => setOpen((value) => !value)} aria-label="Open account menu" aria-expanded={open}>
         <SenderAvatar name={account.displayName ?? undefined} email={account.address} imageUrl={profileImageUrl} />
-        <span className="gsw-account-trigger-copy"><strong>{account.displayName || account.address}</strong><span>{account.address}</span></span>
+        <span className="gsw-account-trigger-copy" style={{ minWidth: 0 }}><strong>{account.displayName || account.address}</strong><span style={emailStyle}>{account.address}</span></span>
         <span className="gsw-account-chevron" aria-hidden="true"><ChevronDown size={15} strokeWidth={1.75} /></span>
       </button>
       {open && (
         <div className="gsw-account-menu">
           <div className="gsw-account-summary">
             <SenderAvatar name={account.displayName ?? undefined} email={account.address} imageUrl={profileImageUrl} />
-            <div><strong>{account.displayName || "GSW Mail account"}</strong><span>{account.address}</span></div>
+            <div style={identityCopyStyle}><strong>{account.displayName || "GSW Mail account"}</strong><span style={emailStyle}>{account.address}</span></div>
           </div>
 
           <div className="gsw-account-menu-rule" />
@@ -58,8 +65,8 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
             const current = session.user.id === currentAuthUserId;
             return (
               <button key={session.session.token} className={`gsw-account-menu-item ${current ? "current" : ""}`} disabled={switching !== null} onClick={() => void switchIdentity(session)}>
-                <SenderAvatar name={session.user.name} email={session.user.email} imageUrl={session.user.image ?? undefined} />
-                <span style={{ minWidth: 0, flex: 1, textAlign: "left" }}><strong>{session.user.name || session.user.email}</strong><span>{session.user.email}</span></span>
+                <SenderAvatar name={session.user.name} email={session.user.email} imageUrl={imageForSession(session)} />
+                <span style={identityCopyStyle}><strong>{session.user.name || session.user.email}</strong><span style={emailStyle}>{session.user.email}</span></span>
                 {current && <Check size={16} strokeWidth={2} aria-label="Current account" />}
               </button>
             );
@@ -67,8 +74,8 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
           {signedOut.map((identity) => (
             <button key={identity.id} className="gsw-account-menu-item" onClick={() => reauthenticate(identity.email)}>
               <SenderAvatar name={identity.name} email={identity.email} imageUrl={identity.image ?? undefined} />
-              <span style={{ minWidth: 0, flex: 1, textAlign: "left" }}><strong>{identity.name || identity.email}</strong><span>{identity.email}</span></span>
-              <span style={{ fontSize: 11, opacity: 0.58 }}>Signed out</span>
+              <span style={identityCopyStyle}><strong>{identity.name || identity.email}</strong><span style={emailStyle}>{identity.email}</span></span>
+              <span style={{ fontSize: 11, opacity: 0.58, whiteSpace: "nowrap" }}>Signed out</span>
             </button>
           ))}
           <a className="gsw-menu-action" href="/sign-in#use-another-account" onClick={() => setOpen(false)}><Plus size={16} strokeWidth={1.75} aria-hidden="true" />Add another account</a>
@@ -77,14 +84,13 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
           <a className="gsw-menu-action" href="/mail" onClick={() => setOpen(false)}><Mail size={16} strokeWidth={1.75} aria-hidden="true" />Mailbox</a>
           <a className="gsw-menu-action" href="/contacts" onClick={() => setOpen(false)}><Users size={16} strokeWidth={1.75} aria-hidden="true" />Contacts</a>
           <a className="gsw-menu-action" href="/settings" onClick={() => setOpen(false)}><Settings size={16} strokeWidth={1.75} aria-hidden="true" />Settings</a>
-          <a className="gsw-menu-action" href="/oauth/test" onClick={() => setOpen(false)}><KeyRound size={16} strokeWidth={1.75} aria-hidden="true" />Connect with GSW</a>
 
           {accounts.length > 1 && <>
             <div className="gsw-account-menu-rule" />
             <div style={{ padding: "4px 14px 6px", fontSize: 11, fontWeight: 700, opacity: 0.58, letterSpacing: ".06em", textTransform: "uppercase" }}>Mailboxes in this account</div>
             {accounts.map((item) => (
               <button key={item.id} className={`gsw-account-menu-item ${item.id === account.id ? "current" : ""}`} onClick={() => { onSelect(item.id); setOpen(false); }}>
-                <strong>{item.displayName || item.address}</strong><span>{item.address}</span>
+                <span style={identityCopyStyle}><strong>{item.displayName || item.address}</strong><span style={emailStyle}>{item.address}</span></span>
               </button>
             ))}
           </>}
