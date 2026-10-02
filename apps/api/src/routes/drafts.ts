@@ -7,6 +7,7 @@ import { describeJmapFailure } from "../lib/jmapError.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { submitSend } from "../outbound/sendFlow.js";
 import { createScheduledSendFromDraft } from "../outbound/schedule.js";
+import { syncScheduledDraftEdit } from "../outbound/scheduledOutbox.js";
 import { DEFAULT_MAIL_TEMPLATE_KEY } from "../mail/templates/index.js";
 import { sanitizeRichText } from "../lib/richText.js";
 import {
@@ -134,6 +135,21 @@ export default async (app: FastifyInstance) => {
         references: input.references,
       });
       await moveDraftAttachments(account.id, req.params.id, engineId);
+      await syncScheduledDraftEdit({
+        accountId: account.id,
+        previousEngineId: req.params.id,
+        engineId,
+        to: input.to ?? [],
+        cc: input.cc,
+        bcc: input.bcc,
+        subject: input.subject,
+        textBody: input.textBody,
+        htmlBody,
+        replyTo: input.replyTo,
+        inReplyTo: input.inReplyTo,
+        references: input.references,
+        templateKey: input.templateKey,
+      });
       return { engineId };
     } catch (error) {
       req.log.error({ err: error, jmap: { method: "Email/set", operation: "replace" }, draftId: req.params.id, ...draftLogContext(input, error) }, "draft update failed");
