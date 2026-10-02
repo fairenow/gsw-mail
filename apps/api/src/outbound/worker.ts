@@ -1,4 +1,7 @@
+import { eq } from "drizzle-orm";
 import { config } from "../config.js";
+import { db } from "../db/client.js";
+import { outboundMessages } from "../db/schema.js";
 import { reconcilePreparing } from "./reconcile.js";
 import { getRelay, isInvalidHeaderError } from "./relay.js";
 import { clearOutboundAttachmentPayloads, loadOutboundAttachmentPayloads } from "./attachmentPayloadStore.js";
@@ -34,11 +37,8 @@ export function createOutboundWorker(intervalMs = 5_000): OutboundWorker {
     let processed = 0;
     try {
       ticks += 1;
-      if (ticks % 12 === 0) {
-        await reconcilePreparing();
-      }
-      const batchSize = 10;
-      const claimed = await claimDueJobs(batchSize);
+      if (ticks % 12 === 0) await reconcilePreparing();
+      const claimed = await claimDueJobs(10);
       for (const jobId of claimed) {
         processed += 1;
         const job = await loadJob(jobId.id);
@@ -58,13 +58,14 @@ export function createOutboundWorker(intervalMs = 5_000): OutboundWorker {
             const schedule = await scheduledMetadata(job.id);
             await markAccepted(job.id, result.deliveryId);
 
-            // Recurring sends need their next staged Email object while the current
-            // occurrence and attachment payloads still exist. Failure to prepare a
-            // later occurrence never changes the fact that this occurrence sent.
             if (schedule?.kind === "recurring") {
               try {
                 const nextId = await scheduleNextRecurringOccurrence(job.id);
-                console.info("[outbound:schedule] recurring occurrence prepared", { sendId: job.id, nextSendId: nextId, seriesId: schedule.seriesId });
+                console.info("[outbound:schedule] recurring occurrence prepared", {
+                  sendId: job.id,
+                  nextSendId: nextId,
+                  seriesId: schedule.seriesId,
+                });
               } catch (error) {
                 console.warn("[outbound:schedule] could not prepare next recurring occurrence", {
                   sendId: job.id,
@@ -74,24 +75,24 @@ export function createOutboundWorker(intervalMs = 5_000): OutboundWorker {
               }
             }
 
-            if (schedule && job.messageId) {
-              const engineMessageId = (await loadJob(job.id))?.messageId ? (await import("../db/client.js"), undefined) : undefined;
-              void engineMessageId;
-            }
             if (schedule) {
               try {
-                const refreshed = await loadJob(job.id);
-                const rowEngineId = await (async () => {
-                  const { db } = await import("../db/client.js");
-                  const { outboundMessages } = await import("../db/schema.js");
-                  const { eq } = await import("drizzle-orm");
-                  const [row] = await db.select({ engineMessageId: outboundMessages.engineMessageId }).from(outboundMessages).where(eq(outboundMessages.id, job.id)).limit(1);
-                  return row?.engineMessageId ?? null;
-                })();
-                void refreshed;
-                if (rowEngineId) await moveScheduledEmailToSent({ productAccountId: job.accountId, address: job.fromAddress, engineMessageId: rowEngineId });
+                const [row] = await db.select({ engineMessageId: outboundMessages.engineMessageId })
+                  .from(outboundMessages)
+                  .where(eq(outboundMessages.id, job.id))
+                  .limit(1);
+                if (row?.engineMessageId) {
+                  await moveScheduledEmailToSent({
+                    productAccountId: job.accountId,
+                    address: job.fromAddress,
+                    engineMessageId: row.engineMessageId,
+                  });
+                }
               } catch (error) {
-                console.warn("[outbound:schedule] sent copy finalization failed", { sendId: job.id, error: error instanceof Error ? error.message : String(error) });
+                console.warn("[outbound:schedule] sent copy finalization failed", {
+                  sendId: job.id,
+                  error: error instanceof Error ? error.message : String(error),
+                });
               }
             }
             await clearOutboundAttachmentPayloads(job.id);
@@ -110,11 +111,8 @@ export function createOutboundWorker(intervalMs = 5_000): OutboundWorker {
             subject: job.subject ?? "",
             threading: { hasInReplyTo: Boolean(job.inReplyTo), hasReferences: Boolean(job.references) },
           });
-          if (isInvalidHeaderError(message)) {
-            await markFailed(job.id, "invalid_header", message);
-          } else {
-            await markTransportRetry(job.id, message);
-          }
+          if (isInvalidHeaderError(message)) await markFailed(job.id, "invalid_header", message);
+          else await markTransportRetry(job.id, message);
         }
       }
     } catch (err) {
@@ -127,9 +125,7 @@ export function createOutboundWorker(intervalMs = 5_000): OutboundWorker {
 
   const start = (): void => {
     if (timer) return;
-    timer = setInterval(() => {
-      void runOnce();
-    }, intervalMs);
+    timer = setInterval(() => { void runOnce(); }, intervalMs);
     void runOnce();
   };
 
@@ -144,8 +140,6 @@ export function createOutboundWorker(intervalMs = 5_000): OutboundWorker {
 let worker: OutboundWorker | undefined;
 
 export function getOutboundWorker(): OutboundWorker {
-  if (!worker) {
-    worker = createOutboundWorker(config.outbound.relay === "null" ? 10_000 : 5_000);
-  }
+  if (!worker) worker = createOutboundWorker(config.outbound.relay === "null" ? 10_000 : 5_000);
   return worker;
 }
