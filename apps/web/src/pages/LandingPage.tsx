@@ -24,11 +24,11 @@ const featureRows = [
 
 const showcaseSteps = [
   { key: "inbox", label: "Inbox", title: "Move through what matters." },
-  { key: "compose", label: "Compose", title: "Write and send without leaving your flow." },
-  { key: "calendar", label: "Calendar", title: "Turn messages into time on your calendar." },
-  { key: "contacts", label: "Contacts", title: "Keep people and context close." },
-  { key: "templates", label: "Templates", title: "Reuse the messages you send most." },
-  { key: "assistant", label: "Assistant", title: "Ask for help and keep work moving." },
+  { key: "compose", label: "Compose", title: "Write. Send. Keep moving." },
+  { key: "calendar", label: "Calendar", title: "Turn messages into time." },
+  { key: "contacts", label: "Contacts", title: "Keep people close." },
+  { key: "templates", label: "Templates", title: "Reuse what works." },
+  { key: "assistant", label: "Assistant", title: "Ask. Act. Keep moving." },
 ] as const;
 
 type ShowcaseKey = (typeof showcaseSteps)[number]["key"];
