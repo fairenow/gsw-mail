@@ -106,14 +106,12 @@ export function getOAuthPublicClient(clientId: string): Promise<OAuthPublicClien
 
 export async function submitOAuthConsent(accept: boolean, acceptedScope?: string): Promise<void> {
   // Better Auth binds this decision to its signed pending-consent transaction.
-  // client_id, redirect_uri, and state are never submitted from the page. On
-  // approval, the visible scope list is sent as the accepted subset so URL
-  // tampering cannot silently approve permissions that were not displayed;
-  // Better Auth validates that subset against the original authorization request.
-  const result = await authRequest<OAuthConsentResult>("/oauth2/consent", {
+  // Keep the signed oauth_query intact through the consent decision instead of
+  // rebuilding authorization state from client-visible fields.
+  const result = await authRequest<OAuthConsentResult>("/oauth2/consent", withOAuthQuery({
     accept,
     ...(accept && acceptedScope ? { scope: acceptedScope } : {}),
-  });
+  }));
   if (result.redirect !== false && typeof result.url === "string" && result.url) {
     window.location.assign(result.url);
     return;
