@@ -6,7 +6,6 @@ import {
   getSession,
   listDeviceSessions,
   setActiveDeviceSession,
-  type AuthSession,
   type DeviceSession,
   type OAuthPublicClient,
 } from "../auth";
@@ -40,7 +39,6 @@ function signInPath(): string {
 
 export function OAuthAccountChooserPage() {
   const clientId = useMemo(readClientId, []);
-  const [session, setSession] = useState<AuthSession | null>(null);
   const [client, setClient] = useState<OAuthPublicClient | null>(null);
   const [rows, setRows] = useState<ChooserRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,9 +87,6 @@ export function OAuthAccountChooserPage() {
           };
         });
 
-        // A fresh current session may not yet appear in the multi-session cookie
-        // on an older browser. Still show it as the active account; continuing it
-        // does not require switching the session token.
         if (!merged.some((item) => item.id === current.user.id)) {
           merged.unshift({
             id: current.user.id,
@@ -104,7 +99,6 @@ export function OAuthAccountChooserPage() {
           });
         }
 
-        setSession(current);
         setClient(publicClient);
         setRows(merged);
       } catch (err) {
