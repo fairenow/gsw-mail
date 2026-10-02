@@ -59,7 +59,7 @@ export default async (app: FastifyInstance) => {
     // Some JMAP mailbox counters can lag immediately after bulk destruction.
     // If Trash claims messages still exist, verify against the actual message
     // query so every client sees zero as soon as Empty Trash has completed.
-    if (folders.Trash.total > 0) {
+    if (folders.Trash && folders.Trash.total > 0) {
       const trashProbe = await engine.listMessages(req.query.accountId, { mailbox: "Trash", limit: 1, offset: 0 });
       if (trashProbe.length === 0) folders.Trash = { total: 0, unread: 0 };
     }
