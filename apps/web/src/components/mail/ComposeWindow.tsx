@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Minus, Paperclip, X } from "lucide-react";
+import { ChevronDown, Minus, Paperclip, X } from "lucide-react";
 import type { ComposeAttachment } from "../../api";
 import type { DraftAttachmentMeta } from "../../lib/draftAttachments";
+import type { ScheduleDraftInput } from "../../lib/scheduledSend";
 import { RichTextEditor } from "../RichTextEditor";
+import { ScheduleSendModal } from "./ScheduleSendModal";
 
 export type ComposeMode = "new" | "reply" | "replyAll" | "forward";
 
@@ -95,7 +97,7 @@ const fileToAttachment = (file: File): Promise<ComposeAttachment> => new Promise
 
 const formatBytes = (size: number) => size < 1024 ? `${size} B` : size < 1024 * 1024 ? `${Math.round(size / 1024)} KB` : `${(size / (1024 * 1024)).toFixed(1)} MB`;
 
-export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, attachments, persistedAttachments = [], attachmentSyncing = false, sending, draftStatus, sendError, sendNote, onToChange, onCcChange, onBccChange, onSubjectChange, onHtmlChange, onAttachmentsChange, onRemovePersistedAttachment, onMinimize, onClose, onSubmit, onRetry, onUndo }: {
+export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, attachments, persistedAttachments = [], attachmentSyncing = false, sending, draftStatus, sendError, sendNote, defaultTimeZone, onToChange, onCcChange, onBccChange, onSubjectChange, onHtmlChange, onAttachmentsChange, onRemovePersistedAttachment, onMinimize, onClose, onSubmit, onSchedule, onRetry, onUndo }: {
   mode: ComposeMode;
   minimized: boolean;
   to: string;
@@ -110,6 +112,7 @@ export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, att
   draftStatus: "idle" | "saving" | "saved" | "notSaved";
   sendError?: string | null;
   sendNote?: string;
+  defaultTimeZone?: string;
   onToChange: (value: string) => void;
   onCcChange: (value: string) => void;
   onBccChange: (value: string) => void;
@@ -120,11 +123,13 @@ export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, att
   onMinimize: () => void;
   onClose: () => void;
   onSubmit: () => void;
+  onSchedule: (schedule: ScheduleDraftInput) => void;
   onRetry: () => void;
   onUndo?: () => void;
 }) {
   const [showBcc, setShowBcc] = useState(Boolean(bcc));
   const [attachmentError, setAttachmentError] = useState("");
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const submit = (event: FormEvent) => { event.preventDefault(); onSubmit(); };
   const title = mode === "new" ? "New message" : mode === "forward" ? "Forward message" : mode === "replyAll" ? "Reply all" : "Reply";
@@ -143,21 +148,24 @@ export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, att
     if (fileInput.current) fileInput.current.value = "";
   };
   if (minimized) return <button className="gsw-compose-minimized" onClick={onMinimize}><span><strong>{title}</strong><small>{subject || to || "New draft"}</small></span><span className="gsw-compose-minimized-status">{totalAttachmentCount ? `${totalAttachmentCount} attachment${totalAttachmentCount === 1 ? "" : "s"}` : status || "Draft"}</span></button>;
-  return <section className="gsw-compose-window" aria-label="Compose message">
-    <div className="gsw-compose-head"><strong>{title}</strong><div><button className="gsw-compose-head-action" onClick={onMinimize} aria-label="Minimize compose"><Minus size={16} strokeWidth={1.75} aria-hidden="true" /></button><button className="gsw-compose-head-action" onClick={onClose} aria-label="Close compose"><X size={16} strokeWidth={1.75} aria-hidden="true" /></button></div></div>
-    <form className="gsw-compose-form" onSubmit={submit}>
-      <div className="gsw-recipient-row"><RecipientField label="To" value={to} onChange={onToChange} /><button type="button" className="gsw-recipient-toggle" onClick={() => setShowBcc((current) => !current)}>Cc/Bcc</button></div>
-      <RecipientField label="Cc" value={cc} onChange={onCcChange} />
-      {showBcc && <RecipientField label="Bcc" value={bcc} onChange={onBccChange} />}
-      <input value={subject} onChange={(event) => onSubjectChange(event.target.value)} placeholder="Subject" aria-label="Subject" />
-      <RichTextEditor value={html} onChange={onHtmlChange} placeholder="Write a message" />
-      {totalAttachmentCount > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "8px 12px 0" }}>
-        {persistedAttachments.map((attachment) => <span key={`server:${attachment.position}:${attachment.filename}`} style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid #e5dccd", borderRadius: 999, padding: "5px 8px", fontSize: 12 }}><Paperclip size={13} />{attachment.filename} <small>{formatBytes(attachment.size)} · Synced</small>{onRemovePersistedAttachment && <button type="button" disabled={attachmentSyncing} aria-label={`Remove ${attachment.filename}`} onClick={() => onRemovePersistedAttachment(attachment)} style={{ border: 0, background: "transparent", cursor: "pointer" }}>×</button>}</span>)}
-        {attachments.map((attachment, index) => <span key={`local:${attachment.filename}:${index}`} style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid #e5dccd", borderRadius: 999, padding: "5px 8px", fontSize: 12 }}><Paperclip size={13} />{attachment.filename} <small>{formatBytes(attachment.size)} · {attachmentSyncing ? "Syncing" : "Pending"}</small><button type="button" disabled={attachmentSyncing} aria-label={`Remove ${attachment.filename}`} onClick={() => onAttachmentsChange(attachments.filter((_, itemIndex) => itemIndex !== index))} style={{ border: 0, background: "transparent", cursor: "pointer" }}>×</button></span>)}
-      </div>}
-      {attachmentError && <div className="gsw-send-error" style={{ padding: "6px 12px 0" }}>{attachmentError}</div>}
-      <input ref={fileInput} type="file" multiple hidden onChange={(event) => void pickFiles(event.target.files)} />
-      <div className="gsw-compose-actions"><span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><button type="button" className="gsw-icon-btn" disabled={attachmentSyncing || totalAttachmentCount >= 20} onClick={() => fileInput.current?.click()} aria-label="Attach files" title="Attach files"><Paperclip size={18} /></button><span className={`gsw-send-note ${sendError ? "gsw-send-error" : ""}`}>{sendError || status || sendNote}{sendError && <button type="button" className="gsw-link-btn" onClick={onRetry}>Retry</button>}{sendNote && onUndo && <button type="button" className="gsw-link-btn" onClick={onUndo}>Undo</button>}</span></span><button className="gsw-primary-btn" type="submit" disabled={sending || attachmentSyncing}>{sending ? "Sending..." : "Send"}</button></div>
-    </form>
-  </section>;
+  return <>
+    <section className="gsw-compose-window" aria-label="Compose message">
+      <div className="gsw-compose-head"><strong>{title}</strong><div><button className="gsw-compose-head-action" onClick={onMinimize} aria-label="Minimize compose"><Minus size={16} strokeWidth={1.75} aria-hidden="true" /></button><button className="gsw-compose-head-action" onClick={onClose} aria-label="Close compose"><X size={16} strokeWidth={1.75} aria-hidden="true" /></button></div></div>
+      <form className="gsw-compose-form" onSubmit={submit}>
+        <div className="gsw-recipient-row"><RecipientField label="To" value={to} onChange={onToChange} /><button type="button" className="gsw-recipient-toggle" onClick={() => setShowBcc((current) => !current)}>Cc/Bcc</button></div>
+        <RecipientField label="Cc" value={cc} onChange={onCcChange} />
+        {showBcc && <RecipientField label="Bcc" value={bcc} onChange={onBccChange} />}
+        <input value={subject} onChange={(event) => onSubjectChange(event.target.value)} placeholder="Subject" aria-label="Subject" />
+        <RichTextEditor value={html} onChange={onHtmlChange} placeholder="Write a message" />
+        {totalAttachmentCount > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "8px 12px 0" }}>
+          {persistedAttachments.map((attachment) => <span key={`server:${attachment.position}:${attachment.filename}`} style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid #e5dccd", borderRadius: 999, padding: "5px 8px", fontSize: 12 }}><Paperclip size={13} />{attachment.filename} <small>{formatBytes(attachment.size)} · Synced</small>{onRemovePersistedAttachment && <button type="button" disabled={attachmentSyncing} aria-label={`Remove ${attachment.filename}`} onClick={() => onRemovePersistedAttachment(attachment)} style={{ border: 0, background: "transparent", cursor: "pointer" }}>×</button>}</span>)}
+          {attachments.map((attachment, index) => <span key={`local:${attachment.filename}:${index}`} style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid #e5dccd", borderRadius: 999, padding: "5px 8px", fontSize: 12 }}><Paperclip size={13} />{attachment.filename} <small>{formatBytes(attachment.size)} · {attachmentSyncing ? "Syncing" : "Pending"}</small><button type="button" disabled={attachmentSyncing} aria-label={`Remove ${attachment.filename}`} onClick={() => onAttachmentsChange(attachments.filter((_, itemIndex) => itemIndex !== index))} style={{ border: 0, background: "transparent", cursor: "pointer" }}>×</button></span>)}
+        </div>}
+        {attachmentError && <div className="gsw-send-error" style={{ padding: "6px 12px 0" }}>{attachmentError}</div>}
+        <input ref={fileInput} type="file" multiple hidden onChange={(event) => void pickFiles(event.target.files)} />
+        <div className="gsw-compose-actions"><span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><button type="button" className="gsw-icon-btn" disabled={attachmentSyncing || totalAttachmentCount >= 20} onClick={() => fileInput.current?.click()} aria-label="Attach files" title="Attach files"><Paperclip size={18} /></button><span className={`gsw-send-note ${sendError ? "gsw-send-error" : ""}`}>{sendError || status || sendNote}{sendError && <button type="button" className="gsw-link-btn" onClick={onRetry}>Retry</button>}{sendNote && onUndo && <button type="button" className="gsw-link-btn" onClick={onUndo}>Undo</button>}</span></span><div className="gsw-send-split"><button className="gsw-primary-btn gsw-send-main" type="submit" disabled={sending || attachmentSyncing}>{sending ? "SENDING…" : "SEND"}</button><button className="gsw-primary-btn gsw-send-menu" type="button" disabled={sending || attachmentSyncing} aria-label="Schedule send" title="Schedule send" onClick={() => setScheduleOpen(true)}><ChevronDown size={17} /></button></div></div>
+      </form>
+    </section>
+    {scheduleOpen && <ScheduleSendModal defaultTimeZone={defaultTimeZone} onClose={() => setScheduleOpen(false)} onSchedule={(schedule) => { setScheduleOpen(false); onSchedule(schedule); }} />}
+  </>;
 }
