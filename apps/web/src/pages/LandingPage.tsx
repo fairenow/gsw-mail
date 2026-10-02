@@ -124,15 +124,15 @@ export function LandingPage() {
       <div className="landing-oauth-copy">
         <span className="landing-section-label">GSW Identity</span>
         <h2>One account. Safe connections to the apps you choose.</h2>
-        <p>We’re testing GSW as an OAuth/OpenID Connect identity provider. The flow works like the familiar “Continue with Google” experience, while identity access stays separate from your mailbox and product data.</p>
+        <p>Use your GSW Account with apps that support GSW sign-in. Identity access stays separate from your mailbox, messages, calendar, contacts, and other product data unless a product explicitly requests and receives separate access.</p>
         <div className="landing-oauth-scopes"><span>Basic identity</span><span>Profile</span><span>Email address</span><b>No mailbox access</b></div>
       </div>
       <div className="landing-oauth-card">
         <BrandMark size={56} />
-        <strong>Try the GSW OAuth flow</strong>
-        <p>This launches the real PKCE + consent test client.</p>
-        <a className="landing-oauth-button" href="/oauth/test"><BrandMark size={22} /><span>Continue with GSW</span></a>
-        <small>Developer preview · identity only</small>
+        <strong>Continue with your GSW Account</strong>
+        <p>Choose an account and approve the identity information you want to share.</p>
+        <a className="landing-oauth-button" href="/oauth/connect"><BrandMark size={22} /><span>Continue with GSW</span></a>
+        <small>Identity only</small>
       </div>
     </section>
 
