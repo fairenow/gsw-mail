@@ -55,6 +55,15 @@ export default async (app: FastifyInstance) => {
     });
     const folders = Object.fromEntries(Object.values(folderNames).map((name) => [name, { total: 0, unread: 0 }])) as Record<string, { total: number; unread: number }>;
     for (const stats of await engine.listMailboxStats(req.query.accountId)) folders[folderNames[stats.role]] = { total: stats.total, unread: stats.unread };
+
+    // Some JMAP mailbox counters can lag immediately after bulk destruction.
+    // If Trash claims messages still exist, verify against the actual message
+    // query so every client sees zero as soon as Empty Trash has completed.
+    if (folders.Trash.total > 0) {
+      const trashProbe = await engine.listMessages(req.query.accountId, { mailbox: "Trash", limit: 1, offset: 0 });
+      if (trashProbe.length === 0) folders.Trash = { total: 0, unread: 0 };
+    }
+
     folders.Outbox = { total: await outboxCount(req.query.accountId), unread: 0 };
     return { folders };
   });
