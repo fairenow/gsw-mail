@@ -12,12 +12,28 @@ import { OAuthAccountChooserPage } from "./pages/OAuthAccountChooserPage";
 import { OAuthConsentPage } from "./pages/OAuthConsentPage";
 import { OAuthTestPage } from "./pages/OAuthTestPage";
 
+const scrollToHash = (hash: string) => {
+  if (!hash) return;
+  const id = decodeURIComponent(hash.replace(/^#/, ""));
+  if (!id) return;
+  window.requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+};
+
 const navigate = (href: string) => {
   const url = new URL(href, window.location.href);
   if (url.origin !== window.location.origin) return false;
+
+  const sameDocument = url.pathname === window.location.pathname && url.search === window.location.search;
+  if (sameDocument && url.hash) {
+    if (url.hash !== window.location.hash) window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    scrollToHash(url.hash);
+    return true;
+  }
+
   if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash === window.location.hash) return true;
   window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
   window.dispatchEvent(new PopStateEvent("popstate"));
+  if (url.hash) scrollToHash(url.hash);
   return true;
 };
 
@@ -25,7 +41,10 @@ export function App() {
   const [path, setPath] = useState(() => window.location.pathname);
 
   useEffect(() => {
-    const syncPath = () => setPath(window.location.pathname);
+    const syncPath = () => {
+      setPath(window.location.pathname);
+      if (window.location.hash) scrollToHash(window.location.hash);
+    };
     const handleClick = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const target = event.target instanceof Element ? event.target.closest("a[href]") : null;
@@ -38,6 +57,7 @@ export function App() {
 
     window.addEventListener("popstate", syncPath);
     document.addEventListener("click", handleClick);
+    if (window.location.hash) scrollToHash(window.location.hash);
     return () => {
       window.removeEventListener("popstate", syncPath);
       document.removeEventListener("click", handleClick);
