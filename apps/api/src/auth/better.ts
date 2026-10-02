@@ -9,7 +9,7 @@ import { db } from "../db/client.js";
 import { authAccounts, authSessions, authUsers, authVerifications, domains, emailAccounts, jwks, oauthAccessToken, oauthClient, oauthConsent, oauthRefreshToken, organizationMemberships, users } from "../db/schema.js";
 import { and, eq } from "drizzle-orm";
 import { renderGswAuthEmail } from "./email.js";
-import { GSW_OIDC_SUPPORTED_SCOPES, legacyInternalUserInfoClaims, oidcClientIdFromJwt } from "./oidcContract.js";
+import { GSW_OAUTH_CONSENT_PAGE, GSW_OIDC_SUPPORTED_SCOPES, legacyInternalUserInfoClaims, oidcClientIdFromJwt } from "./oidcContract.js";
 
 const resend = config.outbound.resendApiKey ? new Resend(config.outbound.resendApiKey) : null;
 
@@ -90,7 +90,7 @@ export const auth = betterAuth({
     }),
     oauthProvider({
       loginPage: "/sign-in",
-      consentPage: "/oauth/consent",
+      consentPage: GSW_OAUTH_CONSENT_PAGE,
       scopes: [...GSW_OIDC_SUPPORTED_SCOPES],
       validAudiences: [config.auth.stalwartAudience],
       accessTokenExpiresIn: config.auth.tokenTtlSeconds,
