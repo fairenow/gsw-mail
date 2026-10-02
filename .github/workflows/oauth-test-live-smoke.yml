@@ -37,7 +37,7 @@ jobs:
               --get "$BASE_URL/api/auth/oauth2/authorize" \
               --data-urlencode 'response_type=code' \
               --data-urlencode 'client_id=gsw-mail-web-oauth-test' \
-              --data-urlencode "$BASE_URL/oauth/test/callback" \
+              --data-urlencode "redirect_uri=$BASE_URL/oauth/test/callback" \
               --data-urlencode 'scope=openid profile email' \
               --data-urlencode 'state=live-smoke' \
               --data-urlencode 'nonce=live-smoke-nonce' \
