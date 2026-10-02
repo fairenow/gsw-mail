@@ -52,6 +52,11 @@ function readConsentRequest(): ConsentRequestDisplay | null {
   return { clientId, scopes, acceptedScope: scopes.join(" ") };
 }
 
+function initials(name: string | undefined, email: string): string {
+  const source = name?.trim() || email;
+  return source.split(/\s+|@/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "GS";
+}
+
 export function OAuthConsentPage() {
   const request = useMemo(readConsentRequest, []);
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -100,49 +105,60 @@ export function OAuthConsentPage() {
   };
 
   return <AuthPage>
-    <AuthCard>
-      <BrandMark size={72} className="gsw-intro-logo" />
-      <p className="gsw-setup-kicker">GSW Account · Authorization</p>
-      {loading ? <>
+    <AuthCard className="gsw-login-card gsw-consent-card">
+      {loading ? <div className="gsw-consent-loading">
+        <BrandMark size={64} className="gsw-intro-logo" />
         <h1 className="gsw-login-title">Checking this request</h1>
         <p className="gsw-login-sub">Confirming the application and your signed-in account.</p>
-      </> : error && (!request || !client || !session) ? <>
+      </div> : error && (!request || !client || !session) ? <div className="gsw-consent-loading">
+        <BrandMark size={64} className="gsw-intro-logo" />
         <h1 className="gsw-login-title">We couldn't verify this request</h1>
         <AuthError>{error}</AuthError>
         <p className="gsw-login-hint">For your safety, GSW will not continue an authorization request it cannot verify.</p>
-      </> : <>
-        <h1 className="gsw-login-title">{client?.client_name || "An application"} wants to use your GSW Account</h1>
-        <p className="gsw-login-sub">Review exactly what this application is asking GSW to share.</p>
+      </div> : <div className="gsw-consent-layout">
+        <section className="gsw-consent-intro">
+          <BrandMark size={64} className="gsw-intro-logo" />
+          <p className="gsw-setup-kicker">GSW Account · Authorization</p>
+          <h1 className="gsw-login-title">{client?.client_name || "An application"} wants to use your GSW Account</h1>
+          <p className="gsw-login-sub">Review what this application is asking GSW to share.</p>
 
-        <div className="gsw-consent-account">
-          <span>Signed in as</span>
-          <strong>{session?.user.name || session?.user.email}</strong>
-          <small>{session?.user.email}</small>
-        </div>
+          <div className="gsw-consent-account">
+            <div className="gsw-consent-avatar" aria-hidden="true">
+              {session?.user.image ? <img src={session.user.image} alt="" referrerPolicy="no-referrer" /> : <span>{session ? initials(session.user.name, session.user.email) : "GS"}</span>}
+            </div>
+            <div className="gsw-consent-account-copy">
+              <span>Signed in as</span>
+              <strong>{session?.user.name || session?.user.email}</strong>
+              <small>{session?.user.email}</small>
+            </div>
+          </div>
+        </section>
 
-        <div className="gsw-consent-access" aria-label="Requested access">
-          <h2>Requested access</h2>
-          {request?.scopes.map((scope) => {
-            const detail = scopeDescriptions[scope];
-            return <div className="gsw-consent-scope" key={scope}>
-              <ShieldCheck size={20} aria-hidden="true" />
-              <div><strong>{detail.title}</strong><p>{detail.description}</p></div>
-            </div>;
-          })}
-        </div>
+        <section className="gsw-consent-details">
+          <div className="gsw-consent-access" aria-label="Requested access">
+            <h2>Requested access</h2>
+            {request?.scopes.map((scope) => {
+              const detail = scopeDescriptions[scope];
+              return <div className="gsw-consent-scope" key={scope}>
+                <ShieldCheck size={20} aria-hidden="true" />
+                <div><strong>{detail.title}</strong><p>{detail.description}</p></div>
+              </div>;
+            })}
+          </div>
 
-        <div className="gsw-consent-boundary">
-          <strong>This does not grant access to your GSW Mail data.</strong>
-          <p>Identity permissions do not allow this application to read your mailboxes, messages, calendar, contacts, or other GSW product data.</p>
-        </div>
+          <div className="gsw-consent-boundary">
+            <strong>This does not grant access to your GSW Mail data.</strong>
+            <p>Identity permissions do not allow this application to read your mailboxes, messages, calendar, contacts, or other GSW product data.</p>
+          </div>
 
-        {error && <AuthError>{error}</AuthError>}
-        <div className="gsw-consent-actions">
-          <button className="gsw-btn gsw-btn-quiet" disabled={busy} onClick={() => void decide(false)}>Cancel</button>
-          <button className="gsw-btn gsw-btn-primary" disabled={busy} onClick={() => void decide(true)}>{busy ? "Continuing…" : "Continue"}</button>
-        </div>
-        <p className="gsw-login-hint">Only continue if you recognize this application and want to share the access listed above.</p>
-      </>}
+          {error && <AuthError>{error}</AuthError>}
+          <div className="gsw-consent-actions">
+            <button className="gsw-btn gsw-btn-quiet" disabled={busy} onClick={() => void decide(false)}>Cancel</button>
+            <button className="gsw-btn gsw-btn-primary" disabled={busy} onClick={() => void decide(true)}>{busy ? "Continuing…" : "Continue"}</button>
+          </div>
+          <p className="gsw-login-hint">Only continue if you recognize this application and want to share the access listed above.</p>
+        </section>
+      </div>}
     </AuthCard>
   </AuthPage>;
 }
