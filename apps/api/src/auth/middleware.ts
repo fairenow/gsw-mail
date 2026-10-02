@@ -34,6 +34,14 @@ const bearer = (req: FastifyRequest): string | null => {
   return null;
 };
 
+export type RequestAuthSource = "session" | "bearer" | "none";
+
+export function selectRequestAuthSource(hasSession: boolean, hasBearer: boolean): RequestAuthSource {
+  if (hasSession) return "session";
+  if (hasBearer) return "bearer";
+  return "none";
+}
+
 export interface OAuthBearerIdentity {
   authUserId: string;
   email: string;
@@ -136,7 +144,10 @@ export const requireUser = async (app: FastifyInstance, opts: { optional?: boole
       return reply.code(503).send({ error: "session_resolution_unavailable" });
     }
 
-    if (session) {
+    const token = session ? null : bearer(req);
+    const authSource = selectRequestAuthSource(Boolean(session), Boolean(token));
+
+    if (authSource === "session" && session) {
       req.authUserId = session.user.id;
       req.log.info({ authUserId: session.user.id, durationMs: Date.now() - startedAt }, "Better Auth session confirmed");
       try {
@@ -147,8 +158,7 @@ export const requireUser = async (app: FastifyInstance, opts: { optional?: boole
         return reply.code(409).send({ error: "account_resolution_failed" });
       }
     } else {
-      const token = bearer(req);
-      if (token) {
+      if (authSource === "bearer" && token) {
         try {
           const identity = await resolveOAuthBearerIdentity(token);
           if (identity) {
