@@ -70,7 +70,7 @@ export function App() {
   if (path === "/account-deleted") return <AccountDeletedPage />;
   if (path === "/oauth/select-account") return <OAuthAccountChooserPage />;
   if (path === "/oauth/consent") return <OAuthConsentPage />;
-  if (path === "/oauth/test" || path === "/oauth/test/callback") return <OAuthTestPage />;
+  if (path === "/oauth/connect" || path === "/oauth/test" || path === "/oauth/test/callback") return <OAuthTestPage />;
   if (path === "/setup") return <SetupPage />;
   if (path === "/control-center") return <ControlCenterPage />;
   const page = path === "/settings" ? <SettingsPage /> : path === "/contacts" ? <ContactsPage /> : path === "/calendar" ? <CalendarPage /> : <MailPage />;
