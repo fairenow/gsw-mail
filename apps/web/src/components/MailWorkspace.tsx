@@ -8,8 +8,8 @@ const emptyCounts = () => Object.fromEntries(FOLDERS.map((name) => [name, { tota
 const countsCache = new Map<string, Record<Folder, { total: number; unread: number }>>();
 const normalizeCounts = (stats: Record<string, { total: number; unread: number }>) => Object.fromEntries(FOLDERS.map((name) => [name, stats[name] ?? { total: 0, unread: 0 }])) as Record<Folder, { total: number; unread: number }>;
 const goToMailbox = () => {
-  if (window.location.pathname === "/") return;
-  window.history.pushState({}, "", "/");
+  if (window.location.pathname === "/mail") return;
+  window.history.pushState({}, "", "/mail");
   window.dispatchEvent(new PopStateEvent("popstate"));
 };
 
