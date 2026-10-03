@@ -10,6 +10,7 @@ import "./styles/landing-showcase-motion.css";
 import "./styles/landing-page-motion.css";
 import "./styles/setup-dns.css";
 import "./styles/mail.css";
+import "./styles/header-brand-fix.css";
 import "./styles/scheduled-send.css";
 import "./styles/mail-row-fix.css";
 import "./styles/product.css";
