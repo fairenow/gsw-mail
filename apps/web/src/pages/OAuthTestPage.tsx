@@ -135,7 +135,7 @@ export function OAuthTestPage() {
       authorize.searchParams.set("nonce", nonce);
       authorize.searchParams.set("code_challenge", challenge);
       authorize.searchParams.set("code_challenge_method", "S256");
-      authorize.searchParams.set("prompt", "select_account consent");
+      authorize.searchParams.set("prompt", "consent");
       window.location.assign(authorize.toString());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start GSW sign-in.");
@@ -215,7 +215,7 @@ export function OAuthTestPage() {
   }, [isCallback]);
 
   if (autoLaunch) {
-    return <main className="oauth-test-shell"><section className="oauth-test-card" aria-live="polite"><BrandMark size={68} /><p className="oauth-test-eyebrow">GSW Account</p><h1>{error ? "Could not start sign-in" : "Opening GSW…"}</h1><p className="oauth-test-copy">{error || "Taking you to your GSW account chooser."}</p>{error && <button className="oauth-test-primary" onClick={() => void begin()}>Try again</button>}</section></main>;
+    return <main className="oauth-test-shell"><section className="oauth-test-card" aria-live="polite"><BrandMark size={68} /><p className="oauth-test-eyebrow">GSW Account</p><h1>{error ? "Could not start sign-in" : "Opening GSW…"}</h1><p className="oauth-test-copy">{error || "Taking you to GSW authorization."}</p>{error && <button className="oauth-test-primary" onClick={() => void begin()}>Try again</button>}</section></main>;
   }
 
   return <main className="oauth-test-shell">
@@ -224,7 +224,7 @@ export function OAuthTestPage() {
       {!isCallback ? <>
         <p className="oauth-test-eyebrow">GSW Identity</p>
         <h1>Continue with your GSW Account</h1>
-        <p className="oauth-test-copy">Use this page when you want to see the same account chooser and consent flow available to apps that support GSW sign-in.</p>
+        <p className="oauth-test-copy">Use this page to start the same consent flow available to apps that support GSW sign-in. Apps may request account selection when they need it.</p>
         <button className="oauth-test-google-button" disabled={busy} onClick={() => void begin()}>
           <BrandMark size={22} />
           {busy ? "Opening GSW…" : "Continue with GSW"}
