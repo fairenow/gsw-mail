@@ -29,19 +29,17 @@ export function AppTopBar({ account, accounts, profileImageUrl, search, searchPl
     <header className="gsw-topnav">
       <div className="gsw-topnav-brand">
         {onToggleSidebar ? (
-          <>
-            <button className="gsw-logo-toggle" onClick={onToggleSidebar} aria-label="Toggle navigation" title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}>
-              <img className="gsw-wordmark-mark" src="/logo.png" alt="" aria-hidden="true" />
-              <span className="gsw-mobile-menu-icon" aria-hidden="true"><Menu size={20} /></span>
-              <span className="gsw-logo-toggle-icon" aria-hidden="true">{sidebarCollapsed ? <ChevronRight size={20} strokeWidth={1.75} /> : <ChevronLeft size={20} strokeWidth={1.75} />}</span>
-            </button>
-            <a className="gsw-wordmark" href="/">GSW Mail</a>
-          </>
-        ) : (
-          <a className="gsw-topnav-brand-link" href="/">
+          <button className="gsw-logo-toggle gsw-brand-toggle" onClick={onToggleSidebar} aria-label="Toggle navigation" title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}>
             <img className="gsw-wordmark-mark" src="/logo.png" alt="" aria-hidden="true" />
             <span className="gsw-wordmark">GSW Mail</span>
-          </a>
+            <span className="gsw-mobile-menu-icon" aria-hidden="true"><Menu size={20} /></span>
+            <span className="gsw-logo-toggle-icon" aria-hidden="true">{sidebarCollapsed ? <ChevronRight size={20} strokeWidth={1.75} /> : <ChevronLeft size={20} strokeWidth={1.75} />}</span>
+          </button>
+        ) : (
+          <div className="gsw-topnav-brand-link" aria-label="GSW Mail">
+            <img className="gsw-wordmark-mark" src="/logo.png" alt="" aria-hidden="true" />
+            <span className="gsw-wordmark">GSW Mail</span>
+          </div>
         )}
       </div>
       <button ref={searchToggle} className="gsw-icon-btn gsw-search-toggle" aria-label="Open search" aria-expanded={searchOpen} disabled={searchDisabled} onClick={() => { setSearchOpen(true); requestAnimationFrame(() => searchInput.current?.focus()); }}><Search size={20} /></button>
