@@ -24,22 +24,23 @@ export function AppTopBar({ account, accounts, profileImageUrl, search, searchPl
   const searchToggle = useRef<HTMLButtonElement>(null);
   const closeSearch = () => { setSearchOpen(false); searchToggle.current?.focus(); };
   const submit = (event: FormEvent) => { event.preventDefault(); if (!searchDisabled) onSearch(); };
+  const isMailRoute = window.location.pathname === "/mail";
 
   return (
     <header className="gsw-topnav">
       <div className="gsw-topnav-brand">
-        {onToggleSidebar ? (
-          <button className="gsw-logo-toggle gsw-brand-toggle" onClick={onToggleSidebar} aria-label="Toggle navigation" title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}>
+        {isMailRoute && onToggleSidebar ? (
+          <button className="gsw-logo-toggle gsw-brand-toggle" onClick={onToggleSidebar} aria-label="Toggle mail navigation" title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}>
             <img className="gsw-wordmark-mark" src="/logo.png" alt="" aria-hidden="true" />
             <span className="gsw-wordmark">GSW Mail</span>
             <span className="gsw-mobile-menu-icon" aria-hidden="true"><Menu size={20} /></span>
             <span className="gsw-logo-toggle-icon" aria-hidden="true">{sidebarCollapsed ? <ChevronRight size={20} strokeWidth={1.75} /> : <ChevronLeft size={20} strokeWidth={1.75} />}</span>
           </button>
         ) : (
-          <div className="gsw-topnav-brand-link" aria-label="GSW Mail">
+          <a className="gsw-topnav-brand-link" href="/mail" aria-label="Open GSW Mail">
             <img className="gsw-wordmark-mark" src="/logo.png" alt="" aria-hidden="true" />
             <span className="gsw-wordmark">GSW Mail</span>
-          </div>
+          </a>
         )}
       </div>
       <button ref={searchToggle} className="gsw-icon-btn gsw-search-toggle" aria-label="Open search" aria-expanded={searchOpen} disabled={searchDisabled} onClick={() => { setSearchOpen(true); requestAnimationFrame(() => searchInput.current?.focus()); }}><Search size={20} /></button>
