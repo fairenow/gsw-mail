@@ -30,12 +30,14 @@ export function AppTopBar({ account, accounts, profileImageUrl, search, searchPl
     <header className="gsw-topnav">
       <div className="gsw-topnav-brand">
         {isMailRoute && onToggleSidebar ? (
-          <button className="gsw-logo-toggle gsw-brand-toggle" onClick={onToggleSidebar} aria-label="Toggle mail navigation" title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}>
-            <img className="gsw-wordmark-mark" src="/logo.png" alt="" aria-hidden="true" />
+          <>
+            <button className="gsw-logo-toggle" onClick={onToggleSidebar} aria-label="Toggle mail navigation" title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}>
+              <img className="gsw-wordmark-mark" src="/logo.png" alt="" aria-hidden="true" />
+              <span className="gsw-mobile-menu-icon" aria-hidden="true"><Menu size={20} /></span>
+              <span className="gsw-logo-toggle-icon" aria-hidden="true">{sidebarCollapsed ? <ChevronRight size={20} strokeWidth={1.75} /> : <ChevronLeft size={20} strokeWidth={1.75} />}</span>
+            </button>
             <span className="gsw-wordmark">GSW Mail</span>
-            <span className="gsw-mobile-menu-icon" aria-hidden="true"><Menu size={20} /></span>
-            <span className="gsw-logo-toggle-icon" aria-hidden="true">{sidebarCollapsed ? <ChevronRight size={20} strokeWidth={1.75} /> : <ChevronLeft size={20} strokeWidth={1.75} />}</span>
-          </button>
+          </>
         ) : (
           <a className="gsw-topnav-brand-link" href="/mail" aria-label="Open GSW Mail">
             <img className="gsw-wordmark-mark" src="/logo.png" alt="" aria-hidden="true" />
