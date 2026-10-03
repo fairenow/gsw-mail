@@ -1,0 +1,53 @@
+.gsw-logo-toggle.gsw-brand-toggle {
+  width: auto;
+  min-width: max-content;
+  height: 52px;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 2px 10px 2px 2px;
+  overflow: visible;
+  color: var(--gsw-text-heading);
+}
+
+.gsw-brand-toggle .gsw-wordmark-mark {
+  flex: 0 0 48px;
+  opacity: 1;
+}
+
+.gsw-brand-toggle:hover .gsw-wordmark-mark,
+.gsw-brand-toggle:focus-visible .gsw-wordmark-mark {
+  opacity: 1;
+}
+
+.gsw-brand-toggle .gsw-logo-toggle-icon {
+  position: static;
+  inset: auto;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  background: transparent;
+  opacity: 0.5;
+}
+
+.gsw-brand-toggle:hover .gsw-logo-toggle-icon,
+.gsw-brand-toggle:focus-visible .gsw-logo-toggle-icon {
+  opacity: 0.9;
+}
+
+@media (max-width: 700px) {
+  .gsw-brand-toggle .gsw-wordmark {
+    display: none;
+  }
+
+  .gsw-logo-toggle.gsw-brand-toggle {
+    width: 48px;
+    min-width: 48px;
+    padding: 0;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .gsw-brand-toggle .gsw-logo-toggle-icon {
+    display: none;
+  }
+}
