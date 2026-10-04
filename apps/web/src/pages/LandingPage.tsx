@@ -1,5 +1,19 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  ArrowUp,
+  CalendarDays,
+  ContactRound,
+  FileText,
+  Inbox,
+  Menu,
+  Reply,
+  Sparkles,
+  SquarePen,
+  Star,
+  X,
+} from "lucide-react";
 import { BrandMark } from "../components/auth/BrandMark";
+import "../styles/landing-mobile.css";
 
 const featureRows = [
   { eyebrow: "Inbox", title: "A calmer place to handle the work that matters.", copy: "Move through mail quickly with a focused inbox, clean threading, drafts, search, flags, folders, and the actions you expect without the clutter around them.", visual: "inbox" },
@@ -18,6 +32,15 @@ const showcaseSteps = [
 
 type ShowcaseKey = (typeof showcaseSteps)[number]["key"];
 
+const showcaseIcons = {
+  inbox: Inbox,
+  compose: SquarePen,
+  calendar: CalendarDays,
+  contacts: ContactRound,
+  templates: FileText,
+  assistant: Sparkles,
+} satisfies Record<ShowcaseKey, typeof Inbox>;
+
 function InboxScreen() {
   return <section className="landing-preview-mail">
     <div className="landing-preview-title"><div><strong>Inbox</strong><small>Stay focused on what needs you.</small></div><span>RW</span></div>
@@ -32,25 +55,97 @@ function InboxScreen() {
   </section>;
 }
 
-function ComposeScreen() { return <section className="landing-showcase-panel landing-showcase-compose"><div className="landing-compose-window"><div className="landing-compose-head"><strong>New message</strong><span>×</span></div><div className="landing-compose-field"><span>To</span><strong>danielle@example.org</strong></div><div className="landing-compose-field"><span>Subject</span><strong>Following up on our conversation</strong></div><div className="landing-compose-body">Hi Danielle,<br /><br />Thanks again for taking the time to connect. I wanted to follow up with the next steps we discussed and keep things moving.</div><div className="landing-compose-footer"><button>Send</button><button className="quiet">Schedule</button><span>Saved</span></div></div></section>; }
-function CalendarScreen() { return <section className="landing-showcase-panel landing-showcase-calendar"><div className="landing-calendar-head"><strong>October</strong><span>Week</span></div><div className="landing-calendar-grid">{['Mon 5','Tue 6','Wed 7','Thu 8','Fri 9'].map((day) => <div className="landing-calendar-day" key={day}><b>{day}</b></div>)}<div className="landing-calendar-event event-a"><strong>Product review</strong><span>10:00 AM</span></div><div className="landing-calendar-event event-b"><strong>Ministry outreach</strong><span>1:30 PM</span></div><div className="landing-calendar-event event-c"><strong>Team check-in</strong><span>3:00 PM</span></div></div><div className="landing-calendar-pop"><small>New event</small><strong>Follow-up call</strong><span>Thursday · 2:00 PM</span><button>Add event</button></div></section>; }
-function ContactsScreen() { return <section className="landing-showcase-panel landing-showcase-contacts"><div className="landing-contacts-list">{[['DC','Danielle Carter','Anchored Learning'],['JL','Jordan Lee','Community Partner'],['MB','Marcus Brooks','Project Lead'],['SR','Sophia Reed','Ministry Network']].map((contact,index)=><div className={`landing-contact-row ${index===0?'active':''}`} key={contact[1]}><span>{contact[0]}</span><div><strong>{contact[1]}</strong><small>{contact[2]}</small></div></div>)}</div><div className="landing-contact-detail"><span className="landing-contact-avatar">DC</span><h3>Danielle Carter</h3><p>danielle@example.org</p><div><button>Email</button><button>Schedule</button></div><small>Last contacted 2 days ago</small></div></section>; }
-function TemplatesScreen() { return <section className="landing-showcase-panel landing-showcase-templates"><div className="landing-template-list">{['Warm introduction','Meeting follow-up','Partnership outreach','Thank you'].map((name,index)=><button className={index===1?'active':''} key={name}><strong>{name}</strong><small>{index===1?'Used 18 times':'Saved template'}</small></button>)}</div><div className="landing-template-editor"><small>Template</small><h3>Meeting follow-up</h3><div className="landing-template-subject">Subject: Great speaking with you</div><p>Hi {'{{first_name}}'},</p><p>Thanks again for taking the time to meet. I wanted to follow up with the next steps we discussed.</p><div className="landing-template-actions"><button>Use template</button><span>Updated today</span></div></div></section>; }
-function AssistantScreen() { return <section className="landing-showcase-panel landing-showcase-assistant"><div className="landing-ai-sidebar"><BrandMark size={38}/><strong>GSW Assistant</strong><span>Inbox</span><span>Calendar</span><span>Contacts</span></div><div className="landing-ai-chat"><div className="landing-ai-message user">Find the people I owe a follow-up to this week.</div><div className="landing-ai-message assistant"><strong>I found 4 conversations.</strong><span>Danielle Carter · partnership follow-up</span><span>Jordan Lee · coffee scheduling</span><span>Marcus Brooks · project review</span><button>Draft follow-ups</button></div><div className="landing-ai-input">Ask GSW to help with your work… <span>↑</span></div></div></section>; }
+function ComposeScreen() {
+  return <section className="landing-showcase-panel landing-showcase-compose"><div className="landing-compose-window"><div className="landing-compose-head"><strong>New message</strong><span aria-hidden="true"><X size={18} strokeWidth={1.75} /></span></div><div className="landing-compose-field"><span>To</span><strong>danielle@example.org</strong></div><div className="landing-compose-field"><span>Subject</span><strong>Following up on our conversation</strong></div><div className="landing-compose-body">Hi Danielle,<br /><br />Thanks again for taking the time to connect. I wanted to follow up with the next steps we discussed and keep things moving.</div><div className="landing-compose-footer"><button>Send</button><button className="quiet">Schedule</button><span>Saved</span></div></div></section>;
+}
 
-function ShowcaseScreen({ active }: { active: ShowcaseKey }) { if(active==='compose')return <ComposeScreen/>; if(active==='calendar')return <CalendarScreen/>; if(active==='contacts')return <ContactsScreen/>; if(active==='templates')return <TemplatesScreen/>; if(active==='assistant')return <AssistantScreen/>; return <InboxScreen/>; }
+function CalendarScreen() {
+  return <section className="landing-showcase-panel landing-showcase-calendar"><div className="landing-calendar-head"><strong>October</strong><span>Week</span></div><div className="landing-calendar-grid">{['Mon 5','Tue 6','Wed 7','Thu 8','Fri 9'].map((day) => <div className="landing-calendar-day" key={day}><b>{day}</b></div>)}<div className="landing-calendar-event event-a"><strong>Product review</strong><span>10:00 AM</span></div><div className="landing-calendar-event event-b"><strong>Ministry outreach</strong><span>1:30 PM</span></div><div className="landing-calendar-event event-c"><strong>Team check-in</strong><span>3:00 PM</span></div></div><div className="landing-calendar-pop"><small>New event</small><strong>Follow-up call</strong><span>Thursday · 2:00 PM</span><button>Add event</button></div></section>;
+}
+
+function ContactsScreen() {
+  return <section className="landing-showcase-panel landing-showcase-contacts"><div className="landing-contacts-list">{[['DC','Danielle Carter','Anchored Learning'],['JL','Jordan Lee','Community Partner'],['MB','Marcus Brooks','Project Lead'],['SR','Sophia Reed','Ministry Network']].map((contact,index)=><div className={`landing-contact-row ${index===0?'active':''}`} key={contact[1]}><span>{contact[0]}</span><div><strong>{contact[1]}</strong><small>{contact[2]}</small></div></div>)}</div><div className="landing-contact-detail"><span className="landing-contact-avatar">DC</span><h3>Danielle Carter</h3><p>danielle@example.org</p><div><button>Email</button><button>Schedule</button></div><small>Last contacted 2 days ago</small></div></section>;
+}
+
+function TemplatesScreen() {
+  return <section className="landing-showcase-panel landing-showcase-templates"><div className="landing-template-list">{['Warm introduction','Meeting follow-up','Partnership outreach','Thank you'].map((name,index)=><button className={index===1?'active':''} key={name}><strong>{name}</strong><small>{index===1?'Used 18 times':'Saved template'}</small></button>)}</div><div className="landing-template-editor"><small>Template</small><h3>Meeting follow-up</h3><div className="landing-template-subject">Subject: Great speaking with you</div><p>Hi {'{{first_name}}'},</p><p>Thanks again for taking the time to meet. I wanted to follow up with the next steps we discussed.</p><div className="landing-template-actions"><button>Use template</button><span>Updated today</span></div></div></section>;
+}
+
+function AssistantScreen() {
+  return <section className="landing-showcase-panel landing-showcase-assistant"><div className="landing-ai-sidebar"><BrandMark size={38}/><strong>GSW Assistant</strong><span>Inbox</span><span>Calendar</span><span>Contacts</span></div><div className="landing-ai-chat"><div className="landing-ai-message user">Find the people I owe a follow-up to this week.</div><div className="landing-ai-message assistant"><strong>I found 4 conversations.</strong><span>Danielle Carter · partnership follow-up</span><span>Jordan Lee · coffee scheduling</span><span>Marcus Brooks · project review</span><button>Draft follow-ups</button></div><div className="landing-ai-input">Ask GSW to help with your work… <span aria-hidden="true"><ArrowUp size={16} strokeWidth={2} /></span></div></div></section>;
+}
+
+function ShowcaseScreen({ active }: { active: ShowcaseKey }) {
+  if(active==='compose')return <ComposeScreen/>;
+  if(active==='calendar')return <CalendarScreen/>;
+  if(active==='contacts')return <ContactsScreen/>;
+  if(active==='templates')return <TemplatesScreen/>;
+  if(active==='assistant')return <AssistantScreen/>;
+  return <InboxScreen/>;
+}
 
 function ProductShowcase() {
-  const sectionRef=useRef<HTMLDivElement>(null); const [activeIndex,setActiveIndex]=useState(0);
-  useEffect(()=>{ const update=()=>{ const section=sectionRef.current; if(!section||window.matchMedia('(max-width: 900px)').matches)return; const rect=section.getBoundingClientRect(); const travel=section.offsetHeight-window.innerHeight; if(travel<=0)return; const progress=Math.max(0,Math.min(1,-rect.top/travel)); setActiveIndex(Math.min(showcaseSteps.length-1,Math.floor(progress*showcaseSteps.length))); }; update(); window.addEventListener('scroll',update,{passive:true}); window.addEventListener('resize',update); return()=>{window.removeEventListener('scroll',update);window.removeEventListener('resize',update);};},[]);
-  const active=showcaseSteps[activeIndex];
-  return <div ref={sectionRef} className="landing-showcase-scroll"><div className="landing-showcase-sticky"><div className="landing-showcase-copy"><span>{active.label}</span><h2 key={active.key}>{active.title}</h2><div className="landing-showcase-progress" aria-label={`Step ${activeIndex+1} of ${showcaseSteps.length}`}>{showcaseSteps.map((step,index)=><button key={step.key} className={index===activeIndex?'active':''} onClick={()=>setActiveIndex(index)} aria-label={step.label}><span/></button>)}</div></div><div className="landing-preview-window landing-showcase-window" aria-label="GSW Mail product preview"><div className="landing-preview-topbar"><span/><span/><span/><div className="landing-preview-search">Search GSW Mail</div></div><div className="landing-preview-body"><aside className="landing-preview-sidebar"><button>＋ Compose</button>{['Inbox','Calendar','Contacts','Templates','Assistant'].map((item)=><div key={item} className={item.toLowerCase()===active.key?'active':''}><span>{item}</span><small>{item==='Inbox'?'8':''}</small></div>)}</aside><div className="landing-showcase-stage" key={active.key}><ShowcaseScreen active={active.key}/></div></div></div></div></div>;
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<number | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    const viewportHeight = () => window.visualViewport?.height ?? window.innerHeight;
+    const update = () => {
+      frameRef.current = null;
+      const section = sectionRef.current;
+      if (!section) return;
+      const height = viewportHeight();
+      const travel = section.offsetHeight - height;
+      if (travel <= 0) return;
+      const rect = section.getBoundingClientRect();
+      const progress = Math.max(0, Math.min(1, -rect.top / travel));
+      const nextIndex = Math.min(showcaseSteps.length - 1, Math.floor(progress * showcaseSteps.length));
+      setActiveIndex((current) => current === nextIndex ? current : nextIndex);
+    };
+    const scheduleUpdate = () => {
+      if (frameRef.current !== null) return;
+      frameRef.current = window.requestAnimationFrame(update);
+    };
+
+    update();
+    window.addEventListener('scroll', scheduleUpdate, { passive: true });
+    window.addEventListener('resize', scheduleUpdate);
+    window.visualViewport?.addEventListener('scroll', scheduleUpdate);
+    window.visualViewport?.addEventListener('resize', scheduleUpdate);
+
+    return () => {
+      window.removeEventListener('scroll', scheduleUpdate);
+      window.removeEventListener('resize', scheduleUpdate);
+      window.visualViewport?.removeEventListener('scroll', scheduleUpdate);
+      window.visualViewport?.removeEventListener('resize', scheduleUpdate);
+      if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+    };
+  }, []);
+
+  const selectStep = (index: number) => {
+    setActiveIndex(index);
+    const section = sectionRef.current;
+    if (!section) return;
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const travel = Math.max(0, section.offsetHeight - viewportHeight);
+    const sectionTop = window.scrollY + section.getBoundingClientRect().top;
+    const stepProgress = showcaseSteps.length <= 1 ? 0 : index / (showcaseSteps.length - 1);
+    window.scrollTo({
+      top: sectionTop + travel * stepProgress,
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    });
+  };
+
+  const active = showcaseSteps[activeIndex];
+  return <div ref={sectionRef} className="landing-showcase-scroll"><div className="landing-showcase-sticky"><div className="landing-showcase-copy"><span>{active.label}</span><h2 key={active.key}>{active.title}</h2><div className="landing-showcase-progress" aria-label={`Step ${activeIndex+1} of ${showcaseSteps.length}`}>{showcaseSteps.map((step,index)=><button key={step.key} className={index===activeIndex?'active':''} onClick={()=>selectStep(index)} aria-label={step.label}><span/></button>)}</div></div><div className="landing-preview-window landing-showcase-window" aria-label="GSW Mail product preview"><div className="landing-preview-topbar"><span/><span/><span/><div className="landing-preview-search">Search GSW Mail</div></div><div className="landing-preview-body"><aside className="landing-preview-sidebar"><button><SquarePen size={18} strokeWidth={2} /> <span>Compose</span></button>{showcaseSteps.filter((step)=>step.key!=='compose').map((step)=>{ const ItemIcon=showcaseIcons[step.key]; return <div key={step.key} className={step.key===active.key?'active':''}><span className="landing-preview-nav-label"><ItemIcon size={18} strokeWidth={1.75}/><span>{step.label}</span></span><small>{step.key==='inbox'?'8':''}</small></div>; })}</aside><div className="landing-showcase-stage" key={active.key}><ShowcaseScreen active={active.key}/></div></div></div></div></div>;
 }
 
 function FeatureVisual({ kind }: { kind: 'inbox'|'schedule'|'identity' }) {
-  if(kind==='schedule')return <div className="landing-feature-visual schedule"><div className="landing-mini-compose"><div className="landing-mini-head"><span>New message</span><small>×</small></div><p><b>To</b> team@example.com</p><p><b>Subject</b> Weekly project update</p><div className="landing-mini-message">Here’s the latest progress and what we’re focused on next week.</div><div className="landing-mini-actions"><button>Send later</button><span>Every Friday · 8:00 AM</span></div></div></div>;
+  if(kind==='schedule')return <div className="landing-feature-visual schedule"><div className="landing-mini-compose"><div className="landing-mini-head"><span>New message</span><small aria-hidden="true"><X size={16} strokeWidth={1.75}/></small></div><p><b>To</b> team@example.com</p><p><b>Subject</b> Weekly project update</p><div className="landing-mini-message">Here’s the latest progress and what we’re focused on next week.</div><div className="landing-mini-actions"><button>Send later</button><span>Every Friday · 8:00 AM</span></div></div></div>;
   if(kind==='identity')return <div className="landing-feature-visual identity"><div className="landing-domain-card"><small>Your domain</small><strong>you@yourcompany.com</strong><span>✓ Domain connected</span></div><div className="landing-domain-card"><small>Your workspace</small><strong>Mail · Calendar · Contacts</strong><span>One GSW account</span></div></div>;
-  return <div className="landing-feature-visual inbox">{['Needs reply','Priority','Everything else'].map((label,index)=><div className="landing-inbox-chip" key={label}><span>{index===0?'↩':index===1?'★':'☰'}</span><div><strong>{label}</strong><small>{index===0?'4 conversations':index===1?'8 important messages':'Inbox organized your way'}</small></div></div>)}</div>;
+  const icons = [Reply, Star, Menu];
+  return <div className="landing-feature-visual inbox">{['Needs reply','Priority','Everything else'].map((label,index)=>{ const FeatureIcon=icons[index]; return <div className="landing-inbox-chip" key={label}><span><FeatureIcon size={19} strokeWidth={1.75}/></span><div><strong>{label}</strong><small>{index===0?'4 conversations':index===1?'8 important messages':'Inbox organized your way'}</small></div></div>; })}</div>;
 }
 
 export function LandingPage() {
