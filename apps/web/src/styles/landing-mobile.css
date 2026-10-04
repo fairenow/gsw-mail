@@ -1,0 +1,116 @@
+@media (max-width: 900px) {
+  .landing-showcase-scroll {
+    position: relative;
+    height: 540vh;
+    height: 540svh;
+    margin: 8px 0 48px;
+  }
+
+  .landing-showcase-sticky {
+    position: sticky;
+    top: 64px;
+    height: calc(100vh - 64px);
+    height: calc(100dvh - 64px);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    align-content: stretch;
+    gap: 10px;
+    padding: 10px 18px 18px;
+    background: #fbfaf5;
+  }
+
+  .landing-showcase-copy {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    margin: 0;
+  }
+
+  .landing-showcase-copy > span {
+    flex: 0 0 auto;
+  }
+
+  .landing-showcase-copy h2 {
+    min-width: 0;
+    margin: 0 auto 0 0;
+    font-size: clamp(22px, 6vw, 32px);
+    line-height: 1.05;
+  }
+
+  .landing-showcase-progress {
+    flex: 0 0 auto;
+    gap: 5px;
+  }
+
+  .landing-showcase-progress button {
+    padding: 7px 0;
+  }
+
+  .landing-showcase-progress button span {
+    width: 20px;
+    height: 3px;
+  }
+
+  .landing-showcase-progress button.active span {
+    width: 28px;
+  }
+
+  .landing-showcase-window {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+  }
+
+  .landing-preview-topbar {
+    display: none;
+  }
+
+  .landing-showcase-window .landing-preview-body,
+  .landing-preview-body {
+    height: 100%;
+    min-height: 0;
+    grid-template-columns: 1fr;
+  }
+
+  .landing-preview-sidebar {
+    display: none;
+  }
+
+  .landing-showcase-stage {
+    height: 100%;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .landing-showcase-scroll {
+    height: 500vh;
+    height: 500svh;
+  }
+
+  .landing-showcase-sticky {
+    top: 66px;
+    height: calc(100vh - 66px);
+    height: calc(100dvh - 66px);
+    padding: 8px 14px 14px;
+  }
+
+  .landing-showcase-copy {
+    align-items: center;
+  }
+
+  .landing-showcase-copy > span {
+    display: none;
+  }
+
+  .landing-showcase-copy h2 {
+    font-size: clamp(20px, 6vw, 27px);
+  }
+
+  .landing-showcase-stage {
+    min-height: 0;
+  }
+}
