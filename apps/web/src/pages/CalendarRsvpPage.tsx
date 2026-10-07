@@ -17,7 +17,7 @@ const statusCopy: Record<CalendarRsvpResponse, string> = {
 export function CalendarRsvpPage() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const token = params.get("token") ?? "";
-  const requested = params.get("response");
+  const requested = params.get("choice");
   const requestedResponse = requested === "accepted" || requested === "declined" || requested === "tentative" ? requested : null;
   const [invite, setInvite] = useState<CalendarRsvpPublic | null>(null);
   const [error, setError] = useState("");
@@ -29,25 +29,14 @@ export function CalendarRsvpPage() {
       return;
     }
     let cancelled = false;
-    void api.calendarRsvpPublic(token).then(async (value) => {
+    void api.calendarRsvpPublic(token).then((value) => {
       if (cancelled) return;
       setInvite(value);
-      if (requestedResponse && value.response !== requestedResponse) {
-        setSaving(requestedResponse);
-        try {
-          const saved = await api.respondCalendarRsvp(token, requestedResponse);
-          if (!cancelled) setInvite(saved);
-        } catch (err) {
-          if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-        } finally {
-          if (!cancelled) setSaving(null);
-        }
-      }
     }).catch((err) => {
       if (!cancelled) setError(err instanceof Error ? err.message : String(err));
     });
     return () => { cancelled = true; };
-  }, [requestedResponse, token]);
+  }, [token]);
 
   const respond = async (response: CalendarRsvpResponse) => {
     if (!token) return;
@@ -56,7 +45,7 @@ export function CalendarRsvpPage() {
     try {
       setInvite(await api.respondCalendarRsvp(token, response));
       const url = new URL(window.location.href);
-      url.searchParams.set("response", response);
+      url.searchParams.delete("choice");
       window.history.replaceState({}, "", url);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -89,10 +78,10 @@ export function CalendarRsvpPage() {
           {invite.meetingLink && <div><Video size={19} /><span><strong>Online meeting</strong><a href={invite.meetingLink} target="_blank" rel="noreferrer">Join meeting</a></span></div>}
         </div>
 
-        {invite.response && <div className="gsw-rsvp-status"><CalendarCheck size={20} /><div><strong>{statusCopy[invite.response]}</strong><span>You can change your response below.</span></div></div>}
+        {invite.response ? <div className="gsw-rsvp-status"><CalendarCheck size={20} /><div><strong>{statusCopy[invite.response]}</strong><span>You can change your response below.</span></div></div> : requestedResponse ? <div className="gsw-rsvp-status"><CalendarCheck size={20} /><div><strong>Confirm {responseLabel[requestedResponse]}</strong><span>Your response is not recorded until you press the button below.</span></div></div> : null}
 
         <div className="gsw-rsvp-actions" aria-label="RSVP response">
-          {(["accepted", "declined", "tentative"] as CalendarRsvpResponse[]).map((response) => <button key={response} className={invite.response === response ? "active" : ""} disabled={saving !== null} onClick={() => void respond(response)}>{saving === response ? "Saving…" : responseLabel[response]}</button>)}
+          {(["accepted", "declined", "tentative"] as CalendarRsvpResponse[]).map((response) => <button key={response} className={(invite.response ?? requestedResponse) === response ? "active" : ""} disabled={saving !== null} onClick={() => void respond(response)}>{saving === response ? "Saving…" : responseLabel[response]}</button>)}
         </div>
 
         <p className="gsw-rsvp-footnote">Your response is recorded securely by GSW Mail. You can return to this link later to change it while the invitation is active.</p>
