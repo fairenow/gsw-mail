@@ -251,6 +251,7 @@ export function ChatPanel() {
       setRecording(false);
       speechRef.current = null;
       stopVoiceVisualizer();
+      setInput(captured);
       if (shouldSend) {
         if (captured) void send(captured);
         else setError("I didn't catch any speech to send. Try dictating again.");
@@ -531,8 +532,16 @@ export function ChatPanel() {
     </div>
 
     <footer className="gsw-chat-composer">
-      <div className="gsw-chat-composer-box">
-        <textarea
+      <div className={`gsw-chat-composer-box ${recording ? "voice-active" : ""}`}>
+        {recording ? <div className="gsw-chat-voice-live" aria-live="polite" aria-label="Microphone is recording">
+          <span className="gsw-chat-recording-dot" />
+          <span className="gsw-chat-listening-label">Listening</span>
+          <div className="gsw-chat-waveform" aria-hidden="true">
+            {[0.52, 0.76, 0.61, 0.96, 0.72, 1.18, 0.82, 1.04, 0.66, 0.92, 0.58, 1.1, 0.74, 0.88, 0.55, 0.98, 0.69].map((multiplier, index) => (
+              <span key={index} style={{ height: `${Math.max(4, Math.round(5 + voiceLevel * multiplier * 20))}px` }} />
+            ))}
+          </div>
+        </div> : <textarea
           value={input}
           aria-label="Message GSW Chat"
           onChange={(event) => setInput(event.target.value)}
@@ -544,16 +553,7 @@ export function ChatPanel() {
           }}
           placeholder="Ask for help writing or rewriting an email…"
           rows={1}
-        />
-        {recording && <div className="gsw-chat-voice-live" aria-live="polite" aria-label="Microphone is recording">
-          <span className="gsw-chat-recording-dot" />
-          <div className="gsw-chat-waveform" aria-hidden="true">
-            {[0.62, 0.95, 0.76, 1.15, 0.84, 1.05, 0.7, 0.9, 0.58].map((multiplier, index) => (
-              <span key={index} style={{ height: `${Math.max(4, Math.round(5 + voiceLevel * multiplier * 18))}px` }} />
-            ))}
-          </div>
-          <span className="gsw-chat-listening-label">Listening</span>
-        </div>}
+        />}
         <button
           className={`gsw-chat-voice ${recording ? "recording" : ""}`}
           type="button"
