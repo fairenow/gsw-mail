@@ -27,6 +27,8 @@ import { getAiProvider, type AiProviderMessage } from "../ai/providers/index.js"
 import { agentMailRegistry } from "../ai/tools/registry.js";
 import type { AgentExecutionContext, ProviderToolDefinition } from "../ai/tools/types.js";
 import { aiScopes } from "../ai/permissions/types.js";
+import { getAiCapabilitySettings, isAiScopeGloballyEnabled } from "../ai/capabilities.js";
+import { forbidden } from "../lib/errors.js";
 
 const chatMessagesSchema = z.array(z.object({
   role: z.enum(["user", "assistant"]),
@@ -140,9 +142,11 @@ async function runConversationTurn(input: {
 }): Promise<ChatTurnResult> {
   let tools: ProviderToolDefinition[] | undefined;
   let toolContext: AgentExecutionContext | undefined;
+  const capabilitySettings = await getAiCapabilitySettings(input.userId);
+  if (!capabilitySettings.enabled) throw forbidden("GSW AI is disabled in Settings.");
 
   if (input.accountId) {
-    tools = agentMailRegistry.providerDefinitions();
+    tools = agentMailRegistry.providerDefinitions((tool) => tool.requiredScopes.every((scope) => isAiScopeGloballyEnabled(capabilitySettings, scope)));
     toolContext = {
       userId: input.userId,
       authUserId: input.authUserId,
@@ -396,6 +400,10 @@ export default async function aiChatRoutes(app: FastifyInstance) {
 
   app.post("/product/chat/permissions", async (req) => {
     const input = permissionGrantSchema.parse(req.body);
+    const capabilitySettings = await getAiCapabilitySettings(req.user!.id);
+    if (!isAiScopeGloballyEnabled(capabilitySettings, input.scope)) {
+      throw forbidden("This AI capability is disabled in Settings.");
+    }
     const requiredPermission = input.scope === "mail.read" || input.scope.endsWith(".read") || input.scope === "automations.write"
       ? "read"
       : input.scope === "mail.write" || input.scope === "mail.send"
