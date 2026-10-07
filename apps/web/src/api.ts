@@ -195,6 +195,37 @@ export interface ProductSettings {
   signature: { id: string | null; signatureHtml: string; signatureText: string; enabled: boolean; onNew: boolean; onReply: boolean; onForward: boolean; position: "beforeQuotedText" | "afterQuotedText" };
 }
 
+export interface EmailTemplateTheme {
+  borderColor: string;
+  fontColor: string;
+  buttonColor: string;
+  backgroundColor: string;
+}
+
+export interface EmailTemplateOption {
+  id?: string;
+  key: string;
+  name: string;
+  kind: "builtin" | "custom";
+  editable: boolean;
+  category?: string;
+  description?: string;
+  logoUrl?: string | null;
+  logoFilename?: string | null;
+  theme: EmailTemplateTheme | null;
+}
+
+export interface EmailTemplateCatalog {
+  selectedTemplateKey: string;
+  templates: EmailTemplateOption[];
+}
+
+export interface EmailTemplateInput extends EmailTemplateTheme {
+  name: string;
+  logoDataUrl?: string | null;
+  logoFilename?: string | null;
+}
+
 export interface SendResult {
   sendId: string;
   messageId: string | null;
@@ -456,6 +487,11 @@ export const api = {
   prefetchSettings: () => { void cachedGet<ProductSettings>("/product/settings", 60_000, 10 * 60_000).catch(() => undefined); },
   updateSettings: async (body: { general?: Record<string, unknown>; compose?: Record<string, unknown>; contacts?: Record<string, unknown>; ai?: Record<string, unknown> }) => { const result = await patch<ProductSettings>("/product/settings", body); readCache.delete("/product/settings"); return result; },
   saveSignature: async (body: ProductSettings["signature"]) => { const result = await request("/product/signature", { method: "PUT", headers: headers(true), body: JSON.stringify(body) }).then((res) => json<ProductSettings["signature"]>(res)); readCache.delete("/product/settings"); return result; },
+  templates: () => get<EmailTemplateCatalog>("/product/templates"),
+  createTemplate: (body: EmailTemplateInput) => post<{ template: EmailTemplateOption }>("/product/templates", body, interactiveTimeout),
+  updateTemplate: (id: string, body: Partial<EmailTemplateInput>) => patch<{ template: EmailTemplateOption }>(`/product/templates/${encodeURIComponent(id)}`, body, interactiveTimeout),
+  deleteTemplate: (id: string) => request(`/product/templates/${encodeURIComponent(id)}`, { method: "DELETE" }).then((res) => json<{ deleted: { id: string; key: string } }>(res)),
+  selectTemplate: async (templateKey: string) => { const result = await post<{ templateKey: string }>("/product/templates/select", { templateKey }); readCache.delete("/product/settings"); return result; },
   contacts: (q = "") => cachedGet<ContactListResponse>(`/product/contacts?q=${encodeURIComponent(q)}`, 30_000, 5 * 60_000).then((r) => r.contacts),
   contactsPage: (q = "", limit = 100, offset = 0) => cachedGet<ContactListResponse>(`/product/contacts?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`, 30_000, 5 * 60_000),
   prefetchContactsPage: () => { void cachedGet<ContactListResponse>("/product/contacts?q=&limit=100&offset=0", 30_000, 5 * 60_000).catch(() => undefined); },
