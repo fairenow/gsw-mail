@@ -144,9 +144,10 @@ export interface AiChatResponse {
   model: string;
   capabilities: {
     actions: false;
-    mailboxAccess: false;
+    mailboxAccess: boolean;
     rewriteEmail: true;
   };
+  toolActivity?: { name: string; ok: boolean }[];
 }
 
 export interface ProductSettings {
@@ -374,6 +375,6 @@ export const api = {
   calendarRsvpStatuses: (accountId: string, eventId: string) => get<{ responses: CalendarRsvpStatus[] }>(`/product/calendar-rsvps?accountId=${encodeURIComponent(accountId)}&eventId=${encodeURIComponent(eventId)}`),
   calendarRsvpPublic: (token: string) => get<CalendarRsvpPublic>(`/product/calendar-rsvp?token=${encodeURIComponent(token)}`),
   respondCalendarRsvp: (token: string, response: CalendarRsvpResponse) => post<CalendarRsvpPublic>("/product/calendar-rsvp", { token, response }),
-  chat: (messages: AiChatMessage[]) => post<AiChatResponse>("/product/chat", { messages }, 100_000),
+  chat: (accountId: string | null, messages: AiChatMessage[]) => post<AiChatResponse>("/product/chat", { ...(accountId ? { accountId } : {}), messages }, 100_000),
 
 };

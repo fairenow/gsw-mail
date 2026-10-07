@@ -540,3 +540,69 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+
+.gsw-calendar-rsvp-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 7px 0 10px;
+  color: var(--gsw-text-muted);
+  font-size: 11.5px;
+}
+
+.gsw-calendar-rsvp-list {
+  display: grid;
+  gap: 7px;
+}
+
+.gsw-calendar-rsvp-person {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid var(--gsw-border-soft);
+  border-radius: 10px;
+  background: var(--gsw-bg);
+}
+
+.gsw-calendar-rsvp-email {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--gsw-text-body);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gsw-calendar-rsvp-badge {
+  display: inline-flex;
+  min-width: 56px;
+  justify-content: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+.gsw-calendar-rsvp-badge.accepted {
+  background: #e6f5eb;
+  color: #267442;
+}
+
+.gsw-calendar-rsvp-badge.declined {
+  background: #fae8e5;
+  color: #a83b2f;
+}
+
+.gsw-calendar-rsvp-badge.tentative {
+  background: #fff3d7;
+  color: #9b6a0c;
+}
+
+.gsw-calendar-rsvp-badge.pending {
+  background: var(--gsw-surface);
+  color: var(--gsw-text-muted);
+  border: 1px solid var(--gsw-border);
+}

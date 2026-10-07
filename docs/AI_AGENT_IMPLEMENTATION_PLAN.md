@@ -2,6 +2,22 @@
 
 > Implementation should begin with the repository audit in [`AI_AGENT_READINESS_AUDIT.md`](./AI_AGENT_READINESS_AUDIT.md). That audit is the current source of truth for capability status, blockers, and Phase 0 priorities.
 
+## Current implementation status — 2026-10-07
+
+The implementation has now started with the safest vertical slice:
+
+- `MailService` is in place for shared search/read/thread behavior used by product routes and agent tools.
+- a provider-neutral agent tool contract and registry now exist under `apps/api/src/ai/tools/`;
+- the first semantic tools are `mail.search`, `mail.read`, and `mail.read_thread`;
+- GSW Chat passes the explicitly selected mailbox/account into the API;
+- the Hetzner provider can request these read-only tools through its OpenAI-compatible tool-call interface;
+- the backend executes tools only after the existing GSW `read` permission check;
+- no mutation/action tools are exposed yet.
+
+This is the beginning of Steps 1-2 in the rollout sequence. Conversation persistence, agent permissions/confirmations, dedicated action-ledger persistence, general idempotency, SSE streaming, reversible writes, and external actions remain intentionally disabled until their safety foundations are implemented.
+
+---
+
 ## Purpose
 
 This document defines the next implementation phase for GSW Mail: an AI-operated communication workspace where users can control mail, calendars, contacts, files, templates, signatures, campaigns, and future automations from a conversational interface.

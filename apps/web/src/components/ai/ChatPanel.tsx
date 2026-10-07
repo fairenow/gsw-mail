@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
-import { ArrowUp, Copy, RefreshCcw, Sparkles } from "lucide-react";
+import { ArrowUp, Copy, RefreshCcw } from "lucide-react";
 import { api, type AiChatMessage } from "../../api";
+import { useAppShell } from "../AppShell";
 
 const starterPrompts = [
   "Rewrite this email to sound more natural",
@@ -37,6 +38,7 @@ const cleanAssistantText = (content: string) => content
   .trim();
 
 export function ChatPanel() {
+  const { account } = useAppShell();
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -57,7 +59,7 @@ export function ChatPanel() {
     setSending(true);
     window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
     try {
-      const response = await api.chat(next);
+      const response = await api.chat(account?.id ?? null, next);
       setMessages((current) => [...current, response.message].slice(-24));
       window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
     } catch (err) {
@@ -70,7 +72,7 @@ export function ChatPanel() {
   return <div className="gsw-chat-panel">
     <header className="gsw-chat-header">
       <div className="gsw-chat-heading">
-        <span className="gsw-chat-mark" aria-hidden="true"><Sparkles size={19} strokeWidth={1.7} /></span>
+        <span className="gsw-chat-mark" aria-hidden="true"><img className="gsw-chat-brand-logo" src="/logo.png" alt="" /></span>
         <div>
           <h2>GSW Chat</h2>
           <p>Writing help and general conversation</p>
@@ -81,7 +83,7 @@ export function ChatPanel() {
 
     <div className="gsw-chat-thread">
       {visibleMessages.length === 0 ? <div className="gsw-chat-empty">
-        <span className="gsw-chat-empty-icon"><Sparkles size={26} strokeWidth={1.5} /></span>
+        <span className="gsw-chat-empty-icon"><img className="gsw-chat-brand-logo" src="/logo.png" alt="" /></span>
         <h3>What can I help you write?</h3>
         <p>Paste an email, describe what you want to say, or just start a conversation.</p>
         <div className="gsw-chat-starters">{starterPrompts.map((prompt) => <button type="button" key={prompt} onClick={() => setInput(prompt)}>{prompt}</button>)}</div>
@@ -124,7 +126,7 @@ export function ChatPanel() {
         />
         <button className="gsw-chat-send" type="button" aria-label="Send message" disabled={!canSend} onClick={() => void send()}><ArrowUp size={18} strokeWidth={2} /></button>
       </div>
-      <p>Chat can draft and rewrite. It cannot read your mailbox or take actions yet.</p>
+      <p>Chat can read the selected mailbox and help draft or rewrite. It cannot take actions yet.</p>
     </footer>
   </div>;
 }

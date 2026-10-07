@@ -1717,3 +1717,25 @@
   font-size: 14px;
   line-height: 1.65;
 }
+
+
+.gsw-chat-brand-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.gsw-chat-mark {
+  overflow: hidden;
+  padding: 4px;
+  background: var(--gsw-surface);
+  border: 1px solid var(--gsw-border-soft);
+}
+
+.gsw-chat-empty-icon {
+  overflow: hidden;
+  padding: 7px;
+  background: var(--gsw-surface);
+  border: 1px solid var(--gsw-border-soft);
+}
