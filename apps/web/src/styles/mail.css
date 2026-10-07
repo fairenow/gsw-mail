@@ -1356,3 +1356,19 @@
   from { opacity: .72; transform: translateX(18px); }
   to { opacity: 1; transform: translateX(0); }
 }
+
+
+.gsw-mail-reader-surface,
+.gsw-operational-surface {
+  min-height: 100%;
+  height: 100%;
+}
+
+.gsw-operational-surface {
+  overflow: auto;
+}
+
+.gsw-mail-reader-surface[hidden],
+.gsw-operational-surface[hidden] {
+  display: none !important;
+}
