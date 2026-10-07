@@ -8,6 +8,29 @@ This audit should be read with `docs/AI_AGENT_IMPLEMENTATION_PLAN.md`.
 
 ---
 
+# Implementation progress — 2026-10-07
+
+The first agent-readiness slice is now underway.
+
+Completed/in progress:
+
+- shared `MailService` covers search, message read, thread read, seen state, and archive for routes that have been migrated;
+- provider-neutral `AgentToolDefinition` / `AgentExecutionContext` / `AgentToolResult` contracts exist;
+- a read-only tool registry exposes `mail.search`, `mail.read`, and `mail.read_thread`;
+- GSW Chat now supplies explicit selected-account context and can use those tools through the Hetzner inference adapter;
+- tool execution still relies on current GSW account authorization and exposes no write/action capability.
+
+Still blocking write access:
+
+- persistent conversation/run state;
+- agent-specific permission grants and confirmations;
+- authoritative agent action ledger;
+- executor-wide idempotency;
+- broader domain-service normalization;
+- evaluation coverage.
+
+---
+
 # Executive Summary
 
 GSW Mail is already a strong foundation for an agentic communication product.
