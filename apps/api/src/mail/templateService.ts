@@ -29,6 +29,16 @@ export interface CustomEmailTemplateInput extends EmailTemplateTheme {
   logoFilename?: string | null | undefined;
 }
 
+export interface CustomEmailTemplatePatch {
+  name?: string | undefined;
+  borderColor?: string | undefined;
+  fontColor?: string | undefined;
+  buttonColor?: string | undefined;
+  backgroundColor?: string | undefined;
+  logoDataUrl?: string | null | undefined;
+  logoFilename?: string | null | undefined;
+}
+
 const colorPattern = /^#[0-9a-f]{6}$/i;
 const normalizeColor = (value: string, field: string) => {
   const color = value.trim();
@@ -99,7 +109,7 @@ export async function createCustomEmailTemplate(userId: string, input: CustomEma
   return present(row);
 }
 
-export async function updateCustomEmailTemplate(userId: string, id: string, input: Partial<CustomEmailTemplateInput>) {
+export async function updateCustomEmailTemplate(userId: string, id: string, input: CustomEmailTemplatePatch) {
   const existing = await getCustomEmailTemplate(userId, id);
   const logo = input.logoDataUrl === undefined ? {} : parseLogo(input.logoDataUrl);
   const [row] = await db.update(emailTemplates).set({
