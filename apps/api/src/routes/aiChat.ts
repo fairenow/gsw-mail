@@ -4,6 +4,7 @@ import { requireAccountPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
 import { runHetznerChat, type AiProviderMessage } from "../ai/hetzner.js";
 import { readOnlyMailRegistry } from "../ai/tools/registry.js";
+import type { AgentExecutionContext, ProviderToolDefinition } from "../ai/tools/types.js";
 
 const bodySchema = z.object({
   accountId: z.string().uuid().optional(),
@@ -23,8 +24,8 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       content: message.content,
     }));
 
-    let tools = undefined;
-    let toolContext = undefined;
+    let tools: ProviderToolDefinition[] | undefined;
+    let toolContext: AgentExecutionContext | undefined;
     if (input.accountId) {
       await requireAccountPermission(req.user!.id, input.accountId, "read");
       tools = readOnlyMailRegistry.providerDefinitions();
