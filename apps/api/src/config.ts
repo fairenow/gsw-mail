@@ -51,6 +51,12 @@ const config = {
   mail: {
     defaultTemplateKey: env("DEFAULT_MAIL_TEMPLATE_KEY", "none"),
   },
+  ai: {
+    hetznerApiKey: process.env.HETZNER_INFERENCE_KEY,
+    hetznerBaseUrl: env("HETZNER_INFERENCE_BASE_URL", "https://inference.hetzner.com/api/v1"),
+    hetznerModel: env("HETZNER_INFERENCE_MODEL", "Qwen/Qwen3.6-35B-A3B-FP8"),
+    timeoutMs: Number(env("HETZNER_INFERENCE_TIMEOUT_MS", "45000")),
+  },
   provisioning: {
     organizationName: env("PROVISIONING_ORGANIZATION_NAME", "Guided Steps Wellness"),
     organizationSlug: env("PROVISIONING_ORGANIZATION_SLUG", "guided-steps-wellness"),
