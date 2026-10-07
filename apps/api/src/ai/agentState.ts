@@ -9,7 +9,7 @@ import {
   aiToolCalls,
   aiToolResults,
 } from "../db/schema.js";
-import { notFound } from "../lib/errors.js";
+import { badRequest, notFound } from "../lib/errors.js";
 
 const titleFromMessage = (content: string): string => {
   const compact = content.replace(/\s+/g, " ").trim();
@@ -28,10 +28,12 @@ export async function createOrResumeConversation(input: {
       eq(aiConversations.userId, input.userId),
     )).limit(1);
     if (!existing) throw notFound("AI conversation not found");
-    const accountChanged = input.accountId !== undefined && existing.accountId !== input.accountId;
-    if (accountChanged) {
+    if (existing.accountId && input.accountId && existing.accountId !== input.accountId) {
+      throw badRequest("AI conversation belongs to a different mailbox");
+    }
+    if (!existing.accountId && input.accountId) {
       const [updated] = await db.update(aiConversations).set({
-        accountId: input.accountId ?? null,
+        accountId: input.accountId,
         lastMessageAt: new Date(),
         updatedAt: new Date(),
       }).where(eq(aiConversations.id, existing.id)).returning();
