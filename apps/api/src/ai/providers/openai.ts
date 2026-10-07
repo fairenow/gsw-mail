@@ -46,7 +46,8 @@ export const openAiProvider: AiProvider = {
     if (!config.ai.openaiApiKey) {
       throw new HttpError(503, "OpenAI is not configured. Add OPENAI_API_KEY to the API service.");
     }
-    if (!config.ai.openaiModel) {
+    const model = config.ai.openaiModel;
+    if (!model) {
       throw new HttpError(503, "OpenAI is not configured. Add OPENAI_MODEL to the API service.");
     }
 
@@ -60,7 +61,7 @@ export const openAiProvider: AiProvider = {
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          model: config.ai.openaiModel,
+          model: model,
           instructions: gswSystemPrompt,
           input: toInput(input.messages),
           ...(input.tools?.length ? {
@@ -102,7 +103,7 @@ export const openAiProvider: AiProvider = {
 
       const content = textParts.join("\n").trim() || null;
       if (!content && toolCalls.length === 0) throw new HttpError(502, "OpenAI returned an empty response.");
-      return { content, toolCalls, model: config.ai.openaiModel };
+      return { content, toolCalls, model: model };
     } catch (error) {
       if (error instanceof HttpError) throw error;
       if (error instanceof Error && error.name === "AbortError") throw new HttpError(504, "OpenAI request timed out.");
