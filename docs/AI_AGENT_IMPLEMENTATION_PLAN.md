@@ -1339,3 +1339,600 @@ It should become:
 > **an AI-operated communication workspace with email as its primary system of record.**
 
 The visible inbox remains useful, but conversation becomes another first-class way to operate the entire product.
+
+
+---
+
+# Confirmed Product Decisions
+
+The following decisions were confirmed before implementation and should be treated as the current baseline unless deliberately changed later.
+
+## Permissions should be revealed in context
+
+Permissions should not be presented only as a one-time setup screen.
+
+When a user asks the agent to perform an action that requires a capability that has not yet been granted, the conversation should explain the requested capability at the moment it becomes relevant and allow the user to approve or decline it.
+
+Example:
+
+> To send this message, GSW Assistant needs permission to send mail from this account.
+
+The approval should grant an explicit scope, not blanket authority.
+
+Permission settings must remain reviewable and revocable outside the conversation.
+
+## Confirmation policy starts from the baseline in this document
+
+The read / reversible-write / external-action model is the initial policy.
+
+It should be designed to evolve without changing individual tool implementations.
+
+Ambiguity and conflicting information must cause the agent to ask rather than guess.
+
+Examples include:
+
+- multiple contacts with the same name;
+- conflicting dates;
+- unclear sending account;
+- unclear recipient;
+- conflicting instructions;
+- uncertain event identity;
+- destructive scope that is wider than expected.
+
+## Account context is explicit and persistent
+
+An agent conversation operating inside a mailbox should always know its active account.
+
+The agent should never infer a different sender identity solely from message content.
+
+Conversation state should include:
+
+```text
+active_account_id
+active_workspace_id
+active_sender_identity
+current_route
+current_selected_resource
+```
+
+Switching accounts must be an explicit state transition and should be visible to the user.
+
+## Memory is layered
+
+Conversation state is required.
+
+User preferences may be stored, but current explicit instructions should be able to override them. Preferences must not become rigid constraints that create unwanted behavior.
+
+Contact memory is desirable and may begin with a simple retrieval/RAG system. Identity resolution must be conservative because confusing two people can corrupt downstream memory and actions.
+
+Mailbox facts are useful, but should retain source references and freshness metadata rather than becoming unsupported permanent facts.
+
+Recommended memory layers:
+
+```text
+conversation_memory
+user_preferences
+contact_memory
+workflow_memory
+mailbox_facts
+```
+
+Contact and mailbox facts should retain provenance whenever practical.
+
+## Durable asset storage is required
+
+GSW currently needs a durable file/image asset layer before generated attachments become a production capability.
+
+A dedicated R2 bucket is an appropriate initial storage target.
+
+Recommended asset model:
+
+```text
+asset_id
+owner_user_id
+workspace_id
+account_id?
+filename
+mime_type
+size_bytes
+storage_key
+source
+source_resource_id?
+created_by
+created_at
+updated_at
+```
+
+Suggested sources:
+
+```text
+upload
+email_attachment
+generated_document
+generated_image
+campaign_asset
+profile_image
+```
+
+The model should work with durable asset references, not raw binary or base64 payloads.
+
+## Personal mail and campaigns remain separate systems
+
+Personal communication and marketing/broadcast communication must not collapse into one sending primitive.
+
+```text
+mail.send
+campaign.launch
+```
+
+must remain separate tools with different:
+
+- permission scopes;
+- confirmation requirements;
+- send limits;
+- suppression rules;
+- analytics;
+- unsubscribe behavior;
+- audit detail.
+
+## Agent evaluation is required before broad write access
+
+A repeatable evaluation suite should be created before enabling unrestricted write actions.
+
+Initial evaluation categories should include:
+
+- correct tool selection;
+- correct account selection;
+- correct recipient resolution;
+- ambiguity handling;
+- permission enforcement;
+- confirmation compliance;
+- idempotency;
+- duplicate-send prevention;
+- context retrieval accuracy;
+- destructive-action safety.
+
+The suite should include realistic multi-step tasks and regressions discovered during development.
+
+---
+
+# Assistant UX
+
+## Desktop placement
+
+The existing right-side message-reading area is the preferred assistant surface.
+
+When no message is selected, the assistant can occupy that open area by default as a slide-out conversational panel.
+
+When a message is opened, the message remains primary and the assistant collapses to a persistent tab on the right edge.
+
+Selecting that tab reopens the assistant over the right-side area.
+
+This allows the conventional inbox and the conversational operating mode to coexist without requiring a separate AI page.
+
+## Mobile placement
+
+On mobile, the assistant should use a full-screen conversational surface or sheet, with clear navigation back to the current mail/calendar context.
+
+## Current UI context
+
+The assistant should know the relevant current application context at all times.
+
+Examples:
+
+```text
+current route
+selected mailbox
+selected message
+selected thread
+selected contact
+selected calendar date/range
+selected event
+selected template
+selected campaign
+control-center workspace
+selected domain
+selected mailbox-admin record
+```
+
+Context should contain references and compact metadata rather than blindly injecting full resource contents.
+
+The model should retrieve full content only when needed.
+
+## Execution stream, not private chain-of-thought
+
+The user should see a live, useful stream of work while an agentic flow runs.
+
+Do not expose hidden model chain-of-thought.
+
+Expose action-oriented status events such as:
+
+```text
+Searching recent mail...
+Found 4 matching conversations.
+Reading the latest thread...
+Checking Tuesday availability...
+Draft created.
+Waiting for approval to send.
+Message scheduled for 8:00 AM.
+```
+
+This stream can appear:
+
+1. inside the open assistant conversation; and
+2. in a compact persistent agent-status component while the drawer is closed.
+
+## Top-level background-work indicator
+
+While an agentic workflow continues with the assistant drawer closed, the application header may temporarily replace or visually augment the normal GSW Mail title area with a compact agent status component.
+
+Suggested states:
+
+```text
+Working: Searching 3 accounts...
+Working: Drafting follow-ups...
+Waiting: Needs your approval
+Complete: 4 drafts created
+Failed: 1 action needs attention
+```
+
+When work completes:
+
+- show a completion notification;
+- preserve the completed activity in conversation history;
+- restore the normal GSW Mail header state.
+
+The component should display execution status, not hidden reasoning.
+
+---
+
+# Phase 0: Agent Readiness
+
+Before implementing the full inference loop, normalize the application so the UI and the agent can use the same deterministic domain services.
+
+## Goal
+
+Anything the agent can do should be available as an application capability independent of the model.
+
+Do not let React implement one behavior while the agent implements another.
+
+Target architecture:
+
+```text
+                    +-- React UI
+                    |
+MailEngine -> GSW Domain Services
+                    |
+                    +-- AI Tool Registry -> Agent Harness -> Inference Provider
+```
+
+## Domain service layer
+
+Introduce or formalize services such as:
+
+```text
+MailService
+OutboxService
+CalendarService
+ContactService
+IdentityService
+SignatureService
+TemplateService
+AssetService
+CampaignService
+AutomationService
+WorkspaceService
+DomainService
+MailboxAdminService
+AuditService
+```
+
+Route handlers should become transport adapters around these services where practical.
+
+The AI tool registry should call domain services, not HTTP routes.
+
+The UI should also migrate toward those same domain services through API routes.
+
+## Readiness artifacts
+
+Before Phase 1, produce and maintain three matrices.
+
+### Capability matrix
+
+For every desired tool:
+
+```text
+tool name
+existing backend support
+domain-service wrapper required
+missing backend capability
+UI support
+mobile support
+tests
+```
+
+Status values:
+
+```text
+ready
+needs_wrapper
+partial
+missing
+```
+
+### Permission and confirmation matrix
+
+For every tool:
+
+```text
+tool
+scope
+risk class
+confirmation behavior
+organization role requirement
+account role requirement
+bulk threshold
+```
+
+### Implementation gap list
+
+A prioritized list of the work required before the first production AI Mail Operator release.
+
+---
+
+# Domain and Administration Capabilities
+
+The assistant should eventually be able to operate beyond the user's inbox when the authenticated user has the required workspace/admin role.
+
+These actions require stricter authorization than ordinary mailbox actions.
+
+## Workspace
+
+```text
+workspace.read
+workspace.read_health
+workspace.read_stats
+workspace.read_audit
+workspace.list_members
+workspace.read_member
+workspace.read_mailboxes
+workspace.read_mailbox_access
+```
+
+Later write capabilities may include:
+
+```text
+workspace.invite_member
+workspace.update_member_role
+workspace.suspend_member
+workspace.restore_member
+workspace.grant_mailbox_access
+workspace.revoke_mailbox_access
+```
+
+Every write must enforce current organization permissions.
+
+## Domains
+
+Current repository functionality already includes domain listing, provisioning, DNS state, and verification.
+
+Agent tools should eventually include:
+
+```text
+domain.list
+domain.read
+domain.add
+domain.verify
+domain.read_dns
+domain.diagnose
+```
+
+Potential future actions:
+
+```text
+domain.retry_provisioning
+domain.remove
+```
+
+Adding, removing, or changing domain infrastructure should be treated as a high-impact administrative action.
+
+The agent must not receive raw Stalwart or Resend administrative credentials.
+
+## Aliases
+
+The current app already supports listing, creating, and deleting aliases.
+
+Expose:
+
+```text
+alias.list
+alias.create
+alias.delete
+```
+
+Creation and deletion require workspace admin/owner authorization and confirmation.
+
+## Mailbox Administration
+
+The current application includes mailbox setup and administrative account state.
+
+Potential tool family:
+
+```text
+mailbox_admin.list
+mailbox_admin.read
+mailbox_admin.create
+mailbox_admin.read_access
+mailbox_admin.read_quota
+mailbox_admin.read_setup_status
+mailbox_admin.begin_setup
+```
+
+Credential-reset or authentication setup flows should remain specially protected and may intentionally stay outside autonomous tool execution.
+
+## Control Center and operational health
+
+The current admin API exposes control-center data, system health, outbound state, and audit information.
+
+These are valuable read tools:
+
+```text
+admin.control_center
+admin.health
+admin.stats
+admin.outbound_status
+admin.audit
+```
+
+Examples:
+
+> Is anything wrong with mail delivery today?
+
+> Which mailboxes have failed sends?
+
+> Is the domain fully configured?
+
+> Who currently has access to this mailbox?
+
+These can initially be read-only and are strong candidates for the first admin-agent release.
+
+---
+
+# Expanded Permission Scopes
+
+In addition to the previously defined scopes, reserve:
+
+```text
+workspace.read
+workspace.admin
+
+domain.read
+domain.write
+
+alias.read
+alias.write
+
+mailbox_admin.read
+mailbox_admin.write
+
+admin.health.read
+admin.audit.read
+```
+
+Administrative scopes must always be intersected with the user's real organization role.
+
+Possessing an AI preference scope must never elevate a user's underlying GSW role.
+
+---
+
+# Recommended Pre-Implementation Questions
+
+The following questions should be resolved during Phase 0.
+
+## Product authority
+
+- Which reversible actions may run automatically?
+- Which actions always require per-action approval?
+- Should users be able to create standing approvals for selected actions?
+- Should standing approvals expire?
+- What bulk-operation thresholds trigger a second confirmation?
+
+## Account context
+
+- Can one conversation intentionally span multiple mailboxes?
+- If yes, should the conversation show a visible account chip for each action?
+- What happens when the user changes the active mailbox while a workflow is running?
+
+## Identity resolution
+
+- What confidence threshold is required before acting on a contact name?
+- When should the agent show a disambiguation picker?
+- How are aliases, duplicate contacts, and external directory identities reconciled?
+
+## Memory
+
+- Which preferences are explicitly saved versus inferred?
+- Can users inspect/edit stored preferences and contact memory?
+- How long do inferred mailbox facts remain valid?
+- How is memory provenance displayed?
+
+## Assets
+
+- What R2 bucket and key structure will be used?
+- What are retention rules?
+- What is the maximum generated asset size?
+- What file types may be attached?
+- How are malware/file-safety checks handled?
+- Are assets private by default and served with signed URLs?
+
+## Campaigns
+
+- Which features belong to GSW versus Resend?
+- What defines a personal send versus campaign send?
+- When does recipient count force the campaign path?
+- Where are unsubscribe, suppression, and compliance states enforced?
+
+## Agent runtime
+
+- Maximum tool calls per turn?
+- Maximum workflow duration?
+- What happens when the browser closes?
+- Which workflows may continue server-side?
+- How is cancellation handled?
+- How are partial successes represented?
+
+## Administration
+
+- Which admin actions should remain read-only for the first release?
+- Which domain/mailbox operations should never be autonomous?
+- Should an admin conversation be visibly distinct from a mailbox conversation?
+
+---
+
+# Revised Implementation Order
+
+```text
+Phase 0
+Domain-service normalization
+        |
+Capability matrix
+        |
+Permission + confirmation policy
+        |
+Idempotency coverage
+        |
+Audit/activity system
+        |
+Account-context contract
+        |
+R2 asset service
+        |
+Agent evaluation suite
+        |
+        v
+Phase 1
+Tool registry
+        |
+Conversation persistence
+        |
+Modal provider adapter
+        |
+Agent execution loop
+        |
+SSE execution stream
+        |
+Assistant desktop/mobile UI
+        |
+Read-only evaluation
+        |
+Draft/reversible-write evaluation
+        |
+External-send evaluation
+        |
+        v
+Phase 2+
+Calendar, contacts, identity, files,
+research, campaigns, automations,
+workspace and admin agent capabilities
+```
+
