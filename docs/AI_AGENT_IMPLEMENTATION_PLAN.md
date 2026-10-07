@@ -1954,3 +1954,17 @@ research, campaigns, automations,
 workspace and admin agent capabilities
 ```
 
+
+
+## AI provider abstraction — 2026-10-07
+
+GSW now owns a provider-neutral model contract under `apps/api/src/ai/providers/`.
+
+Implemented adapters:
+- `hetzner` — current default, using Hetzner's OpenAI-compatible chat endpoint.
+- `openai` — uses the OpenAI Responses API and translates GSW function tools into Responses function tools.
+- `anthropic` — uses Anthropic Messages/tool-use and normalizes tool calls back into the GSW tool contract.
+
+The agent runtime no longer calls Hetzner directly. It resolves a provider through `getAiProvider()`, while GSW permissions, confirmations, idempotency, tool registry, action ledger, and domain services remain provider-independent.
+
+Server-level selection is controlled by `AI_PROVIDER=hetzner|openai|anthropic`. Provider credentials remain server-side. User-managed/BYOK credentials are intentionally deferred until encrypted credential storage and per-user provider preferences are added.
