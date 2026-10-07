@@ -97,8 +97,9 @@ export function CalendarPage({ embedded = false, active = true }: { embedded?: b
   useEffect(() => {
     void api.settings().then((settings) => {
       const selected = String(settings.general.templateKey ?? "none");
-      if (selected === "gsw_default" || selected === "bible_reader") setMailTemplateKey(selected);
-      else if (account?.address.toLowerCase().endsWith("@team.guidedstepswellness.com")) setMailTemplateKey("gsw_default");
+      const supportsBrandedTemplate = account?.address.toLowerCase().endsWith("@team.guidedstepswellness.com") === true;
+      if (supportsBrandedTemplate && (selected === "gsw_default" || selected === "bible_reader")) setMailTemplateKey(selected);
+      else if (supportsBrandedTemplate) setMailTemplateKey("gsw_default");
       else setMailTemplateKey("none");
     }).catch(() => undefined);
   }, [account?.address]);
