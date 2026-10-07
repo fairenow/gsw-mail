@@ -66,7 +66,7 @@ export async function createCampaign(input: {
   });
 
   if (!recipients.length) throw badRequest("matching contacts do not have email addresses");
-  if (recipients.length > 250) throw badRequest("campaign audiences are currently limited to 250 recipients per launch");
+  if (recipients.length > 100) throw badRequest("campaign audiences are currently limited to 100 recipients per launch");
 
   return db.transaction(async (tx) => {
     const [campaign] = await tx.insert(aiCampaigns).values({
