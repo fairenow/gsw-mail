@@ -28,13 +28,20 @@ Progress since the initial audit:
 - browser sessions can restore the current conversation per selected mailbox;
 - read-only tool executions are recorded without storing full mailbox bodies in the ledger.
 
+Progress since the previous checkpoint:
+
+- executor-wide idempotency reservations now exist for all future non-read tool executions;
+- the central agent executor now gates tools on AI scopes before execution;
+- GSW Chat now renders in-chat permission and confirmation cards and can resume a paused mailbox request after permission is granted;
+- first-use mailbox reading now requires the explicit `mail.read` AI grant in addition to the user's ordinary mailbox authorization.
+
 Still blocking write access:
 
-- executor-wide idempotency for mutations;
-- in-chat permission/confirmation UX for elevated scopes;
+- safe reversible-write tools and their domain services;
+- confirmation-resume binding for exact mutation payloads;
 - broader domain-service normalization;
 - evaluation coverage;
-- reversible-write tool rollout.
+- streaming execution UX.
 
 ---
 
