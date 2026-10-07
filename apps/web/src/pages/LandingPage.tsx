@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import {
   ArrowRight,
   Bot,
@@ -90,14 +91,35 @@ function OutboxFlow() {
 }
 
 export function LandingPage() {
-  return <main className="lp2">
+  const pageRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const root = pageRef.current;
+    if (!root) return;
+    const items = Array.from(root.querySelectorAll<HTMLElement>("[data-reveal]"));
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      items.forEach((item) => item.classList.add("is-visible"));
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        (entry.target as HTMLElement).classList.add("is-visible");
+        observer.unobserve(entry.target);
+      });
+    }, { threshold: 0.14, rootMargin: "0px 0px -8% 0px" });
+    items.forEach((item) => observer.observe(item));
+    return () => observer.disconnect();
+  }, []);
+
+  return <main ref={pageRef} className="lp2">
     <nav className="lp2-nav">
       <a className="lp2-brand" href="/"><BrandMark size={34}/><span>GSW Mail</span></a>
       <div className="lp2-nav-links"><a href="#features">Features</a><a href="#workflows">Workflows</a><a href="#ownership">Built differently</a><a href="#faq">FAQ</a></div>
       <div className="lp2-nav-actions"><a href="/sign-in">Sign in</a><a className="lp2-button small" href="/sign-up">Start free</a></div>
     </nav>
 
-    <section className="lp2-hero">
+    <section className="lp2-hero lp2-hero-animated" data-reveal="hero">
       <div className="lp2-hero-copy">
         <span className="lp2-eyebrow">Your domain · Your workflow · Your inbox</span>
         <h1>Email, on your terms.</h1>
@@ -108,49 +130,49 @@ export function LandingPage() {
       <div id="product" className="lp2-hero-product"><ProductMockup/></div>
     </section>
 
-    <section className="lp2-proof">
+    <section className="lp2-proof" data-reveal="stagger">
       <div><span>One inbox.</span><span>Every identity.</span><span>Work that keeps moving.</span></div>
       <div className="lp2-proof-grid">{capabilityItems.map(([title,copy,Icon]) => <article key={title}><Icon size={22}/><strong>{title}</strong><p>{copy}</p></article>)}</div>
     </section>
 
-    <section id="features" className="lp2-section">
+    <section id="features" className="lp2-section" data-reveal="up">
       <div className="lp2-section-heading"><span className="lp2-eyebrow">Everything around the email</span><h2>Email is the message. The work keeps going.</h2><p>GSW Mail keeps the pieces around email close enough that you can act without constantly switching context.</p></div>
       <div className="lp2-feature-grid">{featureCards.map(([num,title,copy,Icon]) => <article key={title}><span>{num}</span><Icon size={24}/><h3>{title}</h3><p>{copy}</p></article>)}</div>
     </section>
 
-    <section className="lp2-schedule-section">
+    <section className="lp2-schedule-section" data-reveal="split">
       <div className="lp2-schedule-copy"><span className="lp2-eyebrow">Schedule</span><h2>Now. Later. Repeated.</h2><p>Follow-ups, reminders, reports, outreach, and recurring communication should not depend on you remembering to hit Send.</p><ul><li><Check/>Send when the timing is right</li><li><Check/>Repeat communication automatically</li><li><Check/>Change it before it leaves</li></ul></div>
       <div className="lp2-schedule-demo">
         <div className="lp2-send-card"><header><strong>Weekly project update</strong><span>Outbox</span></header><p>Here’s the latest progress and what we’re focused on next week.</p><div><button>Now</button><button className="active">Later</button><button>Repeated</button></div><footer><Clock3 size={16}/><span>Every Friday · 8:00 AM</span></footer></div>
       </div>
     </section>
 
-    <section className="lp2-outbox">
+    <section className="lp2-outbox" data-reveal="outbox">
       <div className="lp2-section-heading compact"><span className="lp2-eyebrow">Outbox</span><h2>Until it sends, it’s still yours.</h2><p>Scheduled and recurring messages stay active until they are actually delivered. Open them. Edit them. Move them. Pause them. Cancel them.</p></div>
       <OutboxFlow/>
     </section>
 
-    <section id="workflows" className="lp2-workflows">
+    <section id="workflows" className="lp2-workflows" data-reveal="stagger">
       <div className="lp2-section-heading"><span className="lp2-eyebrow">Workflows</span><h2>Use email for the work around the message.</h2></div>
       <div className="lp2-workflow-grid">{workflows.map(([title,copy],index)=><article key={title}><span>0{index+1}</span><h3>{title}</h3><p>{copy}</p><ArrowRight size={19}/></article>)}</div>
     </section>
 
-    <section className="lp2-ai">
+    <section className="lp2-ai" data-reveal="split">
       <div className="lp2-ai-copy"><span className="lp2-eyebrow">Connect tools</span><h2>Ask. Act. Done.</h2><p>Your inbox should not just contain work. Intelligent tools can help find the conversation, prepare the follow-up, create the event, and keep the context together.</p><div className="lp2-ai-tags"><span>Find the thread</span><span>Draft the reply</span><span>Create the event</span><span>Keep the context</span></div></div>
       <div className="lp2-ai-card"><div className="lp2-ai-message user">Find the conversations I owe a follow-up to this week.</div><div className="lp2-ai-message assistant"><Sparkles size={18}/><div><strong>I found 4 conversations.</strong><span>Danielle Carter · partnership follow-up</span><span>Jordan Thomas · scheduling</span><span>Project Team · launch review</span><button>Draft follow-ups</button></div></div></div>
     </section>
 
-    <section id="ownership" className="lp2-ownership">
+    <section id="ownership" className="lp2-ownership" data-reveal="split">
       <div><span className="lp2-eyebrow">Ownership</span><h2>Own your email.</h2></div>
       <div><p>Your domain. Your mailbox. Modern standards underneath. GSW Mail is not simply a new skin on Gmail or Outlook. It is built around independently operated infrastructure so the product can evolve around your identity, workflows, integrations, and portability.</p><div className="lp2-standards"><span><ShieldCheck/>Custom-domain identity</span><span><RefreshCw/>Modern sync + standards</span><span><Layers3/>Portable infrastructure</span></div></div>
     </section>
 
-    <section className="lp2-platforms">
+    <section className="lp2-platforms" data-reveal="stagger">
       <div className="lp2-section-heading compact"><span className="lp2-eyebrow">Everywhere</span><h2>Web. Mobile. Yours.</h2></div>
       <div className="lp2-platform-grid"><article><Mail/><h3>Web</h3><p>The full GSW Mail workspace for focused, high-context work.</p></article><article><Smartphone/><h3>Mobile</h3><p>Mail, scheduling, accounts, and calendar aligned with the web experience.</p></article><article><ShieldCheck/><h3>Your domain</h3><p>A professional identity that belongs to you, not a consumer mailbox provider.</p></article></div>
     </section>
 
-    <section id="faq" className="lp2-faq">
+    <section id="faq" className="lp2-faq" data-reveal="up">
       <div className="lp2-section-heading compact"><span className="lp2-eyebrow">FAQ</span><h2>A few things worth knowing.</h2></div>
       <div className="lp2-faq-grid">
         <article><h3>Is GSW Mail just another Gmail client?</h3><p>No. GSW Mail is built around its own independently operated mail stack and product workflows rather than simply wrapping a consumer inbox.</p></article>
@@ -160,7 +182,7 @@ export function LandingPage() {
       </div>
     </section>
 
-    <section className="lp2-final">
+    <section className="lp2-final" data-reveal="cta">
       <span className="lp2-eyebrow">Ready when you are</span>
       <h2>Email can be better.</h2>
       <p>A faster, calmer, more capable inbox built around communication that keeps moving after you hit compose.</p>
