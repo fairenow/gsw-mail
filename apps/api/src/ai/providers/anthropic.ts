@@ -63,7 +63,8 @@ export const anthropicProvider: AiProvider = {
     if (!config.ai.anthropicApiKey) {
       throw new HttpError(503, "Anthropic is not configured. Add ANTHROPIC_API_KEY to the API service.");
     }
-    if (!config.ai.anthropicModel) {
+    const model = config.ai.anthropicModel;
+    if (!model) {
       throw new HttpError(503, "Anthropic is not configured. Add ANTHROPIC_MODEL to the API service.");
     }
 
@@ -78,7 +79,7 @@ export const anthropicProvider: AiProvider = {
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          model: config.ai.anthropicModel,
+          model: model,
           max_tokens: 1600,
           system: gswSystemPrompt,
           messages: toMessages(input.messages),
@@ -116,7 +117,7 @@ export const anthropicProvider: AiProvider = {
 
       const content = textParts.join("\n").trim() || null;
       if (!content && toolCalls.length === 0) throw new HttpError(502, "Anthropic returned an empty response.");
-      return { content, toolCalls, model: config.ai.anthropicModel };
+      return { content, toolCalls, model: model };
     } catch (error) {
       if (error instanceof HttpError) throw error;
       if (error instanceof Error && error.name === "AbortError") throw new HttpError(504, "Anthropic request timed out.");
