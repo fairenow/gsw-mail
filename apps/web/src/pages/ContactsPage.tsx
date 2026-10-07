@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { api, type Contact } from "../api";
 import { useAppShell } from "../components/AppShell";
@@ -9,7 +9,7 @@ type FailedRow = { rowNumber: number; raw: Record<string, string>; error?: strin
 const fields = ["ignore", "firstName", "middleName", "lastName", "displayName", "organization", "jobTitle", "website", "address", "city", "state", "postalCode", "country", "notes", "email", "phone", "tags"];
 const pageSize = 100;
 
-export function ContactsPage() {
+export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { configureTopBar } = useAppShell();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [totalContacts, setTotalContacts] = useState(0);
@@ -36,7 +36,7 @@ export function ContactsPage() {
 
   useEffect(() => { setPage(0); }, [query]);
   useEffect(() => { load(); }, [query, page]);
-  useEffect(() => { configureTopBar({ search: query, searchPlaceholder: "Search contacts", onSearchChange: setQuery, onSearch: () => undefined, searchDisabled: false }); }, [configureTopBar, query]);
+  useEffect(() => { if (!embedded) configureTopBar({ search: query, searchPlaceholder: "Search contacts", onSearchChange: setQuery, onSearch: () => undefined, searchDisabled: false }); }, [configureTopBar, query, embedded]);
 
   const title = useMemo(() => totalContacts === 1 ? "1 contact" : `${totalContacts} contacts`, [totalContacts]);
   const parseFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -71,7 +71,8 @@ export function ContactsPage() {
     }
   };
 
-  return <MailWorkspace section="contacts"><div className="gsw-product-shell"><main className="gsw-contacts-page">
+  const wrap = (node: ReactNode) => embedded ? <div className="gsw-embedded-workspace gsw-embedded-contacts">{node}</div> : <MailWorkspace section="contacts">{node}</MailWorkspace>;
+  return wrap(<><div className="gsw-product-shell"><main className="gsw-contacts-page">
       <div className="gsw-page-heading">
         <div><p className="gsw-eyebrow">People you reach</p><h1>Contacts</h1><p>Useful relationship context, not a CRM. {title}.</p></div>
         <div className="gsw-page-actions"><label className="gsw-secondary-btn">Import CSV<input className="gsw-hidden-input" type="file" accept=".csv,text/csv" onChange={(event) => void parseFile(event)} /></label><button className="gsw-primary-btn" onClick={() => setNewContact(true)}>New contact</button></div>
@@ -88,7 +89,7 @@ export function ContactsPage() {
     {newContact && <div className="gsw-drawer-backdrop"><section className="gsw-contact-drawer"><button className="gsw-drawer-close" onClick={() => setNewContact(false)} aria-label="Close new contact"><X size={18} strokeWidth={1.75} aria-hidden="true" /></button><p className="gsw-eyebrow">Address book</p><h2>New contact</h2><div className="gsw-contact-form"><input placeholder="Name" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /><input placeholder="Email" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /><input placeholder="Organization" value={form.organization} onChange={(event) => setForm({ ...form, organization: event.target.value })} /><input placeholder="Job title" value={form.jobTitle} onChange={(event) => setForm({ ...form, jobTitle: event.target.value })} /><input placeholder="Tags, separated by commas" value={form.tags} onChange={(event) => setForm({ ...form, tags: event.target.value })} /><textarea placeholder="Notes" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /><button className="gsw-primary-btn" onClick={() => void create()}>Create contact</button></div></section></div>}
     {failedRows && <div className="gsw-modal-backdrop"><section className="gsw-import-modal"><div className="gsw-page-heading"><div><p className="gsw-eyebrow">Import review</p><h2>Failed rows</h2><p>{failedRows.length} rows need attention.</p></div><button className="gsw-drawer-close" onClick={() => setFailedRows(null)} aria-label="Close failed rows"><X size={18} strokeWidth={1.75} aria-hidden="true" /></button></div>{failedRows.map((row) => <div className="gsw-import-preview" key={row.rowNumber}><strong>Row {row.rowNumber}</strong><p>{row.error}</p><p>{Object.values(row.raw).join(" · ")}</p></div>)}</section></div>}
     {importState && <div className="gsw-modal-backdrop"><section className="gsw-import-modal"><div className="gsw-page-heading"><div><p className="gsw-eyebrow">Step 2 of 2</p><h2>Map CSV columns</h2><p>{importState.filename} · {importState.rows.length} rows detected</p></div><button className="gsw-drawer-close" onClick={() => setImportState(null)} aria-label="Close import mapping"><X size={18} strokeWidth={1.75} aria-hidden="true" /></button></div><div className="gsw-import-mapping">{importState.headers.map((header) => <label key={header}><span>{header}</span><select value={importState.mapping[header]} onChange={(event) => setImportState({ ...importState, mapping: { ...importState.mapping, [header]: event.target.value } })}>{fields.map((field) => <option key={field} value={field}>{field === "ignore" ? "Leave as custom field" : field}</option>)}</select></label>)}</div><div className="gsw-import-preview"><strong>Preview</strong><div>{importState.rows.slice(0, 3).map((row, index) => <p key={index}>{Object.values(row).join(" · ")}</p>)}</div></div><label className="gsw-duplicate-choice">Duplicates<select value={duplicateBehavior} onChange={(event) => setDuplicateBehavior(event.target.value)}><option value="merge">Merge missing fields (safest)</option><option value="skip">Skip</option><option value="overwrite">Overwrite mapped fields</option></select></label><button className="gsw-primary-btn" onClick={() => void runImport()}>Import {importState.rows.length} rows</button></section></div>}
-   </MailWorkspace>;
+   </>);
 }
 
 function ContactDrawer({ contact, onClose, onSaved }: { contact: Contact; onClose: () => void; onSaved: (contact: Contact) => void }) {
