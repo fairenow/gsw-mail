@@ -173,6 +173,7 @@ export function MailPage() {
     if (!account) return;
     try {
       const full = await api.message(account.id, message.engineId);
+      setWorkspaceSection("mail");
       if (folder === "Outbox") {
         const stagedDraftId = full.headers?.["X-GSW-Draft-ID"];
         if (!stagedDraftId) throw new Error("This scheduled message is not available for editing.");
