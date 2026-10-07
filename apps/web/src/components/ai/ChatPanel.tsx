@@ -93,10 +93,16 @@ export function ChatPanel() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [recording, setRecording] = useState(false);
+  const [voiceLevel, setVoiceLevel] = useState(0);
   const speechRef = useRef<SpeechRecognitionLike | null>(null);
   const speechBaseRef = useRef("");
+  const speechTranscriptRef = useRef("");
+  const sendVoiceOnEndRef = useRef(false);
+  const voiceStreamRef = useRef<MediaStream | null>(null);
+  const voiceAudioContextRef = useRef<AudioContext | null>(null);
+  const voiceAnimationFrameRef = useRef<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const canSend = input.trim().length > 0 && !sending;
+  const canSend = (input.trim().length > 0 || recording) && !sending;
   const speechSupported = typeof window !== "undefined" && speechRecognitionConstructor() !== null;
 
   const visibleMessages = useMemo(() => messages, [messages]);
@@ -143,10 +149,61 @@ export function ChatPanel() {
   };
 
 
+  const stopVoiceVisualizer = () => {
+    if (voiceAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(voiceAnimationFrameRef.current);
+      voiceAnimationFrameRef.current = null;
+    }
+    voiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+    voiceStreamRef.current = null;
+    if (voiceAudioContextRef.current) {
+      void voiceAudioContextRef.current.close().catch(() => undefined);
+      voiceAudioContextRef.current = null;
+    }
+    setVoiceLevel(0);
+  };
+
+  const startVoiceVisualizer = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!speechRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      const AudioContextCtor = window.AudioContext;
+      const audioContext = new AudioContextCtor();
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.78;
+      audioContext.createMediaStreamSource(stream).connect(analyser);
+      voiceStreamRef.current = stream;
+      voiceAudioContextRef.current = audioContext;
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      let lastPaint = 0;
+      const paint = (now: number) => {
+        analyser.getByteTimeDomainData(data);
+        if (now - lastPaint > 70) {
+          let sum = 0;
+          for (const sample of data) {
+            const centered = (sample - 128) / 128;
+            sum += centered * centered;
+          }
+          setVoiceLevel(Math.min(1, Math.sqrt(sum / data.length) * 5.5));
+          lastPaint = now;
+        }
+        voiceAnimationFrameRef.current = window.requestAnimationFrame(paint);
+      };
+      voiceAnimationFrameRef.current = window.requestAnimationFrame(paint);
+    } catch {
+      // SpeechRecognition can still work even when the visualizer stream is unavailable.
+    }
+  };
+
   const stopVoice = () => {
-    speechRef.current?.stop();
-    speechRef.current = null;
-    setRecording(false);
+    if (!speechRef.current) return;
+    sendVoiceOnEndRef.current = false;
+    speechRef.current.stop();
   };
 
   const startVoice = () => {
@@ -161,6 +218,8 @@ export function ChatPanel() {
     const recognition = new Recognition();
     const base = input.trimEnd();
     speechBaseRef.current = base ? `${base} ` : "";
+    speechTranscriptRef.current = speechBaseRef.current.trimEnd();
+    sendVoiceOnEndRef.current = false;
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = navigator.language || "en-US";
@@ -169,23 +228,38 @@ export function ChatPanel() {
       for (let index = 0; index < event.results.length; index += 1) {
         transcript += event.results[index]?.[0]?.transcript ?? "";
       }
-      setInput(`${speechBaseRef.current}${transcript}`.trimStart());
+      const nextInput = `${speechBaseRef.current}${transcript}`.trimStart();
+      speechTranscriptRef.current = nextInput;
+      setInput(nextInput);
     };
     recognition.onerror = (event) => {
       const message = event.error === "not-allowed"
         ? "Microphone access was blocked. Allow microphone access in your browser and try again."
-        : "Voice dictation stopped unexpectedly. You can keep editing the text that was captured.";
+        : event.error === "no-speech"
+          ? "I didn't catch any speech. Tap the microphone and try again."
+          : "Voice dictation stopped unexpectedly. You can keep editing the text that was captured.";
       setError(message);
+      sendVoiceOnEndRef.current = false;
       setRecording(false);
       speechRef.current = null;
+      stopVoiceVisualizer();
     };
     recognition.onend = () => {
+      const shouldSend = sendVoiceOnEndRef.current;
+      const captured = speechTranscriptRef.current.trim();
+      sendVoiceOnEndRef.current = false;
       setRecording(false);
       speechRef.current = null;
+      stopVoiceVisualizer();
+      if (shouldSend) {
+        if (captured) void send(captured);
+        else setError("I didn't catch any speech to send. Try dictating again.");
+      }
     };
     speechRef.current = recognition;
     setRecording(true);
     recognition.start();
+    void startVoiceVisualizer();
   };
 
 
@@ -219,6 +293,7 @@ export function ChatPanel() {
       cancelled = true;
       speechRef.current?.abort();
       speechRef.current = null;
+      stopVoiceVisualizer();
       if (activityClearTimerRef.current !== null) {
         window.clearTimeout(activityClearTimerRef.current);
         activityClearTimerRef.current = null;
@@ -290,8 +365,12 @@ export function ChatPanel() {
     }
   };
 
-  const send = async (override?: string) => {
-    if (recording) stopVoice();
+  async function send(override?: string) {
+    if (recording && speechRef.current) {
+      sendVoiceOnEndRef.current = true;
+      speechRef.current.stop();
+      return;
+    }
     const content = (override ?? input).trim();
     if (!content || sending) return;
     const userMessage: AiChatMessage = { role: "user", content };
@@ -318,7 +397,7 @@ export function ChatPanel() {
     } finally {
       setSending(false);
     }
-  };
+  }
 
   const resumeAfterIntervention = async () => {
     if (!account || !conversationId) return;
@@ -455,6 +534,7 @@ export function ChatPanel() {
       <div className="gsw-chat-composer-box">
         <textarea
           value={input}
+          aria-label="Message GSW Chat"
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
@@ -465,6 +545,15 @@ export function ChatPanel() {
           placeholder="Ask for help writing or rewriting an email…"
           rows={1}
         />
+        {recording && <div className="gsw-chat-voice-live" aria-live="polite" aria-label="Microphone is recording">
+          <span className="gsw-chat-recording-dot" />
+          <div className="gsw-chat-waveform" aria-hidden="true">
+            {[0.62, 0.95, 0.76, 1.15, 0.84, 1.05, 0.7, 0.9, 0.58].map((multiplier, index) => (
+              <span key={index} style={{ height: `${Math.max(4, Math.round(5 + voiceLevel * multiplier * 18))}px` }} />
+            ))}
+          </div>
+          <span className="gsw-chat-listening-label">Listening</span>
+        </div>}
         <button
           className={`gsw-chat-voice ${recording ? "recording" : ""}`}
           type="button"
@@ -473,7 +562,7 @@ export function ChatPanel() {
           disabled={!speechSupported || sending}
           onClick={recording ? stopVoice : startVoice}
         >{recording ? <Square size={15} fill="currentColor" /> : <Mic size={17} strokeWidth={2} />}</button>
-        <button className="gsw-chat-send" type="button" aria-label={recording ? "Stop dictation and send" : "Send message"} disabled={!canSend} onClick={() => void send()}><ArrowUp size={18} strokeWidth={2} /></button>
+        <button className="gsw-chat-send" type="button" aria-label={recording ? "Stop dictation and send" : "Send message"} title={recording ? "Send what you've dictated" : "Send message"} disabled={!canSend} onClick={() => void send()}><ArrowUp size={18} strokeWidth={2} /></button>
       </div>
       <p>{recording ? "Listening… tap stop to review your words, or send when you're done." : "Chat can search mail and saved chats, manage drafts, and create scheduled work. Sending still requires explicit confirmation."}</p>
     </footer>
