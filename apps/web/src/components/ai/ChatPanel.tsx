@@ -4,9 +4,9 @@ import { api, type AiChatMessage, type AiChatStreamEvent, type AiConversationRec
 import { useAppShell } from "../AppShell";
 
 const starterPrompts = [
-  "Rewrite this email to sound more natural",
-  "Find the email I was discussing about a rent roll",
-  "Brief me every weekday at 9 AM on inbox emails that need a response",
+  "Summarize yesterday's email activity",
+  "Let me know what's scheduled for this week",
+  "Coordinate my next campaign to my customer contacts",
 ];
 
 type ChatSegment =

@@ -57,7 +57,7 @@ export function MailPage() {
   const [open, setOpen] = useState<FullMessage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [mobileView, setMobileView] = useState<MobileView>("messages");
+  const [mobileView, setMobileView] = useState<MobileView>("reader");
   const [foldersOpen, setFoldersOpen] = useState(false);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -89,7 +89,7 @@ export function MailPage() {
   const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved" | "notSaved">("idle");
   const [sendError, setSendError] = useState<string | null>(null);
   const [sendRequestId, setSendRequestId] = useState<string | null>(null);
-  const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>("mail");
+  const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>("chat");
 
   const loadFolder = useCallback(async (accountId: string, name: Folder, nextPage = 0) => {
     const request = ++listRequest.current;

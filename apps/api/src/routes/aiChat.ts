@@ -27,6 +27,8 @@ import { getAiProvider, type AiProviderMessage } from "../ai/providers/index.js"
 import { agentMailRegistry } from "../ai/tools/registry.js";
 import type { AgentExecutionContext, ProviderToolDefinition } from "../ai/tools/types.js";
 import { aiScopes } from "../ai/permissions/types.js";
+import { getAiCapabilitySettings, isAiScopeGloballyEnabled } from "../ai/capabilities.js";
+import { forbidden } from "../lib/errors.js";
 
 const chatMessagesSchema = z.array(z.object({
   role: z.enum(["user", "assistant"]),
@@ -102,6 +104,11 @@ const toolLabel = (toolName: string): string => {
     case "automations.update": return "Updating your scheduled task";
     case "automations.delete": return "Removing your scheduled task";
     case "search.workspace": return "Searching mail and chat history";
+    case "contacts.tags": return "Checking contact groups";
+    case "campaign.create": return "Preparing your campaign";
+    case "campaign.list": return "Checking your campaigns";
+    case "campaign.read": return "Reviewing your campaign";
+    case "campaign.launch": return "Launching your campaign";
     default: return "Working with your mailbox";
   }
 };
@@ -140,9 +147,11 @@ async function runConversationTurn(input: {
 }): Promise<ChatTurnResult> {
   let tools: ProviderToolDefinition[] | undefined;
   let toolContext: AgentExecutionContext | undefined;
+  const capabilitySettings = await getAiCapabilitySettings(input.userId);
+  if (!capabilitySettings.enabled) throw forbidden("GSW AI is disabled in Settings.");
 
   if (input.accountId) {
-    tools = agentMailRegistry.providerDefinitions();
+    tools = agentMailRegistry.providerDefinitions((tool) => tool.requiredScopes.every((scope) => isAiScopeGloballyEnabled(capabilitySettings, scope)));
     toolContext = {
       userId: input.userId,
       authUserId: input.authUserId,
@@ -396,9 +405,13 @@ export default async function aiChatRoutes(app: FastifyInstance) {
 
   app.post("/product/chat/permissions", async (req) => {
     const input = permissionGrantSchema.parse(req.body);
+    const capabilitySettings = await getAiCapabilitySettings(req.user!.id);
+    if (!isAiScopeGloballyEnabled(capabilitySettings, input.scope)) {
+      throw forbidden("This AI capability is disabled in Settings.");
+    }
     const requiredPermission = input.scope === "mail.read" || input.scope.endsWith(".read") || input.scope === "automations.write"
       ? "read"
-      : input.scope === "mail.write" || input.scope === "mail.send"
+      : input.scope === "mail.write" || input.scope === "mail.send" || input.scope === "campaign.write" || input.scope === "campaign.send"
         ? "send"
         : "manage";
     await requireAccountPermission(req.user!.id, input.accountId, requiredPermission);
@@ -479,7 +492,9 @@ export default async function aiChatRoutes(app: FastifyInstance) {
         ? "Sent. The email was queued for delivery through GSW Mail."
         : execution.toolCall.toolName === "automations.create"
           ? `Scheduled. ${String(resultData.title ?? "Your task")} will run next at ${String(resultData.nextRunAt ?? "the configured time")}.`
-          : "Approved action completed."
+          : execution.toolCall.toolName === "campaign.launch"
+            ? `Campaign launch queued ${String(resultData.sent ?? 0)} message(s)${Number(resultData.failed ?? 0) > 0 ? ` with ${String(resultData.failed)} failure(s)` : ""}.`
+            : "Approved action completed."
       : execution.toolCall.toolName === "mail.send_draft"
         ? `I couldn't send the email: ${outcome.result.error?.message ?? "the send failed"}`
         : `I couldn't complete that action: ${outcome.result.error?.message ?? "the action failed"}`;

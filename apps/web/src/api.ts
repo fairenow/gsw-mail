@@ -183,6 +183,15 @@ export interface ProductSettings {
   general: Record<string, unknown>;
   compose: Record<string, unknown>;
   contacts: Record<string, unknown>;
+  ai: {
+    enabled: boolean;
+    mailRead: boolean;
+    draftMutation: boolean;
+    emailSend: boolean;
+    scheduledWork: boolean;
+    campaignLaunch: boolean;
+    [key: string]: unknown;
+  };
   signature: { id: string | null; signatureHtml: string; signatureText: string; enabled: boolean; onNew: boolean; onReply: boolean; onForward: boolean; position: "beforeQuotedText" | "afterQuotedText" };
 }
 
@@ -445,7 +454,7 @@ export const api = {
   retrySend: (sendId: string, accountId: string) => post<{ status: string }>(`/mail/sends/${sendId}/retry`, { accountId }),
   settings: () => cachedGet<ProductSettings>("/product/settings", 60_000, 10 * 60_000),
   prefetchSettings: () => { void cachedGet<ProductSettings>("/product/settings", 60_000, 10 * 60_000).catch(() => undefined); },
-  updateSettings: async (body: { general?: Record<string, unknown>; compose?: Record<string, unknown>; contacts?: Record<string, unknown> }) => { const result = await patch<ProductSettings>("/product/settings", body); readCache.delete("/product/settings"); return result; },
+  updateSettings: async (body: { general?: Record<string, unknown>; compose?: Record<string, unknown>; contacts?: Record<string, unknown>; ai?: Record<string, unknown> }) => { const result = await patch<ProductSettings>("/product/settings", body); readCache.delete("/product/settings"); return result; },
   saveSignature: async (body: ProductSettings["signature"]) => { const result = await request("/product/signature", { method: "PUT", headers: headers(true), body: JSON.stringify(body) }).then((res) => json<ProductSettings["signature"]>(res)); readCache.delete("/product/settings"); return result; },
   contacts: (q = "") => cachedGet<ContactListResponse>(`/product/contacts?q=${encodeURIComponent(q)}`, 30_000, 5 * 60_000).then((r) => r.contacts),
   contactsPage: (q = "", limit = 100, offset = 0) => cachedGet<ContactListResponse>(`/product/contacts?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`, 30_000, 5 * 60_000),
