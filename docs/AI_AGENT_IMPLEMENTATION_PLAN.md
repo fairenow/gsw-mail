@@ -1,5 +1,7 @@
 # GSW Mail AI Agent Implementation Plan
 
+> Implementation should begin with the repository audit in [`AI_AGENT_READINESS_AUDIT.md`](./AI_AGENT_READINESS_AUDIT.md). That audit is the current source of truth for capability status, blockers, and Phase 0 priorities.
+
 ## Purpose
 
 This document defines the next implementation phase for GSW Mail: an AI-operated communication workspace where users can control mail, calendars, contacts, files, templates, signatures, campaigns, and future automations from a conversational interface.
