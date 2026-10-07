@@ -43,6 +43,27 @@ const threadInput = z.object({
   threadId: z.string().min(1).max(1_000),
 });
 
+const draftFields = {
+  to: z.array(z.string().email()).min(1).max(100),
+  cc: z.array(z.string().email()).max(100).optional(),
+  bcc: z.array(z.string().email()).max(100).optional(),
+  subject: z.string().max(998).optional(),
+  textBody: z.string().max(200_000).optional(),
+  htmlBody: z.string().max(500_000).optional(),
+  replyTo: z.string().email().optional(),
+  inReplyTo: z.string().max(2_000).optional(),
+  references: z.string().max(8_000).optional(),
+};
+
+const createDraftInput = z.object(draftFields);
+const updateDraftInput = z.object({
+  draftId: z.string().min(1).max(1_000),
+  ...draftFields,
+});
+const sendDraftInput = z.object({
+  draftId: z.string().min(1).max(1_000),
+});
+
 export const mailSearchTool: AgentToolDefinition = {
   name: "mail.search",
   description: "Search the user's currently selected mailbox for messages matching a natural-language query. Use this before reading a message when the message ID is not already known.",
@@ -161,6 +182,111 @@ export const mailReadThreadTool: AgentToolDefinition = {
     }
   },
 };
+
+export const mailCreateDraftTool: AgentToolDefinition = {
+  name: "mail.create_draft",
+  description: "Create a real draft in the user's selected GSW mailbox. Use this when the user explicitly asks to draft or prepare an email in their mailbox. This does not send the email.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      to: { type: "array", items: { type: "string" }, minItems: 1 },
+      cc: { type: "array", items: { type: "string" } },
+      bcc: { type: "array", items: { type: "string" } },
+      subject: { type: "string" },
+      textBody: { type: "string" },
+      htmlBody: { type: "string" },
+      replyTo: { type: "string" },
+      inReplyTo: { type: "string" },
+      references: { type: "string" },
+    },
+    required: ["to"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["mail.write"],
+  risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = createDraftInput.parse(rawInput);
+      const mail = createMailService(ctx);
+      const result = await mail.createDraft(ctx.accountId, input);
+      return success(ctx, toolCallId, startedAt, result);
+    } catch (error) {
+      return failure(ctx, toolCallId, startedAt, error);
+    }
+  },
+};
+
+export const mailUpdateDraftTool: AgentToolDefinition = {
+  name: "mail.update_draft",
+  description: "Update an existing draft in the user's selected GSW mailbox. This does not send the email.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      draftId: { type: "string" },
+      to: { type: "array", items: { type: "string" }, minItems: 1 },
+      cc: { type: "array", items: { type: "string" } },
+      bcc: { type: "array", items: { type: "string" } },
+      subject: { type: "string" },
+      textBody: { type: "string" },
+      htmlBody: { type: "string" },
+      replyTo: { type: "string" },
+      inReplyTo: { type: "string" },
+      references: { type: "string" },
+    },
+    required: ["draftId", "to"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["mail.write"],
+  risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = updateDraftInput.parse(rawInput);
+      const { draftId, ...draft } = input;
+      const mail = createMailService(ctx);
+      const result = await mail.updateDraft(ctx.accountId, draftId, draft);
+      return success(ctx, toolCallId, startedAt, result);
+    } catch (error) {
+      return failure(ctx, toolCallId, startedAt, error);
+    }
+  },
+};
+
+export const mailSendDraftTool: AgentToolDefinition = {
+  name: "mail.send_draft",
+  description: "Send an existing GSW Mail draft. Use only when the user explicitly asks to send a draft or email. This is an external action and requires confirmation before execution.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      draftId: { type: "string" },
+    },
+    required: ["draftId"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["mail.send"],
+  risk: "external",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = sendDraftInput.parse(rawInput);
+      const mail = createMailService(ctx);
+      const result = await mail.sendDraft(ctx.accountId, input.draftId, `agent:${toolCallId}`);
+      return success(ctx, toolCallId, startedAt, result);
+    } catch (error) {
+      return failure(ctx, toolCallId, startedAt, error);
+    }
+  },
+};
+
+export const agentMailTools: AgentToolDefinition[] = [
+  mailSearchTool,
+  mailReadTool,
+  mailReadThreadTool,
+  mailCreateDraftTool,
+  mailUpdateDraftTool,
+  mailSendDraftTool,
+];
 
 export const readOnlyMailTools: AgentToolDefinition[] = [
   mailSearchTool,
