@@ -12,7 +12,7 @@ export function FolderNav({ folder, counts, customFolders = [], collapsed, secti
   counts: Record<Folder, { total: number; unread: number }>;
   customFolders?: MailFolder[];
   collapsed: boolean;
-  section?: "mail" | "contacts" | "calendar" | "settings";
+  section?: "mail" | "contacts" | "calendar" | "settings" | "chat";
   onSelect: (folder: Folder) => void;
   onPrefetch?: (folder: Folder) => void;
   onCreateFolder?: (parentId: string | null) => void;
