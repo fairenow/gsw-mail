@@ -278,7 +278,7 @@ async function runConversationTurn(input: {
       conversationId: input.conversationId,
       role: "assistant",
       content,
-      provider: "hetzner",
+      provider: provider.id,
       model,
       metadata: { toolActivity, toolLimitReached: true },
     });
