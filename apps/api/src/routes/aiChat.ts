@@ -146,7 +146,7 @@ async function runConversationTurn(input: {
     userId: input.userId,
     accountId: input.accountId,
     provider: provider.id,
-    metadata: { route: "/product/chat", readOnly: true, streamingExecution: Boolean(input.emit) },
+    metadata: { route: "/product/chat", agentActions: true, streamingExecution: Boolean(input.emit) },
   });
 
   let model = "";
@@ -356,7 +356,11 @@ export default async function aiChatRoutes(app: FastifyInstance) {
 
   app.post("/product/chat/permissions", async (req) => {
     const input = permissionGrantSchema.parse(req.body);
-    const requiredPermission = input.scope === "mail.read" || input.scope.endsWith(".read") ? "read" : input.scope === "mail.send" ? "send" : "manage";
+    const requiredPermission = input.scope === "mail.read" || input.scope.endsWith(".read")
+      ? "read"
+      : input.scope === "mail.write" || input.scope === "mail.send"
+        ? "send"
+        : "manage";
     await requireAccountPermission(req.user!.id, input.accountId, requiredPermission);
     const grant = await grantAiScope({
       userId: req.user!.id,
