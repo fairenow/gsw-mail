@@ -6,6 +6,7 @@ import {
   reserveAiIdempotency,
 } from "./agentState.js";
 import { scopeConfirmationPolicy, type AiScope } from "./permissions/types.js";
+import { getAiCapabilitySettings, isAiScopeGloballyEnabled } from "./capabilities.js";
 import { AgentToolRegistry } from "./tools/registry.js";
 import type { AgentExecutionContext, AgentToolResult } from "./tools/types.js";
 
@@ -52,6 +53,18 @@ const permissionCopy = (scope: AiScope) => {
       description: "This lets GSW Chat save scheduled tasks that can run when you are away. You will still confirm the exact schedule before it is created.",
     };
   }
+  if (scope === "campaign.write") {
+    return {
+      title: "Allow GSW Chat to prepare campaigns?",
+      description: "This lets GSW Chat build a campaign audience from your contact tags and prepare campaign content. It does not launch the campaign.",
+    };
+  }
+  if (scope === "campaign.send") {
+    return {
+      title: "Allow GSW Chat to request campaign launches?",
+      description: "This lets GSW Chat prepare a campaign launch. Every launch still requires a separate confirmation before messages are queued.",
+    };
+  }
   return {
     title: `Allow ${scope}?`,
     description: "GSW Chat needs this permission before it can continue with the requested capability.",
@@ -79,6 +92,20 @@ export async function executeAgentTool(input: {
         input.ctx,
         input.providerToolCallId,
       ),
+    };
+  }
+
+  const capabilitySettings = await getAiCapabilitySettings(input.ctx.userId);
+  const disabledScope = definition.requiredScopes.find((scope) => !isAiScopeGloballyEnabled(capabilitySettings, scope));
+  if (disabledScope) {
+    return {
+      kind: "result",
+      result: {
+        ok: false,
+        toolCallId: input.providerToolCallId,
+        error: { code: "capability_disabled", message: `AI capability ${disabledScope} is disabled in Settings.`, retryable: false },
+        audit: { userId: input.ctx.userId, accountId: input.ctx.accountId, startedAt: new Date().toISOString(), completedAt: new Date().toISOString() },
+      },
     };
   }
 
