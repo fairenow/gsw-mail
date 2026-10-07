@@ -5,11 +5,11 @@ import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { outboundAttachments, outboundMessages } from "../db/schema.js";
 import type { FullMessage, MailEngine, SendAttachment } from "../engine/types.js";
-import { buildOutgoingMessage } from "../mail/messageBuilder.js";
-import { resolveMailTemplateKey } from "../mail/templates/index.js";
+import { buildOutgoingMessageForUser } from "../mail/messageBuilder.js";
 import { badRequest, conflict } from "../lib/errors.js";
 import { generateMessageId } from "../lib/messageId.js";
 import { templateKeyAllowedForAddress } from "../lib/templatePolicy.js";
+import { isCustomTemplateKey } from "../mail/templateService.js";
 import { checkSuppressions } from "./delivery.js";
 import { loadOutboundAttachmentPayloads, storeOutboundAttachmentPayloads } from "./attachmentPayloadStore.js";
 import { checkSendRate, failSendPreparation, insertOutboundAttachments, insertRecipients, reserveSendOperation } from "./queue.js";
@@ -97,19 +97,23 @@ export async function createScheduledSendFromDraft(input: CreateScheduledSendInp
   if (suppressed.length) throw conflict(`recipient is suppressed and cannot receive mail: ${suppressed.join(", ")}`);
   await checkSendRate(input.account.id);
 
-  const templateKey = resolveMailTemplateKey(input.templateKey ?? "none");
-  if (!templateKeyAllowedForAddress(templateKey, input.account.address)) throw badRequest("template is not available for this mail domain");
+  const requestedTemplateKey = input.templateKey ?? "none";
+  if (!isCustomTemplateKey(requestedTemplateKey) && !templateKeyAllowedForAddress(requestedTemplateKey === "bible_reader" ? "bible_reader" : requestedTemplateKey === "gsw_default" ? "gsw_default" : "none", input.account.address)) {
+    throw badRequest("template is not available for this mail domain");
+  }
   const safeSubject = sanitizeOutboundHeaderValue(input.draft.subject) ?? "";
   const safeReplyTo = sanitizeOutboundHeaderValue(input.draft.headers?.["Reply-To"]);
   const safeInReplyTo = sanitizeOutboundHeaderValue(input.draft.headers?.["In-Reply-To"]);
   const safeReferences = sanitizeOutboundHeaderValue(input.draft.headers?.References);
-  const rendered = buildOutgoingMessage({
+  const rendered = await buildOutgoingMessageForUser({
+    userId: input.userId,
     bodyHtml: input.draft.htmlBody,
     bodyText: input.draft.textBody,
-    templateKey,
+    templateKey: requestedTemplateKey,
     senderName: input.account.displayName ?? undefined,
     senderEmail: input.account.address,
   });
+  const templateKey = rendered.templateKey;
   const messageId = sanitizeOutboundHeaderValue(generateMessageId())!;
 
   // Create a complete Stalwart Email object now while the user's scoped token is

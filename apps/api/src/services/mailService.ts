@@ -6,6 +6,7 @@ import { emailSignatures, userSettings } from "../db/schema.js";
 import { notFound } from "../lib/errors.js";
 import { submitSend } from "../outbound/sendFlow.js";
 import { DEFAULT_MAIL_TEMPLATE_KEY, resolveMailTemplateKey } from "../mail/templates/index.js";
+import { getCustomEmailTemplate, isCustomTemplateKey } from "../mail/templateService.js";
 import { templateKeyAllowedForAddress } from "../lib/templatePolicy.js";
 import { clearDraftAttachments, loadDraftAttachments, moveDraftAttachments } from "../mail/draftAttachmentStore.js";
 import { hasRemoteMailImages, sanitizeInboundMailHtml, sanitizeRichText } from "../lib/richText.js";
@@ -42,8 +43,18 @@ async function resolveComposePreferences(userId: string, address: string, mode: 
   const savedTemplateKey = typeof settings?.general?.templateKey === "string"
     ? settings.general.templateKey
     : DEFAULT_MAIL_TEMPLATE_KEY;
-  const resolvedTemplateKey = resolveMailTemplateKey(savedTemplateKey);
-  const templateKey = templateKeyAllowedForAddress(resolvedTemplateKey, address) ? resolvedTemplateKey : "none";
+  let templateKey: string;
+  if (isCustomTemplateKey(savedTemplateKey)) {
+    try {
+      await getCustomEmailTemplate(userId, savedTemplateKey);
+      templateKey = savedTemplateKey;
+    } catch {
+      templateKey = "none";
+    }
+  } else {
+    const resolvedTemplateKey = resolveMailTemplateKey(savedTemplateKey);
+    templateKey = templateKeyAllowedForAddress(resolvedTemplateKey, address) ? resolvedTemplateKey : "none";
+  }
   const richText = settings?.compose?.defaultFormat !== "plain";
   const signatureEnabled = Boolean(signature?.enabled)
     && (mode === "new"
