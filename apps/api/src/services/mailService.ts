@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { getUserEngine } from "../engine/index.js";
 import { db } from "../db/client.js";
