@@ -60,7 +60,7 @@ export function ChatPanel() {
       </div> : visibleMessages.map((message, index) => <article className={`gsw-chat-message ${message.role}`} key={`${message.role}-${index}`}>
         <div className="gsw-chat-message-label">{message.role === "user" ? "You" : "GSW"}</div>
         <div className="gsw-chat-message-body">{message.content}</div>
-        {message.role === "assistant" && <button className="gsw-chat-copy" type="button" aria-label="Copy response" onClick={() => void navigator.clipboard.writeText(message.content)}><Copy size={13} /> Copy</button>}
+        <button className="gsw-chat-copy" type="button" aria-label={message.role === "user" ? "Copy prompt" : "Copy response"} title={message.role === "user" ? "Copy prompt" : "Copy response"} onClick={() => void navigator.clipboard.writeText(message.content)}><Copy size={14} strokeWidth={1.8} /></button>
       </article>)}
       {sending && <article className="gsw-chat-message assistant gsw-chat-thinking"><div className="gsw-chat-message-label">GSW</div><div className="gsw-chat-thinking-dots" aria-label="Thinking"><span /><span /><span /></div></article>}
       {error && <div className="gsw-chat-error">{error}</div>}
