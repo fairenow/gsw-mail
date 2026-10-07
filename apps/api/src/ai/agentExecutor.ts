@@ -147,7 +147,9 @@ export async function executeAgentTool(input: {
             ? "Apply these changes to the scheduled GSW Chat task?"
             : definition.name === "automations.delete"
               ? "Delete this scheduled GSW Chat task permanently?"
-              : `Approve ${definition.name} for the selected mailbox.`,
+              : definition.name === "campaign.launch"
+                ? "Launch this campaign now? GSW Mail will queue an individual message to each tagged contact in the campaign audience."
+                : `Approve ${definition.name} for the selected mailbox.`,
       expiresAt: new Date(Date.now() + 30 * 60_000),
       metadata: { risk: definition.risk, scopes: definition.requiredScopes },
     });
