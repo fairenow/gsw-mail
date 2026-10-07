@@ -98,6 +98,9 @@ const toolLabel = (toolName: string): string => {
     case "mail.update_draft": return "Updating the draft";
     case "mail.send_draft": return "Preparing to send the draft";
     case "automations.create": return "Scheduling your task";
+    case "automations.list": return "Checking your scheduled tasks";
+    case "automations.update": return "Updating your scheduled task";
+    case "automations.delete": return "Removing your scheduled task";
     case "search.workspace": return "Searching mail and chat history";
     default: return "Working with your mailbox";
   }
