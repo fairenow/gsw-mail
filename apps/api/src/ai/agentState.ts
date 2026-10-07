@@ -3,13 +3,14 @@ import { db } from "../db/client.js";
 import {
   aiConfirmations,
   aiConversations,
+  aiIdempotencyKeys,
   aiMessages,
   aiPermissionGrants,
   aiRuns,
   aiToolCalls,
   aiToolResults,
 } from "../db/schema.js";
-import { badRequest, notFound } from "../lib/errors.js";
+import { badRequest, conflict, notFound } from "../lib/errors.js";
 
 const titleFromMessage = (content: string): string => {
   const compact = content.replace(/\s+/g, " ").trim();
@@ -120,6 +121,60 @@ export async function failAiRun(runId: string, error: unknown) {
   }).where(eq(aiRuns.id, runId));
 }
 
+export async function pauseAiRun(runId: string, status: "awaiting_permission" | "awaiting_confirmation", metadata?: Record<string, unknown>) {
+  await db.update(aiRuns).set({
+    status,
+    metadata: metadata ?? null,
+    updatedAt: new Date(),
+  }).where(eq(aiRuns.id, runId));
+}
+
+export async function reserveAiIdempotency(input: {
+  key: string;
+  userId: string;
+  accountId?: string;
+  toolCallId: string;
+  toolName: string;
+  expiresAt?: Date;
+}) {
+  const [existing] = await db.select().from(aiIdempotencyKeys).where(eq(aiIdempotencyKeys.key, input.key)).limit(1);
+  if (existing) return { reservation: existing, reused: true };
+
+  const [created] = await db.insert(aiIdempotencyKeys).values({
+    key: input.key,
+    userId: input.userId,
+    accountId: input.accountId ?? null,
+    toolCallId: input.toolCallId,
+    toolName: input.toolName,
+    status: "reserved",
+    expiresAt: input.expiresAt ?? null,
+  }).onConflictDoNothing({ target: aiIdempotencyKeys.key }).returning();
+
+  if (created) return { reservation: created, reused: false };
+  const [winner] = await db.select().from(aiIdempotencyKeys).where(eq(aiIdempotencyKeys.key, input.key)).limit(1);
+  if (!winner) throw conflict("AI action reservation conflict");
+  return { reservation: winner, reused: true };
+}
+
+export async function completeAiIdempotency(key: string, result?: Record<string, unknown> | null) {
+  await db.update(aiIdempotencyKeys).set({
+    status: "completed",
+    result: result ?? null,
+    completedAt: new Date(),
+    updatedAt: new Date(),
+  }).where(eq(aiIdempotencyKeys.key, key));
+}
+
+export async function failAiIdempotency(key: string, error: unknown) {
+  await db.update(aiIdempotencyKeys).set({
+    status: "failed",
+    errorCode: error instanceof Error ? error.name : "unknown_error",
+    errorMessage: error instanceof Error ? error.message.slice(0, 2_000) : String(error).slice(0, 2_000),
+    completedAt: new Date(),
+    updatedAt: new Date(),
+  }).where(eq(aiIdempotencyKeys.key, key));
+}
+
 const parseArguments = (raw: string): Record<string, unknown> => {
   try {
     const parsed = raw ? JSON.parse(raw) : {};
@@ -181,6 +236,13 @@ export async function recordAiToolCall(input: {
   }).returning();
   if (!call) throw new Error("failed to record AI tool call");
   return call;
+}
+
+export async function markAiToolCallStatus(toolCallId: string, status: string) {
+  await db.update(aiToolCalls).set({
+    status,
+    updatedAt: new Date(),
+  }).where(eq(aiToolCalls.id, toolCallId));
 }
 
 export async function recordAiToolResult(toolCallId: string, result: {

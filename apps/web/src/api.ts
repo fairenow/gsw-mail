@@ -139,9 +139,14 @@ export interface AiChatMessage {
   content: string;
 }
 
+export type AiIntervention =
+  | { type: "permission"; scope: string; title: string; description: string }
+  | { type: "confirmation"; confirmationId: string; action: string; summary: string };
+
 export interface AiChatResponse {
   conversationId: string;
-  message: AiChatMessage;
+  message: AiChatMessage | null;
+  intervention: AiIntervention | null;
   model: string;
   capabilities: {
     actions: false;
@@ -391,6 +396,9 @@ export const api = {
   calendarRsvpPublic: (token: string) => get<CalendarRsvpPublic>(`/product/calendar-rsvp?token=${encodeURIComponent(token)}`),
   respondCalendarRsvp: (token: string, response: CalendarRsvpResponse) => post<CalendarRsvpPublic>("/product/calendar-rsvp", { token, response }),
   chat: (accountId: string | null, messages: AiChatMessage[], conversationId?: string | null) => post<AiChatResponse>("/product/chat", { ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages }, 100_000),
+  resumeChat: (accountId: string, conversationId: string) => post<AiChatResponse>("/product/chat/resume", { accountId, conversationId }, 100_000),
+  grantChatPermission: (accountId: string, scope: string) => post<{ grant: { id: string; scope: string } }>("/product/chat/permissions", { accountId, scope }),
+  decideChatConfirmation: (confirmationId: string, decision: "approved" | "rejected") => post<{ confirmation: { id: string; status: string } }>(`/product/chat/confirmations/${encodeURIComponent(confirmationId)}`, { decision }),
   chatConversations: () => get<{ conversations: AiConversationRecord[] }>("/product/chat/conversations"),
   chatConversation: (id: string) => get<AiConversationDetail>(`/product/chat/conversations/${encodeURIComponent(id)}`),
 

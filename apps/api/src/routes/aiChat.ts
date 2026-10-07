@@ -12,23 +12,33 @@ import {
   listActiveAiScopes,
   listConversationMessages,
   listRecentConversations,
+  markAiToolCallStatus,
+  pauseAiRun,
   recordAiToolCall,
   recordAiToolResult,
   revokeAiScope,
   startAiRun,
 } from "../ai/agentState.js";
+import { executeAgentTool, type AgentIntervention } from "../ai/agentExecutor.js";
 import { runHetznerChat, type AiProviderMessage } from "../ai/hetzner.js";
 import { readOnlyMailRegistry } from "../ai/tools/registry.js";
 import type { AgentExecutionContext, ProviderToolDefinition } from "../ai/tools/types.js";
 import { aiScopes } from "../ai/permissions/types.js";
 
+const chatMessagesSchema = z.array(z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string().trim().min(1).max(20_000),
+})).min(1).max(24);
+
 const bodySchema = z.object({
   conversationId: z.string().uuid().optional(),
   accountId: z.string().uuid().optional(),
-  messages: z.array(z.object({
-    role: z.enum(["user", "assistant"]),
-    content: z.string().trim().min(1).max(20_000),
-  })).min(1).max(24),
+  messages: chatMessagesSchema,
+});
+
+const resumeSchema = z.object({
+  conversationId: z.string().uuid(),
+  accountId: z.string().uuid(),
 });
 
 const permissionGrantSchema = z.object({
@@ -39,6 +49,172 @@ const permissionGrantSchema = z.object({
 const confirmationDecisionSchema = z.object({
   decision: z.enum(["approved", "rejected"]),
 });
+
+const capabilities = (mailboxAccess: boolean) => ({
+  actions: false as const,
+  mailboxAccess,
+  rewriteEmail: true as const,
+  persistentConversation: true as const,
+});
+
+async function runConversationTurn(input: {
+  userId: string;
+  authUserId: string;
+  accountId?: string;
+  headers: Record<string, string>;
+  conversationId: string;
+  providerMessages: AiProviderMessage[];
+}) {
+  let tools: ProviderToolDefinition[] | undefined;
+  let toolContext: AgentExecutionContext | undefined;
+
+  if (input.accountId) {
+    tools = readOnlyMailRegistry.providerDefinitions();
+    toolContext = {
+      userId: input.userId,
+      authUserId: input.authUserId,
+      accountId: input.accountId,
+      headers: input.headers,
+    };
+  }
+
+  const run = await startAiRun({
+    conversationId: input.conversationId,
+    userId: input.userId,
+    accountId: input.accountId,
+    provider: "hetzner",
+    metadata: { route: "/product/chat", readOnly: true },
+  });
+
+  let model = "";
+  const toolActivity: Array<{ name: string; ok: boolean }> = [];
+
+  try {
+    for (let turn = 0; turn < 4; turn += 1) {
+      const result = await runHetznerChat(input.providerMessages, tools);
+      model = result.model;
+
+      if (result.toolCalls.length === 0) {
+        const content = result.content ?? "I couldn't produce a response.";
+        await appendAiMessage({
+          conversationId: input.conversationId,
+          role: "assistant",
+          content,
+          provider: "hetzner",
+          model,
+          metadata: { toolActivity },
+        });
+        await completeAiRun(run.id, { model, metadata: { toolActivity, toolTurns: turn } });
+        return {
+          conversationId: input.conversationId,
+          message: { role: "assistant" as const, content },
+          intervention: null as AgentIntervention | null,
+          model,
+          capabilities: capabilities(Boolean(input.accountId)),
+          toolActivity,
+        };
+      }
+
+      if (!toolContext) {
+        const content = "Select a mailbox before asking me to inspect your mail.";
+        await appendAiMessage({
+          conversationId: input.conversationId,
+          role: "assistant",
+          content,
+          provider: "hetzner",
+          model,
+        });
+        await completeAiRun(run.id, { model, metadata: { toolActivity } });
+        return {
+          conversationId: input.conversationId,
+          message: { role: "assistant" as const, content },
+          intervention: null,
+          model,
+          capabilities: capabilities(false),
+          toolActivity,
+        };
+      }
+
+      input.providerMessages.push({
+        role: "assistant",
+        content: result.content,
+        tool_calls: result.toolCalls,
+      });
+
+      for (const call of result.toolCalls.slice(0, 4)) {
+        const definition = readOnlyMailRegistry.definition(call.function.name);
+        const semanticName = call.function.name.replaceAll("__", ".");
+        const ledgerCall = await recordAiToolCall({
+          runId: run.id,
+          conversationId: input.conversationId,
+          providerToolCallId: call.id,
+          toolName: semanticName,
+          risk: definition?.risk ?? "read",
+          requiredScopes: definition?.requiredScopes ?? ["mail.read"],
+          argumentsJson: call.function.arguments,
+        });
+
+        const outcome = await executeAgentTool({
+          registry: readOnlyMailRegistry,
+          providerToolName: call.function.name,
+          rawArguments: call.function.arguments,
+          ctx: toolContext,
+          providerToolCallId: call.id,
+          ledgerToolCallId: ledgerCall.id,
+          conversationId: input.conversationId,
+          runId: run.id,
+        });
+
+        if (outcome.kind === "intervention") {
+          const status = outcome.intervention.type === "permission" ? "awaiting_permission" : "awaiting_confirmation";
+          await markAiToolCallStatus(ledgerCall.id, status);
+          await pauseAiRun(run.id, status, {
+            intervention: outcome.intervention,
+            toolName: semanticName,
+          });
+          return {
+            conversationId: input.conversationId,
+            message: null,
+            intervention: outcome.intervention,
+            model,
+            capabilities: capabilities(Boolean(input.accountId)),
+            toolActivity,
+          };
+        }
+
+        await recordAiToolResult(ledgerCall.id, outcome.result);
+        toolActivity.push({ name: semanticName, ok: outcome.result.ok });
+        input.providerMessages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: JSON.stringify(outcome.result),
+        });
+      }
+    }
+
+    const content = "I reached the read-only tool limit for this request. Try asking for a narrower mailbox search.";
+    await appendAiMessage({
+      conversationId: input.conversationId,
+      role: "assistant",
+      content,
+      provider: "hetzner",
+      model,
+      metadata: { toolActivity, toolLimitReached: true },
+    });
+    await completeAiRun(run.id, { model, metadata: { toolActivity, toolLimitReached: true } });
+    return {
+      conversationId: input.conversationId,
+      message: { role: "assistant" as const, content },
+      intervention: null,
+      model,
+      capabilities: capabilities(Boolean(input.accountId)),
+      toolActivity,
+    };
+  } catch (error) {
+    await failAiRun(run.id, error);
+    throw error;
+  }
+}
 
 export default async function aiChatRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
@@ -84,6 +260,28 @@ export default async function aiChatRoutes(app: FastifyInstance) {
     return { confirmation };
   });
 
+  app.post("/product/chat/resume", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req) => {
+    const input = resumeSchema.parse(req.body);
+    await requireAccountPermission(req.user!.id, input.accountId, "read");
+    const detail = await listConversationMessages(req.user!.id, input.conversationId);
+    if (detail.conversation.accountId && detail.conversation.accountId !== input.accountId) {
+      throw new Error("AI conversation belongs to a different mailbox");
+    }
+    const providerMessages: AiProviderMessage[] = detail.messages
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .slice(-24)
+      .map((message) => ({ role: message.role as "user" | "assistant", content: message.content }));
+
+    return runConversationTurn({
+      userId: req.user!.id,
+      authUserId: req.authUserId ?? req.user!.id,
+      accountId: input.accountId,
+      headers: req.headers as Record<string, string>,
+      conversationId: input.conversationId,
+      providerMessages,
+    });
+  });
+
   app.post("/product/chat", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req) => {
     const input = bodySchema.parse(req.body);
     const latestUserMessage = [...input.messages].reverse().find((message) => message.role === "user");
@@ -110,152 +308,13 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       content: message.content,
     }));
 
-    let tools: ProviderToolDefinition[] | undefined;
-    let toolContext: AgentExecutionContext | undefined;
-    if (input.accountId) {
-      tools = readOnlyMailRegistry.providerDefinitions();
-      toolContext = {
-        userId: req.user!.id,
-        authUserId: req.authUserId ?? req.user!.id,
-        accountId: input.accountId,
-        headers: req.headers as Record<string, string>,
-      };
-    }
-
-    const run = await startAiRun({
-      conversationId: conversation.id,
+    return runConversationTurn({
       userId: req.user!.id,
+      authUserId: req.authUserId ?? req.user!.id,
       accountId: input.accountId,
-      provider: "hetzner",
-      metadata: { route: "/product/chat", readOnly: true },
+      headers: req.headers as Record<string, string>,
+      conversationId: conversation.id,
+      providerMessages,
     });
-
-    let model = "";
-    const toolActivity: Array<{ name: string; ok: boolean }> = [];
-
-    try {
-      for (let turn = 0; turn < 4; turn += 1) {
-        const result = await runHetznerChat(providerMessages, tools);
-        model = result.model;
-
-        if (result.toolCalls.length === 0) {
-          const content = result.content ?? "I couldn't produce a response.";
-          await appendAiMessage({
-            conversationId: conversation.id,
-            role: "assistant",
-            content,
-            provider: "hetzner",
-            model,
-            metadata: { toolActivity },
-          });
-          await completeAiRun(run.id, {
-            model,
-            metadata: { toolActivity, toolTurns: turn },
-          });
-          return {
-            conversationId: conversation.id,
-            message: {
-              role: "assistant" as const,
-              content,
-            },
-            model,
-            capabilities: {
-              actions: false,
-              mailboxAccess: Boolean(input.accountId),
-              rewriteEmail: true,
-              persistentConversation: true,
-            },
-            toolActivity,
-          };
-        }
-
-        if (!toolContext) {
-          const content = "Select a mailbox before asking me to inspect your mail.";
-          await appendAiMessage({
-            conversationId: conversation.id,
-            role: "assistant",
-            content,
-            provider: "hetzner",
-            model,
-          });
-          await completeAiRun(run.id, { model, metadata: { toolActivity } });
-          return {
-            conversationId: conversation.id,
-            message: { role: "assistant" as const, content },
-            model,
-            capabilities: {
-              actions: false,
-              mailboxAccess: false,
-              rewriteEmail: true,
-              persistentConversation: true,
-            },
-            toolActivity,
-          };
-        }
-
-        providerMessages.push({
-          role: "assistant",
-          content: result.content,
-          tool_calls: result.toolCalls,
-        });
-
-        for (const call of result.toolCalls.slice(0, 4)) {
-          const definition = readOnlyMailRegistry.definition(call.function.name);
-          const ledgerCall = await recordAiToolCall({
-            runId: run.id,
-            conversationId: conversation.id,
-            providerToolCallId: call.id,
-            toolName: call.function.name.replaceAll("__", "."),
-            risk: definition?.risk ?? "read",
-            requiredScopes: definition?.requiredScopes ?? ["mail.read"],
-            argumentsJson: call.function.arguments,
-          });
-
-          const toolResult = await readOnlyMailRegistry.execute(
-            call.function.name,
-            call.function.arguments,
-            toolContext,
-            call.id,
-          );
-
-          await recordAiToolResult(ledgerCall.id, toolResult);
-          toolActivity.push({ name: call.function.name.replaceAll("__", "."), ok: toolResult.ok });
-          providerMessages.push({
-            role: "tool",
-            tool_call_id: call.id,
-            content: JSON.stringify(toolResult),
-          });
-        }
-      }
-
-      const content = "I reached the read-only tool limit for this request. Try asking for a narrower mailbox search.";
-      await appendAiMessage({
-        conversationId: conversation.id,
-        role: "assistant",
-        content,
-        provider: "hetzner",
-        model,
-        metadata: { toolActivity, toolLimitReached: true },
-      });
-      await completeAiRun(run.id, { model, metadata: { toolActivity, toolLimitReached: true } });
-      return {
-        conversationId: conversation.id,
-        message: {
-          role: "assistant" as const,
-          content,
-        },
-        model,
-        capabilities: {
-          actions: false,
-          mailboxAccess: Boolean(input.accountId),
-          rewriteEmail: true,
-          persistentConversation: true,
-        },
-        toolActivity,
-      };
-    } catch (error) {
-      await failAiRun(run.id, error);
-      throw error;
-    }
   });
 }

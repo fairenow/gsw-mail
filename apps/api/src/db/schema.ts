@@ -903,3 +903,29 @@ export const aiConfirmations = pgTable(
     index("ai_confirmations_conversation_idx").on(t.conversationId, t.requestedAt),
   ],
 );
+
+
+export const aiIdempotencyKeys = pgTable(
+  "ai_idempotency_keys",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    key: text("key").notNull(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id").references(() => emailAccounts.id, { onDelete: "cascade" }),
+    toolCallId: uuid("tool_call_id").references(() => aiToolCalls.id, { onDelete: "cascade" }),
+    toolName: text("tool_name").notNull(),
+    status: text("status").default("reserved").notNull(),
+    result: jsonb("result").$type<Record<string, unknown>>(),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("ai_idempotency_keys_key_idx").on(t.key),
+    uniqueIndex("ai_idempotency_keys_tool_call_idx").on(t.toolCallId),
+    index("ai_idempotency_keys_user_idx").on(t.userId, t.createdAt),
+    index("ai_idempotency_keys_status_idx").on(t.status, t.createdAt),
+  ],
+);
