@@ -449,6 +449,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       accountId: execution.run.accountId,
       headers: req.headers as Record<string, string>,
       accessToken: req.accessToken,
+      conversationId: execution.toolCall.conversationId,
     };
     const rawArguments = JSON.stringify(execution.toolCall.arguments ?? {});
     const outcome = await executeAgentTool({
@@ -466,9 +467,18 @@ export default async function aiChatRoutes(app: FastifyInstance) {
     if (outcome.kind !== "result") throw new Error("confirmed action unexpectedly requested another intervention");
     await recordAiToolResult(execution.toolCall.id, outcome.result);
 
+    const resultData = outcome.result.data && typeof outcome.result.data === "object"
+      ? outcome.result.data as Record<string, unknown>
+      : {};
     const content = outcome.result.ok
-      ? "Sent. The email was delivered through GSW Mail."
-      : `I couldn't send the email: ${outcome.result.error?.message ?? "the send failed"}`;
+      ? execution.toolCall.toolName === "mail.send_draft"
+        ? "Sent. The email was queued for delivery through GSW Mail."
+        : execution.toolCall.toolName === "automations.create"
+          ? `Scheduled. ${String(resultData.title ?? "Your task")} will run next at ${String(resultData.nextRunAt ?? "the configured time")}.`
+          : "Approved action completed."
+      : execution.toolCall.toolName === "mail.send_draft"
+        ? `I couldn't send the email: ${outcome.result.error?.message ?? "the send failed"}`
+        : `I couldn't complete that action: ${outcome.result.error?.message ?? "the action failed"}`;
 
     await appendAiMessage({
       conversationId: execution.toolCall.conversationId,
@@ -513,6 +523,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       accessToken: req.accessToken,
       conversationId: input.conversationId,
       providerMessages,
+      timeZone: input.timeZone,
     });
   });
 
@@ -537,6 +548,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
         headers: req.headers as Record<string, string>,
         conversationId: input.conversationId,
         providerMessages,
+        timeZone: input.timeZone,
         emit: stream.send,
       });
       stream.send({ type: "result", response });
