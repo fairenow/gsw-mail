@@ -103,6 +103,35 @@ export interface CalendarEvent {
   allDay: boolean;
 }
 
+export type CalendarRsvpResponse = "accepted" | "declined" | "tentative";
+
+export interface CalendarRsvpPublic {
+  attendeeEmail: string;
+  eventTitle: string;
+  eventStart: string;
+  eventEnd: string | null;
+  eventLocation: string | null;
+  meetingLink: string | null;
+  response: CalendarRsvpResponse | null;
+  respondedAt: string | null;
+  expiresAt: string;
+}
+
+export interface CalendarRsvpLink {
+  email: string;
+  token: string;
+  pageUrl: string;
+  acceptedUrl: string;
+  declinedUrl: string;
+  tentativeUrl: string;
+}
+
+export interface CalendarRsvpStatus {
+  attendeeEmail: string;
+  response: CalendarRsvpResponse | null;
+  respondedAt: string | null;
+}
+
 export interface ProductSettings {
   general: Record<string, unknown>;
   compose: Record<string, unknown>;
@@ -324,4 +353,9 @@ export const api = {
   createCalendarEvent: async (body: { accountId: string; calendarId: string; title: string; description?: string; start: string; durationMinutes: number; location?: string; meetingLink?: string; attendees: string[]; sendSchedulingMessages: boolean; timeZone?: string; allDay: boolean }) => { const result = await post<CalendarEvent>("/product/calendar-events", body); clearCalendarCache(body.accountId); return result; },
   updateCalendarEvent: async (id: string, body: { accountId: string; calendarId: string; title: string; description?: string; start: string; durationMinutes: number; location?: string; meetingLink?: string; attendees: string[]; sendSchedulingMessages: boolean; timeZone?: string; allDay: boolean }) => { const result = await patch<CalendarEvent>(`/product/calendar-events/${encodeURIComponent(id)}`, body); clearCalendarCache(body.accountId); return result; },
   deleteCalendarEvent: async (id: string, accountId: string) => { const result = await request(`/product/calendar-events/${encodeURIComponent(id)}?accountId=${encodeURIComponent(accountId)}`, { method: "DELETE" }).then((res) => json<{ deleted: boolean; eventId: string }>(res)); clearCalendarCache(accountId); return result; },
+  calendarRsvpLinks: (body: { accountId: string; event: { engineId: string; title: string; start: string; end?: string; location?: string; meetingLink?: string; attendees: string[] } }) => post<{ links: CalendarRsvpLink[] }>("/product/calendar-rsvps/links", body, interactiveTimeout),
+  calendarRsvpStatuses: (accountId: string, eventId: string) => get<{ responses: CalendarRsvpStatus[] }>(`/product/calendar-rsvps?accountId=${encodeURIComponent(accountId)}&eventId=${encodeURIComponent(eventId)}`),
+  calendarRsvpPublic: (token: string) => get<CalendarRsvpPublic>(`/product/calendar-rsvp?token=${encodeURIComponent(token)}`),
+  respondCalendarRsvp: (token: string, response: CalendarRsvpResponse) => post<CalendarRsvpPublic>("/product/calendar-rsvp", { token, response }),
+
 };
