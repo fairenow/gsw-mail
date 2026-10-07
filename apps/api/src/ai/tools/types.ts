@@ -6,6 +6,8 @@ export interface AgentExecutionContext {
   accountId: string;
   headers: Record<string, string>;
   accessToken?: string | undefined;
+  conversationId?: string | undefined;
+  timeZone?: string | undefined;
 }
 
 export interface AgentToolResult<T = unknown> {
