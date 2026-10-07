@@ -238,6 +238,13 @@ export async function recordAiToolCall(input: {
   return call;
 }
 
+export async function markAiToolCallStatus(toolCallId: string, status: string) {
+  await db.update(aiToolCalls).set({
+    status,
+    updatedAt: new Date(),
+  }).where(eq(aiToolCalls.id, toolCallId));
+}
+
 export async function recordAiToolResult(toolCallId: string, result: {
   ok: boolean;
   data?: unknown;
