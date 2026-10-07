@@ -115,11 +115,11 @@ const openEventStream = (reply: FastifyReply) => {
 async function runConversationTurn(input: {
   userId: string;
   authUserId: string;
-  accountId?: string;
+  accountId?: string | undefined;
   headers: Record<string, string>;
   conversationId: string;
   providerMessages: AiProviderMessage[];
-  emit?: ChatStreamEmitter;
+  emit?: ChatStreamEmitter | undefined;
 }): Promise<ChatTurnResult> {
   let tools: ProviderToolDefinition[] | undefined;
   let toolContext: AgentExecutionContext | undefined;
@@ -299,8 +299,8 @@ async function runConversationTurn(input: {
 
 async function prepareNewConversation(input: {
   userId: string;
-  accountId?: string;
-  conversationId?: string;
+  accountId?: string | undefined;
+  conversationId?: string | undefined;
   messages: Array<{ role: "user" | "assistant"; content: string }>;
 }) {
   const latestUserMessage = [...input.messages].reverse().find((message) => message.role === "user");
