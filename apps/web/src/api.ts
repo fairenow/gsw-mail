@@ -132,6 +132,23 @@ export interface CalendarRsvpStatus {
   respondedAt: string | null;
 }
 
+export type AiChatRole = "user" | "assistant";
+
+export interface AiChatMessage {
+  role: AiChatRole;
+  content: string;
+}
+
+export interface AiChatResponse {
+  message: AiChatMessage;
+  model: string;
+  capabilities: {
+    actions: false;
+    mailboxAccess: false;
+    rewriteEmail: true;
+  };
+}
+
 export interface ProductSettings {
   general: Record<string, unknown>;
   compose: Record<string, unknown>;
@@ -357,5 +374,6 @@ export const api = {
   calendarRsvpStatuses: (accountId: string, eventId: string) => get<{ responses: CalendarRsvpStatus[] }>(`/product/calendar-rsvps?accountId=${encodeURIComponent(accountId)}&eventId=${encodeURIComponent(eventId)}`),
   calendarRsvpPublic: (token: string) => get<CalendarRsvpPublic>(`/product/calendar-rsvp?token=${encodeURIComponent(token)}`),
   respondCalendarRsvp: (token: string, response: CalendarRsvpResponse) => post<CalendarRsvpPublic>("/product/calendar-rsvp", { token, response }),
+  chat: (messages: AiChatMessage[]) => post<AiChatResponse>("/product/chat", { messages }, 55_000),
 
 };

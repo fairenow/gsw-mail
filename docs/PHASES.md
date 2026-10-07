@@ -86,9 +86,12 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 - [ ] Failed-login protection, account lockouts, IP abuse detection, throttle
 
 ## Phase 8 — AI intelligence layer
+- [x] Initial authenticated GSW Chat backed by server-side Hetzner Inference
+- [x] Initial chat is deliberately no-action: general conversation + email drafting/rewriting only; no mailbox/tool access
+- [x] AI never blocks delivery
 - [ ] Mail events → AI processing (classification: needs response, waiting, referral, …)
-- [ ] AI never blocks delivery
 - [ ] Referral/contact extraction example
+- [ ] Permissioned mailbox/context tools and user-confirmed actions
 
 ## Phase 9 — Product integration
 - [x] Identity integration with Guided Steps Wellness accounts (signed JWT + JWKS,

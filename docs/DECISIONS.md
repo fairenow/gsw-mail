@@ -90,3 +90,13 @@ Use independent vertical scroll areas inside a viewport-sized mail shell. Keep p
 - Stalwart `sendSchedulingMessages` is disabled for product-created and product-updated events. This prevents Stalwart's server-branded scheduling email and RSVP web page from becoming the user-facing invitation experience.
 - The attached iCalendar request remains interoperable with external calendar clients. GSW Mail also issues recipient-specific signed RSVP links to `mail.guidedstepswellness.com/calendar/rsvp`, where Yes / No / Maybe responses are recorded in the product database without exposing Stalwart branding.
 - RSVP links use signed, expiring tokens and never mutate state on GET. Email buttons preselect a choice, but the recipient must explicitly confirm it on the GSW RSVP page so link scanners cannot accidentally record a response.
+
+
+## 2026-10-07 — Initial AI chat boundary
+
+- The first GSW Chat release is a server-side, no-action assistant. It can converse, draft, and rewrite text, but it cannot read mailbox contents, contacts, calendars, or files and cannot send, edit, schedule, or otherwise mutate product state.
+- Hetzner Inference is called only from the Railway API. `HETZNER_INFERENCE_KEY` is never sent to or referenced by the browser bundle.
+- The provider boundary lives under `apps/api/src/ai/`; the browser calls only `POST /product/chat`.
+- The initial provider uses Hetzner's OpenAI-compatible endpoint at `https://inference.hetzner.com/api/v1`. Base URL, model, and timeout are environment-overridable.
+- AI remains outside the critical mail delivery path. Missing credentials, provider outages, timeouts, or rate limits affect Chat only and must not prevent normal mail operations.
+- Conversation history is client-held for this first release. The API accepts only user/assistant text turns and does not persist chat history.
