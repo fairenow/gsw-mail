@@ -386,16 +386,20 @@ export async function requestAiConfirmation(input: {
 }
 
 export async function decideAiConfirmation(userId: string, confirmationId: string, decision: "approved" | "rejected") {
+  const [existing] = await db.select().from(aiConfirmations).where(and(
+    eq(aiConfirmations.id, confirmationId),
+    eq(aiConfirmations.userId, userId),
+  )).limit(1);
+  if (!existing) throw notFound("AI confirmation not found");
+  if (existing.status === decision) return existing;
+  if (existing.status !== "pending") throw badRequest("AI confirmation has already been decided");
+
   const [updated] = await db.update(aiConfirmations).set({
     status: decision,
     decidedAt: new Date(),
     updatedAt: new Date(),
-  }).where(and(
-    eq(aiConfirmations.id, confirmationId),
-    eq(aiConfirmations.userId, userId),
-    eq(aiConfirmations.status, "pending"),
-  )).returning();
-  if (!updated) throw notFound("pending AI confirmation not found");
+  }).where(eq(aiConfirmations.id, confirmationId)).returning();
+  if (!updated) throw notFound("AI confirmation not found");
   return updated;
 }
 
