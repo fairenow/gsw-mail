@@ -344,6 +344,7 @@ const postEventStream = async (
   url: string,
   body: unknown,
   onEvent: (event: AiChatStreamEvent) => void,
+  fallbackUrl?: string,
 ): Promise<AiChatResponse> => {
   const response = await fetch(url, {
     method: "POST",
@@ -352,8 +353,16 @@ const postEventStream = async (
     body: JSON.stringify(body),
   });
 
-  if (!response.ok) return json<AiChatResponse>(response);
-  if (!response.body) throw new Error("Streaming response is unavailable in this browser.");
+  if (!response.ok) {
+    if (response.status === 404 && fallbackUrl) {
+      return post<AiChatResponse>(fallbackUrl, body, 100_000);
+    }
+    return json<AiChatResponse>(response);
+  }
+  if (!response.body) {
+    if (fallbackUrl) return post<AiChatResponse>(fallbackUrl, body, 100_000);
+    throw new Error("Streaming response is unavailable in this browser.");
+  }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -453,9 +462,9 @@ export const api = {
   calendarRsvpPublic: (token: string) => get<CalendarRsvpPublic>(`/product/calendar-rsvp?token=${encodeURIComponent(token)}`),
   respondCalendarRsvp: (token: string, response: CalendarRsvpResponse) => post<CalendarRsvpPublic>("/product/calendar-rsvp", { token, response }),
   chat: (accountId: string | null, messages: AiChatMessage[], conversationId?: string | null) => post<AiChatResponse>("/product/chat", { ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages }, 100_000),
-  streamChat: (accountId: string | null, messages: AiChatMessage[], conversationId: string | null | undefined, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/stream", { ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages }, onEvent),
+  streamChat: (accountId: string | null, messages: AiChatMessage[], conversationId: string | null | undefined, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/stream", { ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages }, onEvent, "/product/chat"),
   resumeChat: (accountId: string, conversationId: string) => post<AiChatResponse>("/product/chat/resume", { accountId, conversationId }, 100_000),
-  resumeChatStream: (accountId: string, conversationId: string, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/resume/stream", { accountId, conversationId }, onEvent),
+  resumeChatStream: (accountId: string, conversationId: string, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/resume/stream", { accountId, conversationId }, onEvent, "/product/chat/resume"),
   grantChatPermission: (accountId: string, scope: string) => post<{ grant: { id: string; scope: string } }>("/product/chat/permissions", { accountId, scope }),
   decideChatConfirmation: (confirmationId: string, decision: "approved" | "rejected") => post<{ confirmation: { id: string; status: string } }>(`/product/chat/confirmations/${encodeURIComponent(confirmationId)}`, { decision }),
   chatConversations: () => get<{ conversations: AiConversationRecord[] }>("/product/chat/conversations"),
