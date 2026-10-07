@@ -9,7 +9,7 @@ import { DEFAULT_MAIL_TEMPLATE_KEY, resolveMailTemplateKey } from "../mail/templ
 import { getCustomEmailTemplate, isCustomTemplateKey } from "../mail/templateService.js";
 import { templateKeyAllowedForAddress } from "../lib/templatePolicy.js";
 import { clearDraftAttachments, loadDraftAttachments, moveDraftAttachments } from "../mail/draftAttachmentStore.js";
-import { hasRemoteMailImages, sanitizeInboundMailHtml, sanitizeRichText } from "../lib/richText.js";
+import { hasRemoteMailImages, richTextToPlainText, sanitizeInboundMailHtml, sanitizeRichText } from "../lib/richText.js";
 
 export interface MailServiceContext {
   userId: string;
@@ -70,7 +70,19 @@ async function resolveComposePreferences(userId: string, address: string, mode: 
   };
 }
 
-function applySignature(input: {
+const normalizeSignatureText = (value: string): string => value
+  .replace(/\u00a0/g, " ")
+  .replace(/\s+/g, " ")
+  .trim()
+  .toLowerCase();
+
+const alreadyContainsConfiguredSignature = (bodyText: string, signatureText: string): boolean => {
+  const body = normalizeSignatureText(bodyText);
+  const signature = normalizeSignatureText(signatureText);
+  return Boolean(body && signature && (body === signature || body.endsWith(` ${signature}`) || body.endsWith(signature)));
+};
+
+export function applySignature(input: {
   textBody?: string | undefined;
   htmlBody?: string | undefined;
   richText: boolean;
@@ -81,9 +93,19 @@ function applySignature(input: {
   const signatureText = input.signature?.signatureText?.trim() ?? "";
   const signatureHtml = input.signature?.signatureHtml?.trim() ?? "";
 
-  const textBody = [rawText, signatureText].filter(Boolean).join("\n\n") || undefined;
+  const htmlPlainText = rawHtml ? richTextToPlainText(rawHtml) : "";
+  const textHasSignature = alreadyContainsConfiguredSignature(rawText, signatureText);
+  const htmlHasSignature = rawHtml.includes('class="gsw-signature"')
+    || alreadyContainsConfiguredSignature(htmlPlainText, signatureText);
+
+  const textBody = [rawText, !textHasSignature ? signatureText : ""].filter(Boolean).join("\n\n") || undefined;
   const baseHtml = rawHtml || (input.richText && rawText ? textToRichHtml(rawText) : "");
-  const htmlBody = [baseHtml, signatureHtml ? `<div class="gsw-signature">${sanitizeRichText(signatureHtml)}</div>` : ""]
+  const htmlBody = [
+    baseHtml,
+    signatureHtml && !htmlHasSignature && !(!rawHtml && textHasSignature)
+      ? `<div class="gsw-signature">${sanitizeRichText(signatureHtml)}</div>`
+      : "",
+  ]
     .filter(Boolean)
     .join("<br>")
     || undefined;
