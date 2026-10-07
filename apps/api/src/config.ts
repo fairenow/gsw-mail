@@ -52,10 +52,17 @@ const config = {
     defaultTemplateKey: env("DEFAULT_MAIL_TEMPLATE_KEY", "none"),
   },
   ai: {
+    provider: env("AI_PROVIDER", "hetzner"),
+    timeoutMs: Number(env("AI_TIMEOUT_MS", process.env.HETZNER_INFERENCE_TIMEOUT_MS ?? "45000")),
     hetznerApiKey: process.env.HETZNER_INFERENCE_KEY,
     hetznerBaseUrl: env("HETZNER_INFERENCE_BASE_URL", "https://inference.hetzner.com/api/v1"),
     hetznerModel: env("HETZNER_INFERENCE_MODEL", "Qwen/Qwen3.6-35B-A3B-FP8"),
-    timeoutMs: Number(env("HETZNER_INFERENCE_TIMEOUT_MS", "45000")),
+    openaiApiKey: process.env.OPENAI_API_KEY,
+    openaiBaseUrl: env("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+    openaiModel: process.env.OPENAI_MODEL,
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+    anthropicBaseUrl: env("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1"),
+    anthropicModel: process.env.ANTHROPIC_MODEL,
   },
   provisioning: {
     organizationName: env("PROVISIONING_ORGANIZATION_NAME", "Guided Steps Wellness"),
