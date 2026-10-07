@@ -8,6 +8,10 @@ export class AgentToolRegistry {
     for (const definition of definitions) this.tools.set(definition.name, definition);
   }
 
+  definition(name: string): AgentToolDefinition | undefined {
+    return this.tools.get(name.replaceAll("__", "."));
+  }
+
   providerDefinitions(): ProviderToolDefinition[] {
     return [...this.tools.values()].map((tool) => ({
       type: "function" as const,
