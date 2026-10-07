@@ -79,7 +79,8 @@ export async function executeAgentTool(input: {
   const activeScopes = await listActiveAiScopes(input.ctx.userId, input.ctx.accountId);
   const granted = new Set(activeScopes.map((grant) => grant.scope));
   const missingScope = definition.requiredScopes.find((scope) => !granted.has(scope));
-  if (missingScope) {
+  const confirmationCanAuthorizeExternalSend = definition.risk === "external" && missingScope === "mail.send";
+  if (missingScope && !confirmationCanAuthorizeExternalSend) {
     const scope = missingScope as AiScope;
     const copy = permissionCopy(scope);
     return {
