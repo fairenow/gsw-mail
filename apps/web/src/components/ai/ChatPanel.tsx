@@ -60,7 +60,7 @@ export function ChatPanel() {
     setMessages([]);
     setError("");
     setIntervention(null);
-    if (!savedId) return () => { cancelled = true; };
+    if (!savedId) { setConversationLoading(false); return () => { cancelled = true; }; }
 
     setConversationLoading(true);
     void api.chatConversation(savedId).then((detail) => {
