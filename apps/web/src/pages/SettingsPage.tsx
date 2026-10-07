@@ -205,6 +205,7 @@ function TemplateBuilder({
   const [theme, setTheme] = useState<EmailTemplateTheme>({ ...initialTheme });
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(template?.logoUrl ?? null);
   const [logoFilename, setLogoFilename] = useState<string | null>(template?.logoFilename ?? null);
+  const [logoChanged, setLogoChanged] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const updateColor = (field: keyof EmailTemplateTheme, value: string) => setTheme((current) => ({ ...current, [field]: value }));
@@ -223,6 +224,7 @@ function TemplateBuilder({
     reader.onload = () => {
       setLogoDataUrl(typeof reader.result === "string" ? reader.result : null);
       setLogoFilename(file.name);
+      setLogoChanged(true);
     };
     reader.readAsDataURL(file);
   };
@@ -237,8 +239,7 @@ function TemplateBuilder({
       const body: EmailTemplateInput = {
         name: name.trim(),
         ...theme,
-        logoDataUrl: logoDataUrl?.startsWith("data:") ? logoDataUrl : undefined,
-        logoFilename,
+        ...(logoChanged ? { logoDataUrl: logoDataUrl?.startsWith("data:") ? logoDataUrl : null, logoFilename } : {}),
       };
       const result = mode === "edit" && template?.id
         ? await api.updateTemplate(template.id, body)
@@ -252,7 +253,7 @@ function TemplateBuilder({
   };
 
   const previewTemplate: EmailTemplateOption = {
-    id: template?.id,
+    ...(template?.id ? { id: template.id } : {}),
     key: template?.key ?? "preview",
     name: name.trim() || "Your Template",
     kind: "custom",
@@ -267,7 +268,7 @@ function TemplateBuilder({
     <div className="gsw-template-builder-grid">
       <div className="gsw-template-controls">
         <label><strong>Template name</strong><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Customer outreach" maxLength={120} required /></label>
-        <label><strong>Logo</strong><span className="gsw-template-logo-picker">{logoDataUrl ? <img src={logoDataUrl} alt="" /> : <span>No logo</span>}<span><label className="gsw-secondary-btn">Upload logo<input className="gsw-hidden-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={uploadLogo} /></label>{logoDataUrl && <button className="gsw-link-btn" type="button" onClick={() => { setLogoDataUrl(null); setLogoFilename(null); }}>Remove</button>}</span></span><small>PNG, JPEG, WEBP, or GIF. Maximum 1 MB.</small></label>
+        <label><strong>Logo</strong><span className="gsw-template-logo-picker">{logoDataUrl ? <img src={logoDataUrl} alt="" /> : <span>No logo</span>}<span><label className="gsw-secondary-btn">Upload logo<input className="gsw-hidden-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={uploadLogo} /></label>{logoDataUrl && <button className="gsw-link-btn" type="button" onClick={() => { setLogoDataUrl(null); setLogoFilename(null); setLogoChanged(true); }}>Remove</button>}</span></span><small>PNG, JPEG, WEBP, or GIF. Maximum 1 MB.</small></label>
         <ColorField label="Border" value={theme.borderColor} onChange={(value) => updateColor("borderColor", value)} />
         <ColorField label="Font" value={theme.fontColor} onChange={(value) => updateColor("fontColor", value)} />
         <ColorField label="Buttons & links" value={theme.buttonColor} onChange={(value) => updateColor("buttonColor", value)} />
