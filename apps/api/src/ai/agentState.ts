@@ -294,14 +294,40 @@ export async function listConversationMessages(userId: string, conversationId: s
   return { conversation, messages };
 }
 
-export async function listRecentConversations(userId: string, limit = 20) {
+export async function listRecentConversations(userId: string, limit = 50) {
   return db.select({
     id: aiConversations.id,
     accountId: aiConversations.accountId,
     title: aiConversations.title,
     status: aiConversations.status,
     lastMessageAt: aiConversations.lastMessageAt,
-  }).from(aiConversations).where(eq(aiConversations.userId, userId)).orderBy(desc(aiConversations.lastMessageAt)).limit(Math.min(Math.max(limit, 1), 50));
+    createdAt: aiConversations.createdAt,
+    updatedAt: aiConversations.updatedAt,
+  }).from(aiConversations).where(eq(aiConversations.userId, userId)).orderBy(desc(aiConversations.lastMessageAt)).limit(Math.min(Math.max(limit, 1), 100));
+}
+
+export async function updateAiConversation(userId: string, conversationId: string, input: {
+  title?: string | undefined;
+  status?: "active" | "archived" | undefined;
+}) {
+  const patch: Record<string, unknown> = { updatedAt: new Date() };
+  if (input.title !== undefined) patch.title = input.title.trim().slice(0, 120) || "New chat";
+  if (input.status !== undefined) patch.status = input.status;
+  const [updated] = await db.update(aiConversations).set(patch).where(and(
+    eq(aiConversations.id, conversationId),
+    eq(aiConversations.userId, userId),
+  )).returning();
+  if (!updated) throw notFound("AI conversation not found");
+  return updated;
+}
+
+export async function deleteAiConversation(userId: string, conversationId: string) {
+  const [deleted] = await db.delete(aiConversations).where(and(
+    eq(aiConversations.id, conversationId),
+    eq(aiConversations.userId, userId),
+  )).returning({ id: aiConversations.id });
+  if (!deleted) throw notFound("AI conversation not found");
+  return deleted;
 }
 
 export async function listActiveAiScopes(userId: string, accountId?: string) {

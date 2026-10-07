@@ -7,6 +7,7 @@ import {
   completeAiRun,
   createOrResumeConversation,
   decideAiConfirmation,
+  deleteAiConversation,
   failAiRun,
   grantAiScope,
   getAiConfirmationExecution,
@@ -19,6 +20,7 @@ import {
   recordAiToolResult,
   revokeAiScope,
   startAiRun,
+  updateAiConversation,
 } from "../ai/agentState.js";
 import { executeAgentTool, type AgentIntervention } from "../ai/agentExecutor.js";
 import { getAiProvider, type AiProviderMessage } from "../ai/providers/index.js";
@@ -346,6 +348,20 @@ export default async function aiChatRoutes(app: FastifyInstance) {
   app.get("/product/chat/conversations/:id", async (req) => {
     const params = z.object({ id: z.string().uuid() }).parse(req.params);
     return listConversationMessages(req.user!.id, params.id);
+  });
+
+  app.patch("/product/chat/conversations/:id", async (req) => {
+    const params = z.object({ id: z.string().uuid() }).parse(req.params);
+    const input = z.object({
+      title: z.string().trim().min(1).max(120).optional(),
+      status: z.enum(["active", "archived"]).optional(),
+    }).refine((value) => value.title !== undefined || value.status !== undefined, { message: "no conversation changes supplied" }).parse(req.body);
+    return { conversation: await updateAiConversation(req.user!.id, params.id, input) };
+  });
+
+  app.delete("/product/chat/conversations/:id", async (req) => {
+    const params = z.object({ id: z.string().uuid() }).parse(req.params);
+    return { deleted: await deleteAiConversation(req.user!.id, params.id) };
   });
 
   app.get("/product/chat/permissions", async (req) => {

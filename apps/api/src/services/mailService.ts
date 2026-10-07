@@ -1,8 +1,12 @@
+import { eq } from "drizzle-orm";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { getUserEngine } from "../engine/index.js";
+import { db } from "../db/client.js";
+import { emailSignatures, userSettings } from "../db/schema.js";
 import { notFound } from "../lib/errors.js";
 import { submitSend } from "../outbound/sendFlow.js";
-import { DEFAULT_MAIL_TEMPLATE_KEY } from "../mail/templates/index.js";
+import { DEFAULT_MAIL_TEMPLATE_KEY, resolveMailTemplateKey } from "../mail/templates/index.js";
+import { templateKeyAllowedForAddress } from "../lib/templatePolicy.js";
 import { clearDraftAttachments, loadDraftAttachments, moveDraftAttachments } from "../mail/draftAttachmentStore.js";
 import { hasRemoteMailImages, sanitizeInboundMailHtml, sanitizeRichText } from "../lib/richText.js";
 
@@ -11,6 +15,69 @@ export interface MailServiceContext {
   authUserId: string;
   headers: Record<string, string>;
   accessToken?: string | undefined;
+}
+
+type DraftMode = "new" | "reply" | "replyAll" | "forward";
+
+const escapeHtml = (value: string): string => value
+  .replaceAll("&", "&amp;")
+  .replaceAll("<", "&lt;")
+  .replaceAll(">", "&gt;")
+  .replaceAll('"', "&quot;")
+  .replaceAll("'", "&#39;");
+
+const textToRichHtml = (value: string): string => value
+  .trim()
+  .split(/\n\s*\n/)
+  .filter(Boolean)
+  .map((paragraph) => `<p>${escapeHtml(paragraph.trim()).replaceAll("\n", "<br>")}</p>`)
+  .join("");
+
+async function resolveComposePreferences(userId: string, address: string, mode: DraftMode) {
+  const [[settings], [signature]] = await Promise.all([
+    db.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1),
+    db.select().from(emailSignatures).where(eq(emailSignatures.userId, userId)).limit(1),
+  ]);
+
+  const savedTemplateKey = typeof settings?.general?.templateKey === "string"
+    ? settings.general.templateKey
+    : DEFAULT_MAIL_TEMPLATE_KEY;
+  const resolvedTemplateKey = resolveMailTemplateKey(savedTemplateKey);
+  const templateKey = templateKeyAllowedForAddress(resolvedTemplateKey, address) ? resolvedTemplateKey : "none";
+  const richText = settings?.compose?.defaultFormat !== "plain";
+  const signatureEnabled = Boolean(signature?.enabled)
+    && (mode === "new"
+      ? Boolean(signature?.onNew)
+      : mode === "forward"
+        ? Boolean(signature?.onForward)
+        : Boolean(signature?.onReply));
+
+  return {
+    templateKey,
+    richText,
+    signature: signatureEnabled ? (signature ?? null) : null,
+  };
+}
+
+function applySignature(input: {
+  textBody?: string | undefined;
+  htmlBody?: string | undefined;
+  richText: boolean;
+  signature: typeof emailSignatures.$inferSelect | null;
+}) {
+  const rawText = input.textBody?.trim() ?? "";
+  const rawHtml = input.htmlBody?.trim() ?? "";
+  const signatureText = input.signature?.signatureText?.trim() ?? "";
+  const signatureHtml = input.signature?.signatureHtml?.trim() ?? "";
+
+  const textBody = [rawText, signatureText].filter(Boolean).join("\n\n") || undefined;
+  const baseHtml = rawHtml || (input.richText && rawText ? textToRichHtml(rawText) : "");
+  const htmlBody = [baseHtml, signatureHtml ? `<div class="gsw-signature">${sanitizeRichText(signatureHtml)}</div>` : ""]
+    .filter(Boolean)
+    .join("<br>")
+    || undefined;
+
+  return { textBody, htmlBody };
 }
 
 export function createMailService(context: MailServiceContext) {
@@ -77,22 +144,31 @@ export function createMailService(context: MailServiceContext) {
       replyTo?: string | undefined;
       inReplyTo?: string | undefined;
       references?: string | undefined;
+      mode?: DraftMode | undefined;
     }) {
       const account = await requireAccountPermission(context.userId, accountId, "send");
       const engine = await engineFor(accountId, "send");
+      const mode = input.mode ?? (input.inReplyTo ? "reply" : "new");
+      const preferences = await resolveComposePreferences(context.userId, account.address, mode);
+      const body = applySignature({
+        textBody: input.textBody,
+        htmlBody: input.htmlBody ? sanitizeRichText(input.htmlBody) : undefined,
+        richText: preferences.richText,
+        signature: preferences.signature,
+      });
       const engineId = await engine.saveDraft(accountId, {
         from: account.address,
         to: input.to,
         cc: input.cc,
         bcc: input.bcc,
         subject: input.subject,
-        textBody: input.textBody,
-        htmlBody: input.htmlBody ? sanitizeRichText(input.htmlBody) : undefined,
+        textBody: body.textBody,
+        htmlBody: body.htmlBody,
         replyTo: input.replyTo,
         inReplyTo: input.inReplyTo,
         references: input.references,
       });
-      return { engineId };
+      return { engineId, templateKey: preferences.templateKey, signatureApplied: Boolean(preferences.signature) };
     },
 
     async updateDraft(accountId: string, draftId: string, input: {
@@ -131,6 +207,7 @@ export function createMailService(context: MailServiceContext) {
       if (!draft) throw notFound("draft not found");
       const attachments = await loadDraftAttachments(accountId, draftId);
       const htmlBody = draft.htmlBody ? sanitizeRichText(draft.htmlBody) : undefined;
+      const preferences = await resolveComposePreferences(context.userId, account.address, draft.headers["In-Reply-To"] ? "reply" : "new");
       const result = await submitSend({
         userId: context.userId,
         accessToken: context.accessToken,
@@ -142,7 +219,7 @@ export function createMailService(context: MailServiceContext) {
         subject: draft.subject,
         textBody: draft.textBody,
         htmlBody,
-        templateKey: DEFAULT_MAIL_TEMPLATE_KEY,
+        templateKey: preferences.templateKey,
         replyTo: draft.headers["Reply-To"],
         inReplyTo: draft.headers["In-Reply-To"],
         references: draft.headers["References"],

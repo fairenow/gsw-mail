@@ -162,8 +162,10 @@ export interface AiConversationRecord {
   id: string;
   accountId: string | null;
   title: string | null;
-  status: string;
+  status: "active" | "archived" | string;
   lastMessageAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AiConversationDetail {
@@ -467,7 +469,9 @@ export const api = {
   resumeChatStream: (accountId: string, conversationId: string, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/resume/stream", { accountId, conversationId }, onEvent, "/product/chat/resume"),
   grantChatPermission: (accountId: string, scope: string) => post<{ grant: { id: string; scope: string } }>("/product/chat/permissions", { accountId, scope }),
   decideChatConfirmation: (confirmationId: string, decision: "approved" | "rejected") => post<{ confirmation: { id: string; status: string }; execution: { conversationId: string; message: AiChatMessage; toolResult?: unknown } }>(`/product/chat/confirmations/${encodeURIComponent(confirmationId)}`, { decision }),
-  chatConversations: () => get<{ conversations: AiConversationRecord[] }>("/product/chat/conversations"),
+  chatConversations: () => get<{ conversations: AiConversationRecord[] }>("/product/chat/conversations?limit=100"),
   chatConversation: (id: string) => get<AiConversationDetail>(`/product/chat/conversations/${encodeURIComponent(id)}`),
+  updateChatConversation: (id: string, body: { title?: string; status?: "active" | "archived" }) => patch<{ conversation: AiConversationRecord }>(`/product/chat/conversations/${encodeURIComponent(id)}`, body),
+  deleteChatConversation: (id: string) => request(`/product/chat/conversations/${encodeURIComponent(id)}`, { method: "DELETE" }).then((res) => json<{ deleted: { id: string } }>(res)),
 
 };
