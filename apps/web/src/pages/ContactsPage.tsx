@@ -93,9 +93,121 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
 }
 
 function ContactDrawer({ contact, onClose, onSaved }: { contact: Contact; onClose: () => void; onSaved: (contact: Contact) => void }) {
+  const [displayName, setDisplayName] = useState(contact.displayName ?? "");
+  const [organization, setOrganization] = useState(contact.organization ?? "");
+  const [jobTitle, setJobTitle] = useState(contact.jobTitle ?? "");
+  const [website, setWebsite] = useState(contact.website ?? "");
+  const [emails, setEmails] = useState(contact.emails.map((item) => ({ ...item })));
+  const [phones, setPhones] = useState(contact.phones.map((item) => ({ ...item })));
+  const [tags, setTags] = useState<string[]>(contact.tags);
+  const [tagDraft, setTagDraft] = useState("");
   const [notes, setNotes] = useState(contact.notes ?? "");
-  const save = async () => { const saved = await api.updateContact(contact.id, { firstName: contact.firstName ?? undefined, middleName: contact.middleName ?? undefined, lastName: contact.lastName ?? undefined, displayName: contact.displayName ?? undefined, organization: contact.organization ?? undefined, jobTitle: contact.jobTitle ?? undefined, website: contact.website ?? undefined, address: contact.address ?? undefined, city: contact.city ?? undefined, state: contact.state ?? undefined, postalCode: contact.postalCode ?? undefined, country: contact.country ?? undefined, notes, emails: contact.emails.map((item) => ({ email: item.email, label: item.label ?? undefined, isPrimary: item.isPrimary })), phones: contact.phones.map((item) => ({ phone: item.phone, label: item.label ?? undefined, isPrimary: item.isPrimary })), tags: contact.tags, customFields: contact.customFields }); onSaved(saved); };
-  return <div className="gsw-drawer-backdrop"><section className="gsw-contact-drawer"><button className="gsw-drawer-close" onClick={onClose} aria-label="Close contact"><X size={18} strokeWidth={1.75} aria-hidden="true" /></button><span className="gsw-contact-avatar gsw-contact-avatar-large">{(contact.displayName || "?").slice(0, 1).toUpperCase()}</span><h2>{contact.displayName || contact.emails[0]?.email}</h2><p className="gsw-contact-role">{contact.jobTitle}{contact.jobTitle && contact.organization ? " · " : ""}{contact.organization}</p><div className="gsw-detail-block"><strong>Contact</strong>{contact.emails.map((item) => <a key={item.email} href={`mailto:${item.email}`}>{item.email}</a>)}{contact.phones.map((item) => <a key={item.phone} href={`tel:${item.phone}`}>{item.phone}</a>)}</div><div className="gsw-detail-block"><strong>Tags</strong><div className="gsw-tag-list">{contact.tags.length ? contact.tags.map((tag) => <span key={tag}>{tag}</span>) : <small>No tags</small>}</div></div><label className="gsw-detail-block"><strong>Notes</strong><textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Add context you want to remember" /></label><div className="gsw-engagement"><span><strong>Last emailed</strong>{contact.lastContactedAt ? new Date(contact.lastContactedAt).toLocaleDateString() : "Never"}</span><span><strong>Times emailed</strong>{contact.timesEmailed}</span></div><button className="gsw-primary-btn" onClick={() => void save()}>Save notes</button></section></div>;
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setDisplayName(contact.displayName ?? "");
+    setOrganization(contact.organization ?? "");
+    setJobTitle(contact.jobTitle ?? "");
+    setWebsite(contact.website ?? "");
+    setEmails(contact.emails.map((item) => ({ ...item })));
+    setPhones(contact.phones.map((item) => ({ ...item })));
+    setTags(contact.tags);
+    setTagDraft("");
+    setNotes(contact.notes ?? "");
+    setError("");
+  }, [contact]);
+
+  const commitTag = (raw = tagDraft) => {
+    const next = raw.trim().replace(/^#/, "");
+    if (!next) return;
+    setTags((current) => current.some((tag) => tag.toLowerCase() === next.toLowerCase()) ? current : [...current, next]);
+    setTagDraft("");
+  };
+
+  const save = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      const normalizedEmails = emails
+        .map((item, index) => ({ email: item.email.trim(), label: item.label ?? undefined, isPrimary: item.isPrimary || index === 0 }))
+        .filter((item) => item.email);
+      if (!normalizedEmails.length) throw new Error("A contact needs at least one email address.");
+      const saved = await api.updateContact(contact.id, {
+        firstName: contact.firstName ?? undefined,
+        middleName: contact.middleName ?? undefined,
+        lastName: contact.lastName ?? undefined,
+        displayName: displayName.trim() || normalizedEmails[0]!.email,
+        organization: organization.trim() || undefined,
+        jobTitle: jobTitle.trim() || undefined,
+        website: website.trim() || undefined,
+        address: contact.address ?? undefined,
+        city: contact.city ?? undefined,
+        state: contact.state ?? undefined,
+        postalCode: contact.postalCode ?? undefined,
+        country: contact.country ?? undefined,
+        notes,
+        emails: normalizedEmails,
+        phones: phones.map((item, index) => ({ phone: item.phone.trim(), label: item.label ?? undefined, isPrimary: item.isPrimary || index === 0 })).filter((item) => item.phone),
+        tags,
+        customFields: contact.customFields,
+      });
+      onSaved(saved);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <div className="gsw-drawer-backdrop"><section className="gsw-contact-drawer gsw-contact-drawer-editable">
+    <button className="gsw-drawer-close" onClick={onClose} aria-label="Close contact"><X size={18} strokeWidth={1.75} aria-hidden="true" /></button>
+    <span className="gsw-contact-avatar gsw-contact-avatar-large">{(displayName || emails[0]?.email || "?").slice(0, 1).toUpperCase()}</span>
+    <div className="gsw-contact-edit-grid">
+      <label><strong>Name</strong><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Contact name" /></label>
+      <label><strong>Organization</strong><input value={organization} onChange={(event) => setOrganization(event.target.value)} placeholder="Organization" /></label>
+      <label><strong>Job title</strong><input value={jobTitle} onChange={(event) => setJobTitle(event.target.value)} placeholder="Job title" /></label>
+      <label><strong>Website</strong><input value={website} onChange={(event) => setWebsite(event.target.value)} placeholder="https://..." /></label>
+    </div>
+
+    <div className="gsw-detail-block gsw-contact-edit-list">
+      <div className="gsw-contact-edit-list-head"><strong>Email addresses</strong><button type="button" className="gsw-link-btn" onClick={() => setEmails((current) => [...current, { email: "", normalizedEmail: "", label: null, isPrimary: current.length === 0 }])}>+ Add email</button></div>
+      {emails.map((item, index) => <div className="gsw-contact-edit-row" key={`${index}-${item.normalizedEmail}`}>
+        <input type="email" value={item.email} placeholder="name@example.com" onChange={(event) => setEmails((current) => current.map((email, emailIndex) => emailIndex === index ? { ...email, email: event.target.value } : email))} />
+        <button type="button" className="gsw-contact-remove" disabled={emails.length <= 1} onClick={() => setEmails((current) => current.filter((_, emailIndex) => emailIndex !== index))}>Remove</button>
+      </div>)}
+    </div>
+
+    <div className="gsw-detail-block gsw-contact-edit-list">
+      <div className="gsw-contact-edit-list-head"><strong>Phone numbers</strong><button type="button" className="gsw-link-btn" onClick={() => setPhones((current) => [...current, { phone: "", label: null, isPrimary: current.length === 0 }])}>+ Add phone</button></div>
+      {phones.length ? phones.map((item, index) => <div className="gsw-contact-edit-row" key={`${index}-${item.phone}`}>
+        <input value={item.phone} placeholder="Phone number" onChange={(event) => setPhones((current) => current.map((phone, phoneIndex) => phoneIndex === index ? { ...phone, phone: event.target.value } : phone))} />
+        <button type="button" className="gsw-contact-remove" onClick={() => setPhones((current) => current.filter((_, phoneIndex) => phoneIndex !== index))}>Remove</button>
+      </div>) : <small>No phone numbers</small>}
+    </div>
+
+    <div className="gsw-detail-block">
+      <strong>Tags</strong>
+      <div className="gsw-tag-list gsw-tag-list-editable">
+        {tags.map((tag) => <button type="button" key={tag} onClick={() => setTags((current) => current.filter((value) => value !== tag))} title="Remove tag">{tag}<span>×</span></button>)}
+      </div>
+      <div className="gsw-contact-tag-entry">
+        <input value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} placeholder="Add a tag, e.g. customer" onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === ",") {
+            event.preventDefault();
+            commitTag();
+          }
+        }} />
+        <button type="button" className="gsw-secondary-btn" onClick={() => commitTag()}>Add tag</button>
+      </div>
+      <small>Tags are available to GSW Chat for audience targeting, such as “email all contacts tagged customer.”</small>
+    </div>
+
+    <label className="gsw-detail-block"><strong>Notes</strong><textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Add context you want GSW Chat to remember about this contact" /></label>
+    <div className="gsw-engagement"><span><strong>Last emailed</strong>{contact.lastContactedAt ? new Date(contact.lastContactedAt).toLocaleDateString() : "Never"}</span><span><strong>Times emailed</strong>{contact.timesEmailed}</span></div>
+    {error && <p className="gsw-save-notice">{error}</p>}
+    <button className="gsw-primary-btn" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : "Save contact"}</button>
+  </section></div>;
 }
 
 function guessField(header: string) { const value = header.toLowerCase().replace(/[^a-z]/g, ""); if (value.includes("email")) return "email"; if (value.includes("phone") || value.includes("mobile")) return "phone"; if (value.includes("first")) return "firstName"; if (value.includes("last")) return "lastName"; if (value.includes("church") || value.includes("company") || value.includes("organization") || value.includes("ministry")) return "organization"; if (value.includes("title") || value.includes("role")) return "jobTitle"; if (value.includes("city")) return "city"; if (value.includes("state") || value.includes("region")) return "state"; if (value.includes("note")) return "notes"; return "ignore"; }
