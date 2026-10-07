@@ -55,7 +55,7 @@ async function resolveComposePreferences(userId: string, address: string, mode: 
   return {
     templateKey,
     richText,
-    signature: signatureEnabled ? signature : null,
+    signature: signatureEnabled ? (signature ?? null) : null,
   };
 }
 
