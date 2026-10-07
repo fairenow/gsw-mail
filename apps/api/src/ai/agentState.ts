@@ -194,6 +194,7 @@ const sanitizeToolArguments = (toolName: string, raw: string): Record<string, un
   }
   if (toolName === "mail.read") return { messageId: parsed.messageId };
   if (toolName === "mail.read_thread") return { threadId: parsed.threadId };
+  if (toolName === "mail.send_draft") return { draftId: parsed.draftId };
   return { argumentKeys: Object.keys(parsed).slice(0, 30) };
 };
 
@@ -396,4 +397,24 @@ export async function decideAiConfirmation(userId: string, confirmationId: strin
   )).returning();
   if (!updated) throw notFound("pending AI confirmation not found");
   return updated;
+}
+
+export async function getAiConfirmationExecution(userId: string, confirmationId: string) {
+  const [confirmation] = await db.select().from(aiConfirmations).where(and(
+    eq(aiConfirmations.id, confirmationId),
+    eq(aiConfirmations.userId, userId),
+  )).limit(1);
+  if (!confirmation) throw notFound("AI confirmation not found");
+  if (!confirmation.toolCallId) throw badRequest("confirmation is not bound to a tool call");
+
+  const [toolCall] = await db.select().from(aiToolCalls).where(eq(aiToolCalls.id, confirmation.toolCallId)).limit(1);
+  if (!toolCall) throw notFound("AI tool call not found");
+
+  const [run] = await db.select().from(aiRuns).where(and(
+    eq(aiRuns.id, toolCall.runId),
+    eq(aiRuns.userId, userId),
+  )).limit(1);
+  if (!run) throw notFound("AI run not found");
+
+  return { confirmation, toolCall, run };
 }
