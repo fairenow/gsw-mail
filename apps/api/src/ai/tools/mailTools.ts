@@ -138,11 +138,14 @@ export const mailReadThreadTool: AgentToolDefinition = {
     try {
       const input = threadInput.parse(rawInput);
       const mail = createMailService(ctx);
-      const messages = await mail.readThread(ctx.accountId, input.threadId);
+      const summaries = await mail.readThread(ctx.accountId, input.threadId);
+      const messages = await Promise.all(
+        summaries.slice(-20).map((summary) => mail.readMessage(ctx.accountId, summary.engineId, false)),
+      );
       return success(ctx, toolCallId, startedAt, {
         threadId: input.threadId,
-        count: messages.length,
-        messages: messages.slice(-20).map((message) => ({
+        count: summaries.length,
+        messages: messages.map((message) => ({
           messageId: message.engineId,
           subject: message.subject,
           date: message.date,
