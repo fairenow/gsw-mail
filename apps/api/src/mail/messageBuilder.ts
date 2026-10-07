@@ -1,10 +1,11 @@
 import { richTextToPlainText, sanitizeRichText } from "../lib/richText.js";
-import { renderMailTemplate, type MailTemplateKey } from "./templates/index.js";
+import { renderTemplateForUser } from "./templateService.js";
 
 export interface BuildOutgoingMessageInput {
+  userId: string;
   bodyHtml?: string | undefined;
   bodyText?: string | undefined;
-  templateKey: MailTemplateKey;
+  templateKey: string;
   senderName?: string | undefined;
   senderEmail: string;
 }
@@ -14,7 +15,7 @@ export interface BuiltOutgoingMessage {
   bodyText: string;
   html: string;
   text: string;
-  templateKey: MailTemplateKey;
+  templateKey: string;
 }
 
 /**
@@ -31,9 +32,9 @@ const composeBody = (input: BuildOutgoingMessageInput): { html: string; text: st
   return { html, text };
 };
 
-export function buildOutgoingMessage(input: BuildOutgoingMessageInput): BuiltOutgoingMessage {
+export async function buildOutgoingMessage(input: BuildOutgoingMessageInput): Promise<BuiltOutgoingMessage> {
   const body = composeBody(input);
-  const rendered = renderMailTemplate(input.templateKey, {
+  const result = await renderTemplateForUser(input.userId, input.templateKey, {
     bodyHtml: body.html,
     bodyText: body.text,
     senderName: input.senderName,
@@ -42,8 +43,8 @@ export function buildOutgoingMessage(input: BuildOutgoingMessageInput): BuiltOut
   return {
     bodyHtml: body.html,
     bodyText: body.text,
-    html: rendered.html,
-    text: rendered.text,
-    templateKey: input.templateKey,
+    html: result.rendered.html,
+    text: result.rendered.text,
+    templateKey: result.templateKey,
   };
 }
