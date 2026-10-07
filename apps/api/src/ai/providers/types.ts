@@ -19,7 +19,7 @@ export type AiProviderMessage =
 
 export interface AiProviderRunInput {
   messages: AiProviderMessage[];
-  tools?: ProviderToolDefinition[];
+  tools?: ProviderToolDefinition[] | undefined;
 }
 
 export interface AiProviderRunResult {
