@@ -1029,3 +1029,25 @@ Implemented adapters:
 The agent runtime no longer calls Hetzner directly. It resolves a provider through `getAiProvider()`, while GSW permissions, confirmations, idempotency, tool registry, action ledger, and domain services remain provider-independent.
 
 Server-level selection is controlled by `AI_PROVIDER=hetzner|openai|anthropic`. Provider credentials remain server-side. User-managed/BYOK credentials are intentionally deferred until encrypted credential storage and per-user provider preferences are added.
+
+
+## Agent write/send rollout — 2026-10-07
+
+Steps 8 and 9 are now implemented for the first constrained mail vertical slice.
+
+Reversible writes:
+- `mail.create_draft` creates a real draft in the selected GSW mailbox.
+- `mail.update_draft` updates an existing draft.
+- both require the explicit AI `mail.write` grant and the user's underlying mailbox `send` permission;
+- neither tool sends mail.
+
+External action:
+- `mail.send_draft` is the only agent send tool;
+- it can send only an already-created draft, not an arbitrary hidden payload;
+- every send requires an explicit per-action confirmation;
+- the confirmation is bound to the exact persisted `mail.send_draft` tool call/draft ID;
+- approval executes that exact tool call directly instead of asking the model to regenerate it;
+- the executor and outbound send flow both retain idempotency protection, so retries do not intentionally create duplicate sends;
+- rejection is persisted and the paused run is closed without sending.
+
+This completes the original 1–9 roadmap for the first mail-agent slice. Broader mail mutations, calendar actions, contact actions, settings changes, automations, and bulk operations remain separate future rollouts behind the same permission/confirmation/idempotency framework.
