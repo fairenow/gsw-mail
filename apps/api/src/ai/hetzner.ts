@@ -19,6 +19,17 @@ interface HetznerChatResponse {
   };
 }
 
+class HetznerAttemptError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+    readonly publicStatus: number,
+  ) {
+    super(message);
+    this.name = "HetznerAttemptError";
+  }
+}
+
 const systemPrompt = [
   "You are the GSW Mail writing assistant.",
   "You are a general conversational assistant with a strong focus on helping users write, rewrite, shorten, clarify, and improve emails.",
@@ -29,13 +40,12 @@ const systemPrompt = [
   "Do not add facts, promises, names, dates, or commitments that the user did not provide.",
 ].join(" ");
 
-export async function runHetznerChat(messages: AiChatMessage[]): Promise<{ content: string; model: string }> {
-  if (!config.ai.hetznerApiKey) {
-    throw new HttpError(503, "AI chat is not configured yet. Add HETZNER_INFERENCE_KEY to the API service.");
-  }
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function attemptHetznerChat(messages: AiChatMessage[]): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.ai.timeoutMs);
+
   try {
     const response = await fetch(`${config.ai.hetznerBaseUrl.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
@@ -58,18 +68,47 @@ export async function runHetznerChat(messages: AiChatMessage[]): Promise<{ conte
 
     const body = await response.json().catch(() => ({})) as HetznerChatResponse;
     if (!response.ok) {
-      const providerMessage = body.error?.message?.trim();
-      throw new HttpError(response.status === 429 ? 429 : 502, providerMessage || `Hetzner inference returned HTTP ${response.status}`);
+      const providerMessage = body.error?.message?.trim() || `Hetzner inference returned HTTP ${response.status}`;
+      const retryable = response.status === 429 || response.status >= 500;
+      throw new HetznerAttemptError(providerMessage, retryable, response.status === 429 ? 429 : 502);
     }
 
     const content = body.choices?.[0]?.message?.content?.trim();
-    if (!content) throw new HttpError(502, "Hetzner inference returned an empty response.");
-    return { content, model: config.ai.hetznerModel };
+    if (!content) throw new HetznerAttemptError("Hetzner inference returned an empty response.", true, 502);
+    return content;
   } catch (error) {
-    if (error instanceof HttpError) throw error;
-    if (error instanceof Error && error.name === "AbortError") throw new HttpError(504, "AI chat timed out. Try again.");
-    throw new HttpError(502, "AI chat is temporarily unavailable.");
+    if (error instanceof HetznerAttemptError) throw error;
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new HetznerAttemptError("AI chat timed out.", true, 504);
+    }
+    throw new HetznerAttemptError("AI chat is temporarily unavailable.", true, 502);
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function runHetznerChat(messages: AiChatMessage[]): Promise<{ content: string; model: string }> {
+  if (!config.ai.hetznerApiKey) {
+    throw new HttpError(503, "AI chat is not configured yet. Add HETZNER_INFERENCE_KEY to the API service.");
+  }
+
+  let lastError: HetznerAttemptError | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const content = await attemptHetznerChat(messages);
+      return { content, model: config.ai.hetznerModel };
+    } catch (error) {
+      const failure = error instanceof HetznerAttemptError
+        ? error
+        : new HetznerAttemptError("AI chat is temporarily unavailable.", true, 502);
+      lastError = failure;
+      if (!failure.retryable || attempt === 1) break;
+      await sleep(650);
+    }
+  }
+
+  throw new HttpError(
+    lastError?.publicStatus ?? 502,
+    lastError?.message ? `${lastError.message} Please try again.` : "AI chat is temporarily unavailable. Please try again.",
+  );
 }
