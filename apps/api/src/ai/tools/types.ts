@@ -5,6 +5,7 @@ export interface AgentExecutionContext {
   authUserId: string;
   accountId: string;
   headers: Record<string, string>;
+  accessToken?: string | undefined;
 }
 
 export interface AgentToolResult<T = unknown> {
