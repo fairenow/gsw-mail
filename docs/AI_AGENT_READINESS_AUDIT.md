@@ -20,14 +20,21 @@ Completed/in progress:
 - GSW Chat now supplies explicit selected-account context and can use those tools through the Hetzner inference adapter;
 - tool execution still relies on current GSW account authorization and exposes no write/action capability.
 
+Progress since the initial audit:
+
+- persistent conversation/message/run state is now implemented;
+- AI permission-grant and confirmation persistence is now implemented;
+- the dedicated tool-call/result action ledger is now implemented with sanitized arguments/results;
+- browser sessions can restore the current conversation per selected mailbox;
+- read-only tool executions are recorded without storing full mailbox bodies in the ledger.
+
 Still blocking write access:
 
-- persistent conversation/run state;
-- agent-specific permission grants and confirmations;
-- authoritative agent action ledger;
-- executor-wide idempotency;
+- executor-wide idempotency for mutations;
+- in-chat permission/confirmation UX for elevated scopes;
 - broader domain-service normalization;
-- evaluation coverage.
+- evaluation coverage;
+- reversible-write tool rollout.
 
 ---
 
