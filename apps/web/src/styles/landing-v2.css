@@ -60,3 +60,119 @@
 @keyframes lp2CtaGlow{0%,100%{box-shadow:0 10px 24px rgba(201,119,0,.2)}50%{box-shadow:0 10px 30px rgba(230,138,0,.35),0 0 0 7px rgba(230,138,0,.08)}}
 @media(max-width:1000px){.lp2-product-shell{animation:lp2ProductFloatMobile 7s 1.1s ease-in-out infinite}@keyframes lp2ProductFloatMobile{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}}
 @media(prefers-reduced-motion:reduce){.lp2 [data-reveal],.lp2 [data-reveal] *,.lp2-hero-copy>*,.lp2-hero-product,.lp2-product-shell,.lp2-product-topbar:after,.lp2-message,.lp2-compose-card,.lp2-floating-status,.lp2-sidebar .active,.lp2-send-card,.lp2-send-card button.active,.lp2-final .lp2-button{opacity:1!important;transform:none!important;animation:none!important;transition:none!important}}
+
+
+/* Mobile-first homepage refinements */
+@media(max-width:650px){
+  .lp2{overflow-x:hidden}
+  .lp2-nav{grid-template-columns:minmax(0,1fr) auto;gap:10px}
+  .lp2-brand{min-width:0}
+  .lp2-brand span{white-space:nowrap}
+  .lp2-nav-actions{gap:8px}
+  .lp2-nav .lp2-button.small{width:auto;min-height:38px;padding:0 14px;font-size:13px}
+
+  .lp2-hero{gap:34px;padding-top:44px;padding-bottom:46px}
+  .lp2-hero-copy{min-width:0}
+  .lp2-hero .lp2-eyebrow{font-size:10px;letter-spacing:.11em;line-height:1.45}
+  .lp2-hero h1{font-size:clamp(46px,13.2vw,58px);line-height:.92;letter-spacing:-.06em;margin:16px 0}
+  .lp2-hero-copy>p{font-size:16px;line-height:1.55}
+  .lp2-actions{gap:10px;margin-top:24px}
+  .lp2-hero-note{align-items:flex-start;font-size:12px;line-height:1.4;margin-top:20px}
+  .lp2-hero-note svg{flex:0 0 auto;margin-top:1px}
+
+  .lp2-hero-product{width:100%;min-width:0}
+  .lp2-product-shell{width:100%;border-radius:20px;box-shadow:0 18px 44px rgba(68,56,36,.13)}
+  .lp2-product-topbar{height:50px;grid-template-columns:auto 1fr auto;gap:10px;padding:0 12px}
+  .lp2-search{height:32px;padding:0 10px;font-size:10px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lp2-avatar{width:30px;height:30px;font-size:10px}
+  .lp2-product-body{min-height:auto}
+  .lp2-inbox{border-right:0;min-width:0}
+  .lp2-inbox header{padding:16px}
+  .lp2-inbox header strong{font-size:16px}
+  .lp2-inbox header button{font-size:11px;padding:6px 8px}
+  .lp2-message{grid-template-columns:30px minmax(0,1fr);gap:9px;padding:14px 15px}
+  .lp2-message i{width:30px;height:30px}
+  .lp2-message time{display:none}
+  .lp2-message strong,.lp2-message b{font-size:11px}
+  .lp2-message span{font-size:10px}
+  .lp2-floating-status{display:none}
+
+  .lp2-proof{padding-top:46px;padding-bottom:46px}
+  .lp2-proof>div:first-child{font-size:clamp(28px,9vw,38px);line-height:1.02;gap:6px;margin-bottom:28px}
+  .lp2-proof-grid{gap:22px}
+  .lp2-proof-grid article{padding-top:16px}
+  .lp2-proof-grid p{margin-bottom:0}
+
+  .lp2-section,.lp2-workflows,.lp2-platforms,.lp2-faq{padding-top:72px;padding-bottom:72px}
+  .lp2-section-heading h2,.lp2-schedule-copy h2,.lp2-ai h2,.lp2-ownership h2,.lp2-final h2{font-size:clamp(38px,11vw,48px);line-height:.98;letter-spacing:-.055em}
+  .lp2-section-heading>p,.lp2-schedule-copy>p,.lp2-ai-copy>p,.lp2-ownership p,.lp2-final p{font-size:16px;line-height:1.55}
+
+  .lp2-feature-grid{gap:10px;margin-top:36px}
+  .lp2-feature-grid article{min-height:auto;padding:22px;border-radius:20px}
+  .lp2-feature-grid h3{margin:42px 0 9px;font-size:21px}
+  .lp2-feature-grid p{font-size:14px;margin-bottom:0}
+
+  .lp2-schedule-section,.lp2-ai{margin-left:12px;margin-right:12px;padding:42px 18px;gap:36px}
+  .lp2-schedule-copy ul{gap:10px;margin-top:20px}
+  .lp2-schedule-copy li{align-items:flex-start;font-size:14px}
+  .lp2-schedule-copy li svg{flex:0 0 auto;margin-top:1px}
+  .lp2-schedule-demo{min-height:auto;padding:12px;border-radius:20px}
+  .lp2-send-card{border-radius:16px}
+  .lp2-send-card header,.lp2-send-card footer{padding:14px 15px}
+  .lp2-send-card p{padding:22px 15px 42px;font-size:14px;line-height:1.5}
+  .lp2-send-card>div{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:0 12px 14px}
+  .lp2-send-card button{padding:9px 6px;font-size:12px}
+
+  .lp2-outbox{padding-top:72px;padding-bottom:72px}
+  .lp2-flow{gap:10px;margin-top:36px}
+  .lp2-flow>div{min-height:auto;padding:20px;border-radius:17px}
+  .lp2-flow>svg{width:20px;height:20px}
+  .lp2-flow strong{font-size:18px}
+
+  .lp2-workflow-grid{gap:10px;background:transparent;border:0;border-radius:0}
+  .lp2-workflow-grid article{min-height:auto;border:1px solid #dfd9ce;border-radius:18px;padding:22px}
+  .lp2-workflow-grid h3{margin:36px 0 9px;font-size:21px}
+  .lp2-workflow-grid p{font-size:14px}
+  .lp2-workflow-grid svg{margin-top:12px}
+
+  .lp2-ai-card{padding:18px;border-radius:18px}
+  .lp2-ai-message{max-width:94%;font-size:12px;padding:12px 13px}
+  .lp2-ai-message.assistant{gap:8px}
+  .lp2-ai-tags{gap:6px;margin-top:18px}
+  .lp2-ai-tags span{font-size:11px;padding:7px 9px}
+
+  .lp2-ownership{gap:28px}
+  .lp2-standards{gap:10px}
+  .lp2-standards span{font-size:14px}
+
+  .lp2-platform-grid{gap:10px;margin-top:34px}
+  .lp2-platform-grid article{min-height:auto;padding:22px;border-radius:18px}
+  .lp2-platform-grid h3{margin:18px 0 8px;font-size:21px}
+
+  .lp2-faq-grid{gap:10px;background:transparent;border:0;border-radius:0}
+  .lp2-faq-grid article{border:1px solid #ded8cf;border-radius:18px;padding:22px}
+  .lp2-faq-grid h3{font-size:18px}
+  .lp2-faq-grid p{font-size:14px}
+
+  .lp2-final{padding:72px 18px}
+  .lp2-final .lp2-button{width:100%;max-width:360px;margin:0 auto}
+  .lp2-footer{padding:32px 18px}
+  .lp2-footer>div{flex-wrap:wrap;row-gap:10px}
+
+  .lp2 [data-reveal]{transform:translateY(18px)}
+  .lp2-schedule-section[data-reveal] .lp2-schedule-copy,.lp2-ai[data-reveal] .lp2-ai-copy,.lp2-ownership[data-reveal]>div:first-child,
+  .lp2-schedule-section[data-reveal] .lp2-schedule-demo,.lp2-ai[data-reveal] .lp2-ai-card,.lp2-ownership[data-reveal]>div:last-child{transform:translateY(18px)}
+  .lp2-schedule-section[data-reveal].is-visible .lp2-schedule-copy,.lp2-ai[data-reveal].is-visible .lp2-ai-copy,.lp2-ownership[data-reveal].is-visible>div:first-child,
+  .lp2-schedule-section[data-reveal].is-visible .lp2-schedule-demo,.lp2-ai[data-reveal].is-visible .lp2-ai-card,.lp2-ownership[data-reveal].is-visible>div:last-child{animation:lp2CardRise .52s ease forwards}
+  .lp2-feature-grid article:hover,.lp2-workflow-grid article:hover,.lp2-platform-grid article:hover{transform:none;box-shadow:none}
+}
+
+@media(max-width:390px){
+  .lp2-nav{padding-left:14px;padding-right:14px}
+  .lp2-brand{gap:8px;font-size:14px}
+  .lp2-nav .lp2-button.small{padding:0 12px}
+  .lp2-hero,.lp2-section,.lp2-workflows,.lp2-platforms,.lp2-faq,.lp2-ownership,.lp2-outbox{padding-left:14px;padding-right:14px}
+  .lp2-hero h1{font-size:46px}
+  .lp2-product-topbar{grid-template-columns:auto minmax(0,1fr) auto}
+  .lp2-proof{padding-left:14px;padding-right:14px}
+}
