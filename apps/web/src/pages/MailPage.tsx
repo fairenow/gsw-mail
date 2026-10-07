@@ -134,6 +134,29 @@ export function MailPage() {
     setOpen(null);
     setMobileView("reader");
   }, []);
+  useEffect(() => {
+    const openFromMenu = (section: WorkspaceSection) => {
+      setFoldersOpen(false);
+      setOpen(null);
+      setWorkspaceSection(section);
+      setMobileView(section === "mail" ? "messages" : "reader");
+    };
+
+    const pending = sessionStorage.getItem("gsw-mail-open-workspace");
+    if (pending === "mail" || pending === "contacts" || pending === "settings") {
+      sessionStorage.removeItem("gsw-mail-open-workspace");
+      openFromMenu(pending);
+    }
+
+    const onWorkspaceOpen = (event: Event) => {
+      const section = (event as CustomEvent<{ section?: WorkspaceSection }>).detail?.section;
+      if (section === "mail" || section === "contacts" || section === "calendar" || section === "settings" || section === "chat") {
+        openFromMenu(section);
+      }
+    };
+    window.addEventListener("gsw-workspace-open", onWorkspaceOpen as EventListener);
+    return () => window.removeEventListener("gsw-workspace-open", onWorkspaceOpen as EventListener);
+  }, []);
   const prefetchWorkspaceSection = useCallback((section: "contacts" | "calendar" | "settings" | "chat") => {
     if (section === "contacts") api.prefetchContactsPage();
     if (section === "settings") api.prefetchSettings();
