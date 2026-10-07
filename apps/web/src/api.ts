@@ -140,14 +140,29 @@ export interface AiChatMessage {
 }
 
 export interface AiChatResponse {
+  conversationId: string;
   message: AiChatMessage;
   model: string;
   capabilities: {
     actions: false;
     mailboxAccess: boolean;
     rewriteEmail: true;
+    persistentConversation: boolean;
   };
   toolActivity?: { name: string; ok: boolean }[];
+}
+
+export interface AiConversationRecord {
+  id: string;
+  accountId: string | null;
+  title: string | null;
+  status: string;
+  lastMessageAt: string;
+}
+
+export interface AiConversationDetail {
+  conversation: AiConversationRecord;
+  messages: Array<{ id: string; role: string; content: string; createdAt: string }>;
 }
 
 export interface ProductSettings {
@@ -375,6 +390,8 @@ export const api = {
   calendarRsvpStatuses: (accountId: string, eventId: string) => get<{ responses: CalendarRsvpStatus[] }>(`/product/calendar-rsvps?accountId=${encodeURIComponent(accountId)}&eventId=${encodeURIComponent(eventId)}`),
   calendarRsvpPublic: (token: string) => get<CalendarRsvpPublic>(`/product/calendar-rsvp?token=${encodeURIComponent(token)}`),
   respondCalendarRsvp: (token: string, response: CalendarRsvpResponse) => post<CalendarRsvpPublic>("/product/calendar-rsvp", { token, response }),
-  chat: (accountId: string | null, messages: AiChatMessage[]) => post<AiChatResponse>("/product/chat", { ...(accountId ? { accountId } : {}), messages }, 100_000),
+  chat: (accountId: string | null, messages: AiChatMessage[], conversationId?: string | null) => post<AiChatResponse>("/product/chat", { ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages }, 100_000),
+  chatConversations: () => get<{ conversations: AiConversationRecord[] }>("/product/chat/conversations"),
+  chatConversation: (id: string) => get<AiConversationDetail>(`/product/chat/conversations/${encodeURIComponent(id)}`),
 
 };
