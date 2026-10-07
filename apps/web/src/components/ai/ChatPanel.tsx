@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, Check, Copy, RefreshCcw, ShieldCheck, X } from "lucide-react";
-import { api, type AiChatMessage, type AiIntervention } from "../../api";
+import { AlertCircle, ArrowUp, Check, CheckCircle2, Copy, LoaderCircle, RefreshCcw, ShieldCheck, X } from "lucide-react";
+import { api, type AiChatMessage, type AiChatStreamEvent, type AiIntervention } from "../../api";
 import { useAppShell } from "../AppShell";
 
 const starterPrompts = [
@@ -12,6 +12,13 @@ const starterPrompts = [
 type ChatSegment =
   | { type: "text"; content: string }
   | { type: "email_draft"; content: string };
+
+type ExecutionActivity = {
+  id: number;
+  label: string;
+  toolName?: string;
+  status: "running" | "done" | "error";
+};
 
 const parseAssistantSegments = (content: string): ChatSegment[] => {
   const segments: ChatSegment[] = [];
@@ -44,6 +51,9 @@ export function ChatPanel() {
   const [conversationLoading, setConversationLoading] = useState(false);
   const [intervention, setIntervention] = useState<AiIntervention | null>(null);
   const [interventionBusy, setInterventionBusy] = useState(false);
+  const [executionActivities, setExecutionActivities] = useState<ExecutionActivity[]>([]);
+  const activityCounterRef = useRef(0);
+  const activityClearTimerRef = useRef<number | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -51,6 +61,48 @@ export function ChatPanel() {
   const canSend = input.trim().length > 0 && !sending;
 
   const visibleMessages = useMemo(() => messages, [messages]);
+
+  const handleStreamEvent = (event: AiChatStreamEvent) => {
+    if (event.type !== "status") return;
+    if (activityClearTimerRef.current !== null) {
+      window.clearTimeout(activityClearTimerRef.current);
+      activityClearTimerRef.current = null;
+    }
+
+    if (event.phase === "tool_completed") {
+      setExecutionActivities((current) => {
+        const next = [...current];
+        for (let index = next.length - 1; index >= 0; index -= 1) {
+          const item = next[index];
+          if (item?.status === "running" && item.toolName === event.toolName) {
+            next[index] = { ...item, status: event.ok === false ? "error" : "done" };
+            return next;
+          }
+        }
+        return next;
+      });
+      return;
+    }
+
+    setExecutionActivities((current) => {
+      const settled = current.map((item) => item.status === "running" && !item.toolName ? { ...item, status: "done" as const } : item);
+      const last = settled[settled.length - 1];
+      if (event.phase === "thinking" && last?.label === event.label && last.status === "running") return settled;
+      activityCounterRef.current += 1;
+      return [...settled.slice(-4), {
+        id: activityCounterRef.current,
+        label: event.label,
+        toolName: event.toolName,
+        status: "running" as const,
+      }];
+    });
+  };
+
+  const settleAndClearActivities = () => {
+    setExecutionActivities((current) => current.map((item) => item.status === "running" ? { ...item, status: "done" as const } : item));
+    activityClearTimerRef.current = window.setTimeout(() => setExecutionActivities([]), 2400);
+  };
+
 
   useEffect(() => {
     let cancelled = false;
@@ -60,6 +112,7 @@ export function ChatPanel() {
     setMessages([]);
     setError("");
     setIntervention(null);
+    setExecutionActivities([]);
     if (!savedId) { setConversationLoading(false); return () => { cancelled = true; }; }
 
     setConversationLoading(true);
@@ -91,13 +144,16 @@ export function ChatPanel() {
     setSending(true);
     window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
     try {
-      const response = await api.chat(account?.id ?? null, next, conversationId);
+      setExecutionActivities([]);
+      const response = await api.streamChat(account?.id ?? null, next, conversationId, handleStreamEvent);
       setConversationId(response.conversationId);
       sessionStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`, response.conversationId);
       setIntervention(response.intervention);
       if (response.message) setMessages((current) => [...current, response.message].slice(-24));
+      settleAndClearActivities();
       window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
     } catch (err) {
+      setExecutionActivities((current) => current.map((item) => item.status === "running" ? { ...item, status: "error" as const } : item));
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSending(false);
@@ -106,9 +162,11 @@ export function ChatPanel() {
 
   const resumeAfterIntervention = async () => {
     if (!account || !conversationId) return;
-    const response = await api.resumeChat(account.id, conversationId);
+    setExecutionActivities([]);
+    const response = await api.resumeChatStream(account.id, conversationId, handleStreamEvent);
     setIntervention(response.intervention);
     if (response.message) setMessages((current) => [...current, response.message].slice(-24));
+    settleAndClearActivities();
     window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
   };
 
@@ -151,7 +209,7 @@ export function ChatPanel() {
           <p>Writing help and general conversation</p>
         </div>
       </div>
-      {(messages.length > 0 || conversationId) && <button className="gsw-chat-clear" type="button" onClick={() => { sessionStorage.removeItem(`gsw-chat-conversation:${account?.id ?? "none"}`); setConversationId(null); setMessages([]); setIntervention(null); setInput(""); setError(""); }}><RefreshCcw size={15} /> New chat</button>}
+      {(messages.length > 0 || conversationId) && <button className="gsw-chat-clear" type="button" onClick={() => { sessionStorage.removeItem(`gsw-chat-conversation:${account?.id ?? "none"}`); setConversationId(null); setMessages([]); setIntervention(null); setExecutionActivities([]); setInput(""); setError(""); }}><RefreshCcw size={15} /> New chat</button>}
     </header>
 
     <div className="gsw-chat-thread">
@@ -178,6 +236,13 @@ export function ChatPanel() {
           <button className="gsw-chat-copy" type="button" aria-label={message.role === "user" ? "Copy prompt" : "Copy full response"} title={message.role === "user" ? "Copy prompt" : "Copy full response"} onClick={() => void navigator.clipboard.writeText(message.role === "assistant" ? cleanAssistantText(message.content) : message.content)}><Copy size={14} strokeWidth={1.8} /></button>
         </article>;
       })}
+      {executionActivities.length > 0 && <section className="gsw-chat-execution" aria-live="polite">
+        <div className="gsw-chat-execution-title">GSW is working</div>
+        <div className="gsw-chat-execution-list">{executionActivities.map((activity) => <div className={`gsw-chat-execution-item ${activity.status}`} key={activity.id}>
+          {activity.status === "running" ? <LoaderCircle size={14} className="gsw-chat-spin" /> : activity.status === "done" ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+          <span>{activity.label}</span>
+        </div>)}</div>
+      </section>}
       {sending && <article className="gsw-chat-message assistant gsw-chat-thinking"><div className="gsw-chat-message-label">GSW</div><div className="gsw-chat-thinking-dots" aria-label="Thinking"><span /><span /><span /></div></article>}
       {intervention && <section className="gsw-chat-intervention">
         <div className="gsw-chat-intervention-icon"><ShieldCheck size={19} strokeWidth={1.8} /></div>
