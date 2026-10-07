@@ -38,6 +38,9 @@ const systemPrompt = [
   "If the user asks you to take an action, explain briefly that you can help prepare the wording but the user must perform the action themselves.",
   "Preserve the user's intended meaning and voice when rewriting. Prefer natural, concise business language unless the user asks for another tone.",
   "Do not add facts, promises, names, dates, or commitments that the user did not provide.",
+  "When you provide a final email draft, rewritten email, reply, follow-up, or other copy-ready email text, wrap only that email in exact <email_draft> and </email_draft> tags.",
+  "You may add a short explanation before or after the email draft, but never place commentary inside the <email_draft> tags.",
+  "If you provide multiple distinct email options, wrap each option in its own <email_draft> block.",
 ].join(" ");
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
