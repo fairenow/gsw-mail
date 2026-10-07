@@ -20,6 +20,7 @@ import {
 import { runHetznerChat, type AiProviderMessage } from "../ai/hetzner.js";
 import { readOnlyMailRegistry } from "../ai/tools/registry.js";
 import type { AgentExecutionContext, ProviderToolDefinition } from "../ai/tools/types.js";
+import { aiScopes } from "../ai/permissions/types.js";
 
 const bodySchema = z.object({
   conversationId: z.string().uuid().optional(),
@@ -31,9 +32,8 @@ const bodySchema = z.object({
 });
 
 const permissionGrantSchema = z.object({
-  accountId: z.string().uuid().optional(),
-  workspaceId: z.string().uuid().optional(),
-  scope: z.string().trim().min(1).max(120),
+  accountId: z.string().uuid(),
+  scope: z.enum(aiScopes),
 });
 
 const confirmationDecisionSchema = z.object({
@@ -61,11 +61,11 @@ export default async function aiChatRoutes(app: FastifyInstance) {
 
   app.post("/product/chat/permissions", async (req) => {
     const input = permissionGrantSchema.parse(req.body);
-    if (input.accountId) await requireAccountPermission(req.user!.id, input.accountId, "manage");
+    const requiredPermission = input.scope === "mail.read" || input.scope.endsWith(".read") ? "read" : input.scope === "mail.send" ? "send" : "manage";
+    await requireAccountPermission(req.user!.id, input.accountId, requiredPermission);
     const grant = await grantAiScope({
       userId: req.user!.id,
       accountId: input.accountId,
-      workspaceId: input.workspaceId,
       scope: input.scope,
     });
     return { grant };
