@@ -350,3 +350,151 @@
     gap: 7px;
   }
 }
+
+
+.gsw-calendar-attendee-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 6px 8px;
+  border: 1px solid var(--gsw-border);
+  border-radius: 8px;
+  background: var(--gsw-surface);
+}
+
+.gsw-calendar-attendee-input:focus-within {
+  border-color: var(--gsw-accent);
+  box-shadow: 0 0 0 3px var(--gsw-accent-soft);
+}
+
+.gsw-calendar-attendee-input input {
+  flex: 1 1 180px;
+  min-width: 120px;
+  padding: 5px 4px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+
+.gsw-calendar-attendee-chip,
+.gsw-calendar-email-extra > span,
+.gsw-calendar-attendee-list > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--gsw-accent-soft);
+  color: var(--gsw-text-body);
+  font-size: 12px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.gsw-calendar-attendee-chip button,
+.gsw-calendar-email-extra button {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  padding: 0;
+  border-radius: 999px;
+  color: var(--gsw-text-muted);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.gsw-calendar-attendee-chip button:hover,
+.gsw-calendar-email-extra button:hover {
+  background: color-mix(in srgb, var(--gsw-accent) 15%, transparent);
+  color: var(--gsw-text-heading);
+}
+
+.gsw-calendar-email-backdrop {
+  z-index: 120;
+  align-items: center;
+  justify-items: center;
+}
+
+.gsw-calendar-email-modal {
+  width: min(600px, calc(100vw - 32px));
+  max-height: min(720px, calc(100vh - 40px));
+  overflow: auto;
+  padding: 28px;
+  border: 1px solid var(--gsw-border);
+  border-radius: 18px;
+  background: var(--gsw-surface);
+  box-shadow: var(--shadow-3);
+}
+
+.gsw-calendar-email-recipients {
+  display: grid;
+  gap: 8px;
+  margin: 22px 0;
+}
+
+.gsw-calendar-email-recipients label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--gsw-border-soft);
+  border-radius: 10px;
+  background: var(--gsw-bg);
+  cursor: pointer;
+}
+
+.gsw-calendar-email-recipients label:has(input:checked) {
+  border-color: color-mix(in srgb, var(--gsw-accent) 42%, var(--gsw-border));
+  background: var(--gsw-accent-soft);
+}
+
+.gsw-calendar-email-add {
+  display: grid;
+  gap: 7px;
+}
+
+.gsw-calendar-email-add > small {
+  color: var(--gsw-text-muted);
+}
+
+.gsw-calendar-email-extra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.gsw-calendar-email-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--gsw-border-soft);
+}
+
+.gsw-calendar-email-actions > span {
+  color: var(--gsw-text-muted);
+  font-size: 12px;
+}
+
+.gsw-calendar-attendee-list a,
+.gsw-calendar-attendee-list > span {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--gsw-accent-soft);
+  text-decoration: none;
+}
+
+@media (max-width: 700px) {
+  .gsw-calendar-email-modal {
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+    padding: 20px;
+  }
+}
