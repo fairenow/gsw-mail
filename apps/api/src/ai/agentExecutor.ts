@@ -53,6 +53,12 @@ const permissionCopy = (scope: AiScope) => {
       description: "This lets GSW Chat save scheduled tasks that can run when you are away. You will still confirm the exact schedule before it is created.",
     };
   }
+  if (scope === "domain.read") {
+    return {
+      title: "Allow GSW Chat to read domain information?",
+      description: "This lets GSW Chat read basic domain details for the selected mailbox. DNS configuration and verification diagnostics are only returned to workspace owners and admins.",
+    };
+  }
   if (scope === "campaign.write") {
     return {
       title: "Allow GSW Chat to prepare campaigns?",
