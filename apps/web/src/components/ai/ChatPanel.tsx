@@ -27,6 +27,7 @@ type SpeechRecognitionResultLike = {
 };
 
 type SpeechRecognitionEventLike = {
+  resultIndex?: number;
   results: ArrayLike<SpeechRecognitionResultLike>;
 };
 
@@ -93,11 +94,23 @@ export function ChatPanel() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [recording, setRecording] = useState(false);
+  const [voiceStopping, setVoiceStopping] = useState(false);
+  const [voiceLevels, setVoiceLevels] = useState<number[]>(() => Array.from({ length: 22 }, () => 0.14));
   const speechRef = useRef<SpeechRecognitionLike | null>(null);
   const speechBaseRef = useRef("");
+  const speechTranscriptRef = useRef("");
+  const sendAfterVoiceStopRef = useRef(false);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const waveformFrameRef = useRef<number | null>(null);
+  const voiceFallbackTimerRef = useRef<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const canSend = input.trim().length > 0 && !sending;
-  const speechSupported = typeof window !== "undefined" && speechRecognitionConstructor() !== null;
+  const voiceActive = recording || voiceStopping;
+  const canSend = !sending && (voiceActive || input.trim().length > 0);
+  const speechSupported = typeof window !== "undefined"
+    && speechRecognitionConstructor() !== null
+    && Boolean(navigator.mediaDevices?.getUserMedia);
 
   const visibleMessages = useMemo(() => messages, [messages]);
 
@@ -143,49 +156,147 @@ export function ChatPanel() {
   };
 
 
-  const stopVoice = () => {
-    speechRef.current?.stop();
-    speechRef.current = null;
-    setRecording(false);
+  const cleanupVoiceAudio = () => {
+    if (waveformFrameRef.current !== null) {
+      window.cancelAnimationFrame(waveformFrameRef.current);
+      waveformFrameRef.current = null;
+    }
+    if (voiceFallbackTimerRef.current !== null) {
+      window.clearTimeout(voiceFallbackTimerRef.current);
+      voiceFallbackTimerRef.current = null;
+    }
+    analyserRef.current?.disconnect();
+    analyserRef.current = null;
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+    const audioContext = audioContextRef.current;
+    audioContextRef.current = null;
+    if (audioContext && audioContext.state !== "closed") void audioContext.close();
+    setVoiceLevels(Array.from({ length: 22 }, () => 0.14));
   };
 
-  const startVoice = () => {
-    if (sending || recording) return;
+  const startWaveform = (stream: MediaStream) => {
+    const audioContext = new AudioContext();
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 128;
+    analyser.smoothingTimeConstant = 0.72;
+    source.connect(analyser);
+    audioContextRef.current = audioContext;
+    analyserRef.current = analyser;
+    const frequency = new Uint8Array(analyser.frequencyBinCount);
+
+    const draw = () => {
+      analyser.getByteFrequencyData(frequency);
+      const bars = 22;
+      const step = Math.max(1, Math.floor(frequency.length / bars));
+      const next = Array.from({ length: bars }, (_, index) => {
+        let total = 0;
+        let count = 0;
+        for (let offset = 0; offset < step; offset += 1) {
+          const value = frequency[Math.min(frequency.length - 1, index * step + offset)] ?? 0;
+          total += value;
+          count += 1;
+        }
+        const normalized = count ? total / count / 255 : 0;
+        return Math.min(1, Math.max(0.12, normalized * 1.35));
+      });
+      setVoiceLevels(next);
+      waveformFrameRef.current = window.requestAnimationFrame(draw);
+    };
+    draw();
+  };
+
+  const currentVoiceContent = () => `${speechBaseRef.current}${speechTranscriptRef.current}`.trim();
+
+  const finalizeVoice = () => {
+    const content = currentVoiceContent();
+    setInput(content);
+    setRecording(false);
+    setVoiceStopping(false);
+    speechRef.current = null;
+    cleanupVoiceAudio();
+    const shouldSend = sendAfterVoiceStopRef.current;
+    sendAfterVoiceStopRef.current = false;
+    if (shouldSend) {
+      if (content) {
+        void submitContent(content);
+      } else {
+        setError("I didn’t catch any speech. Try again and speak after the waveform starts moving.");
+      }
+    }
+  };
+
+  const stopVoice = (sendWhenReady = false) => {
+    if (!voiceActive) return;
+    if (sendWhenReady) sendAfterVoiceStopRef.current = true;
+    if (voiceStopping) return;
+    setVoiceStopping(true);
+    setRecording(false);
+    try {
+      speechRef.current?.stop();
+    } catch {
+      finalizeVoice();
+      return;
+    }
+    voiceFallbackTimerRef.current = window.setTimeout(() => finalizeVoice(), 1200);
+  };
+
+  const startVoice = async () => {
+    if (sending || voiceActive) return;
     const Recognition = speechRecognitionConstructor();
-    if (!Recognition) {
+    if (!Recognition || !navigator.mediaDevices?.getUserMedia) {
       setError("Voice dictation is not supported in this browser.");
       return;
     }
 
     setError("");
-    const recognition = new Recognition();
+    speechTranscriptRef.current = "";
+    sendAfterVoiceStopRef.current = false;
     const base = input.trimEnd();
     speechBaseRef.current = base ? `${base} ` : "";
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = navigator.language || "en-US";
-    recognition.onresult = (event) => {
-      let transcript = "";
-      for (let index = 0; index < event.results.length; index += 1) {
-        transcript += event.results[index]?.[0]?.transcript ?? "";
-      }
-      setInput(`${speechBaseRef.current}${transcript}`.trimStart());
-    };
-    recognition.onerror = (event) => {
-      const message = event.error === "not-allowed"
-        ? "Microphone access was blocked. Allow microphone access in your browser and try again."
-        : "Voice dictation stopped unexpectedly. You can keep editing the text that was captured.";
-      setError(message);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      startWaveform(stream);
+
+      const recognition = new Recognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = navigator.language || "en-US";
+      recognition.onresult = (event) => {
+        let finalText = "";
+        let interimText = "";
+        for (let index = 0; index < event.results.length; index += 1) {
+          const result = event.results[index];
+          const transcript = result?.[0]?.transcript ?? "";
+          if (result?.isFinal) finalText += `${transcript} `;
+          else interimText += transcript;
+        }
+        speechTranscriptRef.current = `${finalText}${interimText}`.trim();
+      };
+      recognition.onerror = (event) => {
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          setError("Microphone or speech-recognition access was blocked. Allow microphone access in Chrome and try again.");
+        } else if (event.error !== "no-speech" && event.error !== "aborted") {
+          setError("Voice dictation stopped unexpectedly. Any recognized text has been kept.");
+        }
+      };
+      recognition.onend = finalizeVoice;
+      speechRef.current = recognition;
+      setVoiceStopping(false);
+      setRecording(true);
+      recognition.start();
+    } catch (err) {
+      cleanupVoiceAudio();
       setRecording(false);
-      speechRef.current = null;
-    };
-    recognition.onend = () => {
-      setRecording(false);
-      speechRef.current = null;
-    };
-    speechRef.current = recognition;
-    setRecording(true);
-    recognition.start();
+      setVoiceStopping(false);
+      const name = err instanceof DOMException ? err.name : "";
+      setError(name === "NotAllowedError"
+        ? "Microphone access was blocked. Allow microphone access for GSW Mail in Chrome and try again."
+        : "GSW Mail could not start the microphone. Check your browser microphone settings and try again.");
+    }
   };
 
 
@@ -219,6 +330,7 @@ export function ChatPanel() {
       cancelled = true;
       speechRef.current?.abort();
       speechRef.current = null;
+      cleanupVoiceAudio();
       if (activityClearTimerRef.current !== null) {
         window.clearTimeout(activityClearTimerRef.current);
         activityClearTimerRef.current = null;
@@ -290,9 +402,8 @@ export function ChatPanel() {
     }
   };
 
-  const send = async (override?: string) => {
-    if (recording) stopVoice();
-    const content = (override ?? input).trim();
+  const submitContent = async (contentOverride: string) => {
+    const content = contentOverride.trim();
     if (!content || sending) return;
     const userMessage: AiChatMessage = { role: "user", content };
     const next = [...messages, userMessage].slice(-23);
@@ -318,6 +429,14 @@ export function ChatPanel() {
     } finally {
       setSending(false);
     }
+  };
+
+  const send = async () => {
+    if (voiceActive) {
+      stopVoice(true);
+      return;
+    }
+    await submitContent(input);
   };
 
   const resumeAfterIntervention = async () => {
@@ -452,8 +571,13 @@ export function ChatPanel() {
     </div>
 
     <footer className="gsw-chat-composer">
-      <div className="gsw-chat-composer-box">
-        <textarea
+      <div className={`gsw-chat-composer-box ${voiceActive ? "voice-active" : ""}`}>
+        {voiceActive ? <div className="gsw-chat-waveform" role="status" aria-live="polite" aria-label={voiceStopping ? "Finishing voice transcription" : "Recording voice prompt"}>
+          <span className="gsw-chat-waveform-status">{voiceStopping ? "Finishing…" : "Listening"}</span>
+          <span className="gsw-chat-waveform-bars" aria-hidden="true">
+            {voiceLevels.map((level, index) => <span key={index} style={{ height: `${Math.round(6 + level * 26)}px` }} />)}
+          </span>
+        </div> : <textarea
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
@@ -464,18 +588,18 @@ export function ChatPanel() {
           }}
           placeholder="Ask for help writing or rewriting an email…"
           rows={1}
-        />
+        />}
         <button
           className={`gsw-chat-voice ${recording ? "recording" : ""}`}
           type="button"
-          aria-label={recording ? "Stop voice dictation" : "Start voice dictation"}
-          title={recording ? "Stop and review" : speechSupported ? "Dictate a prompt" : "Voice dictation is unavailable in this browser"}
-          disabled={!speechSupported || sending}
-          onClick={recording ? stopVoice : startVoice}
-        >{recording ? <Square size={15} fill="currentColor" /> : <Mic size={17} strokeWidth={2} />}</button>
-        <button className="gsw-chat-send" type="button" aria-label={recording ? "Stop dictation and send" : "Send message"} disabled={!canSend} onClick={() => void send()}><ArrowUp size={18} strokeWidth={2} /></button>
+          aria-label={voiceActive ? "Stop voice dictation and review" : "Start voice dictation"}
+          title={voiceActive ? "Stop and review" : speechSupported ? "Dictate a prompt" : "Voice dictation is unavailable in this browser"}
+          disabled={!speechSupported || sending || voiceStopping}
+          onClick={voiceActive ? () => stopVoice(false) : () => void startVoice()}
+        >{voiceActive ? <Square size={15} fill="currentColor" /> : <Mic size={17} strokeWidth={2} />}</button>
+        <button className="gsw-chat-send" type="button" aria-label={voiceActive ? "Send voice prompt now" : "Send message"} disabled={!canSend} onClick={() => void send()}><ArrowUp size={18} strokeWidth={2} /></button>
       </div>
-      <p>{recording ? "Listening… tap stop to review your words, or send when you're done." : "Chat can search mail and saved chats, manage drafts, and create scheduled work. Sending still requires explicit confirmation."}</p>
+      <p>{voiceActive ? "Speak naturally. Tap stop to review the transcript, or tap send to submit it immediately." : "Chat can search mail and saved chats, manage drafts, and create scheduled work. Sending still requires explicit confirmation."}</p>
     </footer>
   </div>;
 }
