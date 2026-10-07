@@ -12,7 +12,6 @@ import {
   Send,
   ShieldCheck,
   Smartphone,
-  Sparkles,
   UsersRound,
 } from "lucide-react";
 import { BrandMark } from "../components/auth/BrandMark";
