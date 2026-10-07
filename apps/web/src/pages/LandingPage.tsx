@@ -12,7 +12,6 @@ import {
   Send,
   ShieldCheck,
   Smartphone,
-  Sparkles,
   UsersRound,
 } from "lucide-react";
 import { BrandMark } from "../components/auth/BrandMark";
@@ -22,7 +21,7 @@ const capabilityItems = [
   ["Switch identities", "Move between accounts without moving between apps.", Layers3],
   ["Send once. Or keep sending.", "Schedule a message once or put recurring communication on a rhythm.", RefreshCw],
   ["Turn mail into meetings", "Keep conversations and time in the same workflow.", CalendarDays],
-  ["Ask your inbox to act", "Connect intelligent tools without turning your inbox into a chatbot.", Sparkles],
+  ["Ask your inbox to act", "Connect intelligent tools without turning your inbox into a chatbot.", Bot],
 ] as const;
 
 const featureCards = [
@@ -159,7 +158,7 @@ export function LandingPage() {
 
     <section className="lp2-ai" data-reveal="split">
       <div className="lp2-ai-copy"><span className="lp2-eyebrow">Connect tools</span><h2>Ask. Act. Done.</h2><p>Your inbox should not just contain work. Intelligent tools can help find the conversation, prepare the follow-up, create the event, and keep the context together.</p><div className="lp2-ai-tags"><span>Find the thread</span><span>Draft the reply</span><span>Create the event</span><span>Keep the context</span></div></div>
-      <div className="lp2-ai-card"><div className="lp2-ai-message user">Find the conversations I owe a follow-up to this week.</div><div className="lp2-ai-message assistant"><Sparkles size={18}/><div><strong>I found 4 conversations.</strong><span>Danielle Carter · partnership follow-up</span><span>Jordan Thomas · scheduling</span><span>Project Team · launch review</span><button>Draft follow-ups</button></div></div></div>
+      <div className="lp2-ai-card"><div className="lp2-ai-message user">Find the conversations I owe a follow-up to this week.</div><div className="lp2-ai-message assistant"><Bot size={18}/><div><strong>I found 4 conversations.</strong><span>Danielle Carter · partnership follow-up</span><span>Jordan Thomas · scheduling</span><span>Project Team · launch review</span><button>Draft follow-ups</button></div></div></div>
     </section>
 
     <section id="ownership" className="lp2-ownership" data-reveal="split">
