@@ -153,6 +153,7 @@ export interface AiChatResponse {
     mailboxAccess: boolean;
     rewriteEmail: true;
     persistentConversation: boolean;
+    streamingExecution?: boolean;
   };
   toolActivity?: { name: string; ok: boolean }[];
 }
@@ -169,6 +170,12 @@ export interface AiConversationDetail {
   conversation: AiConversationRecord;
   messages: Array<{ id: string; role: string; content: string; createdAt: string }>;
 }
+
+export type AiChatStreamEvent =
+  | { type: "status"; phase: "thinking" | "tool_started" | "tool_completed"; label: string; toolName?: string; ok?: boolean }
+  | { type: "result"; response: AiChatResponse }
+  | { type: "error"; message: string };
+
 
 export interface ProductSettings {
   general: Record<string, unknown>;
@@ -333,6 +340,56 @@ const request = async (url: string, init: RequestInit, timeoutMs?: number): Prom
 const post = async <T,>(url: string, body?: unknown, timeoutMs?: number): Promise<T> =>
   request(url, { method: "POST", headers: headers(!!body), body: body ? JSON.stringify(body) : undefined }, timeoutMs).then((res) => json<T>(res));
 
+const postEventStream = async (
+  url: string,
+  body: unknown,
+  onEvent: (event: AiChatStreamEvent) => void,
+): Promise<AiChatResponse> => {
+  const response = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers: headers(true),
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) return json<AiChatResponse>(response);
+  if (!response.body) throw new Error("Streaming response is unavailable in this browser.");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalResponse: AiChatResponse | null = null;
+
+  const consumeBlock = (block: string) => {
+    const dataLines = block
+      .split("\n")
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trim());
+    if (dataLines.length === 0) return;
+    const event = JSON.parse(dataLines.join("\n")) as AiChatStreamEvent;
+    onEvent(event);
+    if (event.type === "result") finalResponse = event.response;
+    if (event.type === "error") throw new Error(event.message);
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary >= 0) {
+      const block = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      consumeBlock(block);
+      boundary = buffer.indexOf("\n\n");
+    }
+    if (done) break;
+  }
+
+  if (buffer.trim()) consumeBlock(buffer);
+  if (!finalResponse) throw new Error("The chat stream ended before a final response was received.");
+  return finalResponse;
+};
+
 const patch = async <T,>(url: string, body: unknown, timeoutMs?: number): Promise<T> =>
   request(url, { method: "PATCH", headers: headers(true), body: JSON.stringify(body) }, timeoutMs).then((res) => json<T>(res));
 
@@ -396,7 +453,9 @@ export const api = {
   calendarRsvpPublic: (token: string) => get<CalendarRsvpPublic>(`/product/calendar-rsvp?token=${encodeURIComponent(token)}`),
   respondCalendarRsvp: (token: string, response: CalendarRsvpResponse) => post<CalendarRsvpPublic>("/product/calendar-rsvp", { token, response }),
   chat: (accountId: string | null, messages: AiChatMessage[], conversationId?: string | null) => post<AiChatResponse>("/product/chat", { ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages }, 100_000),
+  streamChat: (accountId: string | null, messages: AiChatMessage[], conversationId: string | null | undefined, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/stream", { ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages }, onEvent),
   resumeChat: (accountId: string, conversationId: string) => post<AiChatResponse>("/product/chat/resume", { accountId, conversationId }, 100_000),
+  resumeChatStream: (accountId: string, conversationId: string, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/resume/stream", { accountId, conversationId }, onEvent),
   grantChatPermission: (accountId: string, scope: string) => post<{ grant: { id: string; scope: string } }>("/product/chat/permissions", { accountId, scope }),
   decideChatConfirmation: (confirmationId: string, decision: "approved" | "rejected") => post<{ confirmation: { id: string; status: string } }>(`/product/chat/confirmations/${encodeURIComponent(confirmationId)}`, { decision }),
   chatConversations: () => get<{ conversations: AiConversationRecord[] }>("/product/chat/conversations"),
