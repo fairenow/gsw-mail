@@ -57,7 +57,7 @@ export function MailPage() {
   const [open, setOpen] = useState<FullMessage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [mobileView, setMobileView] = useState<MobileView>("messages");
+  const [mobileView, setMobileView] = useState<MobileView>("reader");
   const [foldersOpen, setFoldersOpen] = useState(false);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
