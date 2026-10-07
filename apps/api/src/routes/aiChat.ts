@@ -109,6 +109,10 @@ const toolLabel = (toolName: string): string => {
     case "campaign.list": return "Checking your campaigns";
     case "campaign.read": return "Reviewing your campaign";
     case "campaign.launch": return "Launching your campaign";
+    case "templates.list": return "Checking your email templates";
+    case "templates.create": return "Creating your email template";
+    case "templates.update": return "Updating your email template";
+    case "templates.select": return "Selecting your default email template";
     default: return "Working with your mailbox";
   }
 };
@@ -409,7 +413,12 @@ export default async function aiChatRoutes(app: FastifyInstance) {
     if (!isAiScopeGloballyEnabled(capabilitySettings, input.scope)) {
       throw forbidden("This AI capability is disabled in Settings.");
     }
-    const requiredPermission = input.scope === "mail.read" || input.scope.endsWith(".read") || input.scope === "automations.write"
+    const requiredPermission = input.scope === "mail.read"
+      || input.scope.endsWith(".read")
+      || input.scope === "automations.write"
+      || input.scope === "templates.write"
+      || input.scope === "settings.write"
+      || input.scope === "signatures.write"
       ? "read"
       : input.scope === "mail.write" || input.scope === "mail.send" || input.scope === "campaign.write" || input.scope === "campaign.send"
         ? "send"
