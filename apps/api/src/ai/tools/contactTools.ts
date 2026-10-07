@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "../../db/client.js";
 import { contactTags, contacts } from "../../db/schema.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
