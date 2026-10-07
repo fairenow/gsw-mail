@@ -920,11 +920,11 @@ export const aiAutomations = pgTable(
       frequency: "once" | "daily" | "weekdays" | "weekends" | "weekly" | "monthly";
       hour: number;
       minute: number;
-      daysOfWeek?: number[];
-      dayOfMonth?: number;
-      interval?: number;
-      startDate?: string;
-      endDate?: string;
+      daysOfWeek?: number[] | undefined;
+      dayOfMonth?: number | undefined;
+      interval?: number | undefined;
+      startDate?: string | undefined;
+      endDate?: string | undefined;
     }>().notNull(),
     allowedScopes: text("allowed_scopes").array().default(sql`ARRAY[]::text[]`).notNull(),
     nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
