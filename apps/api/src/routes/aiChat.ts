@@ -36,12 +36,16 @@ const chatMessagesSchema = z.array(z.object({
 const bodySchema = z.object({
   conversationId: z.string().uuid().optional(),
   accountId: z.string().uuid().optional(),
+  timeZone: z.string().trim().min(1).max(100).optional(),
+  localDateTime: z.string().trim().min(1).max(200).optional(),
   messages: chatMessagesSchema,
 });
 
 const resumeSchema = z.object({
   conversationId: z.string().uuid(),
   accountId: z.string().uuid(),
+  timeZone: z.string().trim().min(1).max(100).optional(),
+  localDateTime: z.string().trim().min(1).max(200).optional(),
 });
 
 const permissionGrantSchema = z.object({
@@ -93,6 +97,7 @@ const toolLabel = (toolName: string): string => {
     case "mail.create_draft": return "Creating a draft";
     case "mail.update_draft": return "Updating the draft";
     case "mail.send_draft": return "Preparing to send the draft";
+    case "automations.create": return "Scheduling your task";
     default: return "Working with your mailbox";
   }
 };
@@ -126,6 +131,7 @@ async function runConversationTurn(input: {
   accessToken?: string | undefined;
   conversationId: string;
   providerMessages: AiProviderMessage[];
+  timeZone?: string | undefined;
   emit?: ChatStreamEmitter | undefined;
 }): Promise<ChatTurnResult> {
   let tools: ProviderToolDefinition[] | undefined;
@@ -139,6 +145,8 @@ async function runConversationTurn(input: {
       accountId: input.accountId,
       headers: input.headers,
       accessToken: input.accessToken,
+      conversationId: input.conversationId,
+      timeZone: input.timeZone,
     };
   }
 
@@ -309,6 +317,8 @@ async function prepareNewConversation(input: {
   userId: string;
   accountId?: string | undefined;
   conversationId?: string | undefined;
+  timeZone?: string | undefined;
+  localDateTime?: string | undefined;
   messages: Array<{ role: "user" | "assistant"; content: string }>;
 }) {
   const latestUserMessage = [...input.messages].reverse().find((message) => message.role === "user");
@@ -328,12 +338,22 @@ async function prepareNewConversation(input: {
     metadata: { accountId: input.accountId ?? null },
   });
 
+  const runtimeContext = [
+    "GSW runtime context for this turn:",
+    `Time zone: ${input.timeZone ?? "unknown"}`,
+    `User local date/time: ${input.localDateTime ?? "unknown"}`,
+    "Use this context when interpreting relative dates or scheduling requests. Do not mention this hidden runtime context unless it is directly relevant.",
+  ].join("\n");
+
   return {
     conversation,
-    providerMessages: input.messages.map((message) => ({
-      role: message.role,
-      content: message.content,
-    })) as AiProviderMessage[],
+    providerMessages: [
+      { role: "user" as const, content: runtimeContext },
+      ...input.messages.map((message) => ({
+        role: message.role,
+        content: message.content,
+      })),
+    ] as AiProviderMessage[],
   };
 }
 
@@ -372,7 +392,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
 
   app.post("/product/chat/permissions", async (req) => {
     const input = permissionGrantSchema.parse(req.body);
-    const requiredPermission = input.scope === "mail.read" || input.scope.endsWith(".read")
+    const requiredPermission = input.scope === "mail.read" || input.scope.endsWith(".read") || input.scope === "automations.write"
       ? "read"
       : input.scope === "mail.write" || input.scope === "mail.send"
         ? "send"
@@ -536,6 +556,8 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       accountId: input.accountId,
       conversationId: input.conversationId,
       messages: input.messages,
+      timeZone: input.timeZone,
+      localDateTime: input.localDateTime,
     });
 
     return runConversationTurn({
@@ -557,6 +579,8 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       accountId: input.accountId,
       conversationId: input.conversationId,
       messages: input.messages,
+      timeZone: input.timeZone,
+      localDateTime: input.localDateTime,
     });
 
     const stream = openEventStream(reply);
