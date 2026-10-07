@@ -4,11 +4,11 @@ export interface AutomationSchedule {
   frequency: AutomationFrequency;
   hour: number;
   minute: number;
-  daysOfWeek?: number[];
-  dayOfMonth?: number;
-  interval?: number;
-  startDate?: string;
-  endDate?: string;
+  daysOfWeek?: number[] | undefined;
+  dayOfMonth?: number | undefined;
+  interval?: number | undefined;
+  startDate?: string | undefined;
+  endDate?: string | undefined;
 }
 
 type LocalParts = {
