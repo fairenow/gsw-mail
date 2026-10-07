@@ -91,6 +91,10 @@
     {
       "source": "/calendar",
       "destination": "/index.html"
+    },
+    {
+      "source": "/calendar/rsvp",
+      "destination": "/index.html"
     }
   ]
 }
