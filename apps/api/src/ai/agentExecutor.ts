@@ -46,6 +46,12 @@ const permissionCopy = (scope: AiScope) => {
       description: "This lets GSW Chat prepare a send action for the selected mailbox. Every send still requires a separate confirmation before it is executed.",
     };
   }
+  if (scope === "automations.write") {
+    return {
+      title: "Allow GSW Chat to create scheduled work?",
+      description: "This lets GSW Chat save scheduled tasks that can run when you are away. You will still confirm the exact schedule before it is created.",
+    };
+  }
   return {
     title: `Allow ${scope}?`,
     description: "GSW Chat needs this permission before it can continue with the requested capability.",
