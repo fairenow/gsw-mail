@@ -46,6 +46,12 @@ const permissionCopy = (scope: AiScope) => {
       description: "This lets GSW Chat prepare a send action for the selected mailbox. Every send still requires a separate confirmation before it is executed.",
     };
   }
+  if (scope === "automations.write") {
+    return {
+      title: "Allow GSW Chat to create scheduled work?",
+      description: "This lets GSW Chat save scheduled tasks that can run when you are away. You will still confirm the exact schedule before it is created.",
+    };
+  }
   return {
     title: `Allow ${scope}?`,
     description: "GSW Chat needs this permission before it can continue with the requested capability.",
@@ -108,7 +114,13 @@ export async function executeAgentTool(input: {
       action: definition.name,
       summary: definition.name === "mail.send_draft"
         ? "Send this prepared draft now? This will deliver the email to its recipients."
-        : `Approve ${definition.name} for the selected mailbox.`,
+        : definition.name === "automations.create"
+          ? "Create this scheduled GSW Chat task? It can run in the background at the configured times."
+          : definition.name === "automations.update"
+            ? "Apply these changes to the scheduled GSW Chat task?"
+            : definition.name === "automations.delete"
+              ? "Delete this scheduled GSW Chat task permanently?"
+              : `Approve ${definition.name} for the selected mailbox.`,
       expiresAt: new Date(Date.now() + 30 * 60_000),
       metadata: { risk: definition.risk, scopes: definition.requiredScopes },
     });

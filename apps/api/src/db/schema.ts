@@ -905,6 +905,61 @@ export const aiConfirmations = pgTable(
 );
 
 
+export const aiAutomations = pgTable(
+  "ai_automations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id").references(() => emailAccounts.id, { onDelete: "set null" }),
+    conversationId: uuid("conversation_id").references(() => aiConversations.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    instruction: text("instruction").notNull(),
+    status: text("status").default("active").notNull(),
+    timeZone: text("time_zone").notNull(),
+    schedule: jsonb("schedule").$type<{
+      frequency: "once" | "daily" | "weekdays" | "weekends" | "weekly" | "monthly";
+      hour: number;
+      minute: number;
+      daysOfWeek?: number[] | undefined;
+      dayOfMonth?: number | undefined;
+      interval?: number | undefined;
+      startDate?: string | undefined;
+      endDate?: string | undefined;
+    }>().notNull(),
+    allowedScopes: text("allowed_scopes").array().default(sql`ARRAY[]::text[]`).notNull(),
+    nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    runningAt: timestamp("running_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    ...timestamps,
+  },
+  (t) => [
+    index("ai_automations_user_idx").on(t.userId, t.status, t.nextRunAt),
+    index("ai_automations_due_idx").on(t.status, t.nextRunAt),
+    index("ai_automations_account_idx").on(t.accountId, t.status),
+  ],
+);
+
+export const aiAutomationRuns = pgTable(
+  "ai_automation_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    automationId: uuid("automation_id").notNull().references(() => aiAutomations.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id").references(() => aiConversations.id, { onDelete: "set null" }),
+    status: text("status").default("running").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    result: text("result"),
+    errorMessage: text("error_message"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    ...timestamps,
+  },
+  (t) => [
+    index("ai_automation_runs_automation_idx").on(t.automationId, t.startedAt),
+    index("ai_automation_runs_status_idx").on(t.status, t.startedAt),
+  ],
+);
+
 export const aiIdempotencyKeys = pgTable(
   "ai_idempotency_keys",
   {

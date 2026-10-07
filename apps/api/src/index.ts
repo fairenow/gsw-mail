@@ -6,9 +6,11 @@ import { ensureScheduledSendSchema } from "./outbound/ensureScheduledSchema.js";
 import { ensureCalendarRsvpSchema } from "./calendar/ensureRsvpSchema.js";
 import { ensureAiAgentSchema } from "./ai/ensureAgentSchema.js";
 import { getOutboundWorker } from "./outbound/worker.js";
+import { getAutomationWorker } from "./ai/automationWorker.js";
 
 const app = buildApp();
 const worker = getOutboundWorker();
+const automationWorker = getAutomationWorker();
 
 async function main() {
   await ensureScheduledSendSchema();
@@ -16,12 +18,14 @@ async function main() {
   await ensureAiAgentSchema();
   await ensureWebOAuthTestClient();
   worker.start();
+  automationWorker.start();
   await app.listen({ port: config.port, host: "0.0.0.0" });
 }
 
 const shutdown = async (signal: string) => {
   app.log.info(`received ${signal}, shutting down`);
   worker.stop();
+  automationWorker.stop();
   await app.close();
   await pool.end();
   process.exit(0);

@@ -342,6 +342,11 @@ const request = async (url: string, init: RequestInit, timeoutMs?: number): Prom
 const post = async <T,>(url: string, body?: unknown, timeoutMs?: number): Promise<T> =>
   request(url, { method: "POST", headers: headers(!!body), body: body ? JSON.stringify(body) : undefined }, timeoutMs).then((res) => json<T>(res));
 
+const chatRuntimeContext = () => ({
+  timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  localDateTime: new Date().toString(),
+});
+
 const postEventStream = async (
   url: string,
   body: unknown,
@@ -463,10 +468,10 @@ export const api = {
   calendarRsvpStatuses: (accountId: string, eventId: string) => get<{ responses: CalendarRsvpStatus[] }>(`/product/calendar-rsvps?accountId=${encodeURIComponent(accountId)}&eventId=${encodeURIComponent(eventId)}`),
   calendarRsvpPublic: (token: string) => get<CalendarRsvpPublic>(`/product/calendar-rsvp?token=${encodeURIComponent(token)}`),
   respondCalendarRsvp: (token: string, response: CalendarRsvpResponse) => post<CalendarRsvpPublic>("/product/calendar-rsvp", { token, response }),
-  chat: (accountId: string | null, messages: AiChatMessage[], conversationId?: string | null) => post<AiChatResponse>("/product/chat", { ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages }, 100_000),
-  streamChat: (accountId: string | null, messages: AiChatMessage[], conversationId: string | null | undefined, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/stream", { ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages }, onEvent, "/product/chat"),
-  resumeChat: (accountId: string, conversationId: string) => post<AiChatResponse>("/product/chat/resume", { accountId, conversationId }, 100_000),
-  resumeChatStream: (accountId: string, conversationId: string, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/resume/stream", { accountId, conversationId }, onEvent, "/product/chat/resume"),
+  chat: (accountId: string | null, messages: AiChatMessage[], conversationId?: string | null) => post<AiChatResponse>("/product/chat", { ...chatRuntimeContext(), ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages }, 100_000),
+  streamChat: (accountId: string | null, messages: AiChatMessage[], conversationId: string | null | undefined, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/stream", { ...chatRuntimeContext(), ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages }, onEvent, "/product/chat"),
+  resumeChat: (accountId: string, conversationId: string) => post<AiChatResponse>("/product/chat/resume", { ...chatRuntimeContext(), accountId, conversationId }, 100_000),
+  resumeChatStream: (accountId: string, conversationId: string, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/resume/stream", { ...chatRuntimeContext(), accountId, conversationId }, onEvent, "/product/chat/resume"),
   grantChatPermission: (accountId: string, scope: string) => post<{ grant: { id: string; scope: string } }>("/product/chat/permissions", { accountId, scope }),
   decideChatConfirmation: (confirmationId: string, decision: "approved" | "rejected") => post<{ confirmation: { id: string; status: string }; execution: { conversationId: string; message: AiChatMessage; toolResult?: unknown } }>(`/product/chat/confirmations/${encodeURIComponent(confirmationId)}`, { decision }),
   chatConversations: () => get<{ conversations: AiConversationRecord[] }>("/product/chat/conversations?limit=100"),

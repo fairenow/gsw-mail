@@ -1,5 +1,7 @@
 import type { AgentExecutionContext, AgentToolDefinition, ProviderToolDefinition } from "./types.js";
 import { agentMailTools, readOnlyMailTools } from "./mailTools.js";
+import { automationTools } from "./automationTools.js";
+import { searchTools } from "./searchTools.js";
 
 export class AgentToolRegistry {
   private readonly tools = new Map<string, AgentToolDefinition>();
@@ -50,5 +52,5 @@ export class AgentToolRegistry {
   }
 }
 
-export const agentMailRegistry = new AgentToolRegistry(agentMailTools);
+export const agentMailRegistry = new AgentToolRegistry([...agentMailTools, ...automationTools, ...searchTools]);
 export const readOnlyMailRegistry = new AgentToolRegistry(readOnlyMailTools);

@@ -5,8 +5,8 @@ import { useAppShell } from "../AppShell";
 
 const starterPrompts = [
   "Rewrite this email to sound more natural",
-  "Make this email shorter and clearer",
-  "Help me write a professional follow-up",
+  "Find the email I was discussing about a rent roll",
+  "Brief me every weekday at 9 AM on inbox emails that need a response",
 ];
 
 type ChatSegment =
@@ -382,7 +382,7 @@ export function ChatPanel() {
         />
         <button className="gsw-chat-send" type="button" aria-label="Send message" disabled={!canSend} onClick={() => void send()}><ArrowUp size={18} strokeWidth={2} /></button>
       </div>
-      <p>Chat can read mail, create or update drafts, and send only after you explicitly confirm the send.</p>
+      <p>Chat can search mail and saved chats, manage drafts, and create scheduled work. Sending still requires explicit confirmation.</p>
     </footer>
   </div>;
 }

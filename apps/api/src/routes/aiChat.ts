@@ -36,12 +36,16 @@ const chatMessagesSchema = z.array(z.object({
 const bodySchema = z.object({
   conversationId: z.string().uuid().optional(),
   accountId: z.string().uuid().optional(),
+  timeZone: z.string().trim().min(1).max(100).optional(),
+  localDateTime: z.string().trim().min(1).max(200).optional(),
   messages: chatMessagesSchema,
 });
 
 const resumeSchema = z.object({
   conversationId: z.string().uuid(),
   accountId: z.string().uuid(),
+  timeZone: z.string().trim().min(1).max(100).optional(),
+  localDateTime: z.string().trim().min(1).max(200).optional(),
 });
 
 const permissionGrantSchema = z.object({
@@ -93,6 +97,11 @@ const toolLabel = (toolName: string): string => {
     case "mail.create_draft": return "Creating a draft";
     case "mail.update_draft": return "Updating the draft";
     case "mail.send_draft": return "Preparing to send the draft";
+    case "automations.create": return "Scheduling your task";
+    case "automations.list": return "Checking your scheduled tasks";
+    case "automations.update": return "Updating your scheduled task";
+    case "automations.delete": return "Removing your scheduled task";
+    case "search.workspace": return "Searching mail and chat history";
     default: return "Working with your mailbox";
   }
 };
@@ -126,6 +135,7 @@ async function runConversationTurn(input: {
   accessToken?: string | undefined;
   conversationId: string;
   providerMessages: AiProviderMessage[];
+  timeZone?: string | undefined;
   emit?: ChatStreamEmitter | undefined;
 }): Promise<ChatTurnResult> {
   let tools: ProviderToolDefinition[] | undefined;
@@ -139,6 +149,8 @@ async function runConversationTurn(input: {
       accountId: input.accountId,
       headers: input.headers,
       accessToken: input.accessToken,
+      conversationId: input.conversationId,
+      timeZone: input.timeZone,
     };
   }
 
@@ -309,6 +321,8 @@ async function prepareNewConversation(input: {
   userId: string;
   accountId?: string | undefined;
   conversationId?: string | undefined;
+  timeZone?: string | undefined;
+  localDateTime?: string | undefined;
   messages: Array<{ role: "user" | "assistant"; content: string }>;
 }) {
   const latestUserMessage = [...input.messages].reverse().find((message) => message.role === "user");
@@ -328,12 +342,22 @@ async function prepareNewConversation(input: {
     metadata: { accountId: input.accountId ?? null },
   });
 
+  const runtimeContext = [
+    "GSW runtime context for this turn:",
+    `Time zone: ${input.timeZone ?? "unknown"}`,
+    `User local date/time: ${input.localDateTime ?? "unknown"}`,
+    "Use this context when interpreting relative dates or scheduling requests. Do not mention this hidden runtime context unless it is directly relevant.",
+  ].join("\n");
+
   return {
     conversation,
-    providerMessages: input.messages.map((message) => ({
-      role: message.role,
-      content: message.content,
-    })) as AiProviderMessage[],
+    providerMessages: [
+      { role: "user" as const, content: runtimeContext },
+      ...input.messages.map((message) => ({
+        role: message.role,
+        content: message.content,
+      })),
+    ] as AiProviderMessage[],
   };
 }
 
@@ -372,7 +396,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
 
   app.post("/product/chat/permissions", async (req) => {
     const input = permissionGrantSchema.parse(req.body);
-    const requiredPermission = input.scope === "mail.read" || input.scope.endsWith(".read")
+    const requiredPermission = input.scope === "mail.read" || input.scope.endsWith(".read") || input.scope === "automations.write"
       ? "read"
       : input.scope === "mail.write" || input.scope === "mail.send"
         ? "send"
@@ -429,6 +453,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       accountId: execution.run.accountId,
       headers: req.headers as Record<string, string>,
       accessToken: req.accessToken,
+      conversationId: execution.toolCall.conversationId,
     };
     const rawArguments = JSON.stringify(execution.toolCall.arguments ?? {});
     const outcome = await executeAgentTool({
@@ -446,9 +471,18 @@ export default async function aiChatRoutes(app: FastifyInstance) {
     if (outcome.kind !== "result") throw new Error("confirmed action unexpectedly requested another intervention");
     await recordAiToolResult(execution.toolCall.id, outcome.result);
 
+    const resultData = outcome.result.data && typeof outcome.result.data === "object"
+      ? outcome.result.data as Record<string, unknown>
+      : {};
     const content = outcome.result.ok
-      ? "Sent. The email was delivered through GSW Mail."
-      : `I couldn't send the email: ${outcome.result.error?.message ?? "the send failed"}`;
+      ? execution.toolCall.toolName === "mail.send_draft"
+        ? "Sent. The email was queued for delivery through GSW Mail."
+        : execution.toolCall.toolName === "automations.create"
+          ? `Scheduled. ${String(resultData.title ?? "Your task")} will run next at ${String(resultData.nextRunAt ?? "the configured time")}.`
+          : "Approved action completed."
+      : execution.toolCall.toolName === "mail.send_draft"
+        ? `I couldn't send the email: ${outcome.result.error?.message ?? "the send failed"}`
+        : `I couldn't complete that action: ${outcome.result.error?.message ?? "the action failed"}`;
 
     await appendAiMessage({
       conversationId: execution.toolCall.conversationId,
@@ -493,6 +527,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       accessToken: req.accessToken,
       conversationId: input.conversationId,
       providerMessages,
+      timeZone: input.timeZone,
     });
   });
 
@@ -517,6 +552,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
         headers: req.headers as Record<string, string>,
         conversationId: input.conversationId,
         providerMessages,
+        timeZone: input.timeZone,
         emit: stream.send,
       });
       stream.send({ type: "result", response });
@@ -536,6 +572,8 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       accountId: input.accountId,
       conversationId: input.conversationId,
       messages: input.messages,
+      timeZone: input.timeZone,
+      localDateTime: input.localDateTime,
     });
 
     return runConversationTurn({
@@ -557,6 +595,8 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       accountId: input.accountId,
       conversationId: input.conversationId,
       messages: input.messages,
+      timeZone: input.timeZone,
+      localDateTime: input.localDateTime,
     });
 
     const stream = openEventStream(reply);

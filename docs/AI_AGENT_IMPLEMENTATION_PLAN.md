@@ -1990,3 +1990,26 @@ External action:
 - rejection is persisted and the paused run is closed without sending.
 
 This completes the original 1–9 roadmap for the first mail-agent slice. Broader mail mutations, calendar actions, contact actions, settings changes, automations, and bulk operations remain separate future rollouts behind the same permission/confirmation/idempotency framework.
+
+
+## Search and scheduled work foundation — 2026-10-07
+
+GSW Chat now has the next agent foundation beyond the initial 1–9 mail slice:
+
+### Cross-workspace search
+- `search.workspace` searches indexed inbound mail metadata and persisted GSW Chat messages together.
+- Retrieval uses PostgreSQL full-text ranking with substring fallback.
+- The model can use the returned candidates as a discovery/reranking layer and then call `mail.read` / `mail.read_thread` before making claims that require full email contents.
+- This is the first hybrid retrieval layer. Embedding/vector semantic retrieval and richer attachment/contact indexing remain future improvements.
+
+### Durable scheduled work
+- New `ai_automations` and `ai_automation_runs` persistence.
+- Browser-independent worker execution.
+- Detailed timezone-aware schedules: once, daily, weekdays, weekends, weekly, monthly; local hour/minute; interval; day-of-week/day-of-month; optional start/end dates.
+- Chat tools can create, list, update/pause/resume/archive, and delete scheduled tasks.
+- Scheduled work receives its own persisted conversation so every result is retained chronologically in Chat History.
+
+### Current background safety boundary
+Initial unattended execution is deliberately limited to read-only mailbox briefing context from the indexed inbox. Scheduled tasks cannot yet send email, mutate drafts, or launch campaigns unattended. Those capabilities should later be enabled through explicit persisted automation scopes and an external-action policy designed for background execution.
+
+Campaign execution remains a separate domain and must not be implemented as a loop over personal `mail.send`; it needs consent/unsubscribe, suppression, analytics, limits, and provider-specific campaign semantics.
