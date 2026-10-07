@@ -1,173 +1,172 @@
-import { useEffect, useRef, useState } from "react";
 import {
-  ArrowUp,
+  ArrowRight,
+  Bot,
   CalendarDays,
-  ContactRound,
-  FileText,
+  Check,
+  Clock3,
   Inbox,
-  Menu,
-  Reply,
+  Layers3,
+  Mail,
+  RefreshCw,
+  Send,
+  ShieldCheck,
+  Smartphone,
   Sparkles,
-  SquarePen,
-  Star,
-  X,
+  UsersRound,
 } from "lucide-react";
 import { BrandMark } from "../components/auth/BrandMark";
-import "../styles/landing-mobile.css";
+import "../styles/landing-v2.css";
 
-const featureRows = [
-  { eyebrow: "Inbox", title: "A calmer place to handle the work that matters.", copy: "Move through mail quickly with a focused inbox, clean threading, drafts, search, flags, folders, and the actions you expect without the clutter around them.", visual: "inbox" },
-  { eyebrow: "Send on your time", title: "Schedule once. Or make it recurring.", copy: "Plan messages for later, manage scheduled mail from Outbox, and use recurring sends when communication needs to happen more than once.", visual: "schedule" },
-  { eyebrow: "Your identity", title: "Bring your own domain and make email yours.", copy: "Use GSW Mail with your own domain, signatures, contacts, calendar, and account preferences in one straightforward workspace.", visual: "identity" },
+const capabilityItems = [
+  ["Multiple accounts", "Move between identities without moving between apps.", Layers3],
+  ["Scheduled + recurring", "Send once, later, or on a repeatable rhythm.", RefreshCw],
+  ["Calendar built in", "Keep conversations and time in the same workflow.", CalendarDays],
+  ["AI-ready", "Connect intelligent tools without turning your inbox into a chatbot.", Sparkles],
 ] as const;
 
-const showcaseSteps = [
-  { key: "inbox", label: "Inbox", title: "Move through what matters." },
-  { key: "compose", label: "Compose", title: "Write. Send. Keep moving." },
-  { key: "calendar", label: "Calendar", title: "Turn messages into time." },
-  { key: "contacts", label: "Contacts", title: "Keep people close." },
-  { key: "templates", label: "Templates", title: "Reuse what works." },
-  { key: "assistant", label: "Assistant", title: "Ask. Act. Keep moving." },
+const featureCards = [
+  ["01", "A better inbox", "Fast, focused email with the controls you expect and less visual noise.", Inbox],
+  ["02", "Sticky composer", "Start writing, move through your inbox, and keep the message with you.", Mail],
+  ["03", "Schedule anything", "Send later, recur automatically, and manage active messages from Outbox.", Clock3],
+  ["04", "Calendar + email", "Turn messages into meetings and keep reminders close to the conversation.", CalendarDays],
+  ["05", "Multiple accounts", "Personal, business, and team identities without another pile of browser tabs.", UsersRound],
+  ["06", "Connect tools", "Bring AI and future services into the workflow without giving them your whole mailbox by default.", Bot],
 ] as const;
 
-type ShowcaseKey = (typeof showcaseSteps)[number]["key"];
+const workflows = [
+  ["For founders", "Manage several identities, schedule outreach, and keep meetings tied to the conversations that created them."],
+  ["For outreach", "Prepare communication in advance and let it leave when recipients are most likely to see it."],
+  ["For teams", "Keep recurring updates and follow-ups from becoming another manual admin task."],
+  ["For everyday email", "One clean place for messages, calendars, reminders, contacts, and the accounts you use every day."],
+] as const;
 
-const showcaseIcons = {
-  inbox: Inbox,
-  compose: SquarePen,
-  calendar: CalendarDays,
-  contacts: ContactRound,
-  templates: FileText,
-  assistant: Sparkles,
-} satisfies Record<ShowcaseKey, typeof Inbox>;
-
-function InboxScreen() {
-  return <section className="landing-preview-mail">
-    <div className="landing-preview-title"><div><strong>Inbox</strong><small>Stay focused on what needs you.</small></div><span>RW</span></div>
-    {[
-      ['Danielle Carter','Re: Anchored Learning partnership','Thanks Ramon — I took a look at the proposal and would love to keep the conversation moving.','2:18 PM'],
-      ['Project Team','Launch checklist for Friday','The final review is ready. I added the deployment notes and ownership for each remaining item.','11:42 AM'],
-      ['Jordan Lee','Coffee next week?','Tuesday morning works well for me. Want to meet near downtown?','9:06 AM'],
-      ['GSW Calendar','Tomorrow: Product review','Your meeting starts tomorrow at 10:00 AM.','Yesterday'],
-    ].map((row, index) => <div className={`landing-preview-row ${index === 0 ? 'selected' : ''}`} key={row[0]}>
-      <span className="landing-preview-avatar">{row[0].slice(0,1)}</span><div><strong>{row[0]}</strong><b>{row[1]}</b><small>{row[2]}</small></div><time>{row[3]}</time>
-    </div>)}
-  </section>;
+function ProductMockup() {
+  return <div className="lp2-product-shell" aria-label="GSW Mail product preview">
+    <div className="lp2-product-topbar">
+      <BrandMark size={26} />
+      <div className="lp2-search">Search mail, people, and events</div>
+      <div className="lp2-avatar">RW</div>
+    </div>
+    <div className="lp2-product-body">
+      <aside className="lp2-sidebar">
+        <button><Mail size={17} /> Compose</button>
+        <span className="active"><Inbox size={17} /> Inbox <b>8</b></span>
+        <span><Clock3 size={17} /> Outbox <b>3</b></span>
+        <span><CalendarDays size={17} /> Calendar</span>
+        <span><UsersRound size={17} /> Contacts</span>
+      </aside>
+      <section className="lp2-inbox">
+        <header><div><small>Inbox</small><strong>Good evening, Ramon.</strong></div><button>Focus</button></header>
+        {[
+          ["DC","Danielle Carter","Re: Partnership follow-up","Thanks Ramon. Tuesday works well for me.","2:18 PM",true],
+          ["JT","Jordan Thomas","Coffee next week?","Thursday morning is perfect.","11:42 AM",false],
+          ["PT","Project Team","Launch checklist","The final review is ready.","9:06 AM",false],
+        ].map(([initials,name,subject,copy,time,selected]) => <div className={`lp2-message ${selected ? "selected" : ""}`} key={String(subject)}>
+          <i>{initials}</i><div><strong>{name}</strong><b>{subject}</b><span>{copy}</span></div><time>{time}</time>
+        </div>)}
+      </section>
+      <section className="lp2-compose">
+        <div className="lp2-compose-card">
+          <div className="lp2-compose-head"><strong>New message</strong><span>Saved</span></div>
+          <label><span>To</span><b>danielle@example.org</b></label>
+          <label><span>Subject</span><b>Following up on our conversation</b></label>
+          <p>Hi Danielle,<br/><br/>Thanks again for taking the time to connect. I wanted to follow up with the next steps we discussed.</p>
+          <footer><button><Send size={15}/> Send</button><button className="secondary"><Clock3 size={15}/> Schedule</button></footer>
+        </div>
+        <div className="lp2-floating-status"><Check size={16}/><span><b>Scheduled</b> Tomorrow · 8:00 AM</span></div>
+      </section>
+    </div>
+  </div>;
 }
 
-function ComposeScreen() {
-  return <section className="landing-showcase-panel landing-showcase-compose"><div className="landing-compose-window"><div className="landing-compose-head"><strong>New message</strong><span aria-hidden="true"><X size={18} strokeWidth={1.75} /></span></div><div className="landing-compose-field"><span>To</span><strong>danielle@example.org</strong></div><div className="landing-compose-field"><span>Subject</span><strong>Following up on our conversation</strong></div><div className="landing-compose-body">Hi Danielle,<br /><br />Thanks again for taking the time to connect. I wanted to follow up with the next steps we discussed and keep things moving.</div><div className="landing-compose-footer"><button>Send</button><button className="quiet">Schedule</button><span>Saved</span></div></div></section>;
-}
-
-function CalendarScreen() {
-  return <section className="landing-showcase-panel landing-showcase-calendar"><div className="landing-calendar-head"><strong>October</strong><span>Week</span></div><div className="landing-calendar-grid">{['Mon 5','Tue 6','Wed 7','Thu 8','Fri 9'].map((day) => <div className="landing-calendar-day" key={day}><b>{day}</b></div>)}<div className="landing-calendar-event event-a"><strong>Product review</strong><span>10:00 AM</span></div><div className="landing-calendar-event event-b"><strong>Ministry outreach</strong><span>1:30 PM</span></div><div className="landing-calendar-event event-c"><strong>Team check-in</strong><span>3:00 PM</span></div></div><div className="landing-calendar-pop"><small>New event</small><strong>Follow-up call</strong><span>Thursday · 2:00 PM</span><button>Add event</button></div></section>;
-}
-
-function ContactsScreen() {
-  return <section className="landing-showcase-panel landing-showcase-contacts"><div className="landing-contacts-list">{[['DC','Danielle Carter','Anchored Learning'],['JL','Jordan Lee','Community Partner'],['MB','Marcus Brooks','Project Lead'],['SR','Sophia Reed','Ministry Network']].map((contact,index)=><div className={`landing-contact-row ${index===0?'active':''}`} key={contact[1]}><span>{contact[0]}</span><div><strong>{contact[1]}</strong><small>{contact[2]}</small></div></div>)}</div><div className="landing-contact-detail"><span className="landing-contact-avatar">DC</span><h3>Danielle Carter</h3><p>danielle@example.org</p><div><button>Email</button><button>Schedule</button></div><small>Last contacted 2 days ago</small></div></section>;
-}
-
-function TemplatesScreen() {
-  return <section className="landing-showcase-panel landing-showcase-templates"><div className="landing-template-list">{['Warm introduction','Meeting follow-up','Partnership outreach','Thank you'].map((name,index)=><button className={index===1?'active':''} key={name}><strong>{name}</strong><small>{index===1?'Used 18 times':'Saved template'}</small></button>)}</div><div className="landing-template-editor"><small>Template</small><h3>Meeting follow-up</h3><div className="landing-template-subject">Subject: Great speaking with you</div><p>Hi {'{{first_name}}'},</p><p>Thanks again for taking the time to meet. I wanted to follow up with the next steps we discussed.</p><div className="landing-template-actions"><button>Use template</button><span>Updated today</span></div></div></section>;
-}
-
-function AssistantScreen() {
-  return <section className="landing-showcase-panel landing-showcase-assistant"><div className="landing-ai-sidebar"><BrandMark size={38}/><strong>GSW Assistant</strong><span>Inbox</span><span>Calendar</span><span>Contacts</span></div><div className="landing-ai-chat"><div className="landing-ai-message user">Find the people I owe a follow-up to this week.</div><div className="landing-ai-message assistant"><strong>I found 4 conversations.</strong><span>Danielle Carter · partnership follow-up</span><span>Jordan Lee · coffee scheduling</span><span>Marcus Brooks · project review</span><button>Draft follow-ups</button></div><div className="landing-ai-input">Ask GSW to help with your work… <span aria-hidden="true"><ArrowUp size={16} strokeWidth={2} /></span></div></div></section>;
-}
-
-function ShowcaseScreen({ active }: { active: ShowcaseKey }) {
-  if(active==='compose')return <ComposeScreen/>;
-  if(active==='calendar')return <CalendarScreen/>;
-  if(active==='contacts')return <ContactsScreen/>;
-  if(active==='templates')return <TemplatesScreen/>;
-  if(active==='assistant')return <AssistantScreen/>;
-  return <InboxScreen/>;
-}
-
-function ProductShowcase() {
-  const sectionRef = useRef<HTMLDivElement>(null);
-  const frameRef = useRef<number | null>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
-
-  useEffect(() => {
-    const viewportHeight = () => window.visualViewport?.height ?? window.innerHeight;
-    const update = () => {
-      frameRef.current = null;
-      const section = sectionRef.current;
-      if (!section) return;
-      const height = viewportHeight();
-      const travel = section.offsetHeight - height;
-      if (travel <= 0) return;
-      const rect = section.getBoundingClientRect();
-      const progress = Math.max(0, Math.min(1, -rect.top / travel));
-      const nextIndex = Math.min(showcaseSteps.length - 1, Math.floor(progress * showcaseSteps.length));
-      setActiveIndex((current) => current === nextIndex ? current : nextIndex);
-    };
-    const scheduleUpdate = () => {
-      if (frameRef.current !== null) return;
-      frameRef.current = window.requestAnimationFrame(update);
-    };
-
-    update();
-    window.addEventListener('scroll', scheduleUpdate, { passive: true });
-    window.addEventListener('resize', scheduleUpdate);
-    window.visualViewport?.addEventListener('scroll', scheduleUpdate);
-    window.visualViewport?.addEventListener('resize', scheduleUpdate);
-
-    return () => {
-      window.removeEventListener('scroll', scheduleUpdate);
-      window.removeEventListener('resize', scheduleUpdate);
-      window.visualViewport?.removeEventListener('scroll', scheduleUpdate);
-      window.visualViewport?.removeEventListener('resize', scheduleUpdate);
-      if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
-    };
-  }, []);
-
-  const selectStep = (index: number) => {
-    setActiveIndex(index);
-    const section = sectionRef.current;
-    if (!section) return;
-    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-    const travel = Math.max(0, section.offsetHeight - viewportHeight);
-    const sectionTop = window.scrollY + section.getBoundingClientRect().top;
-    const stepProgress = showcaseSteps.length <= 1 ? 0 : index / (showcaseSteps.length - 1);
-    window.scrollTo({
-      top: sectionTop + travel * stepProgress,
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-    });
-  };
-
-  const active = showcaseSteps[activeIndex];
-  return <div ref={sectionRef} className="landing-showcase-scroll"><div className="landing-showcase-sticky"><div className="landing-showcase-copy"><span>{active.label}</span><h2 key={active.key}>{active.title}</h2><div className="landing-showcase-progress" aria-label={`Step ${activeIndex+1} of ${showcaseSteps.length}`}>{showcaseSteps.map((step,index)=><button key={step.key} className={index===activeIndex?'active':''} onClick={()=>selectStep(index)} aria-label={step.label}><span/></button>)}</div></div><div className="landing-preview-window landing-showcase-window" aria-label="GSW Mail product preview"><div className="landing-preview-topbar"><span/><span/><span/><div className="landing-preview-search">Search GSW Mail</div></div><div className="landing-preview-body"><aside className="landing-preview-sidebar"><button><SquarePen size={18} strokeWidth={2} /> <span>Compose</span></button>{showcaseSteps.filter((step)=>step.key!=='compose').map((step)=>{ const ItemIcon=showcaseIcons[step.key]; return <div key={step.key} className={step.key===active.key?'active':''}><span className="landing-preview-nav-label"><ItemIcon size={18} strokeWidth={1.75}/><span>{step.label}</span></span><small>{step.key==='inbox'?'8':''}</small></div>; })}</aside><div className="landing-showcase-stage" key={active.key}><ShowcaseScreen active={active.key}/></div></div></div></div></div>;
-}
-
-function FeatureVisual({ kind }: { kind: 'inbox'|'schedule'|'identity' }) {
-  if(kind==='schedule')return <div className="landing-feature-visual schedule"><div className="landing-mini-compose"><div className="landing-mini-head"><span>New message</span><small aria-hidden="true"><X size={16} strokeWidth={1.75}/></small></div><p><b>To</b> team@example.com</p><p><b>Subject</b> Weekly project update</p><div className="landing-mini-message">Here’s the latest progress and what we’re focused on next week.</div><div className="landing-mini-actions"><button>Send later</button><span>Every Friday · 8:00 AM</span></div></div></div>;
-  if(kind==='identity')return <div className="landing-feature-visual identity"><div className="landing-domain-card"><small>Your domain</small><strong>you@yourcompany.com</strong><span>✓ Domain connected</span></div><div className="landing-domain-card"><small>Your workspace</small><strong>Mail · Calendar · Contacts</strong><span>One GSW account</span></div></div>;
-  const icons = [Reply, Star, Menu];
-  return <div className="landing-feature-visual inbox">{['Needs reply','Priority','Everything else'].map((label,index)=>{ const FeatureIcon=icons[index]; return <div className="landing-inbox-chip" key={label}><span><FeatureIcon size={19} strokeWidth={1.75}/></span><div><strong>{label}</strong><small>{index===0?'4 conversations':index===1?'8 important messages':'Inbox organized your way'}</small></div></div>; })}</div>;
+function OutboxFlow() {
+  return <div className="lp2-flow">
+    <div><small>Drafts</small><strong>Still being written</strong></div>
+    <ArrowRight />
+    <div className="active"><small>Outbox</small><strong>Scheduled or recurring</strong><span>Edit · Reschedule · Manage</span></div>
+    <ArrowRight />
+    <div><small>Sent</small><strong>Delivered</strong></div>
+  </div>;
 }
 
 export function LandingPage() {
-  const pageRef=useRef<HTMLElement>(null);
-  useEffect(()=>{ const root=pageRef.current; if(!root)return; const items=Array.from(root.querySelectorAll<HTMLElement>('[data-reveal]')); if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){items.forEach((el)=>el.classList.add('is-visible'));return;} const observer=new IntersectionObserver((entries)=>{entries.forEach((entry)=>{if(entry.isIntersecting){(entry.target as HTMLElement).classList.add('is-visible');observer.unobserve(entry.target);}});},{threshold:.16,rootMargin:'0px 0px -8% 0px'}); items.forEach((el)=>observer.observe(el)); return()=>observer.disconnect();},[]);
-  return <main ref={pageRef} className="landing-shell">
-    <nav className="landing-nav"><a className="landing-brand" href="/"><BrandMark size={34}/><span>GSW Mail</span></a><div className="landing-nav-links"><a href="#features">Features</a><a href="#ownership">Built differently</a><a href="#oauth">GSW:ID</a></div><div className="landing-nav-actions"><a className="landing-link-button" href="/sign-in">Sign in</a><a className="landing-primary small" href="/sign-up">Start free</a></div></nav>
+  return <main className="lp2">
+    <nav className="lp2-nav">
+      <a className="lp2-brand" href="/"><BrandMark size={34}/><span>GSW Mail</span></a>
+      <div className="lp2-nav-links"><a href="#features">Features</a><a href="#workflows">Workflows</a><a href="#ownership">Built differently</a><a href="#faq">FAQ</a></div>
+      <div className="lp2-nav-actions"><a href="/sign-in">Sign in</a><a className="lp2-button small" href="/sign-up">Start free</a></div>
+    </nav>
 
-    <section className="landing-hero" data-reveal="hero"><div className="landing-kicker landing-reveal-child">Email built for your domain and your day</div><h1 className="landing-reveal-child">Your inbox should help you move.</h1><p className="landing-reveal-child">GSW Mail brings email, scheduling, contacts, calendar, and custom-domain identity into one focused workspace that feels fast, clear, and yours.</p><div className="landing-hero-actions landing-reveal-child"><a className="landing-primary" href="/sign-up">Start free</a><a className="landing-secondary" href="/sign-in">Sign in to GSW Mail</a></div><div className="landing-hero-proof landing-reveal-child"><span>Custom domains</span><span>Scheduled + recurring mail</span><span>Web + mobile</span></div></section>
+    <section className="lp2-hero">
+      <div className="lp2-hero-copy">
+        <span className="lp2-eyebrow">A modern inbox for the way you actually work</span>
+        <h1>Email that works the way you do.</h1>
+        <p>Send, schedule, recur, manage multiple identities, keep your calendar close, and connect intelligent tools without turning email into another complicated system.</p>
+        <div className="lp2-actions"><a className="lp2-button" href="/sign-up">Start free <ArrowRight size={17}/></a><a className="lp2-text-link" href="#product">See how it works</a></div>
+        <div className="lp2-hero-note"><ShieldCheck size={17}/><span>Your domain. Your identity. Your workflow.</span></div>
+      </div>
+      <div id="product" className="lp2-hero-product"><ProductMockup/></div>
+    </section>
 
-    <ProductShowcase />
+    <section className="lp2-proof">
+      <div><span>One inbox.</span><span>Multiple accounts.</span><span>Smarter workflows.</span></div>
+      <div className="lp2-proof-grid">{capabilityItems.map(([title,copy,Icon]) => <article key={title}><Icon size={22}/><strong>{title}</strong><p>{copy}</p></article>)}</div>
+    </section>
 
-    <section className="landing-value-strip" aria-label="GSW Mail highlights" data-reveal="stagger"><div><strong>Your domain</strong><span>Professional email without giving up your identity.</span></div><div><strong>Your workflow</strong><span>Mail, calendar, contacts, drafts, and scheduling together.</span></div><div><strong>Your account</strong><span>A reusable GSW identity designed to connect safely to other apps.</span></div></section>
+    <section id="features" className="lp2-section">
+      <div className="lp2-section-heading"><span className="lp2-eyebrow">Your communication workspace</span><h2>Email is only one part of the work.</h2><p>GSW Mail keeps the pieces around email close enough that you can act without constantly switching context.</p></div>
+      <div className="lp2-feature-grid">{featureCards.map(([num,title,copy,Icon]) => <article key={title}><span>{num}</span><Icon size={24}/><h3>{title}</h3><p>{copy}</p></article>)}</div>
+    </section>
 
-    <section id="features" className="landing-features"><div className="landing-section-heading" data-reveal="up"><span>Built around the workday</span><h2>Less friction between reading, deciding, and sending.</h2></div>{featureRows.map((feature,index)=><article className={`landing-feature-row ${index%2?'reverse':''}`} data-reveal={index%2?'from-left':'from-right'} key={feature.title}><div className="landing-feature-copy"><span>{feature.eyebrow}</span><h3>{feature.title}</h3><p>{feature.copy}</p></div><FeatureVisual kind={feature.visual}/></article>)}</section>
+    <section className="lp2-schedule-section">
+      <div className="lp2-schedule-copy"><span className="lp2-eyebrow">Send on your time</span><h2>Send it now. Later. Or every time.</h2><p>Follow-ups, reminders, reports, outreach, and recurring communication should not depend on you remembering to hit Send.</p><ul><li><Check/>Schedule a message for the right moment</li><li><Check/>Create recurring sends for repeatable communication</li><li><Check/>Open and edit active messages before they leave</li></ul></div>
+      <div className="lp2-schedule-demo">
+        <div className="lp2-send-card"><header><strong>Weekly project update</strong><span>Outbox</span></header><p>Here’s the latest progress and what we’re focused on next week.</p><div><button>Send now</button><button className="active">Schedule</button><button>Recurring</button></div><footer><Clock3 size={16}/><span>Every Friday · 8:00 AM</span></footer></div>
+      </div>
+    </section>
 
-    <section id="ownership" className="landing-ownership" data-reveal="panel"><div><span className="landing-section-label">Built differently</span><h2>Email infrastructure you can actually own and operate.</h2></div><div><p>GSW Mail is built around an independently operated mail stack instead of being a thin skin over somebody else’s consumer inbox. That gives the product room to evolve around custom domains, workflows, integrations, and the people using it.</p><a href="/sign-up">Create your GSW account →</a></div></section>
+    <section className="lp2-outbox">
+      <div className="lp2-section-heading compact"><span className="lp2-eyebrow">A different kind of Outbox</span><h2>Future email should still be yours to manage.</h2><p>Anything waiting to be sent stays active. Open it, edit it, reschedule it, or stop the recurrence before it becomes history.</p></div>
+      <OutboxFlow/>
+    </section>
 
-    <section id="oauth" className="landing-oauth-section"><div className="landing-oauth-copy" data-reveal="from-left"><span className="landing-section-label">GSW Identity</span><h2>One account. Safe connections to the apps you choose.</h2><p>Use your GSW Account with apps that support GSW sign-in. Identity access stays separate from your mailbox, messages, calendar, contacts, and other product data unless a product explicitly requests and receives separate access.</p><div className="landing-oauth-scopes"><span>Basic identity</span><span>Profile</span><span>Email address</span><b>No mailbox access</b></div></div><div className="landing-oauth-card" data-reveal="card"><BrandMark size={56}/><strong>Continue with your GSW Account</strong><p>Choose an account and approve the identity information you want to share.</p><a className="landing-oauth-button" href="/oauth/connect"><BrandMark size={22}/><span>Continue with GSW</span></a><small>Identity only</small></div></section>
+    <section id="workflows" className="lp2-workflows">
+      <div className="lp2-section-heading"><span className="lp2-eyebrow">Built for real workflows</span><h2>Use email for the work around the message.</h2></div>
+      <div className="lp2-workflow-grid">{workflows.map(([title,copy],index)=><article key={title}><span>0{index+1}</span><h3>{title}</h3><p>{copy}</p><ArrowRight size={19}/></article>)}</div>
+    </section>
 
-    <section className="landing-final-cta" data-reveal="cta"><span>Ready when you are.</span><h2>Make email feel like your workspace again.</h2><div><a className="landing-primary" href="/sign-up">Start free</a><a className="landing-secondary light" href="/sign-in">Sign in</a></div></section>
+    <section className="lp2-ai">
+      <div className="lp2-ai-copy"><span className="lp2-eyebrow">AI-native, not AI-noisy</span><h2>Your inbox shouldn’t just contain work. It should help do it.</h2><p>GSW Mail is being built so intelligent tools can participate in the workflow: finding a conversation, preparing a follow-up, helping create an event, or summarizing what needs attention.</p><div className="lp2-ai-tags"><span>Find the thread</span><span>Draft the reply</span><span>Create the event</span><span>Keep the context</span></div></div>
+      <div className="lp2-ai-card"><div className="lp2-ai-message user">Find the conversations I owe a follow-up to this week.</div><div className="lp2-ai-message assistant"><Sparkles size={18}/><div><strong>I found 4 conversations.</strong><span>Danielle Carter · partnership follow-up</span><span>Jordan Thomas · scheduling</span><span>Project Team · launch review</span><button>Draft follow-ups</button></div></div></div>
+    </section>
 
-    <footer className="landing-footer" data-reveal="footer"><a className="landing-brand" href="/"><BrandMark size={28}/><span>GSW Mail</span></a><div><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/sign-in">Sign in</a></div><span>Guided Steps Wellness: The Community · A non-profit Est. 2025 to build community by meeting them where they are.</span></footer>
+    <section id="ownership" className="lp2-ownership">
+      <div><span className="lp2-eyebrow">Your email. Not someone else’s ecosystem.</span><h2>Built on an independently operated mail stack.</h2></div>
+      <div><p>GSW Mail is not simply a new skin on Gmail or Outlook. It is built around modern email standards and independently operated infrastructure, giving the product room to evolve around custom domains, workflows, integrations, and portability.</p><div className="lp2-standards"><span><ShieldCheck/>Custom-domain identity</span><span><RefreshCw/>Modern sync + standards</span><span><Layers3/>Portable infrastructure</span></div></div>
+    </section>
+
+    <section className="lp2-platforms">
+      <div className="lp2-section-heading compact"><span className="lp2-eyebrow">Your inbox goes with you</span><h2>One workflow across web and mobile.</h2></div>
+      <div className="lp2-platform-grid"><article><Mail/><h3>Web</h3><p>The full GSW Mail workspace for focused, high-context work.</p></article><article><Smartphone/><h3>Mobile</h3><p>Mail, scheduling, accounts, and calendar designed to stay aligned with the web experience.</p></article><article><ShieldCheck/><h3>Your domain</h3><p>A professional identity that belongs to you, not a consumer mailbox provider.</p></article></div>
+    </section>
+
+    <section id="faq" className="lp2-faq">
+      <div className="lp2-section-heading compact"><span className="lp2-eyebrow">FAQ</span><h2>A few things worth knowing.</h2></div>
+      <div className="lp2-faq-grid">
+        <article><h3>Is GSW Mail just another Gmail client?</h3><p>No. GSW Mail is built around its own independently operated mail stack and product workflows rather than simply wrapping a consumer inbox.</p></article>
+        <article><h3>Can I use my own domain?</h3><p>Yes. Custom-domain identity is a core part of how GSW Mail is designed.</p></article>
+        <article><h3>What makes Outbox different?</h3><p>Outbox is for scheduled and recurring messages that still have a future lifecycle. You can open and manage them before delivery.</p></article>
+        <article><h3>Does AI get access to my mailbox?</h3><p>Connections are designed to be explicit and permissioned. Identity access and mailbox access are separate concepts rather than one blanket permission.</p></article>
+      </div>
+    </section>
+
+    <section className="lp2-final">
+      <span className="lp2-eyebrow">Ready when you are</span>
+      <h2>Email can be better than this.</h2>
+      <p>Try a faster, calmer, more capable inbox built around the way communication actually happens.</p>
+      <a className="lp2-button" href="/sign-up">Start free <ArrowRight size={17}/></a>
+    </section>
+
+    <footer className="lp2-footer"><a className="lp2-brand" href="/"><BrandMark size={28}/><span>GSW Mail</span></a><div><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/sign-in">Sign in</a></div><span>Guided Steps Wellness: The Community · Est. 2025</span></footer>
   </main>;
 }
