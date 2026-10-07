@@ -114,7 +114,13 @@ export async function executeAgentTool(input: {
       action: definition.name,
       summary: definition.name === "mail.send_draft"
         ? "Send this prepared draft now? This will deliver the email to its recipients."
-        : `Approve ${definition.name} for the selected mailbox.`,
+        : definition.name === "automations.create"
+          ? "Create this scheduled GSW Chat task? It can run in the background at the configured times."
+          : definition.name === "automations.update"
+            ? "Apply these changes to the scheduled GSW Chat task?"
+            : definition.name === "automations.delete"
+              ? "Delete this scheduled GSW Chat task permanently?"
+              : `Approve ${definition.name} for the selected mailbox.`,
       expiresAt: new Date(Date.now() + 30 * 60_000),
       metadata: { risk: definition.risk, scopes: definition.requiredScopes },
     });
