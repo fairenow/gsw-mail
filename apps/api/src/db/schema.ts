@@ -906,6 +906,49 @@ export const aiConfirmations = pgTable(
 );
 
 
+export const aiCampaigns = pgTable(
+  "ai_campaigns",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id").notNull().references(() => emailAccounts.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    subject: text("subject").notNull(),
+    textBody: text("text_body"),
+    htmlBody: text("html_body"),
+    audienceTags: text("audience_tags").array().default(sql`ARRAY[]::text[]`).notNull(),
+    status: text("status").default("draft").notNull(),
+    recipientCount: integer("recipient_count").default(0).notNull(),
+    launchedAt: timestamp("launched_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    ...timestamps,
+  },
+  (t) => [
+    index("ai_campaigns_user_idx").on(t.userId, t.createdAt),
+    index("ai_campaigns_account_idx").on(t.accountId, t.status),
+  ],
+);
+
+export const aiCampaignRecipients = pgTable(
+  "ai_campaign_recipients",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id").notNull().references(() => aiCampaigns.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+    email: text("email").notNull(),
+    displayName: text("display_name"),
+    firstName: text("first_name"),
+    status: text("status").default("pending").notNull(),
+    sendId: uuid("send_id").references(() => outboundMessages.id, { onDelete: "set null" }),
+    errorMessage: text("error_message"),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("ai_campaign_recipients_unique_idx").on(t.campaignId, t.email),
+    index("ai_campaign_recipients_campaign_idx").on(t.campaignId, t.status),
+  ],
+);
+
 export const aiAutomations = pgTable(
   "ai_automations",
   {
