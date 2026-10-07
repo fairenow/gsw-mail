@@ -44,6 +44,15 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
     setAuthPrefillEmail(email);
     window.location.assign("/sign-in#use-another-account");
   };
+  const openWorkspace = (section: "mail" | "contacts" | "settings") => {
+    setOpen(false);
+    if (window.location.pathname === "/mail") {
+      window.dispatchEvent(new CustomEvent("gsw-workspace-open", { detail: { section } }));
+      return;
+    }
+    sessionStorage.setItem("gsw-mail-open-workspace", section);
+    window.location.assign("/mail");
+  };
 
   return (
     <div className="gsw-avatar-wrap">
@@ -81,9 +90,9 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
           <a className="gsw-menu-action" href="/sign-in#use-another-account" onClick={() => setOpen(false)}><Plus size={16} strokeWidth={1.75} aria-hidden="true" />Add another account</a>
 
           <div className="gsw-account-menu-rule" />
-          <a className="gsw-menu-action" href="/mail" onClick={() => setOpen(false)}><Mail size={16} strokeWidth={1.75} aria-hidden="true" />Mailbox</a>
-          <a className="gsw-menu-action" href="/contacts" onClick={() => setOpen(false)}><Users size={16} strokeWidth={1.75} aria-hidden="true" />Contacts</a>
-          <a className="gsw-menu-action" href="/settings" onClick={() => setOpen(false)}><Settings size={16} strokeWidth={1.75} aria-hidden="true" />Settings</a>
+          <button className="gsw-menu-action" type="button" onClick={() => openWorkspace("mail")}><Mail size={16} strokeWidth={1.75} aria-hidden="true" />Mailbox</button>
+          <button className="gsw-menu-action" type="button" onClick={() => openWorkspace("contacts")}><Users size={16} strokeWidth={1.75} aria-hidden="true" />Contacts</button>
+          <button className="gsw-menu-action" type="button" onClick={() => openWorkspace("settings")}><Settings size={16} strokeWidth={1.75} aria-hidden="true" />Settings</button>
 
           {accounts.length > 1 && <>
             <div className="gsw-account-menu-rule" />
