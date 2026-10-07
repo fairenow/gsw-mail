@@ -112,12 +112,26 @@ export function CalendarPage({ embedded = false, active = true }: { embedded?: b
       return;
     }
     let cancelled = false;
-    setRsvpLoading(true);
-    void api.calendarRsvpStatuses(account.id, selectedEvent.engineId)
-      .then((result) => { if (!cancelled) setRsvpStatuses(result.responses); })
-      .catch(() => { if (!cancelled) setRsvpStatuses([]); })
-      .finally(() => { if (!cancelled) setRsvpLoading(false); });
-    return () => { cancelled = true; };
+    const refreshResponses = async (showLoading = false) => {
+      if (showLoading) setRsvpLoading(true);
+      try {
+        const result = await api.calendarRsvpStatuses(account.id, selectedEvent.engineId);
+        if (!cancelled) setRsvpStatuses(result.responses);
+      } catch {
+        if (!cancelled && showLoading) setRsvpStatuses([]);
+      } finally {
+        if (!cancelled && showLoading) setRsvpLoading(false);
+      }
+    };
+    void refreshResponses(true);
+    const interval = window.setInterval(() => { if (document.visibilityState === "visible") void refreshResponses(false); }, 15_000);
+    const onFocus = () => { void refreshResponses(false); };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [account, selectedEvent]);
   useEffect(() => {
     if (!account) return;
