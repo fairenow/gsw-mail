@@ -156,7 +156,8 @@ export function ChatPanel() {
       sessionStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`, response.conversationId);
       setIntervention(response.intervention);
       if (response.message) setMessages((current) => [...current, response.message].slice(-24));
-      settleAndClearActivities();
+      if (response.intervention) setExecutionActivities([]);
+      else settleAndClearActivities();
       window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
     } catch (err) {
       setExecutionActivities((current) => current.map((item) => item.status === "running" ? { ...item, status: "error" as const } : item));
@@ -172,7 +173,8 @@ export function ChatPanel() {
     const response = await api.resumeChatStream(account.id, conversationId, handleStreamEvent);
     setIntervention(response.intervention);
     if (response.message) setMessages((current) => [...current, response.message].slice(-24));
-    settleAndClearActivities();
+    if (response.intervention) setExecutionActivities([]);
+    else settleAndClearActivities();
     window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
   };
 
