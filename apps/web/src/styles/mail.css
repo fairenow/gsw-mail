@@ -1546,16 +1546,22 @@
 }
 
 .gsw-chat-copy {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
   margin-top: 7px;
-  padding: 4px 0;
+  padding: 0;
+  border-radius: 8px;
   color: var(--gsw-text-muted);
-  font-size: 11px;
+}
+
+.gsw-chat-message.user .gsw-chat-copy {
+  margin-left: auto;
 }
 
 .gsw-chat-copy:hover {
+  background: var(--gsw-accent-soft);
   color: var(--gsw-text-heading);
 }
 

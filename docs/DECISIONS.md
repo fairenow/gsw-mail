@@ -100,3 +100,11 @@ Use independent vertical scroll areas inside a viewport-sized mail shell. Keep p
 - The initial provider uses Hetzner's OpenAI-compatible endpoint at `https://inference.hetzner.com/api/v1`. Base URL, model, and timeout are environment-overridable.
 - AI remains outside the critical mail delivery path. Missing credentials, provider outages, timeouts, or rate limits affect Chat only and must not prevent normal mail operations.
 - Conversation history is client-held for this first release. The API accepts only user/assistant text turns and does not persist chat history.
+
+
+## 2026-10-07 — Chat copy controls and transient inference retry
+
+- Every visible user prompt and assistant response exposes the same compact overlapping-square copy control.
+- Hetzner inference gets one automatic retry for transient failures: HTTP 429, provider 5xx responses, network failures, timeouts, or empty model responses.
+- Non-transient provider failures are not retried.
+- The browser request window is long enough to accommodate the single server-side retry; normal mail remains independent of AI availability.
