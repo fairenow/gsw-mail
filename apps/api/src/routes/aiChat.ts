@@ -20,7 +20,7 @@ import {
   startAiRun,
 } from "../ai/agentState.js";
 import { executeAgentTool, type AgentIntervention } from "../ai/agentExecutor.js";
-import { runHetznerChat, type AiProviderMessage } from "../ai/hetzner.js";
+import { getAiProvider, type AiProviderMessage } from "../ai/providers/index.js";
 import { readOnlyMailRegistry } from "../ai/tools/registry.js";
 import type { AgentExecutionContext, ProviderToolDefinition } from "../ai/tools/types.js";
 import { aiScopes } from "../ai/permissions/types.js";
@@ -134,11 +134,12 @@ async function runConversationTurn(input: {
     };
   }
 
+  const provider = getAiProvider();
   const run = await startAiRun({
     conversationId: input.conversationId,
     userId: input.userId,
     accountId: input.accountId,
-    provider: "hetzner",
+    provider: provider.id,
     metadata: { route: "/product/chat", readOnly: true, streamingExecution: Boolean(input.emit) },
   });
 
@@ -153,7 +154,7 @@ async function runConversationTurn(input: {
         label: turn === 0 ? "Thinking" : "Reviewing what I found",
       });
 
-      const result = await runHetznerChat(input.providerMessages, tools);
+      const result = await provider.run({ messages: input.providerMessages, tools });
       model = result.model;
 
       if (result.toolCalls.length === 0) {
@@ -162,7 +163,7 @@ async function runConversationTurn(input: {
           conversationId: input.conversationId,
           role: "assistant",
           content,
-          provider: "hetzner",
+          provider: provider.id,
           model,
           metadata: { toolActivity },
         });
@@ -183,7 +184,7 @@ async function runConversationTurn(input: {
           conversationId: input.conversationId,
           role: "assistant",
           content,
-          provider: "hetzner",
+          provider: provider.id,
           model,
         });
         await completeAiRun(run.id, { model, metadata: { toolActivity } });
