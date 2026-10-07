@@ -130,7 +130,13 @@ export function ChatPanel() {
     }).finally(() => {
       if (!cancelled) setConversationLoading(false);
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (activityClearTimerRef.current !== null) {
+        window.clearTimeout(activityClearTimerRef.current);
+        activityClearTimerRef.current = null;
+      }
+    };
   }, [account?.id]);
 
   const send = async (override?: string) => {
@@ -243,7 +249,7 @@ export function ChatPanel() {
           <span>{activity.label}</span>
         </div>)}</div>
       </section>}
-      {sending && <article className="gsw-chat-message assistant gsw-chat-thinking"><div className="gsw-chat-message-label">GSW</div><div className="gsw-chat-thinking-dots" aria-label="Thinking"><span /><span /><span /></div></article>}
+      {sending && executionActivities.length === 0 && <article className="gsw-chat-message assistant gsw-chat-thinking"><div className="gsw-chat-message-label">GSW</div><div className="gsw-chat-thinking-dots" aria-label="Thinking"><span /><span /><span /></div></article>}
       {intervention && <section className="gsw-chat-intervention">
         <div className="gsw-chat-intervention-icon"><ShieldCheck size={19} strokeWidth={1.8} /></div>
         <div className="gsw-chat-intervention-copy">
