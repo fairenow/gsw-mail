@@ -5,7 +5,7 @@ import type { Folder } from "../folders";
 import { FolderNav } from "./FolderNav";
 import { SenderAvatar } from "./SenderAvatar";
 
-export function MailSidebar({ account, profileImageUrl, folder, counts, composeOpen, mobileHidden, collapsed, section, onSelectFolder, onToggleCompose }: {
+export function MailSidebar({ account, profileImageUrl, folder, counts, composeOpen, mobileHidden, collapsed, section, onSelectFolder, onToggleCompose, onOpenSection, onPrefetchSection }: {
   account: Account | null;
   profileImageUrl?: string;
   folder: Folder;
@@ -13,9 +13,11 @@ export function MailSidebar({ account, profileImageUrl, folder, counts, composeO
   composeOpen: boolean;
   mobileHidden: boolean;
   collapsed: boolean;
-  section?: "mail" | "contacts" | "calendar" | "settings";
+  section?: "mail" | "contacts" | "calendar" | "settings" | "chat";
   onSelectFolder: (folder: Folder) => void;
   onToggleCompose: () => void;
+  onOpenSection?: (section: "contacts" | "calendar" | "settings" | "chat") => void;
+  onPrefetchSection?: (section: "contacts" | "calendar" | "settings" | "chat") => void;
 }) {
   const [customFolders, setCustomFolders] = useState<MailFolder[]>([]);
   const [folderError, setFolderError] = useState<string | null>(null);
@@ -61,7 +63,7 @@ export function MailSidebar({ account, profileImageUrl, folder, counts, composeO
     <aside className={`gsw-sidebar ${mobileHidden ? "mobile-hidden" : ""} ${collapsed ? "collapsed" : ""}`}>
       <div className="gsw-sidebar-identity"><SenderAvatar name={account?.displayName ?? undefined} email={account?.address} imageUrl={profileImageUrl} /><div><strong>{account?.displayName || "Your mailbox"}</strong><span>{account?.address}</span></div></div>
        <button className="gsw-compose-btn" onClick={onToggleCompose} title={collapsed ? (composeOpen ? "Close compose" : "Compose") : undefined}><span aria-hidden="true">{composeOpen ? <X size={18} strokeWidth={2} /> : <SquarePen size={18} strokeWidth={2} />}</span><span className="gsw-sidebar-label">{composeOpen ? "Close compose" : "Compose"}</span></button>
-       <FolderNav folder={folder} counts={counts} customFolders={customFolders} collapsed={collapsed} section={section} onSelect={onSelectFolder} onPrefetch={prefetchFolder} onCreateFolder={(parentId) => void createFolder(parentId)} />
+       <FolderNav folder={folder} counts={counts} customFolders={customFolders} collapsed={collapsed} section={section} onSelect={onSelectFolder} onPrefetch={prefetchFolder} onCreateFolder={(parentId) => void createFolder(parentId)} onOpenSection={onOpenSection} onPrefetchSection={onPrefetchSection} />
        {!collapsed && folderError && <p className="gsw-errors" style={{ margin: "8px 12px" }}>{folderError}</p>}
     </aside>
   );

@@ -19,10 +19,11 @@ import "./styles/control-center.css";
 import "./styles/calendar.css";
 import "./styles/skeletons.css";
 import "./styles/legal.css";
+import "./styles/rsvp.css";
 import { AuthGate } from "./AuthGate";
 import { App } from "./App";
 
-const PUBLIC_PATHS = new Set(["/", "/privacy", "/terms", "/account-deleted", "/oauth/connect", "/oauth/test", "/oauth/test/callback"]);
+const PUBLIC_PATHS = new Set(["/", "/privacy", "/terms", "/account-deleted", "/calendar/rsvp", "/oauth/connect", "/oauth/test", "/oauth/test/callback"]);
 
 function Root() {
   const [path, setPath] = useState(() => window.location.pathname);

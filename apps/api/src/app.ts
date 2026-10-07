@@ -22,6 +22,8 @@ import webhooks from "./routes/webhooks.js";
 import stalwartWebhooks from "./routes/stalwartWebhooks.js";
 import product from "./routes/product.js";
 import calendarSync from "./routes/calendarSync.js";
+import calendarRsvp from "./routes/calendarRsvp.js";
+import calendarRsvpPublic from "./routes/calendarRsvpPublic.js";
 import contactSuggestions from "./routes/contactSuggestions.js";
 import templates from "./routes/templates.js";
 import setup from "./routes/setup.js";
@@ -104,6 +106,8 @@ export function buildApp() {
   app.register(webhooks);
   app.register(stalwartWebhooks);
   app.register(product);
+  app.register(calendarRsvpPublic);
+  app.register(calendarRsvp);
   app.register(calendarSync);
   app.register(contactSuggestions);
   app.register(templates);

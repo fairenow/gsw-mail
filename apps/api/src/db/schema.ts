@@ -67,6 +67,7 @@ export const deliveryEventType = pgEnum("delivery_event_type", [
 ]);
 export const signaturePosition = pgEnum("signature_position", ["beforeQuotedText", "afterQuotedText"]);
 export const contactImportDuplicateBehavior = pgEnum("contact_import_duplicate_behavior", ["skip", "merge", "overwrite"]);
+export const calendarRsvpResponse = pgEnum("calendar_rsvp_response", ["accepted", "declined", "tentative"]);
 export const setupStep = pgEnum("setup_step", ["email_verified", "workspace_created", "domain_added", "domain_verified", "first_mailbox_created", "complete"]);
 
 export const authUsers = pgTable("auth_users", {
@@ -735,4 +736,28 @@ export const contactImportRows = pgTable(
     ...timestamps,
   },
   (t) => [index("contact_import_rows_batch_idx").on(t.batchId, t.rowNumber)],
+);
+
+
+export const calendarRsvps = pgTable(
+  "calendar_rsvps",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id").notNull().references(() => emailAccounts.id, { onDelete: "cascade" }),
+    eventId: text("event_id").notNull(),
+    attendeeEmail: text("attendee_email").notNull(),
+    eventTitle: text("event_title").notNull(),
+    eventStart: timestamp("event_start", { withTimezone: true }).notNull(),
+    eventEnd: timestamp("event_end", { withTimezone: true }),
+    eventLocation: text("event_location"),
+    meetingLink: text("meeting_link"),
+    response: calendarRsvpResponse("response"),
+    respondedAt: timestamp("responded_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("calendar_rsvps_event_attendee_idx").on(t.accountId, t.eventId, t.attendeeEmail),
+    index("calendar_rsvps_event_idx").on(t.accountId, t.eventId),
+  ],
 );

@@ -1,21 +1,23 @@
 import type { ReactNode } from "react";
 import { FOLDERS, FOLDER_ICON, type Folder } from "../folders";
 import type { MailFolder } from "../../api";
-import { CalendarDays, ContactRound, Folder as FolderIcon } from "lucide-react";
+import { CalendarDays, ContactRound, Folder as FolderIcon, MessageCircle, Settings } from "lucide-react";
 
 const childrenOf = (folders: MailFolder[], parentId: string | null) => folders
   .filter((item) => !item.system && item.parentId === parentId)
   .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 
-export function FolderNav({ folder, counts, customFolders = [], collapsed, section = "mail", onSelect, onPrefetch }: {
+export function FolderNav({ folder, counts, customFolders = [], collapsed, section = "mail", onSelect, onPrefetch, onOpenSection, onPrefetchSection }: {
   folder: Folder;
   counts: Record<Folder, { total: number; unread: number }>;
   customFolders?: MailFolder[];
   collapsed: boolean;
-  section?: "mail" | "contacts" | "calendar" | "settings";
+  section?: "mail" | "contacts" | "calendar" | "settings" | "chat";
   onSelect: (folder: Folder) => void;
   onPrefetch?: (folder: Folder) => void;
   onCreateFolder?: (parentId: string | null) => void;
+  onOpenSection?: (section: "contacts" | "calendar" | "settings" | "chat") => void;
+  onPrefetchSection?: (section: "contacts" | "calendar" | "settings" | "chat") => void;
 }) {
   const renderCustom = (parentId: string | null, depth = 0): ReactNode => childrenOf(customFolders, parentId).map((item) => {
     const customName = item.name as Folder;
@@ -51,8 +53,16 @@ export function FolderNav({ folder, counts, customFolders = [], collapsed, secti
       {!collapsed && <div style={{ padding: "2px 10px 6px 12px" }}><span style={{ fontSize: 12, fontWeight: 600, opacity: 0.62 }}>Folders</span></div>}
       {renderCustom(null)}
       <div className="gsw-folder-nav-divider" />
-      <a className={`gsw-folder gsw-folder-link ${section === "contacts" ? "active" : ""}`} href="/contacts" title={collapsed ? "Contacts" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><ContactRound size={18} strokeWidth={1.75} /></span><span>Contacts</span></a>
-      <a className={`gsw-folder gsw-folder-link ${section === "calendar" ? "active" : ""}`} href="/calendar" title={collapsed ? "Calendar" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><CalendarDays size={18} strokeWidth={1.75} /></span><span>Calendar</span></a>
+      {onOpenSection ? <>
+        <button className={`gsw-folder gsw-folder-link ${section === "contacts" ? "active" : ""}`} onPointerEnter={() => onPrefetchSection?.("contacts")} onFocus={() => onPrefetchSection?.("contacts")} onClick={() => onOpenSection("contacts")} title={collapsed ? "Contacts" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><ContactRound size={18} strokeWidth={1.75} /></span><span>Contacts</span></button>
+        <button className={`gsw-folder gsw-folder-link ${section === "calendar" ? "active" : ""}`} onPointerEnter={() => onPrefetchSection?.("calendar")} onFocus={() => onPrefetchSection?.("calendar")} onClick={() => onOpenSection("calendar")} title={collapsed ? "Calendar" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><CalendarDays size={18} strokeWidth={1.75} /></span><span>Calendar</span></button>
+        <button className={`gsw-folder gsw-folder-link ${section === "settings" ? "active" : ""}`} onPointerEnter={() => onPrefetchSection?.("settings")} onFocus={() => onPrefetchSection?.("settings")} onClick={() => onOpenSection("settings")} title={collapsed ? "Settings" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><Settings size={18} strokeWidth={1.75} /></span><span>Settings</span></button>
+        <button className={`gsw-folder gsw-folder-link ${section === "chat" ? "active" : ""}`} onClick={() => onOpenSection("chat")} title={collapsed ? "Chat" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><MessageCircle size={18} strokeWidth={1.75} /></span><span>Chat</span></button>
+      </> : <>
+        <a className={`gsw-folder gsw-folder-link ${section === "contacts" ? "active" : ""}`} href="/contacts" title={collapsed ? "Contacts" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><ContactRound size={18} strokeWidth={1.75} /></span><span>Contacts</span></a>
+        <a className={`gsw-folder gsw-folder-link ${section === "calendar" ? "active" : ""}`} href="/calendar" title={collapsed ? "Calendar" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><CalendarDays size={18} strokeWidth={1.75} /></span><span>Calendar</span></a>
+        <a className={`gsw-folder gsw-folder-link ${section === "settings" ? "active" : ""}`} href="/settings" title={collapsed ? "Settings" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><Settings size={18} strokeWidth={1.75} /></span><span>Settings</span></a>
+      </>}
     </nav>
   );
 }

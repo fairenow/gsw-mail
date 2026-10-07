@@ -6,6 +6,7 @@ import { AppShell } from "./components/AppShell";
 import { SetupPage } from "./pages/SetupPage";
 import { ControlCenterPage } from "./pages/ControlCenterPage";
 import { CalendarPage } from "./pages/CalendarPage";
+import { CalendarRsvpPage } from "./pages/CalendarRsvpPage";
 import { AccountDeletedPage, LegalPage } from "./pages/LegalPage";
 import { LandingPage } from "./pages/LandingPage";
 import { OAuthAccountChooserPage } from "./pages/OAuthAccountChooserPage";
@@ -68,6 +69,7 @@ export function App() {
   if (path === "/privacy") return <LegalPage kind="privacy" />;
   if (path === "/terms") return <LegalPage kind="terms" />;
   if (path === "/account-deleted") return <AccountDeletedPage />;
+  if (path === "/calendar/rsvp") return <CalendarRsvpPage />;
   if (path === "/oauth/select-account") return <OAuthAccountChooserPage />;
   if (path === "/oauth/consent") return <OAuthConsentPage />;
   if (path === "/oauth/connect" || path === "/oauth/test" || path === "/oauth/test/callback") return <OAuthTestPage />;
