@@ -113,6 +113,7 @@ const toolLabel = (toolName: string): string => {
     case "templates.create": return "Creating your email template";
     case "templates.update": return "Updating your email template";
     case "templates.select": return "Selecting your default email template";
+    case "domain.read": return "Checking your domain";
     default: return "Working with your mailbox";
   }
 };

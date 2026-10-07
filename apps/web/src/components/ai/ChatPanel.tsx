@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, Clock3, Copy, LoaderCircle, RefreshCcw, ShieldCheck, Trash2, X } from "lucide-react";
+import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, Clock3, Copy, LoaderCircle, Mic, RefreshCcw, ShieldCheck, Square, Trash2, X } from "lucide-react";
 import { api, type AiChatMessage, type AiChatStreamEvent, type AiConversationRecord, type AiIntervention } from "../../api";
 import { useAppShell } from "../AppShell";
+import { ChatMarkdown } from "./ChatMarkdown";
 
 const starterPrompts = [
   "Summarize yesterday's email activity",
@@ -18,6 +19,37 @@ type ExecutionActivity = {
   label: string;
   toolName?: string;
   status: "running" | "done" | "error";
+};
+
+type SpeechRecognitionResultLike = {
+  isFinal: boolean;
+  0: { transcript: string };
+};
+
+type SpeechRecognitionEventLike = {
+  results: ArrayLike<SpeechRecognitionResultLike>;
+};
+
+type SpeechRecognitionLike = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: { error?: string }) => void) | null;
+  onend: (() => void) | null;
+};
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+const speechRecognitionConstructor = (): SpeechRecognitionConstructor | null => {
+  const speechWindow = window as typeof window & {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
+  return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition ?? null;
 };
 
 const parseAssistantSegments = (content: string): ChatSegment[] => {
@@ -60,8 +92,12 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [recording, setRecording] = useState(false);
+  const speechRef = useRef<SpeechRecognitionLike | null>(null);
+  const speechBaseRef = useRef("");
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const canSend = input.trim().length > 0 && !sending;
+  const speechSupported = typeof window !== "undefined" && speechRecognitionConstructor() !== null;
 
   const visibleMessages = useMemo(() => messages, [messages]);
 
@@ -107,6 +143,52 @@ export function ChatPanel() {
   };
 
 
+  const stopVoice = () => {
+    speechRef.current?.stop();
+    speechRef.current = null;
+    setRecording(false);
+  };
+
+  const startVoice = () => {
+    if (sending || recording) return;
+    const Recognition = speechRecognitionConstructor();
+    if (!Recognition) {
+      setError("Voice dictation is not supported in this browser.");
+      return;
+    }
+
+    setError("");
+    const recognition = new Recognition();
+    const base = input.trimEnd();
+    speechBaseRef.current = base ? `${base} ` : "";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = navigator.language || "en-US";
+    recognition.onresult = (event) => {
+      let transcript = "";
+      for (let index = 0; index < event.results.length; index += 1) {
+        transcript += event.results[index]?.[0]?.transcript ?? "";
+      }
+      setInput(`${speechBaseRef.current}${transcript}`.trimStart());
+    };
+    recognition.onerror = (event) => {
+      const message = event.error === "not-allowed"
+        ? "Microphone access was blocked. Allow microphone access in your browser and try again."
+        : "Voice dictation stopped unexpectedly. You can keep editing the text that was captured.";
+      setError(message);
+      setRecording(false);
+      speechRef.current = null;
+    };
+    recognition.onend = () => {
+      setRecording(false);
+      speechRef.current = null;
+    };
+    speechRef.current = recognition;
+    setRecording(true);
+    recognition.start();
+  };
+
+
   useEffect(() => {
     let cancelled = false;
     const key = `gsw-chat-conversation:${account?.id ?? "none"}`;
@@ -135,6 +217,8 @@ export function ChatPanel() {
     });
     return () => {
       cancelled = true;
+      speechRef.current?.abort();
+      speechRef.current = null;
       if (activityClearTimerRef.current !== null) {
         window.clearTimeout(activityClearTimerRef.current);
         activityClearTimerRef.current = null;
@@ -207,6 +291,7 @@ export function ChatPanel() {
   };
 
   const send = async (override?: string) => {
+    if (recording) stopVoice();
     const content = (override ?? input).trim();
     if (!content || sending) return;
     const userMessage: AiChatMessage = { role: "user", content };
@@ -333,7 +418,7 @@ export function ChatPanel() {
                   </div>
                   <div className="gsw-chat-email-draft-body">{segment.content}</div>
                 </section>
-              : <div className="gsw-chat-message-body" key={`text-${segmentIndex}`}>{segment.content}</div>)}
+              : <div className="gsw-chat-message-body" key={`text-${segmentIndex}`}><ChatMarkdown content={segment.content} /></div>)}
           </div> : <div className="gsw-chat-message-body">{message.content}</div>}
           <button className="gsw-chat-copy" type="button" aria-label={message.role === "user" ? "Copy prompt" : "Copy full response"} title={message.role === "user" ? "Copy prompt" : "Copy full response"} onClick={() => void navigator.clipboard.writeText(message.role === "assistant" ? cleanAssistantText(message.content) : message.content)}><Copy size={14} strokeWidth={1.8} /></button>
         </article>;
@@ -380,9 +465,17 @@ export function ChatPanel() {
           placeholder="Ask for help writing or rewriting an email…"
           rows={1}
         />
-        <button className="gsw-chat-send" type="button" aria-label="Send message" disabled={!canSend} onClick={() => void send()}><ArrowUp size={18} strokeWidth={2} /></button>
+        <button
+          className={`gsw-chat-voice ${recording ? "recording" : ""}`}
+          type="button"
+          aria-label={recording ? "Stop voice dictation" : "Start voice dictation"}
+          title={recording ? "Stop and review" : speechSupported ? "Dictate a prompt" : "Voice dictation is unavailable in this browser"}
+          disabled={!speechSupported || sending}
+          onClick={recording ? stopVoice : startVoice}
+        >{recording ? <Square size={15} fill="currentColor" /> : <Mic size={17} strokeWidth={2} />}</button>
+        <button className="gsw-chat-send" type="button" aria-label={recording ? "Stop dictation and send" : "Send message"} disabled={!canSend} onClick={() => void send()}><ArrowUp size={18} strokeWidth={2} /></button>
       </div>
-      <p>Chat can search mail and saved chats, manage drafts, and create scheduled work. Sending still requires explicit confirmation.</p>
+      <p>{recording ? "Listening… tap stop to review your words, or send when you're done." : "Chat can search mail and saved chats, manage drafts, and create scheduled work. Sending still requires explicit confirmation."}</p>
     </footer>
   </div>;
 }

@@ -1948,3 +1948,80 @@
   .gsw-chat-history { top: 68px; right: 10px; width: calc(100% - 20px); }
   .gsw-chat-header-actions .gsw-chat-clear { padding-inline: 9px; }
 }
+
+
+/* Chat dictation + formatted assistant content */
+.gsw-chat-voice {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  color: var(--gsw-text-muted);
+  background: transparent;
+}
+.gsw-chat-voice:hover:not(:disabled) {
+  background: var(--gsw-accent-soft);
+  color: var(--gsw-text-heading);
+}
+.gsw-chat-voice.recording {
+  background: #fff0ed;
+  color: #b83b2f;
+  box-shadow: 0 0 0 3px rgba(184, 59, 47, .1);
+  animation: gsw-chat-recording-pulse 1.4s ease-in-out infinite;
+}
+.gsw-chat-voice:disabled {
+  opacity: .35;
+  cursor: default;
+}
+@keyframes gsw-chat-recording-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(184, 59, 47, .08); }
+  50% { box-shadow: 0 0 0 6px rgba(184, 59, 47, .03); }
+}
+
+.gsw-chat-markdown {
+  display: grid;
+  gap: 10px;
+  white-space: normal;
+}
+.gsw-chat-markdown p,
+.gsw-chat-markdown ol,
+.gsw-chat-markdown ul,
+.gsw-chat-markdown h3,
+.gsw-chat-markdown h4,
+.gsw-chat-markdown h5 {
+  margin: 0;
+}
+.gsw-chat-markdown ol,
+.gsw-chat-markdown ul {
+  display: grid;
+  gap: 7px;
+  padding-left: 22px;
+}
+.gsw-chat-markdown li {
+  padding-left: 2px;
+}
+.gsw-chat-markdown strong {
+  font-weight: 700;
+  color: var(--gsw-text-heading);
+}
+.gsw-chat-markdown em {
+  font-style: italic;
+}
+.gsw-chat-markdown code {
+  padding: 1px 5px;
+  border: 1px solid var(--gsw-border-soft);
+  border-radius: 5px;
+  background: var(--gsw-surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: .92em;
+}
+.gsw-chat-markdown a {
+  color: var(--gsw-accent-dark);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.gsw-chat-markdown h3 { font-size: 18px; }
+.gsw-chat-markdown h4 { font-size: 16px; }
+.gsw-chat-markdown h5 { font-size: 14px; }
