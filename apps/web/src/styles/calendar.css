@@ -498,3 +498,45 @@
     padding: 20px;
   }
 }
+
+
+.gsw-calendar-contact-suggestions {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.gsw-calendar-contact-suggestions button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 11px;
+  border: 1px solid var(--gsw-border-soft);
+  border-radius: 9px;
+  background: var(--gsw-bg);
+  text-align: left;
+}
+
+.gsw-calendar-contact-suggestions button:hover {
+  border-color: var(--gsw-accent);
+  background: var(--gsw-accent-soft);
+}
+
+.gsw-calendar-contact-suggestions strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--gsw-text-heading);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gsw-calendar-contact-suggestions span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--gsw-text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
