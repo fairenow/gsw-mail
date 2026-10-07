@@ -200,9 +200,13 @@ export function ChatPanel() {
     setInterventionBusy(true);
     setError("");
     try {
-      await api.decideChatConfirmation(intervention.confirmationId, decision);
+      const result = await api.decideChatConfirmation(intervention.confirmationId, decision);
       setIntervention(null);
-      if (decision === "approved") await resumeAfterIntervention();
+      if (result.execution?.message) {
+        setMessages((current) => [...current, result.execution.message].slice(-24));
+      }
+      setExecutionActivities([]);
+      window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -290,7 +294,7 @@ export function ChatPanel() {
         />
         <button className="gsw-chat-send" type="button" aria-label="Send message" disabled={!canSend} onClick={() => void send()}><ArrowUp size={18} strokeWidth={2} /></button>
       </div>
-      <p>Chat can read the selected mailbox and help draft or rewrite. It cannot take actions yet.</p>
+      <p>Chat can read mail, create or update drafts, and send only after you explicitly confirm the send.</p>
     </footer>
   </div>;
 }

@@ -31,7 +31,19 @@ const permissionCopy = (scope: AiScope) => {
   if (scope === "mail.read") {
     return {
       title: "Allow GSW Chat to read this mailbox?",
-      description: "This lets GSW Chat search and read messages in the currently selected mailbox when you ask it to. It still cannot send, edit, archive, delete, or otherwise change mail.",
+      description: "This lets GSW Chat search and read messages in the currently selected mailbox when you ask it to.",
+    };
+  }
+  if (scope === "mail.write") {
+    return {
+      title: "Allow GSW Chat to create and edit drafts?",
+      description: "This lets GSW Chat create or update drafts in the selected mailbox. Drafts are not sent automatically.",
+    };
+  }
+  if (scope === "mail.send") {
+    return {
+      title: "Allow GSW Chat to request email sending?",
+      description: "This lets GSW Chat prepare a send action for the selected mailbox. Every send still requires a separate confirmation before it is executed.",
     };
   }
   return {
@@ -49,6 +61,7 @@ export async function executeAgentTool(input: {
   ledgerToolCallId: string;
   conversationId: string;
   runId: string;
+  confirmationApproved?: boolean | undefined;
 }): Promise<AgentExecutionOutcome> {
   const definition = input.registry.definition(input.providerToolName);
   if (!definition) {
@@ -66,7 +79,8 @@ export async function executeAgentTool(input: {
   const activeScopes = await listActiveAiScopes(input.ctx.userId, input.ctx.accountId);
   const granted = new Set(activeScopes.map((grant) => grant.scope));
   const missingScope = definition.requiredScopes.find((scope) => !granted.has(scope));
-  if (missingScope) {
+  const confirmationCanAuthorizeExternalSend = definition.risk === "external" && missingScope === "mail.send";
+  if (missingScope && !confirmationCanAuthorizeExternalSend) {
     const scope = missingScope as AiScope;
     const copy = permissionCopy(scope);
     return {
@@ -85,14 +99,16 @@ export async function executeAgentTool(input: {
     return policy === "always" || (policy === "contextual" && definition.risk === "external");
   });
 
-  if (definition.risk === "external" || confirmationScope) {
+  if (!input.confirmationApproved && (definition.risk === "external" || confirmationScope)) {
     const confirmation = await requestAiConfirmation({
       conversationId: input.conversationId,
       runId: input.runId,
       toolCallId: input.ledgerToolCallId,
       userId: input.ctx.userId,
       action: definition.name,
-      summary: `Approve ${definition.name} for the selected mailbox.`,
+      summary: definition.name === "mail.send_draft"
+        ? "Send this prepared draft now? This will deliver the email to its recipients."
+        : `Approve ${definition.name} for the selected mailbox.`,
       expiresAt: new Date(Date.now() + 30 * 60_000),
       metadata: { risk: definition.risk, scopes: definition.requiredScopes },
     });

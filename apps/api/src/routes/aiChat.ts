@@ -9,6 +9,7 @@ import {
   decideAiConfirmation,
   failAiRun,
   grantAiScope,
+  getAiConfirmationExecution,
   listActiveAiScopes,
   listConversationMessages,
   listRecentConversations,
@@ -21,7 +22,7 @@ import {
 } from "../ai/agentState.js";
 import { executeAgentTool, type AgentIntervention } from "../ai/agentExecutor.js";
 import { getAiProvider, type AiProviderMessage } from "../ai/providers/index.js";
-import { readOnlyMailRegistry } from "../ai/tools/registry.js";
+import { agentMailRegistry } from "../ai/tools/registry.js";
 import type { AgentExecutionContext, ProviderToolDefinition } from "../ai/tools/types.js";
 import { aiScopes } from "../ai/permissions/types.js";
 
@@ -51,7 +52,7 @@ const confirmationDecisionSchema = z.object({
 });
 
 const capabilities = (mailboxAccess: boolean) => ({
-  actions: false as const,
+  actions: true as const,
   mailboxAccess,
   rewriteEmail: true as const,
   persistentConversation: true as const,
@@ -87,7 +88,10 @@ const toolLabel = (toolName: string): string => {
     case "mail.search": return "Searching your mailbox";
     case "mail.read": return "Reading the matching email";
     case "mail.read_thread": return "Reading the conversation";
-    default: return "Checking mailbox context";
+    case "mail.create_draft": return "Creating a draft";
+    case "mail.update_draft": return "Updating the draft";
+    case "mail.send_draft": return "Preparing to send the draft";
+    default: return "Working with your mailbox";
   }
 };
 
@@ -117,6 +121,7 @@ async function runConversationTurn(input: {
   authUserId: string;
   accountId?: string | undefined;
   headers: Record<string, string>;
+  accessToken?: string | undefined;
   conversationId: string;
   providerMessages: AiProviderMessage[];
   emit?: ChatStreamEmitter | undefined;
@@ -125,12 +130,13 @@ async function runConversationTurn(input: {
   let toolContext: AgentExecutionContext | undefined;
 
   if (input.accountId) {
-    tools = readOnlyMailRegistry.providerDefinitions();
+    tools = agentMailRegistry.providerDefinitions();
     toolContext = {
       userId: input.userId,
       authUserId: input.authUserId,
       accountId: input.accountId,
       headers: input.headers,
+      accessToken: input.accessToken,
     };
   }
 
@@ -140,7 +146,7 @@ async function runConversationTurn(input: {
     userId: input.userId,
     accountId: input.accountId,
     provider: provider.id,
-    metadata: { route: "/product/chat", readOnly: true, streamingExecution: Boolean(input.emit) },
+    metadata: { route: "/product/chat", agentActions: true, streamingExecution: Boolean(input.emit) },
   });
 
   let model = "";
@@ -205,7 +211,7 @@ async function runConversationTurn(input: {
       });
 
       for (const call of result.toolCalls.slice(0, 4)) {
-        const definition = readOnlyMailRegistry.definition(call.function.name);
+        const definition = agentMailRegistry.definition(call.function.name);
         const semanticName = call.function.name.replaceAll("__", ".");
         const label = toolLabel(semanticName);
 
@@ -227,7 +233,7 @@ async function runConversationTurn(input: {
         });
 
         const outcome = await executeAgentTool({
-          registry: readOnlyMailRegistry,
+          registry: agentMailRegistry,
           providerToolName: call.function.name,
           rawArguments: call.function.arguments,
           ctx: toolContext,
@@ -350,7 +356,11 @@ export default async function aiChatRoutes(app: FastifyInstance) {
 
   app.post("/product/chat/permissions", async (req) => {
     const input = permissionGrantSchema.parse(req.body);
-    const requiredPermission = input.scope === "mail.read" || input.scope.endsWith(".read") ? "read" : input.scope === "mail.send" ? "send" : "manage";
+    const requiredPermission = input.scope === "mail.read" || input.scope.endsWith(".read")
+      ? "read"
+      : input.scope === "mail.write" || input.scope === "mail.send"
+        ? "send"
+        : "manage";
     await requireAccountPermission(req.user!.id, input.accountId, requiredPermission);
     const grant = await grantAiScope({
       userId: req.user!.id,
@@ -369,8 +379,82 @@ export default async function aiChatRoutes(app: FastifyInstance) {
   app.post("/product/chat/confirmations/:id", async (req) => {
     const params = z.object({ id: z.string().uuid() }).parse(req.params);
     const input = confirmationDecisionSchema.parse(req.body);
+    const execution = await getAiConfirmationExecution(req.user!.id, params.id);
     const confirmation = await decideAiConfirmation(req.user!.id, params.id, input.decision);
-    return { confirmation };
+
+    if (input.decision === "rejected") {
+      await markAiToolCallStatus(execution.toolCall.id, "rejected");
+      await completeAiRun(execution.run.id, {
+        model: execution.run.model ?? undefined,
+        metadata: { confirmationId: params.id, rejected: true },
+      });
+      const content = "Okay — I did not send the email.";
+      await appendAiMessage({
+        conversationId: execution.toolCall.conversationId,
+        role: "assistant",
+        content,
+        provider: execution.run.provider,
+        model: execution.run.model ?? undefined,
+        metadata: { confirmationId: params.id, rejected: true },
+      });
+      return {
+        confirmation,
+        execution: {
+          conversationId: execution.toolCall.conversationId,
+          message: { role: "assistant" as const, content },
+        },
+      };
+    }
+
+    if (!execution.run.accountId) throw new Error("confirmed AI action has no mailbox context");
+    const toolContext: AgentExecutionContext = {
+      userId: req.user!.id,
+      authUserId: req.authUserId ?? req.user!.id,
+      accountId: execution.run.accountId,
+      headers: req.headers as Record<string, string>,
+      accessToken: req.accessToken,
+    };
+    const rawArguments = JSON.stringify(execution.toolCall.arguments ?? {});
+    const outcome = await executeAgentTool({
+      registry: agentMailRegistry,
+      providerToolName: execution.toolCall.toolName,
+      rawArguments,
+      ctx: toolContext,
+      providerToolCallId: execution.toolCall.providerToolCallId,
+      ledgerToolCallId: execution.toolCall.id,
+      conversationId: execution.toolCall.conversationId,
+      runId: execution.run.id,
+      confirmationApproved: true,
+    });
+
+    if (outcome.kind !== "result") throw new Error("confirmed action unexpectedly requested another intervention");
+    await recordAiToolResult(execution.toolCall.id, outcome.result);
+
+    const content = outcome.result.ok
+      ? "Sent. The email was delivered through GSW Mail."
+      : `I couldn't send the email: ${outcome.result.error?.message ?? "the send failed"}`;
+
+    await appendAiMessage({
+      conversationId: execution.toolCall.conversationId,
+      role: "assistant",
+      content,
+      provider: execution.run.provider,
+      model: execution.run.model ?? undefined,
+      metadata: { confirmationId: params.id, toolName: execution.toolCall.toolName, ok: outcome.result.ok },
+    });
+    await completeAiRun(execution.run.id, {
+      model: execution.run.model ?? undefined,
+      metadata: { confirmationId: params.id, toolName: execution.toolCall.toolName, ok: outcome.result.ok },
+    });
+
+    return {
+      confirmation,
+      execution: {
+        conversationId: execution.toolCall.conversationId,
+        message: { role: "assistant" as const, content },
+        toolResult: outcome.result,
+      },
+    };
   });
 
   app.post("/product/chat/resume", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req) => {
@@ -390,6 +474,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       authUserId: req.authUserId ?? req.user!.id,
       accountId: input.accountId,
       headers: req.headers as Record<string, string>,
+      accessToken: req.accessToken,
       conversationId: input.conversationId,
       providerMessages,
     });
@@ -442,6 +527,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       authUserId: req.authUserId ?? req.user!.id,
       accountId: input.accountId,
       headers: req.headers as Record<string, string>,
+      accessToken: req.accessToken,
       conversationId: prepared.conversation.id,
       providerMessages: prepared.providerMessages,
     });
