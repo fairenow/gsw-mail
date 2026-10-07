@@ -108,3 +108,11 @@ Use independent vertical scroll areas inside a viewport-sized mail shell. Keep p
 - Hetzner inference gets one automatic retry for transient failures: HTTP 429, provider 5xx responses, network failures, timeouts, or empty model responses.
 - Non-transient provider failures are not retried.
 - The browser request window is long enough to accommodate the single server-side retry; normal mail remains independent of AI availability.
+
+
+## 2026-10-07 — Workspace menu routing and copy-ready email drafts
+
+- The top-right account menu no longer links directly to legacy standalone Contacts or Settings routes. Mailbox, Contacts, and Settings now open the same in-pane workspace states used by the left navigation.
+- When the account menu is used from a legacy standalone page, it returns to `/mail` and restores the requested workspace panel instead of navigating to another standalone route.
+- AI email drafts are explicitly tagged by the server-side writing assistant and rendered as nested copy-ready email cards inside the assistant response.
+- Each email draft card has its own copy control, while the overall assistant response retains a separate copy control with internal draft tags removed.
