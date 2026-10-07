@@ -192,3 +192,64 @@
     grid-template-columns: minmax(0, 1fr) 220px;
   }
 }
+
+
+/* Editable contact drawer */
+.gsw-contact-drawer-editable { overflow-y: auto; }
+.gsw-contact-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 18px 0;
+}
+.gsw-contact-edit-grid label,
+.gsw-contact-edit-list { display: grid; gap: 7px; }
+.gsw-contact-edit-grid strong,
+.gsw-contact-edit-list strong { font-size: 12px; }
+.gsw-contact-edit-grid input,
+.gsw-contact-edit-row input,
+.gsw-contact-tag-entry input {
+  width: 100%;
+  border: 1px solid var(--border, #e7dfd2);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  color: inherit;
+  padding: 10px 11px;
+  font: inherit;
+}
+.gsw-contact-edit-list-head,
+.gsw-contact-edit-row,
+.gsw-contact-tag-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gsw-contact-edit-list-head { justify-content: space-between; }
+.gsw-contact-edit-row input,
+.gsw-contact-tag-entry input { flex: 1; min-width: 0; }
+.gsw-contact-remove {
+  border: 0;
+  background: transparent;
+  color: #8a5f31;
+  cursor: pointer;
+  font-size: 12px;
+}
+.gsw-contact-remove:disabled { opacity: .4; cursor: default; }
+.gsw-tag-list-editable button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 9px;
+  background: rgba(237, 151, 0, .12);
+  color: inherit;
+  cursor: pointer;
+}
+.gsw-tag-list-editable button span { opacity: .62; }
+.gsw-contact-tag-entry { margin-top: 9px; }
+.gsw-contact-drawer .gsw-detail-block > small { display: block; margin-top: 7px; opacity: .62; line-height: 1.45; }
+
+@media (max-width: 640px) {
+  .gsw-contact-edit-grid { grid-template-columns: 1fr; }
+}
