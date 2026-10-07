@@ -13,10 +13,11 @@ import { MessageRow } from "../components/mail/MessageRow";
 import { appendDraftAttachments, listDraftAttachments, removeDraftAttachment, type DraftAttachmentMeta } from "../lib/draftAttachments";
 import { browserTimeZone, scheduleDraft, type ScheduleDraftInput } from "../lib/scheduledSend";
 import { CalendarPage } from "./CalendarPage";
+import { ContactsPage } from "./ContactsPage";
 import { SettingsPage } from "./SettingsPage";
 
 type MobileView = "messages" | "reader";
-type WorkspaceSection = "mail" | "calendar" | "settings" | "chat";
+type WorkspaceSection = "mail" | "contacts" | "calendar" | "settings" | "chat";
 const pageSize = 50;
 const fallbackTemplateKey = "none";
 const parseRecipients = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
@@ -128,16 +129,12 @@ export function MailPage() {
   const refresh = useCallback(() => { if (account) { void loadFolder(account.id, folder); void loadFolderCounts(account.id); } }, [account, folder, loadFolder, loadFolderCounts]);
   const openWorkspaceSection = useCallback((section: "contacts" | "calendar" | "settings" | "chat") => {
     setFoldersOpen(false);
-    if (section === "contacts") {
-      window.history.pushState({}, "", "/contacts");
-      window.dispatchEvent(new PopStateEvent("popstate"));
-      return;
-    }
     setWorkspaceSection(section);
     setOpen(null);
     setMobileView("reader");
   }, []);
   const prefetchWorkspaceSection = useCallback((section: "contacts" | "calendar" | "settings" | "chat") => {
+    if (section === "contacts") api.prefetchContactsPage();
     if (section === "settings") api.prefetchSettings();
     if (section === "calendar" && account) {
       const now = new Date();
@@ -378,6 +375,7 @@ export function MailPage() {
       </section>
       <section className={`gsw-reading-pane ${mobileView === "reader" ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${workspaceSection !== "mail" ? "gsw-operational-pane" : ""}`} aria-label={workspaceSection === "mail" ? "Message reader" : `${workspaceSection} workspace`}>
         <div className="gsw-mail-reader-surface" hidden={workspaceSection !== "mail"}>{open ? <MessageReader message={open} accountId={account?.id} accountAddress={account?.address} folder={folder} onBack={() => setMobileView("messages")} onReply={() => openCompose("reply", open)} onReplyAll={() => openCompose("replyAll", open)} onForward={() => openCompose("forward", open)} onArchive={() => void runAction("archive", open.engineId)} onTrash={() => void runAction("trash", open.engineId)} onToggleRead={() => void toggleRead(open)} onRestore={() => void restoreMessage(open.engineId)} onDestroy={() => void destroyMessage(open.engineId)} onComposeEmail={openComposeTo} /> : <EmptyReader />}</div>
+        <div className="gsw-operational-surface" hidden={workspaceSection !== "contacts"}><ContactsPage embedded /></div>
         <div className="gsw-operational-surface" hidden={workspaceSection !== "calendar"}><CalendarPage embedded active={workspaceSection === "calendar"} /></div>
         <div className="gsw-operational-surface" hidden={workspaceSection !== "settings"}><SettingsPage embedded /></div>
         <div className="gsw-operational-surface" hidden={workspaceSection !== "chat"}><div className="gsw-future-chat"><MessageCircle size={34} strokeWidth={1.5} /><h2>Chat workspace</h2><p>This pane is reserved for the conversational workspace, so it can arrive here without changing the mail layout.</p></div></div>
