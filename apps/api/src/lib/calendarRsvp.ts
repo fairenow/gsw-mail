@@ -32,6 +32,6 @@ export const verifyCalendarRsvpToken = (token: string): { id: string; expiresAt:
 export const calendarRsvpUrl = (token: string, response?: "accepted" | "declined" | "tentative"): string => {
   const url = new URL("https://mail.guidedstepswellness.com/calendar/rsvp");
   url.searchParams.set("token", token);
-  if (response) url.searchParams.set("response", response);
+  if (response) url.searchParams.set("choice", response);
   return url.toString();
 };
