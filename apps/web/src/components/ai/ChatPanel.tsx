@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, Copy, RefreshCcw } from "lucide-react";
-import { api, type AiChatMessage } from "../../api";
+import { ArrowUp, Check, Copy, RefreshCcw, ShieldCheck, X } from "lucide-react";
+import { api, type AiChatMessage, type AiIntervention } from "../../api";
 import { useAppShell } from "../AppShell";
 
 const starterPrompts = [
@@ -42,6 +42,8 @@ export function ChatPanel() {
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [conversationLoading, setConversationLoading] = useState(false);
+  const [intervention, setIntervention] = useState<AiIntervention | null>(null);
+  const [interventionBusy, setInterventionBusy] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -57,6 +59,7 @@ export function ChatPanel() {
     setConversationId(savedId);
     setMessages([]);
     setError("");
+    setIntervention(null);
     if (!savedId) return () => { cancelled = true; };
 
     setConversationLoading(true);
@@ -91,12 +94,51 @@ export function ChatPanel() {
       const response = await api.chat(account?.id ?? null, next, conversationId);
       setConversationId(response.conversationId);
       sessionStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`, response.conversationId);
-      setMessages((current) => [...current, response.message].slice(-24));
+      setIntervention(response.intervention);
+      if (response.message) setMessages((current) => [...current, response.message].slice(-24));
       window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSending(false);
+    }
+  };
+
+  const resumeAfterIntervention = async () => {
+    if (!account || !conversationId) return;
+    const response = await api.resumeChat(account.id, conversationId);
+    setIntervention(response.intervention);
+    if (response.message) setMessages((current) => [...current, response.message].slice(-24));
+    window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
+  };
+
+  const allowPermission = async () => {
+    if (!account || !intervention || intervention.type !== "permission") return;
+    setInterventionBusy(true);
+    setError("");
+    try {
+      await api.grantChatPermission(account.id, intervention.scope);
+      setIntervention(null);
+      await resumeAfterIntervention();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setInterventionBusy(false);
+    }
+  };
+
+  const decideConfirmation = async (decision: "approved" | "rejected") => {
+    if (!intervention || intervention.type !== "confirmation") return;
+    setInterventionBusy(true);
+    setError("");
+    try {
+      await api.decideChatConfirmation(intervention.confirmationId, decision);
+      setIntervention(null);
+      if (decision === "approved") await resumeAfterIntervention();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setInterventionBusy(false);
     }
   };
 
@@ -109,7 +151,7 @@ export function ChatPanel() {
           <p>Writing help and general conversation</p>
         </div>
       </div>
-      {(messages.length > 0 || conversationId) && <button className="gsw-chat-clear" type="button" onClick={() => { sessionStorage.removeItem(`gsw-chat-conversation:${account?.id ?? "none"}`); setConversationId(null); setMessages([]); setInput(""); setError(""); }}><RefreshCcw size={15} /> New chat</button>}
+      {(messages.length > 0 || conversationId) && <button className="gsw-chat-clear" type="button" onClick={() => { sessionStorage.removeItem(`gsw-chat-conversation:${account?.id ?? "none"}`); setConversationId(null); setMessages([]); setIntervention(null); setInput(""); setError(""); }}><RefreshCcw size={15} /> New chat</button>}
     </header>
 
     <div className="gsw-chat-thread">
@@ -137,6 +179,22 @@ export function ChatPanel() {
         </article>;
       })}
       {sending && <article className="gsw-chat-message assistant gsw-chat-thinking"><div className="gsw-chat-message-label">GSW</div><div className="gsw-chat-thinking-dots" aria-label="Thinking"><span /><span /><span /></div></article>}
+      {intervention && <section className="gsw-chat-intervention">
+        <div className="gsw-chat-intervention-icon"><ShieldCheck size={19} strokeWidth={1.8} /></div>
+        <div className="gsw-chat-intervention-copy">
+          <strong>{intervention.type === "permission" ? intervention.title : "Confirm this action"}</strong>
+          <p>{intervention.type === "permission" ? intervention.description : intervention.summary}</p>
+          <div className="gsw-chat-intervention-actions">
+            {intervention.type === "permission" ? <>
+              <button type="button" className="primary" disabled={interventionBusy} onClick={() => void allowPermission()}><Check size={14} /> Allow</button>
+              <button type="button" disabled={interventionBusy} onClick={() => setIntervention(null)}><X size={14} /> Not now</button>
+            </> : <>
+              <button type="button" className="primary" disabled={interventionBusy} onClick={() => void decideConfirmation("approved")}><Check size={14} /> Approve</button>
+              <button type="button" disabled={interventionBusy} onClick={() => void decideConfirmation("rejected")}><X size={14} /> Don’t allow</button>
+            </>}
+          </div>
+        </div>
+      </section>}
       {error && <div className="gsw-chat-error">{error}</div>}
       <div ref={bottomRef} />
     </div>
