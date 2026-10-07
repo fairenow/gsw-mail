@@ -13,7 +13,7 @@ export function MailSidebar({ account, profileImageUrl, folder, counts, composeO
   composeOpen: boolean;
   mobileHidden: boolean;
   collapsed: boolean;
-  section?: "mail" | "contacts" | "calendar" | "settings";
+  section?: "mail" | "contacts" | "calendar" | "settings" | "chat";
   onSelectFolder: (folder: Folder) => void;
   onToggleCompose: () => void;
   onOpenSection?: (section: "contacts" | "calendar" | "settings" | "chat") => void;
