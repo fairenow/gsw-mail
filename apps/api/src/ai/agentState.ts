@@ -19,8 +19,8 @@ const titleFromMessage = (content: string): string => {
 
 export async function createOrResumeConversation(input: {
   userId: string;
-  conversationId?: string;
-  accountId?: string;
+  conversationId?: string | undefined;
+  accountId?: string | undefined;
   firstMessage: string;
 }) {
   if (input.conversationId) {
@@ -59,8 +59,8 @@ export async function appendAiMessage(input: {
   role: "user" | "assistant" | "system";
   content: string;
   provider?: string;
-  model?: string;
-  metadata?: Record<string, unknown>;
+  model?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }) {
   const [message] = await db.insert(aiMessages).values({
     conversationId: input.conversationId,
@@ -80,10 +80,10 @@ export async function appendAiMessage(input: {
 export async function startAiRun(input: {
   conversationId: string;
   userId: string;
-  accountId?: string;
+  accountId?: string | undefined;
   provider: string;
-  model?: string;
-  metadata?: Record<string, unknown>;
+  model?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }) {
   const [run] = await db.insert(aiRuns).values({
     conversationId: input.conversationId,
@@ -99,8 +99,8 @@ export async function startAiRun(input: {
 }
 
 export async function completeAiRun(runId: string, input: {
-  model?: string;
-  metadata?: Record<string, unknown>;
+  model?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }) {
   await db.update(aiRuns).set({
     status: "completed",
@@ -132,10 +132,10 @@ export async function pauseAiRun(runId: string, status: "awaiting_permission" | 
 export async function reserveAiIdempotency(input: {
   key: string;
   userId: string;
-  accountId?: string;
+  accountId?: string | undefined;
   toolCallId: string;
   toolName: string;
-  expiresAt?: Date;
+  expiresAt?: Date | undefined;
 }) {
   const [existing] = await db.select().from(aiIdempotencyKeys).where(eq(aiIdempotencyKeys.key, input.key)).limit(1);
   if (existing) return { reservation: existing, reused: true };
@@ -322,11 +322,11 @@ export async function listActiveAiScopes(userId: string, accountId?: string) {
 
 export async function grantAiScope(input: {
   userId: string;
-  accountId?: string;
-  workspaceId?: string;
+  accountId?: string | undefined;
+  workspaceId?: string | undefined;
   scope: string;
-  source?: string;
-  expiresAt?: Date;
+  source?: string | undefined;
+  expiresAt?: Date | undefined;
 }) {
   const [existing] = await db.select().from(aiPermissionGrants).where(and(
     eq(aiPermissionGrants.userId, input.userId),
@@ -362,13 +362,13 @@ export async function revokeAiScope(userId: string, grantId: string) {
 
 export async function requestAiConfirmation(input: {
   conversationId: string;
-  runId?: string;
-  toolCallId?: string;
+  runId?: string | undefined;
+  toolCallId?: string | undefined;
   userId: string;
   action: string;
   summary: string;
-  expiresAt?: Date;
-  metadata?: Record<string, unknown>;
+  expiresAt?: Date | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }) {
   const [confirmation] = await db.insert(aiConfirmations).values({
     conversationId: input.conversationId,
