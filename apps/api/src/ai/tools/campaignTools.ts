@@ -35,7 +35,7 @@ export const campaignCreateTool: AgentToolDefinition = {
     required: ["title", "subject", "audienceTags"],
     additionalProperties: false,
   },
-  requiredScopes: ["campaign.write"],
+  requiredScopes: ["contacts.read", "campaign.write"],
   risk: "reversible_write",
   async execute(ctx, rawInput, toolCallId) {
     const startedAt = new Date().toISOString();
