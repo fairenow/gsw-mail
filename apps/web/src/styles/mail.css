@@ -2025,3 +2025,68 @@
 .gsw-chat-markdown h3 { font-size: 18px; }
 .gsw-chat-markdown h4 { font-size: 16px; }
 .gsw-chat-markdown h5 { font-size: 14px; }
+
+
+/* Live microphone feedback for GSW Chat dictation */
+.gsw-chat-voice-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 112px;
+  height: 36px;
+  padding: 0 9px;
+  flex: 0 1 auto;
+  border-radius: 11px;
+  background: color-mix(in srgb, #b83b2f 8%, var(--gsw-bg));
+  color: #a7362c;
+  overflow: hidden;
+}
+
+.gsw-chat-recording-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: currentColor;
+  animation: gsw-chat-recording-dot 1s ease-in-out infinite;
+}
+
+.gsw-chat-waveform {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 24px;
+  flex: 1;
+  min-width: 42px;
+}
+
+.gsw-chat-waveform span {
+  width: 2px;
+  min-height: 4px;
+  max-height: 23px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: .82;
+  transition: height 70ms linear;
+}
+
+.gsw-chat-listening-label {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+
+@keyframes gsw-chat-recording-dot {
+  0%, 100% { opacity: .45; transform: scale(.88); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@media (max-width: 560px) {
+  .gsw-chat-voice-live {
+    min-width: 70px;
+    padding-inline: 7px;
+  }
+  .gsw-chat-listening-label { display: none; }
+}
