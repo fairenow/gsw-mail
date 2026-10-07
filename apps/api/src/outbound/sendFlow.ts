@@ -5,8 +5,8 @@ import { badRequest, conflict } from "../lib/errors.js";
 import { generateMessageId } from "../lib/messageId.js";
 import type { AccessibleAccount } from "../auth/authorize.js";
 import { buildOutgoingMessage } from "../mail/messageBuilder.js";
-import { resolveMailTemplateKey } from "../mail/templates/index.js";
 import { templateKeyAllowedForAddress } from "../lib/templatePolicy.js";
+import { isCustomTemplateKey } from "../mail/templateService.js";
 import { checkSuppressions } from "./delivery.js";
 import { recordSentRecipients } from "../lib/contacts.js";
 import { storeOutboundAttachmentPayloads } from "./attachmentPayloadStore.js";
@@ -79,17 +79,19 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
     ? await getUserEngine({ productUserId: input.userId, authUserId: input.authUserId, accountId: input.account.id, headers: input.headers, permission: "send" })
     : (() => { throw new Error("user-scoped OAuth context required for sending"); })();
 
-  const templateKey = resolveMailTemplateKey(input.templateKey ?? "none");
-  if (!templateKeyAllowedForAddress(templateKey, input.account.address)) {
+  const requestedTemplateKey = input.templateKey ?? "none";
+  if (!isCustomTemplateKey(requestedTemplateKey) && !templateKeyAllowedForAddress(requestedTemplateKey === "bible_reader" ? "bible_reader" : requestedTemplateKey === "gsw_default" ? "gsw_default" : "none", input.account.address)) {
     throw badRequest("template is not available for this mail domain");
   }
-  const rendered = buildOutgoingMessage({
+  const rendered = await buildOutgoingMessage({
+    userId: input.userId,
     bodyHtml: input.htmlBody,
     bodyText: input.textBody,
-    templateKey,
+    templateKey: requestedTemplateKey,
     senderName: input.account.displayName ?? undefined,
     senderEmail: input.account.address,
   });
+  const templateKey = rendered.templateKey;
 
   const reserve = await reserveSendOperation({
     accountId: input.account.id,
