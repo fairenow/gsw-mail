@@ -149,7 +149,7 @@ export interface AiChatResponse {
   intervention: AiIntervention | null;
   model: string;
   capabilities: {
-    actions: false;
+    actions: boolean;
     mailboxAccess: boolean;
     rewriteEmail: true;
     persistentConversation: boolean;
@@ -466,7 +466,7 @@ export const api = {
   resumeChat: (accountId: string, conversationId: string) => post<AiChatResponse>("/product/chat/resume", { accountId, conversationId }, 100_000),
   resumeChatStream: (accountId: string, conversationId: string, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/resume/stream", { accountId, conversationId }, onEvent, "/product/chat/resume"),
   grantChatPermission: (accountId: string, scope: string) => post<{ grant: { id: string; scope: string } }>("/product/chat/permissions", { accountId, scope }),
-  decideChatConfirmation: (confirmationId: string, decision: "approved" | "rejected") => post<{ confirmation: { id: string; status: string } }>(`/product/chat/confirmations/${encodeURIComponent(confirmationId)}`, { decision }),
+  decideChatConfirmation: (confirmationId: string, decision: "approved" | "rejected") => post<{ confirmation: { id: string; status: string }; execution: { conversationId: string; message: AiChatMessage; toolResult?: unknown } }>(`/product/chat/confirmations/${encodeURIComponent(confirmationId)}`, { decision }),
   chatConversations: () => get<{ conversations: AiConversationRecord[] }>("/product/chat/conversations"),
   chatConversation: (id: string) => get<AiConversationDetail>(`/product/chat/conversations/${encodeURIComponent(id)}`),
 
