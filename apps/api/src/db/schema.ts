@@ -603,6 +603,7 @@ export const userSettings = pgTable(
     general: jsonb("general").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
     compose: jsonb("compose").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
     contacts: jsonb("contacts").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+    ai: jsonb("ai").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
     ...timestamps,
   },
 );
