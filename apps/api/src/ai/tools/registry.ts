@@ -12,7 +12,7 @@ export class AgentToolRegistry {
     return [...this.tools.values()].map((tool) => ({
       type: "function" as const,
       function: {
-        name: tool.name,
+        name: tool.name.replaceAll(".", "__"),
         description: tool.description,
         parameters: tool.inputSchema,
       },
@@ -20,12 +20,13 @@ export class AgentToolRegistry {
   }
 
   async execute(name: string, rawArguments: string, ctx: AgentExecutionContext, toolCallId: string) {
-    const tool = this.tools.get(name);
+    const semanticName = name.replaceAll("__", ".");
+    const tool = this.tools.get(semanticName);
     if (!tool) {
       return {
         ok: false,
         toolCallId,
-        error: { code: "unknown_tool", message: `Unknown tool: ${name}`, retryable: false },
+        error: { code: "unknown_tool", message: `Unknown tool: ${semanticName}`, retryable: false },
         audit: { userId: ctx.userId, accountId: ctx.accountId, startedAt: new Date().toISOString(), completedAt: new Date().toISOString() },
       };
     }
