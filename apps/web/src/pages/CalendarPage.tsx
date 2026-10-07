@@ -68,7 +68,7 @@ function LinkifiedText({ text }: { text: string }) {
   return <>{parts.map((part, index) => /^https?:\/\//.test(part) ? <a key={`${part}-${index}`} href={part} target="_blank" rel="noreferrer">{part}</a> : <span key={`${part}-${index}`}>{part}</span>)}</>;
 }
 
-export function CalendarPage({ embedded = false }: { embedded?: boolean } = {}) {
+export function CalendarPage({ embedded = false, active = true }: { embedded?: boolean; active?: boolean } = {}) {
   const { account, configureTopBar } = useAppShell();
   const [month, setMonth] = useState(() => monthStart(new Date()));
   const [selectedDay, setSelectedDay] = useState(() => new Date());
@@ -111,7 +111,7 @@ export function CalendarPage({ embedded = false }: { embedded?: boolean } = {}) 
       const before = calendarBoundary(monthGridEnd(month));
       setEventsLoading(true);
       try {
-        if (syncAccount.current !== account.id && account.permissions.includes("send")) {
+        if (active && syncAccount.current !== account.id && account.permissions.includes("send")) {
           syncAccount.current = account.id;
           void fetch("/product/calendar-events/sync-invitations", {
             method: "POST",
@@ -138,7 +138,7 @@ export function CalendarPage({ embedded = false }: { embedded?: boolean } = {}) 
     };
     void load();
     return () => { cancelled = true; };
-  }, [account, month]);
+  }, [account, month, active]);
 
   const openNew = (day?: Date) => {
     setEditingId(null);
