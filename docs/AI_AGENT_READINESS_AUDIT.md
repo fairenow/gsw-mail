@@ -35,13 +35,19 @@ Progress since the previous checkpoint:
 - GSW Chat now renders in-chat permission and confirmation cards and can resume a paused mailbox request after permission is granted;
 - first-use mailbox reading now requires the explicit `mail.read` AI grant in addition to the user's ordinary mailbox authorization.
 
+Progress since the previous checkpoint:
+
+- live server-to-browser execution events are now implemented for chat runs;
+- GSW Chat visibly reports reasoning/tool phases while the backend is still working;
+- permission-resumed requests use the same streaming execution path;
+- the existing non-streaming chat endpoints remain available as compatibility fallbacks.
+
 Still blocking write access:
 
 - safe reversible-write tools and their domain services;
 - confirmation-resume binding for exact mutation payloads;
 - broader domain-service normalization;
-- evaluation coverage;
-- streaming execution UX.
+- evaluation coverage.
 
 ---
 

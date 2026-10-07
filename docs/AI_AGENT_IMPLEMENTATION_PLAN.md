@@ -14,7 +14,7 @@ The implementation has now started with the safest vertical slice:
 - the backend executes tools only after the existing GSW `read` permission check;
 - no mutation/action tools are exposed yet.
 
-Steps 1-6 are now underway. The app has the first shared mail service/tool layer, durable conversation and run persistence, a formal AI permission-scope model, confirmation records, a dedicated tool-call/result action ledger, and executor-wide idempotency reservations for future mutating tools. Read-only mailbox tools remain the only executable agent capabilities. GSW Chat now requests explicit in-chat permission before first mailbox reading and can resume the paused request after permission is granted. SSE streaming, reversible writes, and external actions remain intentionally disabled until their next safety layers are implemented.
+Steps 1-7 are now underway. The app has the first shared mail service/tool layer, durable conversation and run persistence, a formal AI permission-scope model, confirmation records, a dedicated tool-call/result action ledger, executor-wide idempotency reservations for future mutating tools, and live execution streaming from the API to GSW Chat. Read-only mailbox tools remain the only executable agent capabilities. GSW Chat now shows model/tool progress such as Thinking, Searching your mailbox, Reading the matching email, and Reviewing what I found while the request is still running. Reversible writes and external actions remain intentionally disabled until their next safety layers are implemented.
 
 ---
 
