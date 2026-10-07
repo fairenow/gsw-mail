@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { ArrowUp, Copy, RefreshCcw, Sparkles } from "lucide-react";
+import { ArrowUp, Copy, RefreshCcw } from "lucide-react";
 import { api, type AiChatMessage } from "../../api";
 
 const starterPrompts = [
@@ -70,7 +70,7 @@ export function ChatPanel() {
   return <div className="gsw-chat-panel">
     <header className="gsw-chat-header">
       <div className="gsw-chat-heading">
-        <span className="gsw-chat-mark" aria-hidden="true"><Sparkles size={19} strokeWidth={1.7} /></span>
+        <span className="gsw-chat-mark" aria-hidden="true"><img className="gsw-chat-brand-logo" src="/logo.png" alt="" /></span>
         <div>
           <h2>GSW Chat</h2>
           <p>Writing help and general conversation</p>
@@ -81,7 +81,7 @@ export function ChatPanel() {
 
     <div className="gsw-chat-thread">
       {visibleMessages.length === 0 ? <div className="gsw-chat-empty">
-        <span className="gsw-chat-empty-icon"><Sparkles size={26} strokeWidth={1.5} /></span>
+        <span className="gsw-chat-empty-icon"><img className="gsw-chat-brand-logo" src="/logo.png" alt="" /></span>
         <h3>What can I help you write?</h3>
         <p>Paste an email, describe what you want to say, or just start a conversation.</p>
         <div className="gsw-chat-starters">{starterPrompts.map((prompt) => <button type="button" key={prompt} onClick={() => setInput(prompt)}>{prompt}</button>)}</div>
