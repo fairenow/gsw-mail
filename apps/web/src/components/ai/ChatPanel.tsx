@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowUp, Check, CheckCircle2, Copy, LoaderCircle, RefreshCcw, ShieldCheck, X } from "lucide-react";
-import { api, type AiChatMessage, type AiChatStreamEvent, type AiIntervention } from "../../api";
+import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, Clock3, Copy, LoaderCircle, RefreshCcw, ShieldCheck, Trash2, X } from "lucide-react";
+import { api, type AiChatMessage, type AiChatStreamEvent, type AiConversationRecord, type AiIntervention } from "../../api";
 import { useAppShell } from "../AppShell";
 
 const starterPrompts = [
@@ -49,6 +49,9 @@ export function ChatPanel() {
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [conversationLoading, setConversationLoading] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [conversations, setConversations] = useState<AiConversationRecord[]>([]);
   const [intervention, setIntervention] = useState<AiIntervention | null>(null);
   const [interventionBusy, setInterventionBusy] = useState(false);
   const [executionActivities, setExecutionActivities] = useState<ExecutionActivity[]>([]);
@@ -107,7 +110,7 @@ export function ChatPanel() {
   useEffect(() => {
     let cancelled = false;
     const key = `gsw-chat-conversation:${account?.id ?? "none"}`;
-    const savedId = sessionStorage.getItem(key);
+    const savedId = localStorage.getItem(key);
     setConversationId(savedId);
     setMessages([]);
     setError("");
@@ -124,7 +127,7 @@ export function ChatPanel() {
       setMessages(restored.slice(-24));
     }).catch(() => {
       if (!cancelled) {
-        sessionStorage.removeItem(key);
+        localStorage.removeItem(key);
         setConversationId(null);
       }
     }).finally(() => {
@@ -138,6 +141,70 @@ export function ChatPanel() {
       }
     };
   }, [account?.id]);
+
+  const refreshConversations = async () => {
+    setHistoryLoading(true);
+    try {
+      const response = await api.chatConversations();
+      setConversations(response.conversations);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const openConversation = async (id: string) => {
+    setConversationLoading(true);
+    setError("");
+    try {
+      const detail = await api.chatConversation(id);
+      const restored = detail.messages
+        .filter((message) => message.role === "user" || message.role === "assistant")
+        .map((message) => ({ role: message.role as "user" | "assistant", content: message.content }));
+      setConversationId(id);
+      setMessages(restored.slice(-24));
+      setIntervention(null);
+      setExecutionActivities([]);
+      localStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`, id);
+      setHistoryOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setConversationLoading(false);
+    }
+  };
+
+  const archiveConversation = async (id: string) => {
+    try {
+      await api.updateChatConversation(id, { status: "archived" });
+      if (conversationId === id) {
+        localStorage.removeItem(`gsw-chat-conversation:${account?.id ?? "none"}`);
+        setConversationId(null);
+        setMessages([]);
+        setIntervention(null);
+      }
+      await refreshConversations();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const deleteConversation = async (id: string) => {
+    if (!window.confirm("Delete this chat permanently?")) return;
+    try {
+      await api.deleteChatConversation(id);
+      if (conversationId === id) {
+        localStorage.removeItem(`gsw-chat-conversation:${account?.id ?? "none"}`);
+        setConversationId(null);
+        setMessages([]);
+        setIntervention(null);
+      }
+      await refreshConversations();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   const send = async (override?: string) => {
     const content = (override ?? input).trim();
@@ -153,7 +220,7 @@ export function ChatPanel() {
       setExecutionActivities([]);
       const response = await api.streamChat(account?.id ?? null, next, conversationId, handleStreamEvent);
       setConversationId(response.conversationId);
-      sessionStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`, response.conversationId);
+      localStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`, response.conversationId);
       setIntervention(response.intervention);
       const assistantMessage = response.message;
       if (assistantMessage) setMessages((current) => [...current, assistantMessage].slice(-24));
@@ -223,9 +290,30 @@ export function ChatPanel() {
           <p>Writing help and general conversation</p>
         </div>
       </div>
-      {(messages.length > 0 || conversationId) && <button className="gsw-chat-clear" type="button" onClick={() => { sessionStorage.removeItem(`gsw-chat-conversation:${account?.id ?? "none"}`); setConversationId(null); setMessages([]); setIntervention(null); setExecutionActivities([]); setInput(""); setError(""); }}><RefreshCcw size={15} /> New chat</button>}
+      <div className="gsw-chat-header-actions">
+        <button className="gsw-chat-clear" type="button" onClick={() => { setHistoryOpen((current) => !current); if (!historyOpen) void refreshConversations(); }}><Clock3 size={15} /> History</button>
+        {(messages.length > 0 || conversationId) && <button className="gsw-chat-clear" type="button" onClick={() => { localStorage.removeItem(`gsw-chat-conversation:${account?.id ?? "none"}`); setConversationId(null); setMessages([]); setIntervention(null); setExecutionActivities([]); setInput(""); setError(""); }}><RefreshCcw size={15} /> New chat</button>}
+      </div>
     </header>
 
+    {historyOpen && <aside className="gsw-chat-history" aria-label="Chat history">
+      <div className="gsw-chat-history-head">
+        <div><strong>Chat history</strong><span>Saved to your GSW account</span></div>
+        <button type="button" className="gsw-chat-copy" aria-label="Close chat history" onClick={() => setHistoryOpen(false)}><X size={15} /></button>
+      </div>
+      <div className="gsw-chat-history-list">
+        {historyLoading ? <div className="gsw-chat-history-empty">Loading chats…</div> : conversations.length === 0 ? <div className="gsw-chat-history-empty">No saved chats yet.</div> : conversations.map((conversation) => <div className={`gsw-chat-history-item ${conversation.id === conversationId ? "active" : ""} ${conversation.status === "archived" ? "archived" : ""}`} key={conversation.id}>
+          <button type="button" className="gsw-chat-history-open" onClick={() => void openConversation(conversation.id)}>
+            <strong>{conversation.title || "New chat"}</strong>
+            <span>{new Date(conversation.lastMessageAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}{conversation.status === "archived" ? " · Archived" : ""}</span>
+          </button>
+          <div className="gsw-chat-history-actions">
+            {conversation.status !== "archived" && <button type="button" title="Archive chat" aria-label="Archive chat" onClick={() => void archiveConversation(conversation.id)}><Archive size={14} /></button>}
+            <button type="button" title="Delete chat" aria-label="Delete chat" onClick={() => void deleteConversation(conversation.id)}><Trash2 size={14} /></button>
+          </div>
+        </div>)}
+      </div>
+    </aside>}
     <div className="gsw-chat-thread">
       {conversationLoading ? <div className="gsw-chat-empty"><span className="gsw-chat-empty-icon"><img className="gsw-chat-brand-logo" src="/logo.png" alt="" /></span><h3>Opening your chat…</h3><p>Restoring the conversation for this mailbox.</p></div> : visibleMessages.length === 0 ? <div className="gsw-chat-empty">
         <span className="gsw-chat-empty-icon"><img className="gsw-chat-brand-logo" src="/logo.png" alt="" /></span>
