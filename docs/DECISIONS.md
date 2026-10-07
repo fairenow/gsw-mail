@@ -79,3 +79,13 @@ service identity. Existing Stalwart principals and mail state are preserved.
 ## Responsive mail panels (adopted, September 2026)
 
 Use independent vertical scroll areas inside a viewport-sized mail shell. Keep pagination in the list footer and use the existing 50-message limit/offset API. Below 1100px, folder navigation is an overlay so opening it preserves the selected list or message. Phone compose occupies the dynamic viewport; content length does not determine window height.
+
+
+## 2026-10-07 — Calendar workspace and invitation delivery
+
+- Calendar and Settings are pre-mounted inside the mail reading pane so sidebar switching does not require a full page transition or an intermediate loading screen. The future Chat workspace uses the same pane contract.
+- Calendar attendees are entered as validated address chips. Enter and comma commit an address; duplicate addresses are normalized away.
+- Event updates to attendees are sent through the GSW outbound mail queue, not through a local `mailto:` handler.
+- Product-authored calendar invitation/update emails use the user's selected supported mail template when available, with GSW Mail event styling and an attached `text/calendar` invitation.
+- Stalwart `sendSchedulingMessages` is disabled for product-created and product-updated events. This prevents Stalwart's server-branded scheduling email and RSVP web page from becoming the user-facing invitation experience.
+- The attached iCalendar request remains interoperable with external calendar clients. A first-party GSW-hosted RSVP endpoint can be added later if browser-based Yes/No/Maybe responses are required.
