@@ -8,6 +8,34 @@ const starterPrompts = [
   "Help me write a professional follow-up",
 ];
 
+type ChatSegment =
+  | { type: "text"; content: string }
+  | { type: "email_draft"; content: string };
+
+const parseAssistantSegments = (content: string): ChatSegment[] => {
+  const segments: ChatSegment[] = [];
+  const pattern = /<email_draft>([\s\S]*?)<\/email_draft>/gi;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(content)) !== null) {
+    const before = content.slice(cursor, match.index).trim();
+    if (before) segments.push({ type: "text", content: before });
+    const draft = match[1]?.trim();
+    if (draft) segments.push({ type: "email_draft", content: draft });
+    cursor = pattern.lastIndex;
+  }
+
+  const after = content.slice(cursor).trim();
+  if (after) segments.push({ type: "text", content: after });
+  return segments.length > 0 ? segments : [{ type: "text", content }];
+};
+
+const cleanAssistantText = (content: string) => content
+  .replace(/<email_draft>/gi, "")
+  .replace(/<\/email_draft>/gi, "")
+  .trim();
+
 export function ChatPanel() {
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -57,11 +85,24 @@ export function ChatPanel() {
         <h3>What can I help you write?</h3>
         <p>Paste an email, describe what you want to say, or just start a conversation.</p>
         <div className="gsw-chat-starters">{starterPrompts.map((prompt) => <button type="button" key={prompt} onClick={() => setInput(prompt)}>{prompt}</button>)}</div>
-      </div> : visibleMessages.map((message, index) => <article className={`gsw-chat-message ${message.role}`} key={`${message.role}-${index}`}>
-        <div className="gsw-chat-message-label">{message.role === "user" ? "You" : "GSW"}</div>
-        <div className="gsw-chat-message-body">{message.content}</div>
-        <button className="gsw-chat-copy" type="button" aria-label={message.role === "user" ? "Copy prompt" : "Copy response"} title={message.role === "user" ? "Copy prompt" : "Copy response"} onClick={() => void navigator.clipboard.writeText(message.content)}><Copy size={14} strokeWidth={1.8} /></button>
-      </article>)}
+      </div> : visibleMessages.map((message, index) => {
+        const segments = message.role === "assistant" ? parseAssistantSegments(message.content) : null;
+        return <article className={`gsw-chat-message ${message.role}`} key={`${message.role}-${index}`}>
+          <div className="gsw-chat-message-label">{message.role === "user" ? "You" : "GSW"}</div>
+          {message.role === "assistant" ? <div className="gsw-chat-assistant-content">
+            {segments?.map((segment, segmentIndex) => segment.type === "email_draft"
+              ? <section className="gsw-chat-email-draft" key={`draft-${segmentIndex}`}>
+                  <div className="gsw-chat-email-draft-head">
+                    <span>Email draft</span>
+                    <button className="gsw-chat-copy gsw-chat-email-copy" type="button" aria-label="Copy email draft" title="Copy email draft" onClick={() => void navigator.clipboard.writeText(segment.content)}><Copy size={14} strokeWidth={1.8} /></button>
+                  </div>
+                  <div className="gsw-chat-email-draft-body">{segment.content}</div>
+                </section>
+              : <div className="gsw-chat-message-body" key={`text-${segmentIndex}`}>{segment.content}</div>)}
+          </div> : <div className="gsw-chat-message-body">{message.content}</div>}
+          <button className="gsw-chat-copy" type="button" aria-label={message.role === "user" ? "Copy prompt" : "Copy full response"} title={message.role === "user" ? "Copy prompt" : "Copy full response"} onClick={() => void navigator.clipboard.writeText(message.role === "assistant" ? cleanAssistantText(message.content) : message.content)}><Copy size={14} strokeWidth={1.8} /></button>
+        </article>;
+      })}
       {sending && <article className="gsw-chat-message assistant gsw-chat-thinking"><div className="gsw-chat-message-label">GSW</div><div className="gsw-chat-thinking-dots" aria-label="Thinking"><span /><span /><span /></div></article>}
       {error && <div className="gsw-chat-error">{error}</div>}
       <div ref={bottomRef} />
