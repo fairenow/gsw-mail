@@ -4,7 +4,7 @@ import type { SendAttachment } from "../engine/types.js";
 import { badRequest, conflict } from "../lib/errors.js";
 import { generateMessageId } from "../lib/messageId.js";
 import type { AccessibleAccount } from "../auth/authorize.js";
-import { buildOutgoingMessage } from "../mail/messageBuilder.js";
+import { buildOutgoingMessageForUser } from "../mail/messageBuilder.js";
 import { templateKeyAllowedForAddress } from "../lib/templatePolicy.js";
 import { isCustomTemplateKey } from "../mail/templateService.js";
 import { checkSuppressions } from "./delivery.js";
@@ -83,7 +83,7 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
   if (!isCustomTemplateKey(requestedTemplateKey) && !templateKeyAllowedForAddress(requestedTemplateKey === "bible_reader" ? "bible_reader" : requestedTemplateKey === "gsw_default" ? "gsw_default" : "none", input.account.address)) {
     throw badRequest("template is not available for this mail domain");
   }
-  const rendered = await buildOutgoingMessage({
+  const rendered = await buildOutgoingMessageForUser({
     userId: input.userId,
     bodyHtml: input.htmlBody,
     bodyText: input.textBody,
