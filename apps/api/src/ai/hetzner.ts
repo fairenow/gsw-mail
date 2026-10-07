@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import { HttpError } from "../lib/errors.js";
+import type { ProviderToolDefinition } from "./tools/types.js";
 
 export type AiChatRole = "user" | "assistant";
 
@@ -8,10 +9,25 @@ export interface AiChatMessage {
   content: string;
 }
 
+export interface AiToolCall {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+export type AiProviderMessage =
+  | { role: "user"; content: string }
+  | { role: "assistant"; content: string | null; tool_calls?: AiToolCall[] }
+  | { role: "tool"; content: string; tool_call_id: string };
+
 interface HetznerChatResponse {
   choices?: Array<{
     message?: {
       content?: string | null;
+      tool_calls?: AiToolCall[];
     };
   }>;
   error?: {
@@ -31,13 +47,14 @@ class HetznerAttemptError extends Error {
 }
 
 const systemPrompt = [
-  "You are the GSW Mail writing assistant.",
-  "You are a general conversational assistant with a strong focus on helping users write, rewrite, shorten, clarify, and improve emails.",
-  "Do not claim to have read the user's mailbox, contacts, calendar, or files unless the user explicitly pasted that information into the conversation.",
-  "You do not have tools and cannot send email, edit drafts, schedule meetings, change settings, or take any other action.",
-  "If the user asks you to take an action, explain briefly that you can help prepare the wording but the user must perform the action themselves.",
+  "You are GSW Chat, the assistant inside GSW Mail.",
+  "You can provide general conversational help and help users write, rewrite, shorten, clarify, and improve emails.",
+  "You now have read-only mailbox tools for the currently selected GSW mailbox. Use them when the user asks about messages already in their mailbox.",
+  "Never claim to have read a mailbox message unless you actually used a mailbox tool in this conversation turn or the user pasted the message content.",
+  "The mailbox tools are read-only. You cannot send email, edit drafts, archive messages, change calendar events, change contacts, change settings, or take any other action yet.",
+  "If the user asks you to take an unavailable action, explain briefly that you can inspect relevant mail and prepare the wording, but the user must perform the action themselves.",
   "Preserve the user's intended meaning and voice when rewriting. Prefer natural, concise business language unless the user asks for another tone.",
-  "Do not add facts, promises, names, dates, or commitments that the user did not provide.",
+  "Do not add facts, promises, names, dates, or commitments that the user did not provide or that were not found through an available read tool.",
   "When you provide a final email draft, rewritten email, reply, follow-up, or other copy-ready email text, wrap only that email in exact <email_draft> and </email_draft> tags.",
   "You may add a short explanation before or after the email draft, but never place commentary inside the <email_draft> tags.",
   "If you provide multiple distinct email options, wrap each option in its own <email_draft> block.",
@@ -45,7 +62,10 @@ const systemPrompt = [
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function attemptHetznerChat(messages: AiChatMessage[]): Promise<string> {
+async function attemptHetznerChat(
+  messages: AiProviderMessage[],
+  tools?: ProviderToolDefinition[],
+): Promise<{ content: string | null; toolCalls: AiToolCall[] }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.ai.timeoutMs);
 
@@ -62,8 +82,9 @@ async function attemptHetznerChat(messages: AiChatMessage[]): Promise<string> {
           { role: "system", content: systemPrompt },
           ...messages,
         ],
-        temperature: 0.45,
-        max_tokens: 1400,
+        ...(tools?.length ? { tools, tool_choice: "auto" } : {}),
+        temperature: 0.35,
+        max_tokens: 1600,
         stream: false,
       }),
       signal: controller.signal,
@@ -76,9 +97,11 @@ async function attemptHetznerChat(messages: AiChatMessage[]): Promise<string> {
       throw new HetznerAttemptError(providerMessage, retryable, response.status === 429 ? 429 : 502);
     }
 
-    const content = body.choices?.[0]?.message?.content?.trim();
-    if (!content) throw new HetznerAttemptError("Hetzner inference returned an empty response.", true, 502);
-    return content;
+    const message = body.choices?.[0]?.message;
+    const content = message?.content?.trim() || null;
+    const toolCalls = message?.tool_calls ?? [];
+    if (!content && toolCalls.length === 0) throw new HetznerAttemptError("Hetzner inference returned an empty response.", true, 502);
+    return { content, toolCalls };
   } catch (error) {
     if (error instanceof HetznerAttemptError) throw error;
     if (error instanceof Error && error.name === "AbortError") {
@@ -90,7 +113,10 @@ async function attemptHetznerChat(messages: AiChatMessage[]): Promise<string> {
   }
 }
 
-export async function runHetznerChat(messages: AiChatMessage[]): Promise<{ content: string; model: string }> {
+export async function runHetznerChat(
+  messages: AiProviderMessage[],
+  tools?: ProviderToolDefinition[],
+): Promise<{ content: string | null; toolCalls: AiToolCall[]; model: string }> {
   if (!config.ai.hetznerApiKey) {
     throw new HttpError(503, "AI chat is not configured yet. Add HETZNER_INFERENCE_KEY to the API service.");
   }
@@ -98,8 +124,8 @@ export async function runHetznerChat(messages: AiChatMessage[]): Promise<{ conte
   let lastError: HetznerAttemptError | null = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const content = await attemptHetznerChat(messages);
-      return { content, model: config.ai.hetznerModel };
+      const result = await attemptHetznerChat(messages, tools);
+      return { ...result, model: config.ai.hetznerModel };
     } catch (error) {
       const failure = error instanceof HetznerAttemptError
         ? error
