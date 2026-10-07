@@ -1,6 +1,7 @@
 import { pool } from "../db/client.js";
 
 export async function ensureAiAgentSchema(): Promise<void> {
+  await pool.query(`ALTER TABLE "user_settings" ADD COLUMN IF NOT EXISTS "ai" jsonb DEFAULT '{}'::jsonb NOT NULL;`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "ai_conversations" (
       "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
