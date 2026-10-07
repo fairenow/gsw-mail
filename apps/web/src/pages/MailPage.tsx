@@ -116,7 +116,7 @@ export function MailPage() {
     });
   }, []);
   useEffect(() => { if (account) void loadAccount(account.id, "Inbox"); }, [account, loadAccount]);
-  useEffect(() => { void api.settings().then((settings) => { setSignature(settings.signature); const selected = settings.general.templateKey; setTemplateKey(selected === "bible_reader" ? "bible_reader" : selected === "gsw_default" ? "gsw_default" : "none"); }).catch(() => undefined); }, []);
+  useEffect(() => { void api.settings().then((settings) => { setSignature(settings.signature); const selected = settings.general.templateKey; setTemplateKey(typeof selected === "string" && selected.trim() ? selected : "none"); }).catch(() => undefined); }, []);
   useEffect(() => () => readTimers.current.forEach((timer) => window.clearTimeout(timer)), []);
   useEffect(() => { if (!foldersOpen) return; const closeFolders = (event: KeyboardEvent) => { if (event.key === "Escape") setFoldersOpen(false); }; window.addEventListener("keydown", closeFolders); return () => window.removeEventListener("keydown", closeFolders); }, [foldersOpen]);
 
