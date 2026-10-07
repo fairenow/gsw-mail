@@ -26,7 +26,7 @@ export async function searchWorkspace(input: {
   userId: string;
   accountId: string;
   query: string;
-  limit?: number;
+  limit?: number | undefined;
 }): Promise<WorkspaceSearchResult> {
   const query = input.query.trim();
   const limit = Math.min(Math.max(input.limit ?? 12, 1), 25);
