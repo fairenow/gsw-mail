@@ -7,9 +7,9 @@ import { db } from "../db/client.js";
 import { inboundMessages, mailboxRole } from "../db/schema.js";
 import { getUserEngine } from "../engine/index.js";
 import { badRequest, notFound } from "../lib/errors.js";
-import { hasRemoteMailImages, sanitizeInboundMailHtml, sanitizeRichText } from "../lib/richText.js";
 import { activeScheduledEngineIds } from "../outbound/schedule.js";
 import { getOutboxMessage, listOutboxMessages, outboxCount } from "../outbound/scheduledOutbox.js";
+import { createMailService } from "../services/mailService.js";
 
 type MailboxRole = (typeof mailboxRole.enumValues)[number];
 type StandardMailboxRole = Exclude<MailboxRole, null>;
@@ -100,20 +100,23 @@ export default async (app: FastifyInstance) => {
       if (!message) throw notFound("message not found");
       return message;
     }
-    const engine = await getUserEngine({ productUserId: user!.id, authUserId: req.authUserId ?? user!.id, accountId: query.accountId, headers: req.headers as Record<string, string> });
-    const message = await engine.getMessage(query.accountId, params.id);
-    if (!message) throw notFound("message not found");
-    const rawHtmlBody = message.htmlBody;
-    const allowRemoteImages = query.remoteImages === "1" || query.remoteImages === "true";
-    const hasRemoteImages = rawHtmlBody ? hasRemoteMailImages(rawHtmlBody) : false;
-    return { ...message, ...(rawHtmlBody ? { htmlBody: allowRemoteImages ? sanitizeRichText(rawHtmlBody) : sanitizeInboundMailHtml(rawHtmlBody), remoteImagesBlocked: hasRemoteImages && !allowRemoteImages } : {}) };
+    const mail = createMailService({
+      userId: user!.id,
+      authUserId: req.authUserId ?? user!.id,
+      headers: req.headers as Record<string, string>,
+    });
+    return mail.readMessage(query.accountId, params.id, query.remoteImages === "1" || query.remoteImages === "true");
   });
 
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/read", async (req) => {
     const input = seenSchema.parse(req.body);
     if (isVirtualOutboxId(req.params.id)) throw badRequest("outbox messages cannot be marked read");
-    const engine = await getUserEngine({ productUserId: req.user!.id, authUserId: req.authUserId ?? req.user!.id, accountId: input.accountId, headers: req.headers as Record<string, string> });
-    await engine.setSeen(input.accountId, [req.params.id], input.seen);
+    const mail = createMailService({
+      userId: req.user!.id,
+      authUserId: req.authUserId ?? req.user!.id,
+      headers: req.headers as Record<string, string>,
+    });
+    await mail.setSeen(input.accountId, req.params.id, input.seen);
     await syncCache(input.accountId, req.params.id, { read: input.seen });
     return { messageId: req.params.id, read: input.seen };
   });
@@ -141,8 +144,12 @@ export default async (app: FastifyInstance) => {
     const { params, body, user } = req;
     if (!body.accountId) throw badRequest("accountId is required");
     if (isVirtualOutboxId(params.id)) throw badRequest("cancel the outbox send instead of archiving it");
-    const engine = await getUserEngine({ productUserId: user!.id, authUserId: req.authUserId ?? user!.id, accountId: body.accountId, headers: req.headers as Record<string, string>, permission: "send" });
-    await engine.move(body.accountId, [params.id], "Archive");
+    const mail = createMailService({
+      userId: user!.id,
+      authUserId: req.authUserId ?? user!.id,
+      headers: req.headers as Record<string, string>,
+    });
+    await mail.archive(body.accountId, params.id);
     await syncCache(body.accountId, params.id, { mailboxRole: "archive" });
     return { messageId: params.id, mailbox: "Archive" };
   });
