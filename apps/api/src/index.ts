@@ -4,6 +4,7 @@ import { pool } from "./db/client.js";
 import { ensureWebOAuthTestClient } from "./auth/ensureWebOAuthTestClient.js";
 import { ensureScheduledSendSchema } from "./outbound/ensureScheduledSchema.js";
 import { ensureCalendarRsvpSchema } from "./calendar/ensureRsvpSchema.js";
+import { ensureAiAgentSchema } from "./ai/ensureAgentSchema.js";
 import { getOutboundWorker } from "./outbound/worker.js";
 
 const app = buildApp();
@@ -12,6 +13,7 @@ const worker = getOutboundWorker();
 async function main() {
   await ensureScheduledSendSchema();
   await ensureCalendarRsvpSchema();
+  await ensureAiAgentSchema();
   await ensureWebOAuthTestClient();
   worker.start();
   await app.listen({ port: config.port, host: "0.0.0.0" });

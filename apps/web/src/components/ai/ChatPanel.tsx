@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, Copy, RefreshCcw } from "lucide-react";
 import { api, type AiChatMessage } from "../../api";
 import { useAppShell } from "../AppShell";
@@ -40,6 +40,8 @@ const cleanAssistantText = (content: string) => content
 export function ChatPanel() {
   const { account } = useAppShell();
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationLoading, setConversationLoading] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -47,6 +49,33 @@ export function ChatPanel() {
   const canSend = input.trim().length > 0 && !sending;
 
   const visibleMessages = useMemo(() => messages, [messages]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const key = `gsw-chat-conversation:${account?.id ?? "none"}`;
+    const savedId = sessionStorage.getItem(key);
+    setConversationId(savedId);
+    setMessages([]);
+    setError("");
+    if (!savedId) return () => { cancelled = true; };
+
+    setConversationLoading(true);
+    void api.chatConversation(savedId).then((detail) => {
+      if (cancelled) return;
+      const restored = detail.messages
+        .filter((message) => message.role === "user" || message.role === "assistant")
+        .map((message) => ({ role: message.role as "user" | "assistant", content: message.content }));
+      setMessages(restored.slice(-24));
+    }).catch(() => {
+      if (!cancelled) {
+        sessionStorage.removeItem(key);
+        setConversationId(null);
+      }
+    }).finally(() => {
+      if (!cancelled) setConversationLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [account?.id]);
 
   const send = async (override?: string) => {
     const content = (override ?? input).trim();
@@ -59,7 +88,9 @@ export function ChatPanel() {
     setSending(true);
     window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
     try {
-      const response = await api.chat(account?.id ?? null, next);
+      const response = await api.chat(account?.id ?? null, next, conversationId);
+      setConversationId(response.conversationId);
+      sessionStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`, response.conversationId);
       setMessages((current) => [...current, response.message].slice(-24));
       window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
     } catch (err) {
@@ -78,11 +109,11 @@ export function ChatPanel() {
           <p>Writing help and general conversation</p>
         </div>
       </div>
-      {messages.length > 0 && <button className="gsw-chat-clear" type="button" onClick={() => { setMessages([]); setInput(""); setError(""); }}><RefreshCcw size={15} /> New chat</button>}
+      {(messages.length > 0 || conversationId) && <button className="gsw-chat-clear" type="button" onClick={() => { sessionStorage.removeItem(`gsw-chat-conversation:${account?.id ?? "none"}`); setConversationId(null); setMessages([]); setInput(""); setError(""); }}><RefreshCcw size={15} /> New chat</button>}
     </header>
 
     <div className="gsw-chat-thread">
-      {visibleMessages.length === 0 ? <div className="gsw-chat-empty">
+      {conversationLoading ? <div className="gsw-chat-empty"><span className="gsw-chat-empty-icon"><img className="gsw-chat-brand-logo" src="/logo.png" alt="" /></span><h3>Opening your chat…</h3><p>Restoring the conversation for this mailbox.</p></div> : visibleMessages.length === 0 ? <div className="gsw-chat-empty">
         <span className="gsw-chat-empty-icon"><img className="gsw-chat-brand-logo" src="/logo.png" alt="" /></span>
         <h3>What can I help you write?</h3>
         <p>Paste an email, describe what you want to say, or just start a conversation.</p>

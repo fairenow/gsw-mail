@@ -14,7 +14,7 @@ The implementation has now started with the safest vertical slice:
 - the backend executes tools only after the existing GSW `read` permission check;
 - no mutation/action tools are exposed yet.
 
-This is the beginning of Steps 1-2 in the rollout sequence. Conversation persistence, agent permissions/confirmations, dedicated action-ledger persistence, general idempotency, SSE streaming, reversible writes, and external actions remain intentionally disabled until their safety foundations are implemented.
+Steps 1-5 are now underway. The app has the first shared mail service/tool layer, durable conversation and run persistence, a formal AI permission-scope model, confirmation records, and a dedicated tool-call/result action ledger. Read-only mailbox tools are the only executable agent capabilities. General executor idempotency, SSE streaming, reversible writes, and external actions remain intentionally disabled until their next safety layers are implemented.
 
 ---
 
