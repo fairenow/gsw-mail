@@ -264,6 +264,15 @@ export async function grantAiScope(input: {
   source?: string;
   expiresAt?: Date;
 }) {
+  const [existing] = await db.select().from(aiPermissionGrants).where(and(
+    eq(aiPermissionGrants.userId, input.userId),
+    eq(aiPermissionGrants.scope, input.scope),
+    isNull(aiPermissionGrants.revokedAt),
+    input.accountId ? eq(aiPermissionGrants.accountId, input.accountId) : isNull(aiPermissionGrants.accountId),
+    input.workspaceId ? eq(aiPermissionGrants.workspaceId, input.workspaceId) : isNull(aiPermissionGrants.workspaceId),
+  )).limit(1);
+  if (existing && (!existing.expiresAt || existing.expiresAt > new Date())) return existing;
+
   const [grant] = await db.insert(aiPermissionGrants).values({
     userId: input.userId,
     accountId: input.accountId ?? null,
