@@ -608,6 +608,28 @@ export const userSettings = pgTable(
   },
 );
 
+export const emailTemplates = pgTable(
+  "email_templates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    name: text("name").notNull(),
+    borderColor: text("border_color").default("#e8e1d4").notNull(),
+    fontColor: text("font_color").default("#484640").notNull(),
+    buttonColor: text("button_color").default("#e89a12").notNull(),
+    backgroundColor: text("background_color").default("#f7f3ea").notNull(),
+    logoMimeType: text("logo_mime_type"),
+    logoBase64: text("logo_base64"),
+    logoFilename: text("logo_filename"),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("email_templates_key_idx").on(t.key),
+    index("email_templates_user_idx").on(t.userId, t.createdAt),
+  ],
+);
+
 export const emailSignatures = pgTable(
   "email_signatures",
   {
