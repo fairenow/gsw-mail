@@ -761,3 +761,145 @@ export const calendarRsvps = pgTable(
     index("calendar_rsvps_event_idx").on(t.accountId, t.eventId),
   ],
 );
+
+
+export const aiConversations = pgTable(
+  "ai_conversations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id").references(() => emailAccounts.id, { onDelete: "set null" }),
+    workspaceId: uuid("workspace_id").references(() => organizations.id, { onDelete: "set null" }),
+    title: text("title"),
+    status: text("status").default("active").notNull(),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true }).defaultNow().notNull(),
+    ...timestamps,
+  },
+  (t) => [
+    index("ai_conversations_user_idx").on(t.userId, t.lastMessageAt),
+    index("ai_conversations_account_idx").on(t.accountId, t.lastMessageAt),
+  ],
+);
+
+export const aiMessages = pgTable(
+  "ai_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    conversationId: uuid("conversation_id").notNull().references(() => aiConversations.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    content: text("content").notNull(),
+    provider: text("provider"),
+    model: text("model"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("ai_messages_conversation_idx").on(t.conversationId, t.createdAt),
+  ],
+);
+
+export const aiRuns = pgTable(
+  "ai_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    conversationId: uuid("conversation_id").notNull().references(() => aiConversations.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id").references(() => emailAccounts.id, { onDelete: "set null" }),
+    provider: text("provider").notNull(),
+    model: text("model"),
+    status: text("status").default("running").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    ...timestamps,
+  },
+  (t) => [
+    index("ai_runs_conversation_idx").on(t.conversationId, t.startedAt),
+    index("ai_runs_user_idx").on(t.userId, t.startedAt),
+  ],
+);
+
+export const aiToolCalls = pgTable(
+  "ai_tool_calls",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    runId: uuid("run_id").notNull().references(() => aiRuns.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id").notNull().references(() => aiConversations.id, { onDelete: "cascade" }),
+    providerToolCallId: text("provider_tool_call_id").notNull(),
+    toolName: text("tool_name").notNull(),
+    risk: text("risk").notNull(),
+    requiredScopes: text("required_scopes").array().default(sql`ARRAY[]::text[]`).notNull(),
+    arguments: jsonb("arguments").$type<Record<string, unknown>>(),
+    status: text("status").default("requested").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("ai_tool_calls_provider_idx").on(t.runId, t.providerToolCallId),
+    index("ai_tool_calls_run_idx").on(t.runId, t.createdAt),
+    index("ai_tool_calls_conversation_idx").on(t.conversationId, t.createdAt),
+  ],
+);
+
+export const aiToolResults = pgTable(
+  "ai_tool_results",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    toolCallId: uuid("tool_call_id").notNull().references(() => aiToolCalls.id, { onDelete: "cascade" }),
+    ok: boolean("ok").notNull(),
+    result: jsonb("result").$type<Record<string, unknown>>(),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    retryable: boolean("retryable").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("ai_tool_results_call_idx").on(t.toolCallId),
+  ],
+);
+
+export const aiPermissionGrants = pgTable(
+  "ai_permission_grants",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id").references(() => emailAccounts.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id").references(() => organizations.id, { onDelete: "cascade" }),
+    scope: text("scope").notNull(),
+    source: text("source").default("user").notNull(),
+    grantedAt: timestamp("granted_at", { withTimezone: true }).defaultNow().notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    index("ai_permission_grants_user_idx").on(t.userId, t.scope),
+    index("ai_permission_grants_account_idx").on(t.accountId, t.scope),
+  ],
+);
+
+export const aiConfirmations = pgTable(
+  "ai_confirmations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    conversationId: uuid("conversation_id").notNull().references(() => aiConversations.id, { onDelete: "cascade" }),
+    runId: uuid("run_id").references(() => aiRuns.id, { onDelete: "cascade" }),
+    toolCallId: uuid("tool_call_id").references(() => aiToolCalls.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    action: text("action").notNull(),
+    summary: text("summary").notNull(),
+    status: text("status").default("pending").notNull(),
+    requestedAt: timestamp("requested_at", { withTimezone: true }).defaultNow().notNull(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    ...timestamps,
+  },
+  (t) => [
+    index("ai_confirmations_user_idx").on(t.userId, t.status, t.requestedAt),
+    index("ai_confirmations_conversation_idx").on(t.conversationId, t.requestedAt),
+  ],
+);
