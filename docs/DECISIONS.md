@@ -88,4 +88,5 @@ Use independent vertical scroll areas inside a viewport-sized mail shell. Keep p
 - Event updates to attendees are sent through the GSW outbound mail queue, not through a local `mailto:` handler.
 - Product-authored calendar invitation/update emails use the user's selected supported mail template when available, with GSW Mail event styling and an attached `text/calendar` invitation.
 - Stalwart `sendSchedulingMessages` is disabled for product-created and product-updated events. This prevents Stalwart's server-branded scheduling email and RSVP web page from becoming the user-facing invitation experience.
-- The attached iCalendar request remains interoperable with external calendar clients. A first-party GSW-hosted RSVP endpoint can be added later if browser-based Yes/No/Maybe responses are required.
+- The attached iCalendar request remains interoperable with external calendar clients. GSW Mail also issues recipient-specific signed RSVP links to `mail.guidedstepswellness.com/calendar/rsvp`, where Yes / No / Maybe responses are recorded in the product database without exposing Stalwart branding.
+- RSVP links use signed, expiring tokens and never mutate state on GET. Email buttons preselect a choice, but the recipient must explicitly confirm it on the GSW RSVP page so link scanners cannot accidentally record a response.
