@@ -169,7 +169,9 @@ export async function completeAutomationRun(input: {
   conversationId?: string | null;
 }) {
   const now = new Date();
-  const nextRunAt = computeNextAutomationRun(input.schedule, input.timeZone, now);
+  const nextRunAt = input.schedule.frequency === "once"
+    ? null
+    : computeNextAutomationRun(input.schedule, input.timeZone, now);
   await db.transaction(async (tx) => {
     await tx.update(aiAutomationRuns).set({
       status: "completed",
@@ -199,7 +201,9 @@ export async function failAutomationRun(input: {
 }) {
   const now = new Date();
   const message = input.error instanceof Error ? input.error.message : String(input.error);
-  const nextRunAt = computeNextAutomationRun(input.schedule, input.timeZone, new Date(now.getTime() + 60_000));
+  const nextRunAt = input.schedule.frequency === "once"
+    ? null
+    : computeNextAutomationRun(input.schedule, input.timeZone, new Date(now.getTime() + 60_000));
   await db.transaction(async (tx) => {
     await tx.update(aiAutomationRuns).set({
       status: "failed",
