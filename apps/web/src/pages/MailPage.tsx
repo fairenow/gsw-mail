@@ -89,7 +89,7 @@ export function MailPage() {
   const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved" | "notSaved">("idle");
   const [sendError, setSendError] = useState<string | null>(null);
   const [sendRequestId, setSendRequestId] = useState<string | null>(null);
-  const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>("mail");
+  const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>("chat");
 
   const loadFolder = useCallback(async (accountId: string, name: Folder, nextPage = 0) => {
     const request = ++listRequest.current;
