@@ -118,13 +118,43 @@ export async function failAiRun(runId: string, error: unknown) {
   }).where(eq(aiRuns.id, runId));
 }
 
-const parseArguments = (raw: string): Record<string, unknown> | null => {
+const parseArguments = (raw: string): Record<string, unknown> => {
   try {
     const parsed = raw ? JSON.parse(raw) : {};
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : { value: parsed };
   } catch {
-    return { raw: raw.slice(0, 5_000) };
+    return { invalidJson: true };
   }
+};
+
+const sanitizeToolArguments = (toolName: string, raw: string): Record<string, unknown> => {
+  const parsed = parseArguments(raw);
+  if (toolName === "mail.search") {
+    return {
+      mailbox: typeof parsed.mailbox === "string" ? parsed.mailbox : undefined,
+      queryLength: typeof parsed.query === "string" ? parsed.query.length : 0,
+    };
+  }
+  if (toolName === "mail.read") return { messageId: parsed.messageId };
+  if (toolName === "mail.read_thread") return { threadId: parsed.threadId };
+  return { argumentKeys: Object.keys(parsed).slice(0, 30) };
+};
+
+const sanitizeToolResult = (data: unknown): Record<string, unknown> | null => {
+  if (!data || typeof data !== "object") return data === undefined ? null : { valueType: typeof data };
+  const value = data as Record<string, unknown>;
+  const summary: Record<string, unknown> = {};
+  if (typeof value.count === "number") summary.count = value.count;
+  if (typeof value.messageId === "string") summary.messageId = value.messageId;
+  if (typeof value.threadId === "string") summary.threadId = value.threadId;
+  if (Array.isArray(value.messages)) {
+    summary.messageIds = value.messages
+      .map((item) => item && typeof item === "object" ? (item as Record<string, unknown>).messageId : undefined)
+      .filter((item): item is string => typeof item === "string")
+      .slice(0, 50);
+  }
+  if (Object.keys(summary).length === 0) summary.resultKeys = Object.keys(value).slice(0, 30);
+  return summary;
 };
 
 export async function recordAiToolCall(input: {
@@ -143,7 +173,7 @@ export async function recordAiToolCall(input: {
     toolName: input.toolName,
     risk: input.risk,
     requiredScopes: input.requiredScopes,
-    arguments: parseArguments(input.argumentsJson),
+    arguments: sanitizeToolArguments(input.toolName, input.argumentsJson),
     status: "running",
     startedAt: new Date(),
   }).returning();
@@ -156,11 +186,7 @@ export async function recordAiToolResult(toolCallId: string, result: {
   data?: unknown;
   error?: { code: string; message: string; retryable: boolean };
 }) {
-  const normalizedResult = result.data && typeof result.data === "object"
-    ? result.data as Record<string, unknown>
-    : result.data === undefined
-      ? null
-      : { value: result.data };
+  const normalizedResult = sanitizeToolResult(result.data);
 
   await db.transaction(async (tx) => {
     await tx.insert(aiToolResults).values({
