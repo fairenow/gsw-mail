@@ -13,11 +13,11 @@ export function MailSidebar({ account, profileImageUrl, folder, counts, composeO
   composeOpen: boolean;
   mobileHidden: boolean;
   collapsed: boolean;
-  section?: "mail" | "contacts" | "calendar" | "settings" | "chat";
+  section?: "mail" | "contacts" | "calendar" | "settings" | "files" | "chat";
   onSelectFolder: (folder: Folder) => void;
   onToggleCompose: () => void;
-  onOpenSection?: (section: "contacts" | "calendar" | "settings" | "chat") => void;
-  onPrefetchSection?: (section: "contacts" | "calendar" | "settings" | "chat") => void;
+  onOpenSection?: (section: "contacts" | "calendar" | "settings" | "files" | "chat") => void;
+  onPrefetchSection?: (section: "contacts" | "calendar" | "settings" | "files" | "chat") => void;
 }) {
   const [customFolders, setCustomFolders] = useState<MailFolder[]>([]);
   const [folderError, setFolderError] = useState<string | null>(null);
