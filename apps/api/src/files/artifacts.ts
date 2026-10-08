@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { config } from "../config.js";
+import { renderLocalPdf } from "./localPdfRenderer.js";
 import { HttpError } from "../lib/errors.js";
 
 const execFileAsync = promisify(execFile);
