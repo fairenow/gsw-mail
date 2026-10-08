@@ -56,7 +56,7 @@ export default async function productRoutes(app: FastifyInstance) {
         enabled: settings?.ai?.enabled !== false,
         modelProvider: settings?.ai?.modelProvider === "openai" || settings?.ai?.modelProvider === "claude" || settings?.ai?.modelProvider === "qwen" || settings?.ai?.modelProvider === "gpt-oss-120b"
           ? settings.ai.modelProvider
-          : "qwen",
+          : "gpt-oss-120b",
         mailRead: settings?.ai?.mailRead !== false,
         draftMutation: settings?.ai?.draftMutation !== false,
         emailSend: settings?.ai?.emailSend !== false,
