@@ -79,6 +79,7 @@ const config = {
     huggingFaceApiToken: process.env.HUGGINGFACE_API_TOKEN ?? process.env.HF_TOKEN,
     huggingFaceChatBaseUrl: env("HUGGINGFACE_CHAT_BASE_URL", "https://router.huggingface.co/v1"),
     huggingFaceChatModel: env("HUGGINGFACE_CHAT_MODEL", "openai/gpt-oss-120b:fastest"),
+    huggingFaceReasoningEffort: env("HUGGINGFACE_REASONING_EFFORT", "medium"),
     huggingFaceImageModel: process.env.HUGGINGFACE_IMAGE_MODEL ?? "Qwen/Qwen-Image",
     huggingFaceImageModels: (process.env.HUGGINGFACE_IMAGE_MODELS ?? process.env.HUGGINGFACE_IMAGE_MODEL ?? "Qwen/Qwen-Image,stabilityai/stable-diffusion-3-medium-diffusers").split(",").map((value) => value.trim()).filter(Boolean),
     huggingFaceImageBaseUrl: env("HUGGINGFACE_IMAGE_BASE_URL", "https://router.huggingface.co/hf-inference/models"),
