@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ChevronDown, Minus, Paperclip, X } from "lucide-react";
-import type { ComposeAttachment } from "../../api";
+import { ChevronDown, FolderOpen, Minus, Paperclip, Search, X } from "lucide-react";
+import { api, type ComposeAttachment, type FileNode } from "../../api";
 import type { DraftAttachmentMeta } from "../../lib/draftAttachments";
 import type { ScheduleDraftInput } from "../../lib/scheduledSend";
 import { RichTextEditor } from "../RichTextEditor";
@@ -97,7 +97,7 @@ const fileToAttachment = (file: File): Promise<ComposeAttachment> => new Promise
 
 const formatBytes = (size: number) => size < 1024 ? `${size} B` : size < 1024 * 1024 ? `${Math.round(size / 1024)} KB` : `${(size / (1024 * 1024)).toFixed(1)} MB`;
 
-export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, attachments, persistedAttachments = [], attachmentSyncing = false, sending, draftStatus, sendError, sendNote, defaultTimeZone, onToChange, onCcChange, onBccChange, onSubjectChange, onHtmlChange, onAttachmentsChange, onRemovePersistedAttachment, onMinimize, onClose, onSubmit, onSchedule, onRetry, onUndo }: {
+export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, attachments, persistedAttachments = [], attachmentSyncing = false, sending, draftStatus, sendError, sendNote, defaultTimeZone, onToChange, onCcChange, onBccChange, onSubjectChange, onHtmlChange, onAttachmentsChange, onAttachStoredFiles, onRemovePersistedAttachment, onMinimize, onClose, onSubmit, onSchedule, onRetry, onUndo }: {
   mode: ComposeMode;
   minimized: boolean;
   to: string;
@@ -119,6 +119,7 @@ export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, att
   onSubjectChange: (value: string) => void;
   onHtmlChange: (value: string) => void;
   onAttachmentsChange: (attachments: ComposeAttachment[]) => void;
+  onAttachStoredFiles?: (assetIds: string[]) => Promise<void>;
   onRemovePersistedAttachment?: (attachment: DraftAttachmentMeta) => void;
   onMinimize: () => void;
   onClose: () => void;
@@ -130,12 +131,57 @@ export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, att
   const [showBcc, setShowBcc] = useState(Boolean(bcc));
   const [attachmentError, setAttachmentError] = useState("");
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [storedFiles, setStoredFiles] = useState<FileNode[]>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [fileSearch, setFileSearch] = useState("");
+  const [selectedStoredFiles, setSelectedStoredFiles] = useState<Set<string>>(() => new Set());
   const fileInput = useRef<HTMLInputElement>(null);
   const submit = (event: FormEvent) => { event.preventDefault(); onSubmit(); };
   const title = mode === "new" ? "New message" : mode === "forward" ? "Forward message" : mode === "replyAll" ? "Reply all" : "Reply";
   const status = attachmentSyncing ? "Syncing attachments..." : draftStatus === "saving" ? "Saving..." : draftStatus === "saved" ? "Saved to Drafts" : draftStatus === "notSaved" ? "Saved on this device" : "";
   const totalAttachmentCount = persistedAttachments.length + attachments.length;
   const totalAttachmentBytes = persistedAttachments.reduce((sum, item) => sum + item.size, 0) + attachments.reduce((sum, item) => sum + item.size, 0);
+
+  const openStoredFiles = async () => {
+    setFilesOpen(true);
+    setFilesLoading(true);
+    setAttachmentError("");
+    try {
+      const files = await api.files(null, "recent");
+      setStoredFiles(files.filter((item) => item.nodeType === "file" && item.assetId && item.status === "ready"));
+      setSelectedStoredFiles(new Set());
+    } catch (error) {
+      setAttachmentError(error instanceof Error ? error.message : "Unable to load GSW Files");
+      setFilesOpen(false);
+    } finally {
+      setFilesLoading(false);
+    }
+  };
+
+  const attachSelectedStoredFiles = async () => {
+    if (!onAttachStoredFiles || selectedStoredFiles.size === 0) return;
+    const selected = storedFiles.filter((item) => item.assetId && selectedStoredFiles.has(item.assetId));
+    const incomingBytes = selected.reduce((sum, item) => sum + Number(item.sizeBytes ?? 0), 0);
+    if (totalAttachmentCount + selected.length > 20) {
+      setAttachmentError("You can attach up to 20 files.");
+      return;
+    }
+    if (totalAttachmentBytes + incomingBytes > MAX_ATTACHMENT_BYTES) {
+      setAttachmentError("Attachments are limited to 20 MB total.");
+      return;
+    }
+    setAttachmentError("");
+    try {
+      await onAttachStoredFiles([...selectedStoredFiles]);
+      setFilesOpen(false);
+      setSelectedStoredFiles(new Set());
+      setFileSearch("");
+    } catch (error) {
+      setAttachmentError(error instanceof Error ? error.message : "Unable to attach stored files");
+    }
+  };
+
   const pickFiles = async (files: FileList | null) => {
     if (!files?.length) return;
     setAttachmentError("");
@@ -163,9 +209,37 @@ export function ComposeWindow({ mode, minimized, to, cc, bcc, subject, html, att
         </div>}
         {attachmentError && <div className="gsw-send-error" style={{ padding: "6px 12px 0" }}>{attachmentError}</div>}
         <input ref={fileInput} type="file" multiple hidden onChange={(event) => void pickFiles(event.target.files)} />
-        <div className="gsw-compose-actions"><span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><button type="button" className="gsw-icon-btn" disabled={attachmentSyncing || totalAttachmentCount >= 20} onClick={() => fileInput.current?.click()} aria-label="Attach files" title="Attach files"><Paperclip size={18} /></button><span className={`gsw-send-note ${sendError ? "gsw-send-error" : ""}`}>{sendError || status || sendNote}{sendError && <button type="button" className="gsw-link-btn" onClick={onRetry}>Retry</button>}{sendNote && onUndo && <button type="button" className="gsw-link-btn" onClick={onUndo}>Undo</button>}</span></span><div className="gsw-send-split"><button className="gsw-primary-btn gsw-send-main" type="submit" disabled={sending || attachmentSyncing}>{sending ? "SENDING…" : "SEND"}</button><button className="gsw-primary-btn gsw-send-menu" type="button" disabled={sending || attachmentSyncing} aria-label="Schedule send" title="Schedule send" onClick={() => setScheduleOpen(true)}><ChevronDown size={17} /></button></div></div>
+        <div className="gsw-compose-actions"><span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><button type="button" className="gsw-icon-btn" disabled={attachmentSyncing || totalAttachmentCount >= 20} onClick={() => fileInput.current?.click()} aria-label="Attach from computer" title="Attach from computer"><Paperclip size={18} /></button><button type="button" className="gsw-icon-btn" disabled={attachmentSyncing || totalAttachmentCount >= 20 || !onAttachStoredFiles} onClick={() => void openStoredFiles()} aria-label="Attach from GSW Files" title="Attach from GSW Files"><FolderOpen size={18} /></button><span className={`gsw-send-note ${sendError ? "gsw-send-error" : ""}`}>{sendError || status || sendNote}{sendError && <button type="button" className="gsw-link-btn" onClick={onRetry}>Retry</button>}{sendNote && onUndo && <button type="button" className="gsw-link-btn" onClick={onUndo}>Undo</button>}</span></span><div className="gsw-send-split"><button className="gsw-primary-btn gsw-send-main" type="submit" disabled={sending || attachmentSyncing}>{sending ? "SENDING…" : "SEND"}</button><button className="gsw-primary-btn gsw-send-menu" type="button" disabled={sending || attachmentSyncing} aria-label="Schedule send" title="Schedule send" onClick={() => setScheduleOpen(true)}><ChevronDown size={17} /></button></div></div>
       </form>
     </section>
+    {filesOpen && <div className="gsw-compose-files-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setFilesOpen(false); }}>
+      <section className="gsw-compose-files-picker" role="dialog" aria-modal="true" aria-label="Attach from GSW Files">
+        <div className="gsw-compose-files-head"><div><strong>Attach from GSW Files</strong><small>Select files already saved to your account.</small></div><button type="button" className="gsw-icon-btn" aria-label="Close file picker" onClick={() => setFilesOpen(false)}><X size={18} /></button></div>
+        <label className="gsw-compose-files-search"><Search size={16} aria-hidden="true" /><input value={fileSearch} onChange={(event) => setFileSearch(event.target.value)} placeholder="Search your files" /></label>
+        <div className="gsw-compose-files-list">
+          {filesLoading ? <div className="gsw-compose-files-empty">Loading files…</div> : (() => {
+            const query = fileSearch.trim().toLowerCase();
+            const visible = storedFiles.filter((item) => !query || item.name.toLowerCase().includes(query) || item.filename?.toLowerCase().includes(query));
+            if (!visible.length) return <div className="gsw-compose-files-empty">{query ? "No matching files." : "No saved files yet."}</div>;
+            return visible.map((item) => {
+              const assetId = item.assetId!;
+              const checked = selectedStoredFiles.has(assetId);
+              const alreadyAttached = persistedAttachments.some((attachment) => attachment.assetId === assetId);
+              return <label key={item.id} className={`gsw-compose-file-row ${alreadyAttached ? "is-disabled" : ""}`}>
+                <input type="checkbox" disabled={alreadyAttached} checked={checked || alreadyAttached} onChange={() => setSelectedStoredFiles((current) => {
+                  const next = new Set(current);
+                  if (next.has(assetId)) next.delete(assetId); else next.add(assetId);
+                  return next;
+                })} />
+                <span className="gsw-compose-file-icon"><FolderOpen size={16} /></span>
+                <span className="gsw-compose-file-copy"><strong>{item.name}</strong><small>{item.kind || "file"} · {formatBytes(Number(item.sizeBytes ?? 0))}{alreadyAttached ? " · Already attached" : ""}</small></span>
+              </label>;
+            });
+          })()}
+        </div>
+        <div className="gsw-compose-files-actions"><button type="button" className="gsw-secondary-btn" onClick={() => setFilesOpen(false)}>Cancel</button><button type="button" className="gsw-primary-btn" disabled={attachmentSyncing || selectedStoredFiles.size === 0} onClick={() => void attachSelectedStoredFiles()}>{attachmentSyncing ? "Attaching…" : `Attach ${selectedStoredFiles.size || ""}`.trim()}</button></div>
+      </section>
+    </div>}
     {scheduleOpen && <ScheduleSendModal defaultTimeZone={defaultTimeZone} onClose={() => setScheduleOpen(false)} onSchedule={(schedule) => { setScheduleOpen(false); onSchedule(schedule); }} />}
   </>;
 }
