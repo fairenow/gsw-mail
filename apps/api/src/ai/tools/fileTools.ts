@@ -374,6 +374,7 @@ export const filesCreateArtifactTool: AgentToolDefinition = {
         ...(input.content !== undefined ? { content: input.content } : {}),
         ...(workspace ? { containerId: workspace.externalContainerId } : {}),
       });
+      if (!generated.bytes) throw new Error("PDF artifact did not return a file");
       const asset = await createAssetFromBuffer({
         userId: ctx.userId,
         filename: generated.filename,
