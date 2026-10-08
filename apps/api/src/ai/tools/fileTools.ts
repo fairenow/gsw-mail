@@ -353,7 +353,7 @@ export const filesCreateArtifactTool: AgentToolDefinition = {
       instruction: { type: "string", description: "Detailed layout, styling, calculations, tables, charts, or structure instructions." },
       content: { type: "string", description: "Complete final body copy for the artifact. For PDFs provide full self-contained HTML/CSS for a designed document, or source text/Markdown for a basic PDF. Do not pass the design brief as document content." },
     },
-    required: ["filename", "instruction", "content"],
+    required: ["filename", "instruction"],
     additionalProperties: false,
   },
   requiredScopes: ["files.write"],
