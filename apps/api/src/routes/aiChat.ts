@@ -323,7 +323,7 @@ async function runConversationTurn(input: {
 
         await recordAiToolResult(ledgerCall.id, outcome.result);
         toolActivity.push({ name: semanticName, ok: outcome.result.ok });
-        if (outcome.result.ok && (semanticName === "files.create_text" || semanticName === "files.create_artifact" || semanticName === "files.generate_image")) {
+        if (outcome.result.ok && (semanticName === "files.create_text" || semanticName === "files.create_artifact" || semanticName === "files.transform" || semanticName === "files.generate_image")) {
           const data = outcome.result.data && typeof outcome.result.data === "object"
             ? outcome.result.data as Record<string, unknown>
             : {};
