@@ -5,6 +5,7 @@ import { assets } from "../../db/schema.js";
 import { getR2Object } from "../../files/r2.js";
 import { analyzeStoredFile } from "../../files/intelligence.js";
 import { generateArtifactFile } from "../../files/artifacts.js";
+import { generateImage } from "../../files/imageGeneration.js";
 import { createAssetFromBuffer } from "../../files/service.js";
 import { attachExistingAssetToDraft } from "../../mail/draftAttachmentStore.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
@@ -41,6 +42,14 @@ const createArtifactInput = z.object({
     "unsupported artifact file extension",
   ),
   instruction: z.string().trim().min(1).max(20_000),
+});
+const generateImageInput = z.object({
+  filename: z.string().trim().min(1).max(255).optional(),
+  prompt: z.string().trim().min(1).max(32_000),
+  size: z.enum(["1024x1024", "1536x1024", "1024x1536", "auto"]).optional(),
+  quality: z.enum(["low", "medium", "high", "auto"]).optional(),
+  background: z.enum(["transparent", "opaque", "auto"]).optional(),
+  format: z.enum(["png", "jpeg", "webp"]).optional(),
 });
 const attachInput = z.object({
   draftId: z.string().min(1).max(1000),
@@ -352,6 +361,56 @@ export const filesCreateArtifactTool: AgentToolDefinition = {
   },
 };
 
+
+
+export const filesGenerateImageTool: AgentToolDefinition = {
+  name: "files.generate_image",
+  description: "Generate a new image from a text prompt and save it into the user's private My Files library. Use this for illustrations, graphics, concepts, banners, thumbnails, and other generated images.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      filename: { type: "string", description: "Optional filename. The correct extension is added if missing." },
+      prompt: { type: "string", description: "Detailed image-generation prompt." },
+      size: { type: "string", enum: ["1024x1024", "1536x1024", "1024x1536", "auto"] },
+      quality: { type: "string", enum: ["low", "medium", "high", "auto"] },
+      background: { type: "string", enum: ["transparent", "opaque", "auto"] },
+      format: { type: "string", enum: ["png", "jpeg", "webp"] },
+    },
+    required: ["prompt"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["files.write", "images.generate"],
+  risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = generateImageInput.parse(rawInput);
+      const generated = await generateImage(input);
+      const base = input.filename?.trim() || "generated-image";
+      const hasImageExt = /\.(png|jpe?g|webp)$/i.test(base);
+      const filename = hasImageExt ? base : `${base}.${generated.extension}`;
+      const asset = await createAssetFromBuffer({
+        userId: ctx.userId,
+        filename,
+        mimeType: generated.mimeType,
+        content: generated.bytes,
+        source: "chat_generated",
+        kind: "image",
+        addToFiles: true,
+      });
+      return success(ctx, toolCallId, startedAt, {
+        assetId: asset.id,
+        filename: asset.displayName || asset.filename,
+        mimeType: asset.mimeType,
+        sizeBytes: Number(asset.sizeBytes),
+        model: generated.model,
+      });
+    } catch (error) {
+      return failure(ctx, toolCallId, startedAt, error);
+    }
+  },
+};
+
 export const mailAttachFileTool: AgentToolDefinition = {
   name: "mail.attach_file",
   description: "Attach an existing GSW Files asset to an existing email draft. The draft must already exist. This changes the draft but does not send it.",
@@ -387,4 +446,4 @@ export const mailAttachFileTool: AgentToolDefinition = {
   },
 };
 
-export const fileTools: AgentToolDefinition[] = [filesListTool, filesSearchTool, filesReadTool, filesAnalyzeTool, filesCreateTextTool, filesCreateArtifactTool, mailAttachFileTool];
+export const fileTools: AgentToolDefinition[] = [filesListTool, filesSearchTool, filesReadTool, filesAnalyzeTool, filesCreateTextTool, filesCreateArtifactTool, filesGenerateImageTool, mailAttachFileTool];
