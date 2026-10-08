@@ -21,7 +21,7 @@ const iconFor = (item: FileNode) => {
   return <File size={22} strokeWidth={1.65} />;
 };
 
-export function FilesPage() {
+export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { configureTopBar } = useAppShell();
   const [view, setView] = useState<FilesView>("folder");
   const [files, setFiles] = useState<FileNode[]>([]);
@@ -32,7 +32,10 @@ export function FilesPage() {
   const [notice, setNotice] = useState("");
   const [menuId, setMenuId] = useState<string | null>(null);
   const [allFolders, setAllFolders] = useState<FileNode[]>([]);
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
   const uploadInput = useRef<HTMLInputElement>(null);
+  const newFolderInputRef = useRef<HTMLInputElement>(null);
 
   const parentId = view === "folder" ? path[path.length - 1]?.id ?? null : null;
 
@@ -57,6 +60,7 @@ export function FilesPage() {
 
   useEffect(() => { void load(); }, [view, parentId]);
   useEffect(() => {
+    if (embedded) return;
     configureTopBar({
       search: "",
       searchPlaceholder: "Search files",
@@ -64,7 +68,20 @@ export function FilesPage() {
       onSearch: () => undefined,
       searchDisabled: true,
     });
-  }, [configureTopBar]);
+  }, [configureTopBar, embedded]);
+
+  useEffect(() => {
+    if (!newFolderOpen) return;
+    window.requestAnimationFrame(() => newFolderInputRef.current?.focus());
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setNewFolderOpen(false);
+        setNewFolderName("");
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [newFolderOpen]);
 
   const usagePercent = useMemo(() => usage && usage.quotaBytes > 0 ? Math.min(100, (usage.usedBytes / usage.quotaBytes) * 100) : 0, [usage]);
 
@@ -74,11 +91,13 @@ export function FilesPage() {
   };
 
   const createFolder = async () => {
-    const name = window.prompt("Folder name");
-    if (!name?.trim()) return;
+    const name = newFolderName.trim();
+    if (!name) return;
     setBusy(true);
     try {
-      await api.createFileFolder(name.trim(), parentId);
+      await api.createFileFolder(name, parentId);
+      setNewFolderOpen(false);
+      setNewFolderName("");
       await load();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error));
@@ -162,8 +181,7 @@ export function FilesPage() {
     }
   };
 
-  return <MailWorkspace section="files">
-    <main className="gsw-files-page">
+  const content = <main className={`gsw-files-page ${embedded ? "gsw-files-page-embedded" : ""}`}>
       <div className="gsw-page-heading gsw-files-heading">
         <div>
           <p className="gsw-eyebrow">Workspace</p>
@@ -172,7 +190,29 @@ export function FilesPage() {
         </div>
         <div className="gsw-files-actions">
           <input ref={uploadInput} className="gsw-hidden-input" type="file" multiple onChange={(event) => void uploadFiles(event.target.files)} />
-          {view === "folder" && <><button className="gsw-secondary-btn" disabled={busy} onClick={() => void createFolder()}><FolderPlus size={16} /> New folder</button><button className="gsw-primary-btn" disabled={busy} onClick={() => uploadInput.current?.click()}><Upload size={16} /> {busy ? "Working…" : "Upload"}</button></>}
+          {view === "folder" && <>
+            <div className="gsw-new-folder-wrap">
+              <button className="gsw-secondary-btn" disabled={busy} onClick={() => setNewFolderOpen((current) => !current)} aria-expanded={newFolderOpen}>
+                <FolderPlus size={16} /> New folder
+              </button>
+              {newFolderOpen && <form className="gsw-new-folder-popover" onSubmit={(event) => { event.preventDefault(); void createFolder(); }}>
+                <label htmlFor="gsw-new-folder-name">New folder</label>
+                <input
+                  id="gsw-new-folder-name"
+                  ref={newFolderInputRef}
+                  value={newFolderName}
+                  onChange={(event) => setNewFolderName(event.target.value)}
+                  placeholder="Folder name"
+                  maxLength={255}
+                />
+                <div>
+                  <button type="button" className="gsw-text-btn" onClick={() => { setNewFolderOpen(false); setNewFolderName(""); }}>Cancel</button>
+                  <button type="submit" className="gsw-primary-btn" disabled={busy || !newFolderName.trim()}>Create</button>
+                </div>
+              </form>}
+            </div>
+            <button className="gsw-primary-btn" disabled={busy} onClick={() => uploadInput.current?.click()}><Upload size={16} /> {busy ? "Working…" : "Upload"}</button>
+          </>}
           <button className="gsw-icon-btn" title="Refresh files" aria-label="Refresh files" onClick={() => void load()}><RefreshCw size={17} /></button>
         </div>
       </div>
@@ -211,6 +251,9 @@ export function FilesPage() {
             </div>)}</div>}
         </section>
       </div>
-    </main>
-  </MailWorkspace>;
+    </main>;
+
+  return embedded
+    ? <div className="gsw-embedded-workspace gsw-embedded-files">{content}</div>
+    : <MailWorkspace section="files">{content}</MailWorkspace>;
 }
