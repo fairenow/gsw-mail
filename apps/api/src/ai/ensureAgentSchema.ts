@@ -65,6 +65,7 @@ export async function ensureAiAgentSchema(): Promise<void> {
       "arguments" jsonb,
       "status" text DEFAULT 'requested' NOT NULL,
       "started_at" timestamp with time zone,
+      "running_at" timestamp with time zone,
       "completed_at" timestamp with time zone,
       "created_at" timestamp with time zone DEFAULT now() NOT NULL,
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -255,6 +256,8 @@ export async function ensureAiAgentSchema(): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS "ai_tasks_user_idx" ON "ai_tasks" ("user_id", "status", "updated_at");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "ai_tasks_conversation_idx" ON "ai_tasks" ("conversation_id", "updated_at");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "ai_tasks_account_idx" ON "ai_tasks" ("account_id", "status");`);
+  await pool.query(`ALTER TABLE "ai_tasks" ADD COLUMN IF NOT EXISTS "running_at" timestamp with time zone;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "ai_tasks_running_idx" ON "ai_tasks" ("status", "running_at", "updated_at");`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "ai_task_steps" (
@@ -266,13 +269,22 @@ export async function ensureAiAgentSchema(): Promise<void> {
       "status" text DEFAULT 'pending' NOT NULL,
       "input" jsonb DEFAULT '{}'::jsonb NOT NULL,
       "result" jsonb,
+      "attempts" integer DEFAULT 0 NOT NULL,
+      "max_attempts" integer DEFAULT 3 NOT NULL,
+      "next_attempt_at" timestamp with time zone,
+      "last_error" text,
       "started_at" timestamp with time zone,
       "completed_at" timestamp with time zone,
       "created_at" timestamp with time zone DEFAULT now() NOT NULL,
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     );
   `);
+  await pool.query(`ALTER TABLE "ai_task_steps" ADD COLUMN IF NOT EXISTS "attempts" integer DEFAULT 0 NOT NULL;`);
+  await pool.query(`ALTER TABLE "ai_task_steps" ADD COLUMN IF NOT EXISTS "max_attempts" integer DEFAULT 3 NOT NULL;`);
+  await pool.query(`ALTER TABLE "ai_task_steps" ADD COLUMN IF NOT EXISTS "next_attempt_at" timestamp with time zone;`);
+  await pool.query(`ALTER TABLE "ai_task_steps" ADD COLUMN IF NOT EXISTS "last_error" text;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "ai_task_steps_task_sequence_idx" ON "ai_task_steps" ("task_id", "sequence");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "ai_task_steps_status_idx" ON "ai_task_steps" ("task_id", "status");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "ai_task_steps_retry_idx" ON "ai_task_steps" ("task_id", "status", "next_attempt_at");`);
 
 }
