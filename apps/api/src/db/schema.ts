@@ -1025,6 +1025,54 @@ export const aiConfirmations = pgTable(
 );
 
 
+export const aiTasks = pgTable(
+  "ai_tasks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id").references(() => emailAccounts.id, { onDelete: "set null" }),
+    conversationId: uuid("conversation_id").references(() => aiConversations.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    instruction: text("instruction").notNull(),
+    status: text("status").default("planned").notNull(),
+    worker: text("worker").default("coordinator").notNull(),
+    selectedSkills: text("selected_skills").array().default(sql`ARRAY[]::text[]`).notNull(),
+    currentStep: integer("current_step").default(0).notNull(),
+    progressPercent: integer("progress_percent").default(0).notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    ...timestamps,
+  },
+  (t) => [
+    index("ai_tasks_user_idx").on(t.userId, t.status, t.updatedAt),
+    index("ai_tasks_conversation_idx").on(t.conversationId, t.updatedAt),
+    index("ai_tasks_account_idx").on(t.accountId, t.status),
+  ],
+);
+
+export const aiTaskSteps = pgTable(
+  "ai_task_steps",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    taskId: uuid("task_id").notNull().references(() => aiTasks.id, { onDelete: "cascade" }),
+    sequence: integer("sequence").notNull(),
+    title: text("title").notNull(),
+    worker: text("worker").default("coordinator").notNull(),
+    status: text("status").default("pending").notNull(),
+    input: jsonb("input").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+    result: jsonb("result").$type<Record<string, unknown>>(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("ai_task_steps_task_sequence_idx").on(t.taskId, t.sequence),
+    index("ai_task_steps_status_idx").on(t.taskId, t.status),
+  ],
+);
+
 export const aiCampaigns = pgTable(
   "ai_campaigns",
   {
