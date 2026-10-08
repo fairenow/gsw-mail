@@ -190,7 +190,7 @@ export function createMailService(context: MailServiceContext) {
         start: start.toISOString(),
         end: end.toISOString(),
         total: folders.reduce((sum, folder) => sum + folder.count, 0),
-        complete: folders.every((folder) => folder.complete),
+        complete: folders.every((folder) => folder.complete) && requested.every((needle) => targets.some((mailbox) => mailbox.role?.toLowerCase() === needle || mailbox.engineName.toLowerCase() === needle)),
         folders,
         missingRequestedMailboxes: requested.filter((needle) => !targets.some((mailbox) => mailbox.role?.toLowerCase() === needle || mailbox.engineName.toLowerCase() === needle)),
       };
