@@ -61,9 +61,9 @@ export function listAgentIntegrations(): AgentIntegrationDescriptor[] {
       id: "browser",
       name: "Browser worker",
       category: "browser",
-      configured: false,
-      capabilities: [],
-      notes: "Reserved for a future isolated browser/computer-use provider.",
+      configured: Boolean(config.browser.baseUrl && config.browser.token),
+      capabilities: ["web-search", "open-page", "read-page", "screenshot", "bounded-click", "bounded-type"],
+      notes: config.browser.baseUrl ? "Isolated browser provider configured." : "Set BROWSER_WORKER_BASE_URL and BROWSER_WORKER_TOKEN to enable.",
     },
   ];
 }
