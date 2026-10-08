@@ -12,6 +12,7 @@ import { LandingPage } from "./pages/LandingPage";
 import { OAuthAccountChooserPage } from "./pages/OAuthAccountChooserPage";
 import { OAuthConsentPage } from "./pages/OAuthConsentPage";
 import { OAuthTestPage } from "./pages/OAuthTestPage";
+import { FilesPage } from "./pages/FilesPage";
 
 const scrollToHash = (hash: string) => {
   if (!hash) return;
@@ -75,7 +76,7 @@ export function App() {
   if (path === "/oauth/connect" || path === "/oauth/test" || path === "/oauth/test/callback") return <OAuthTestPage />;
   if (path === "/setup") return <SetupPage />;
   if (path === "/control-center") return <ControlCenterPage />;
-  const page = path === "/settings" ? <SettingsPage /> : path === "/contacts" ? <ContactsPage /> : path === "/calendar" ? <CalendarPage /> : <MailPage />;
+  const page = path === "/settings" ? <SettingsPage /> : path === "/contacts" ? <ContactsPage /> : path === "/calendar" ? <CalendarPage /> : path === "/files" ? <FilesPage /> : <MailPage />;
   return <AppShell>{page}</AppShell>;
 }
 
