@@ -237,7 +237,6 @@ async function generateLocalPdf(input: { filename: string; content: string; inst
   const dir = await mkdtemp(join(tmpdir(), "gsw-artifact-"));
   try {
     const htmlPath = join(dir, "document.html");
-    const outputPath = join(dir, input.filename);
     const body = /<\/?(?:html|body|section|div|h1|h2|h3|p|ul|ol|li|table|strong|em)\b/i.test(input.content)
       ? input.content
       : simpleMarkdownToHtml(input.content);
@@ -271,12 +270,17 @@ ${body}
 </html>`;
 
     await writeFile(htmlPath, html, "utf8");
+    // Every conversion gets an independent LibreOffice user profile. Sharing a
+    // profile across simultaneous requests can cause soffice to attach to an
+    // existing process, return without writing the expected file, or stall.
+    // A bounded timeout also leaves room for the API to return a useful error.
     const { stderr } = await execFileAsync("libreoffice", [
-      "--headless",
+      `-env:UserInstallation=${new URL(`file://${join(dir, "lo-profile")}`).href}`,
+      "--headless", "--nologo", "--nodefault", "--nofirststartwizard",
       "--convert-to", "pdf",
       "--outdir", dir,
       htmlPath,
-    ], { timeout: 120_000, maxBuffer: 4 * 1024 * 1024 });
+    ], { timeout: 40_000, killSignal: "SIGKILL", maxBuffer: 4 * 1024 * 1024 });
 
     const generatedPath = join(dir, "document.pdf");
     const bytes = await readFile(generatedPath).catch(() => null);
@@ -292,7 +296,10 @@ ${body}
   } catch (error) {
     if (error instanceof HttpError) throw error;
     const message = error instanceof Error ? error.message : String(error);
-    throw new HttpError(502, `Local PDF generation failed: ${message}`);
+    const timedOut = error instanceof Error && "killed" in error && error.killed === true;
+    throw new HttpError(timedOut ? 504 : 502, timedOut
+      ? "PDF conversion exceeded 40 seconds. Please retry; the renderer was stopped safely."
+      : `Local PDF generation failed: ${message}`);
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
