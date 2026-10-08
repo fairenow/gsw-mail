@@ -35,6 +35,32 @@ const ensureOpenAi = () => {
   };
 };
 
+async function uploadOpenAiUserFile(input: { filename: string; mimeType: string; bytes: Buffer }) {
+  const { apiKey, baseUrl } = ensureOpenAi();
+  const form = new FormData();
+  form.append("file", new Blob([new Uint8Array(input.bytes)], { type: input.mimeType || "application/octet-stream" }), input.filename);
+  form.append("purpose", "user_data");
+  form.append("expires_after", JSON.stringify({ anchor: "created_at", seconds: 3600 }));
+  const response = await fetch(`${baseUrl}/files`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${apiKey}` },
+    body: form,
+  });
+  const body = await response.json().catch(() => ({})) as { id?: string; error?: { message?: string } };
+  if (!response.ok || !body.id) {
+    throw new HttpError(response.status === 429 ? 429 : 502, body.error?.message?.trim() || `OpenAI file upload returned HTTP ${response.status}`);
+  }
+  return body.id;
+}
+
+async function deleteOpenAiFile(fileId: string) {
+  const { apiKey, baseUrl } = ensureOpenAi();
+  await fetch(`${baseUrl}/files/${encodeURIComponent(fileId)}`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${apiKey}` },
+  }).catch(() => undefined);
+}
+
 const collectCitations = (body: ArtifactResponse) => {
   const citations: ContainerFileCitation[] = [];
   for (const item of body.output ?? []) {
@@ -66,23 +92,16 @@ export const artifactMimeType = (filename: string) => {
   } as Record<string, string>)[ext ?? ""] ?? "application/octet-stream";
 };
 
-export async function generateArtifactFile(input: {
+async function runArtifactResponse(input: {
   filename: string;
-  instruction: string;
+  prompt: string;
+  sourceFileIds?: string[];
 }) {
   const { apiKey, baseUrl, model } = ensureOpenAi();
   const target = input.filename.trim();
-  const prompt = [
-    `Create exactly one finished file named "${target}".`,
-    "Use the python/code interpreter tool to generate the file.",
-    "The result must be a real downloadable file, not markdown pretending to be a file.",
-    "Keep the output polished and usable.",
-    input.instruction,
-    `Before finishing, save the final artifact using the exact filename: ${target}`,
-  ].join("\n");
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Math.max(config.ai.timeoutMs, 120_000));
+  const timeout = setTimeout(() => controller.abort(), Math.max(config.ai.timeoutMs, 180_000));
   try {
     const response = await fetch(`${baseUrl}/responses`, {
       method: "POST",
@@ -94,10 +113,13 @@ export async function generateArtifactFile(input: {
         model,
         tools: [{
           type: "code_interpreter",
-          container: { type: "auto" },
+          container: {
+            type: "auto",
+            ...(input.sourceFileIds?.length ? { file_ids: input.sourceFileIds } : {}),
+          },
         }],
         tool_choice: "required",
-        input: prompt,
+        input: input.prompt,
       }),
       signal: controller.signal,
     });
@@ -135,5 +157,57 @@ export async function generateArtifactFile(input: {
     throw new HttpError(502, "Artifact generation is temporarily unavailable.");
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+export async function generateArtifactFile(input: {
+  filename: string;
+  instruction: string;
+}) {
+  const target = input.filename.trim();
+  const prompt = [
+    `Create exactly one finished file named "${target}".`,
+    "Use the python/code interpreter tool to generate the file.",
+    "The result must be a real downloadable file, not markdown pretending to be a file.",
+    "Keep the output polished and usable.",
+    input.instruction,
+    `Before finishing, save the final artifact using the exact filename: ${target}`,
+  ].join("\n");
+  return runArtifactResponse({ filename: target, prompt });
+}
+
+export async function transformArtifactFile(input: {
+  filename: string;
+  instruction: string;
+  sources: Array<{ filename: string; mimeType: string; bytes: Buffer }>;
+}) {
+  if (!input.sources.length) throw new HttpError(400, "At least one source file is required.");
+  if (input.sources.length > 5) throw new HttpError(400, "A maximum of 5 source files can be transformed at once.");
+
+  const uploadedIds: string[] = [];
+  try {
+    for (const source of input.sources) {
+      uploadedIds.push(await uploadOpenAiUserFile(source));
+    }
+
+    const sourceNames = input.sources.map((source) => source.filename).join(", ");
+    const target = input.filename.trim();
+    const prompt = [
+      `Transform the provided source file(s) into exactly one finished output file named "${target}".`,
+      `Source files: ${sourceNames}`,
+      "Use the python/code interpreter tool to inspect and modify the actual source file contents.",
+      "Preserve useful structure, formulas, formatting, tables, charts, and data when relevant unless the user's instruction asks to change them.",
+      "Do not invent data that is not present in the source files unless explicitly requested.",
+      input.instruction,
+      `Before finishing, save the final transformed file using the exact filename: ${target}`,
+    ].join("\n");
+
+    return await runArtifactResponse({
+      filename: target,
+      prompt,
+      sourceFileIds: uploadedIds,
+    });
+  } finally {
+    await Promise.all(uploadedIds.map((fileId) => deleteOpenAiFile(fileId)));
   }
 }
