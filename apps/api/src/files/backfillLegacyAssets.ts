@@ -1,4 +1,4 @@
-import { eq, isNotNull, isNull } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { pool, db } from "../db/client.js";
 import { emailTemplates } from "../db/schema.js";
 import { createAssetFromBuffer } from "./service.js";
