@@ -155,7 +155,7 @@ type ChatStreamEmitter = (event: ChatStreamStatus) => void;
 
 const toolLabel = (toolName: string): string => {
   switch (toolName) {
-    case "mail.activity": return "Reviewing email activity";
+    case "mail.activity": return "Checking recent email activity";
     case "mail.search": return "Searching your mailbox";
     case "mail.read": return "Reading the matching email";
     case "mail.read_thread": return "Reading the conversation";
@@ -186,6 +186,14 @@ const toolLabel = (toolName: string): string => {
     case "files.transform": return "Transforming your file";
     case "files.generate_image": return "Generating your image";
     case "mail.attach_file": return "Attaching the file to your draft";
+    case "capabilities.search": return "Finding the right GSW tools";
+    case "tasks.create": return "Creating a work task";
+    case "tasks.list": return "Checking your work tasks";
+    case "tasks.read": return "Reviewing task progress";
+    case "tasks.update": return "Updating task progress";
+    case "workers.delegate": return "Delegating a focused investigation";
+    case "workers.parallel": return "Running parallel investigations";
+    case "workers.review": return "Reviewing prepared work";
     default: return "Working with your mailbox";
   }
 };
@@ -270,6 +278,7 @@ async function runConversationTurn(input: {
   let model = "";
   const toolActivity: Array<{ name: string; ok: boolean }> = [];
   const generatedAttachments: ChatAttachmentResult[] = [];
+  const seenReadCalls = new Set<string>();
 
   try {
     const latestUserContent = [...input.providerMessages].reverse().find((message) => message.role === "user")?.content;
@@ -540,6 +549,26 @@ async function runConversationTurn(input: {
         const definition = agentMailRegistry.definition(call.function.name);
         const semanticName = call.function.name.replaceAll("__", ".");
         const label = toolLabel(semanticName);
+        const readCallKey = definition?.risk === "read" ? `${semanticName}:${call.function.arguments}` : null;
+
+        if (readCallKey && seenReadCalls.has(readCallKey)) {
+          toolActivity.push({ name: semanticName, ok: true });
+          input.providerMessages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: JSON.stringify({
+              ok: true,
+              toolCallId: call.id,
+              data: {
+                skipped: true,
+                reason: "duplicate_read_call",
+                message: "This exact read operation already ran earlier in this request. Reuse the previous tool result instead of calling it again.",
+              },
+            }),
+          });
+          continue;
+        }
+        if (readCallKey) seenReadCalls.add(readCallKey);
 
         input.emit?.({
           type: "status",
