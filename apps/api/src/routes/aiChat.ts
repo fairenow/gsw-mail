@@ -388,7 +388,7 @@ async function prepareNewConversation(input: {
   conversationId?: string | undefined;
   timeZone?: string | undefined;
   localDateTime?: string | undefined;
-  messages: Array<{ role: "user" | "assistant"; content: string; attachments?: Array<{ assetId: string; filename: string; mimeType: string; sizeBytes: number; kind?: string | null }> | undefined }>;
+  messages: Array<{ role: "user" | "assistant"; content: string; attachments?: Array<{ assetId: string; filename: string; mimeType: string; sizeBytes: number; kind?: string | null | undefined }> | undefined }>;
   assetIds?: string[] | undefined;
 }) {
   const latestUserMessage = [...input.messages].reverse().find((message) => message.role === "user");
