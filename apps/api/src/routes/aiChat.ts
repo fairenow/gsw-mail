@@ -29,6 +29,7 @@ import type { AgentExecutionContext, ProviderToolDefinition } from "../ai/tools/
 import { aiScopes } from "../ai/permissions/types.js";
 import { getAiCapabilitySettings, isAiScopeGloballyEnabled } from "../ai/capabilities.js";
 import { selectAgentTools } from "../ai/toolSelection.js";
+import { getAgentTask, listAgentTasks } from "../ai/taskService.js";
 import { forbidden } from "../lib/errors.js";
 import { getAssetForUser } from "../files/service.js";
 import { getR2Object } from "../files/r2.js";
@@ -827,6 +828,16 @@ async function prepareNewConversation(input: {
 
 export default async function aiChatRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
+
+  app.get("/product/chat/tasks", async (req) => {
+    const query = z.object({ limit: z.coerce.number().int().min(1).max(50).optional() }).parse(req.query);
+    return { tasks: await listAgentTasks(req.user!.id, query.limit ?? 20) };
+  });
+
+  app.get("/product/chat/tasks/:id", async (req) => {
+    const params = z.object({ id: z.string().uuid() }).parse(req.params);
+    return getAgentTask(req.user!.id, params.id);
+  });
 
   app.get("/product/chat/conversations", async (req) => {
     const query = z.object({ limit: z.coerce.number().int().min(1).max(50).optional() }).parse(req.query);
