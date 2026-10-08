@@ -5,6 +5,7 @@ import { db } from "../../db/client.js";
 import { assets } from "../../db/schema.js";
 import { getR2Object } from "../../files/r2.js";
 import { analyzeStoredFile } from "../../files/intelligence.js";
+import { detectFileType, isTextLikeFile } from "../../files/fileTypes.js";
 import { generateArtifactFile, transformArtifactFile } from "../../files/artifacts.js";
 import { generateImage } from "../../files/imageGeneration.js";
 import { createAssetFromBuffer } from "../../files/service.js";
@@ -165,16 +166,9 @@ export const filesSearchTool: AgentToolDefinition = {
   },
 };
 
-const readableTextMime = (mimeType: string, filename: string) =>
-  mimeType.startsWith("text/")
-  || mimeType === "application/json"
-  || mimeType === "application/xml"
-  || mimeType === "application/javascript"
-  || /\.(txt|md|csv|json|xml|html|css|js|ts|tsx|jsx|log)$/i.test(filename);
-
 export const filesReadTool: AgentToolDefinition = {
   name: "files.read",
-  description: "Read metadata for a GSW file and, for plain text/CSV/JSON/code files, return a bounded text preview. Use files.analyze for PDFs, Office files, images, audio, or video-audio transcription.",
+  description: "Read a GSW file. Text/code/calendar/email-text files return a bounded text preview; other files use the configured file-intelligence strategy when available. GSW stores and can attach arbitrary file types even when deep analysis is best-effort.",
   inputSchema: {
     type: "object",
     properties: { assetId: { type: "string", description: "Asset ID returned by files.list/files.search or supplied with a chat attachment." } },
@@ -199,7 +193,8 @@ export const filesReadTool: AgentToolDefinition = {
       let deepAnalysis: string | undefined;
       let analysisMode: string | undefined;
       let analysisModel: string | undefined;
-      if (readableTextMime(row.mimeType, row.filename) && Number(row.sizeBytes) <= 2 * 1024 * 1024) {
+      const detected = detectFileType(row.filename, row.mimeType);
+      if (isTextLikeFile(row.filename, row.mimeType) && Number(row.sizeBytes) <= 2 * 1024 * 1024) {
         const object = await getR2Object(row.r2Key);
         textPreview = object.content.toString("utf8").slice(0, 40_000);
       } else if (config.ai.openaiApiKey) {
@@ -223,6 +218,8 @@ export const filesReadTool: AgentToolDefinition = {
         sizeBytes: Number(row.sizeBytes),
         kind: row.kind,
         source: row.source,
+        category: detected.category,
+        analysisStrategy: detected.strategy,
         textPreview,
         deepAnalysis,
         analysisMode,
@@ -241,7 +238,7 @@ export const filesReadTool: AgentToolDefinition = {
 
 export const filesAnalyzeTool: AgentToolDefinition = {
   name: "files.analyze",
-  description: "Deeply analyze a stored GSW file. Supports PDFs, Word documents, PowerPoint presentations, spreadsheets, images, and audio transcription. Video files currently provide audio-track transcription rather than visual frame analysis.",
+  description: "Deeply analyze a stored GSW file using the appropriate strategy for its type: direct text, document/PDF analysis, spreadsheet or archive sandbox inspection, image vision, audio transcription, combined video analysis, or best-effort binary inspection.",
   inputSchema: {
     type: "object",
     properties: {
