@@ -194,7 +194,7 @@ export interface ProductSettings {
   contacts: Record<string, unknown>;
   ai: {
     enabled: boolean;
-    modelProvider: "qwen" | "openai" | "claude";
+    modelProvider: "qwen" | "gpt-oss-120b" | "openai" | "claude";
     mailRead: boolean;
     draftMutation: boolean;
     emailSend: boolean;
