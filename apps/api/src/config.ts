@@ -72,6 +72,8 @@ const config = {
     openaiApiKey: process.env.OPENAI_API_KEY,
     openaiBaseUrl: env("OPENAI_BASE_URL", "https://api.openai.com/v1"),
     openaiModel: process.env.OPENAI_MODEL,
+    openaiFileModel: process.env.OPENAI_FILE_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
+    openaiTranscriptionModel: process.env.OPENAI_TRANSCRIPTION_MODEL ?? "gpt-4o-mini-transcribe",
     anthropicApiKey: process.env.ANTHROPIC_API_KEY,
     anthropicBaseUrl: env("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1"),
     anthropicModel: process.env.ANTHROPIC_MODEL,
