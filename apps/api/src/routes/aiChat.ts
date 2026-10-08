@@ -31,9 +31,17 @@ import { getAiCapabilitySettings, isAiScopeGloballyEnabled } from "../ai/capabil
 import { forbidden } from "../lib/errors.js";
 import { getAssetForUser } from "../files/service.js";
 
+const chatAttachmentSchema = z.object({
+  assetId: z.string().uuid(),
+  filename: z.string().min(1).max(255),
+  mimeType: z.string().min(1).max(255),
+  sizeBytes: z.number().nonnegative(),
+  kind: z.string().max(80).nullable().optional(),
+});
 const chatMessagesSchema = z.array(z.object({
   role: z.enum(["user", "assistant"]),
   content: z.string().trim().min(1).max(20_000),
+  attachments: z.array(chatAttachmentSchema).max(10).optional(),
 })).min(1).max(24);
 
 const bodySchema = z.object({
@@ -343,7 +351,7 @@ async function prepareNewConversation(input: {
   conversationId?: string | undefined;
   timeZone?: string | undefined;
   localDateTime?: string | undefined;
-  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  messages: Array<{ role: "user" | "assistant"; content: string; attachments?: Array<{ assetId: string; filename: string; mimeType: string; sizeBytes: number; kind?: string | null }> | undefined }>;
   assetIds?: string[] | undefined;
 }) {
   const latestUserMessage = [...input.messages].reverse().find((message) => message.role === "user");
@@ -383,8 +391,11 @@ async function prepareNewConversation(input: {
 
   const providerMessages = input.messages.map((message, index) => {
     const isLatestUser = index === input.messages.length - 1 && message.role === "user";
-    if (!isLatestUser || attachmentSummaries.length === 0) return { role: message.role, content: message.content };
-    const attachmentContext = attachmentSummaries
+    const messageAttachments = isLatestUser && attachmentSummaries.length > 0
+      ? attachmentSummaries
+      : (message.attachments ?? []);
+    if (messageAttachments.length === 0) return { role: message.role, content: message.content };
+    const attachmentContext = messageAttachments
       .map((asset) => `- ${asset.filename} | assetId=${asset.assetId} | ${asset.mimeType} | ${asset.sizeBytes} bytes`)
       .join("\n");
     return {
