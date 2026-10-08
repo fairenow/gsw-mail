@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import { HttpError } from "../lib/errors.js";
+import { detectFileType } from "./fileTypes.js";
 
 type OpenAiOutputItem = {
   type?: string;
@@ -65,20 +66,6 @@ async function deleteInputFile(fileId: string) {
     headers: { authorization: `Bearer ${apiKey}` },
   }).catch(() => undefined);
 }
-
-const documentLike = (mimeType: string, filename: string) =>
-  mimeType === "application/pdf"
-  || /\.(pdf|doc|docx|rtf|odt|ppt|pptx|xls|xlsx|csv|tsv|txt|md|json|html|xml)$/i.test(filename);
-
-const imageLike = (mimeType: string, filename: string) =>
-  mimeType.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(filename);
-
-const audioLike = (mimeType: string, filename: string) =>
-  mimeType.startsWith("audio/")
-  || /\.(flac|mp3|mpeg|mpga|m4a|ogg|wav|webm)$/i.test(filename);
-
-const videoAudioLike = (mimeType: string, filename: string) =>
-  mimeType.startsWith("video/") || /\.(mp4|mpeg|webm|m4v)$/i.test(filename);
 
 async function responseAnalysis(input: {
   filename: string;
@@ -173,6 +160,123 @@ async function responseAnalysis(input: {
     if (uploadedFileId) await deleteInputFile(uploadedFileId);
   }
 }
+
+async function textAnalysis(input: {
+  filename: string;
+  mimeType: string;
+  bytes: Buffer;
+  instruction: string;
+}) {
+  const { apiKey, baseUrl, model } = ensureOpenAi();
+  const text = input.bytes.toString("utf8").slice(0, 120_000);
+  const response = await fetch(`${baseUrl}/responses`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      input: [{
+        role: "user",
+        content: [{
+          type: "input_text",
+          text: [
+            `Filename: ${input.filename}`,
+            `MIME type: ${input.mimeType}`,
+            input.instruction,
+            "",
+            "[FILE CONTENT]",
+            text,
+          ].join("\n"),
+        }],
+      }],
+    }),
+  });
+  const body = await response.json().catch(() => ({})) as OpenAiResponse;
+  if (!response.ok) {
+    throw new HttpError(response.status === 429 ? 429 : 502, body.error?.message?.trim() || `OpenAI text analysis returned HTTP ${response.status}`);
+  }
+  const analyzed = outputText(body);
+  if (!analyzed) throw new HttpError(502, "The text analysis service returned an empty response.");
+  return { text: analyzed, model, mode: "text" as const };
+}
+
+async function sandboxAnalysis(input: {
+  filename: string;
+  mimeType: string;
+  bytes: Buffer;
+  instruction: string;
+  category: string;
+}) {
+  if (input.bytes.byteLength > 100 * 1024 * 1024) {
+    throw new HttpError(400, "Best-effort sandbox analysis currently supports files up to 100 MB.");
+  }
+
+  const { apiKey, baseUrl } = ensureOpenAi();
+  const model = config.ai.openaiArtifactModel;
+  const fileId = await uploadInputFile(input);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.max(config.ai.timeoutMs, 180_000));
+  try {
+    const response = await fetch(`${baseUrl}/responses`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        tools: [{
+          type: "code_interpreter",
+          container: {
+            type: "auto",
+            file_ids: [fileId],
+          },
+        }],
+        tool_choice: "required",
+        input: [
+          `Inspect the attached ${input.category} file "${input.filename}" using the code interpreter.`,
+          input.instruction,
+          "Work from the real file contents, not just metadata.",
+          "For spreadsheets, inspect sheets, headers, formulas, values, totals, dates, and anomalies.",
+          "For archives/packages, list meaningful contents and safely inspect relevant small files without blindly expanding huge nested payloads.",
+          "For images in uncommon formats, convert to a common format if needed and inspect what can be determined.",
+          "For video, inspect metadata and sample representative frames if the environment supports it; clearly distinguish visual findings from audio transcript findings.",
+          "For unknown binary formats, identify the format and extract whatever meaningful content is safely accessible.",
+          "Return a concise, grounded analysis. Do not claim successful extraction if the file could not actually be opened.",
+        ].join("\n"),
+      }),
+      signal: controller.signal,
+    });
+    const requestId = response.headers.get("x-request-id") ?? response.headers.get("request-id");
+    const body = await response.json().catch(() => ({})) as OpenAiResponse;
+    if (!response.ok) {
+      const message = body.error?.message?.trim() || `OpenAI sandbox analysis returned HTTP ${response.status}`;
+      console.error("[file-intelligence] sandbox analysis failed", {
+        filename: input.filename,
+        mimeType: input.mimeType,
+        category: input.category,
+        model,
+        status: response.status,
+        requestId,
+        message,
+      });
+      throw new HttpError(response.status === 429 ? 429 : 502, message);
+    }
+    const analyzed = outputText(body);
+    if (!analyzed) throw new HttpError(502, "The sandbox analysis service returned an empty response.");
+    return { text: analyzed, model, mode: "sandbox" as const };
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    if (error instanceof Error && error.name === "AbortError") throw new HttpError(504, "Sandbox file analysis timed out.");
+    throw new HttpError(502, "The sandbox file analysis service is temporarily unavailable.");
+  } finally {
+    clearTimeout(timeout);
+    await deleteInputFile(fileId);
+  }
+}
+
 async function transcribe(input: {
   filename: string;
   mimeType: string;
@@ -217,21 +321,59 @@ export async function analyzeStoredFile(input: {
   bytes: Buffer;
   instruction: string;
 }) {
-  if (imageLike(input.mimeType, input.filename)) {
-    return responseAnalysis({ ...input, image: true });
+  const detected = detectFileType(input.filename, input.mimeType);
+
+  switch (detected.strategy) {
+    case "text":
+      return textAnalysis(input);
+    case "vision":
+      return responseAnalysis({ ...input, image: true });
+    case "openai_file":
+      return responseAnalysis({ ...input, image: false });
+    case "code_interpreter":
+      return sandboxAnalysis({ ...input, category: detected.category });
+    case "transcription":
+      try {
+        return await transcribe(input);
+      } catch (error) {
+        const fallback = await sandboxAnalysis({ ...input, category: detected.category });
+        return {
+          ...fallback,
+          note: `Direct transcription failed, so the file was inspected in the computational workspace instead. ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    case "video": {
+      let transcript: Awaited<ReturnType<typeof transcribe>> | null = null;
+      let visual: Awaited<ReturnType<typeof sandboxAnalysis>> | null = null;
+      try {
+        transcript = await transcribe(input);
+      } catch {
+        transcript = null;
+      }
+      try {
+        visual = await sandboxAnalysis({ ...input, category: detected.category });
+      } catch {
+        visual = null;
+      }
+      if (!transcript && !visual) {
+        throw new HttpError(502, "The video could not be analyzed by either transcription or sandbox inspection.");
+      }
+      return {
+        text: [
+          ...(transcript ? ["[AUDIO TRANSCRIPT]", transcript.text] : []),
+          ...(visual ? ["[VISUAL / FILE INSPECTION]", visual.text] : []),
+        ].join("\n\n"),
+        model: visual?.model ?? transcript?.model ?? config.ai.openaiArtifactModel,
+        mode: "video" as const,
+        note: transcript && visual
+          ? "Video analysis combined audio transcription with best-effort computational frame/file inspection."
+          : transcript
+            ? "Only the audio track could be analyzed."
+            : "Only computational visual/file inspection could be completed.",
+      };
+    }
+    case "best_effort":
+    default:
+      return sandboxAnalysis({ ...input, category: detected.category });
   }
-  if (documentLike(input.mimeType, input.filename)) {
-    return responseAnalysis({ ...input, image: false });
-  }
-  if (audioLike(input.mimeType, input.filename)) {
-    return transcribe(input);
-  }
-  if (videoAudioLike(input.mimeType, input.filename)) {
-    const result = await transcribe(input);
-    return {
-      ...result,
-      note: "This analyzes the video's audio track only; visual frame understanding is not enabled yet.",
-    };
-  }
-  throw new HttpError(400, "This file type is not supported by deep file analysis yet.");
 }
