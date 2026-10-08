@@ -64,7 +64,7 @@ const config = {
     maxUploadBytes: Number(env("FILES_MAX_UPLOAD_BYTES", String(500 * 1024 * 1024))),
   },
   ai: {
-    provider: env("AI_PROVIDER", "qwen"),
+    provider: env("AI_PROVIDER", "gpt-oss-120b"),
     timeoutMs: Number(env("AI_TIMEOUT_MS", process.env.HETZNER_INFERENCE_TIMEOUT_MS ?? "45000")),
     hetznerApiKey: process.env.HETZNER_INFERENCE_KEY,
     hetznerBaseUrl: env("HETZNER_INFERENCE_BASE_URL", "https://inference.hetzner.com/api/v1"),
