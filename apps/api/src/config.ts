@@ -63,6 +63,11 @@ const config = {
     freeQuotaBytes: Number(env("FILES_FREE_QUOTA_BYTES", String(500 * 1024 * 1024))),
     maxUploadBytes: Number(env("FILES_MAX_UPLOAD_BYTES", String(500 * 1024 * 1024))),
   },
+  browser: {
+    baseUrl: process.env.BROWSER_WORKER_BASE_URL,
+    token: process.env.BROWSER_WORKER_TOKEN,
+    timeoutMs: Number(env("BROWSER_WORKER_TIMEOUT_MS", "45000")),
+  },
   ai: {
     provider: env("AI_PROVIDER", "gpt-oss-120b"),
     timeoutMs: Number(env("AI_TIMEOUT_MS", process.env.HETZNER_INFERENCE_TIMEOUT_MS ?? "45000")),
