@@ -24,13 +24,14 @@ const contactInput = z.object({
 });
 const profileImageUrl = z.string().max(2_048).refine((value) => {
   if (!value) return true;
+  if (/^\/product\/files\/[0-9a-f-]{36}\/content$/i.test(value)) return true;
   try {
     const url = new URL(value);
     return url.protocol === "http:" || url.protocol === "https:";
   } catch {
     return false;
   }
-}, "profile image URL must use http or https");
+}, "profile image URL must be http(s) or a GSW Files asset URL");
 const settingsSchema = z.object({ general: z.object({
   profileImageUrl: profileImageUrl.optional(),
   profileImageAssetId: z.string().uuid().nullable().optional(),
