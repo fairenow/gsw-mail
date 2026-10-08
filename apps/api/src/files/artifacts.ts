@@ -1,5 +1,12 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { config } from "../config.js";
 import { HttpError } from "../lib/errors.js";
+
+const execFileAsync = promisify(execFile);
 
 type ContainerFileCitation = {
   type: "container_file_citation";
@@ -178,12 +185,133 @@ async function runArtifactResponse(input: {
   }
 }
 
+const escapeHtml = (value: string) => value
+  .replaceAll("&", "&amp;")
+  .replaceAll("<", "&lt;")
+  .replaceAll(">", "&gt;")
+  .replaceAll('"', "&quot;");
+
+const simpleMarkdownToHtml = (source: string) => {
+  const lines = source.replace(/\r\n/g, "\n").split("\n");
+  const out: string[] = [];
+  let inList: "ul" | "ol" | null = null;
+
+  const closeList = () => {
+    if (inList) out.push(`</${inList}>`);
+    inList = null;
+  };
+
+  const inline = (value: string) => escapeHtml(value)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>");
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) {
+      closeList();
+      continue;
+    }
+    if (/^###\s+/.test(line)) { closeList(); out.push(`<h3>${inline(line.replace(/^###\s+/, ""))}</h3>`); continue; }
+    if (/^##\s+/.test(line)) { closeList(); out.push(`<h2>${inline(line.replace(/^##\s+/, ""))}</h2>`); continue; }
+    if (/^#\s+/.test(line)) { closeList(); out.push(`<h1>${inline(line.replace(/^#\s+/, ""))}</h1>`); continue; }
+    const ordered = line.match(/^\d+[.)]\s+(.+)$/);
+    if (ordered) {
+      if (inList !== "ol") { closeList(); inList = "ol"; out.push("<ol>"); }
+      out.push(`<li>${inline(ordered[1] ?? "")}</li>`);
+      continue;
+    }
+    const bullet = line.match(/^[-*•]\s+(.+)$/);
+    if (bullet) {
+      if (inList !== "ul") { closeList(); inList = "ul"; out.push("<ul>"); }
+      out.push(`<li>${inline(bullet[1] ?? "")}</li>`);
+      continue;
+    }
+    closeList();
+    out.push(`<p>${inline(line)}</p>`);
+  }
+  closeList();
+  return out.join("\n");
+};
+
+async function generateLocalPdf(input: { filename: string; content: string; instruction: string }) {
+  const dir = await mkdtemp(join(tmpdir(), "gsw-artifact-"));
+  try {
+    const htmlPath = join(dir, "document.html");
+    const outputPath = join(dir, input.filename);
+    const body = /<\/?(?:html|body|section|div|h1|h2|h3|p|ul|ol|li|table|strong|em)\b/i.test(input.content)
+      ? input.content
+      : simpleMarkdownToHtml(input.content);
+
+    const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: Letter; margin: 0.55in; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #292722; font-size: 10.5pt; line-height: 1.35; }
+  h1 { font-size: 24pt; line-height: 1.05; margin: 0 0 10pt; color: #25221d; }
+  h2 { font-size: 14pt; margin: 12pt 0 5pt; color: #b96f00; }
+  h3 { font-size: 11pt; margin: 9pt 0 3pt; color: #575047; }
+  p { margin: 0 0 7pt; }
+  ul, ol { margin: 4pt 0 8pt 18pt; padding: 0; }
+  li { margin: 0 0 3pt; }
+  strong { color: #25221d; }
+  table { width: 100%; border-collapse: collapse; margin: 8pt 0; }
+  th, td { border: 1px solid #e5dccb; padding: 5pt; text-align: left; vertical-align: top; }
+  th { background: #fbf2dc; }
+  .gsw-accent { height: 5pt; background: #ee9a00; margin: 0 0 14pt; }
+  .gsw-note { margin-top: 12pt; padding-top: 7pt; border-top: 1px solid #eadfca; color: #756d63; font-size: 8.5pt; }
+</style>
+</head>
+<body>
+<div class="gsw-accent"></div>
+${body}
+</body>
+</html>`;
+
+    await writeFile(htmlPath, html, "utf8");
+    const { stderr } = await execFileAsync("libreoffice", [
+      "--headless",
+      "--convert-to", "pdf",
+      "--outdir", dir,
+      htmlPath,
+    ], { timeout: 120_000, maxBuffer: 4 * 1024 * 1024 });
+
+    const generatedPath = join(dir, "document.pdf");
+    const bytes = await readFile(generatedPath).catch(() => null);
+    if (!bytes?.length) {
+      throw new HttpError(502, stderr?.trim() || "LibreOffice did not produce a PDF.");
+    }
+    return {
+      filename: input.filename,
+      bytes,
+      mimeType: "application/pdf",
+      model: "gsw-local-libreoffice-pdf",
+    };
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new HttpError(502, `Local PDF generation failed: ${message}`);
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
 export async function generateArtifactFile(input: {
   filename: string;
   instruction: string;
+  content?: string;
   containerId?: string;
 }) {
   const target = input.filename.trim();
+  if (/\.pdf$/i.test(target)) {
+    return generateLocalPdf({
+      filename: target,
+      content: input.content?.trim() || input.instruction,
+      instruction: input.instruction,
+    });
+  }
   const prompt = [
     `Create exactly one finished file named "${target}".`,
     "Use the python/code interpreter tool to generate the file.",
