@@ -327,7 +327,7 @@ export async function generateArtifactFile(input: {
         `User design requirements: ${input.instruction}`,
         `Source content to preserve and visually organize:\n${input.content?.trim() || input.instruction}`,
         `Save the final PDF with exactly this filename: ${target}`,
-      ].join("\\n");
+      ].join("\n");
       return runArtifactResponse({ filename: target, prompt, ...(input.containerId ? { containerId: input.containerId } : {}) });
     }
     return generateLocalPdf({
