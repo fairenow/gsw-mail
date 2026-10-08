@@ -357,7 +357,11 @@ export const filesCreateArtifactTool: AgentToolDefinition = {
     const startedAt = new Date().toISOString();
     try {
       const input = createArtifactInput.parse(rawInput);
-      const generated = await generateArtifactFile(input);
+      const workspace = ctx.conversationId ? await getOrCreateFileWorkspace(ctx.userId, ctx.conversationId) : null;
+      const generated = await generateArtifactFile({
+        ...input,
+        ...(workspace ? { containerId: workspace.externalContainerId } : {}),
+      });
       const asset = await createAssetFromBuffer({
         userId: ctx.userId,
         filename: generated.filename,
