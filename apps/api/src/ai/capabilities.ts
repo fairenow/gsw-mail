@@ -10,6 +10,7 @@ export interface AiCapabilitySettings {
   scheduledWork: boolean;
   campaignLaunch: boolean;
   fileAccess: boolean;
+  imageGeneration: boolean;
 }
 
 export const defaultAiCapabilities: AiCapabilitySettings = {
@@ -20,6 +21,7 @@ export const defaultAiCapabilities: AiCapabilitySettings = {
   scheduledWork: true,
   campaignLaunch: true,
   fileAccess: true,
+  imageGeneration: true,
 };
 
 export async function getAiCapabilitySettings(userId: string): Promise<AiCapabilitySettings> {
@@ -33,6 +35,7 @@ export async function getAiCapabilitySettings(userId: string): Promise<AiCapabil
     scheduledWork: ai.scheduledWork !== false,
     campaignLaunch: ai.campaignLaunch !== false,
     fileAccess: ai.fileAccess !== false,
+    imageGeneration: ai.imageGeneration !== false,
   };
 }
 
@@ -44,5 +47,6 @@ export function isAiScopeGloballyEnabled(settings: AiCapabilitySettings, scope: 
   if (scope === "automations.read" || scope === "automations.write") return settings.scheduledWork;
   if (scope === "campaign.read" || scope === "campaign.write" || scope === "campaign.send") return settings.campaignLaunch;
   if (scope === "files.read" || scope === "files.write") return settings.fileAccess;
+  if (scope === "images.generate") return settings.imageGeneration;
   return true;
 }
