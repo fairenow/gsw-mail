@@ -276,27 +276,7 @@ ${body}
 </html>`;
 
     const rendered = await renderLocalPdf(html);
-    return { filename: input.filename, bytes: rendered, mimeType: "application/pdf", model: "gsw-local-chromium-pdf" };
-
-    await writeFile(htmlPath, html, "utf8");
-    const { stderr } = await execFileAsync("libreoffice", [
-      "--headless",
-      "--convert-to", "pdf",
-      "--outdir", dir,
-      htmlPath,
-    ], { timeout: 120_000, maxBuffer: 4 * 1024 * 1024 });
-
-    const generatedPath = join(dir, "document.pdf");
-    const bytes = await readFile(generatedPath).catch(() => null);
-    if (!bytes?.length) {
-      throw new HttpError(502, stderr?.trim() || "LibreOffice did not produce a PDF.");
-    }
-    return {
-      filename: input.filename,
-      bytes,
-      mimeType: "application/pdf",
-      model: "gsw-local-libreoffice-pdf",
-    };
+    return { filename: input.filename, bytes: rendered, mimeType: "application/pdf", model: "gsw-local-pdf" };
   } catch (error) {
     if (error instanceof HttpError) throw error;
     const message = error instanceof Error ? error.message : String(error);
