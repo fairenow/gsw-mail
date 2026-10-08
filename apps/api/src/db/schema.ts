@@ -881,6 +881,26 @@ export const aiConversations = pgTable(
   ],
 );
 
+export const fileWorkspaces = pgTable(
+  "file_workspaces",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id").notNull().references(() => aiConversations.id, { onDelete: "cascade" }),
+    provider: text("provider").default("openai").notNull(),
+    externalContainerId: text("external_container_id").notNull(),
+    status: text("status").default("active").notNull(),
+    memoryLimit: text("memory_limit").default("4g").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    lastActiveAt: timestamp("last_active_at", { withTimezone: true }).defaultNow().notNull(),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("file_workspaces_user_conversation_idx").on(t.userId, t.conversationId),
+    index("file_workspaces_expires_idx").on(t.expiresAt),
+  ],
+);
+
 export const aiMessages = pgTable(
   "ai_messages",
   {
