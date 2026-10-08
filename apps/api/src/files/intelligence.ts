@@ -1,7 +1,14 @@
 import { config } from "../config.js";
 import { HttpError } from "../lib/errors.js";
 import { detectFileType } from "./fileTypes.js";
-import { extractPdfText } from "./localExtraction.js";
+import {
+  extractOfficeDocumentText,
+  extractPdfText,
+  extractPresentationText,
+  extractSpreadsheetText,
+  inspectImageLocally,
+  inspectVideoLocally,
+} from "./localExtraction.js";
 
 type OpenAiOutputItem = {
   type?: string;
@@ -174,6 +181,52 @@ async function textAnalysis(input: {
   return { text, model: "gsw-local-text-extractor", mode: "text" as const };
 }
 
+async function localOfficeAnalysis(input: {
+  filename: string;
+  mimeType: string;
+  bytes: Buffer;
+  instruction: string;
+  category: "document" | "spreadsheet" | "presentation";
+}) {
+  void input.mimeType;
+  void input.instruction;
+  const text = input.category === "document"
+    ? await extractOfficeDocumentText({ filename: input.filename, bytes: input.bytes })
+    : input.category === "spreadsheet"
+      ? await extractSpreadsheetText({ filename: input.filename, bytes: input.bytes })
+      : await extractPresentationText({ filename: input.filename, bytes: input.bytes });
+  return { text, model: `gsw-local-${input.category}-extractor`, mode: "document" as const };
+}
+
+async function localImageAnalysis(input: {
+  filename: string;
+  mimeType: string;
+  bytes: Buffer;
+  instruction: string;
+}) {
+  void input.mimeType;
+  void input.instruction;
+  const text = await inspectImageLocally({ filename: input.filename, bytes: input.bytes });
+  return { text, model: "gsw-local-image-inspector", mode: "vision" as const };
+}
+
+async function localVideoAnalysis(input: {
+  filename: string;
+  mimeType: string;
+  bytes: Buffer;
+  instruction: string;
+}) {
+  void input.mimeType;
+  void input.instruction;
+  const text = await inspectVideoLocally({ filename: input.filename, bytes: input.bytes });
+  return {
+    text,
+    model: "gsw-local-video-inspector",
+    mode: "video" as const,
+    note: "Local video fallback inspects metadata and representative frame OCR. Full visual semantics and speech transcription require a compatible multimodal/transcription model.",
+  };
+}
+
 async function pdfTextAnalysis(input: {
   filename: string;
   mimeType: string;
@@ -315,12 +368,18 @@ export async function analyzeStoredFile(input: {
     case "text":
       return textAnalysis(input);
     case "vision":
-      return responseAnalysis({ ...input, image: true });
+      return localImageAnalysis(input);
     case "openai_file":
-      return detected.category === "pdf"
-        ? pdfTextAnalysis(input)
-        : responseAnalysis({ ...input, image: false });
+      if (detected.category === "pdf") return pdfTextAnalysis(input);
+      if (detected.category === "document" || detected.category === "presentation") {
+        return localOfficeAnalysis({ ...input, category: detected.category });
+      }
+      return responseAnalysis({ ...input, image: false });
     case "code_interpreter":
+      if (detected.category === "document" || detected.category === "spreadsheet" || detected.category === "presentation") {
+        return localOfficeAnalysis({ ...input, category: detected.category });
+      }
+      if (detected.category === "image") return localImageAnalysis(input);
       return sandboxAnalysis({ ...input, category: detected.category });
     case "transcription":
       try {
@@ -333,33 +392,25 @@ export async function analyzeStoredFile(input: {
         };
       }
     case "video": {
+      const local = await localVideoAnalysis(input);
+      if (!config.ai.openaiApiKey) return local;
+
       let transcript: Awaited<ReturnType<typeof transcribe>> | null = null;
-      let visual: Awaited<ReturnType<typeof sandboxAnalysis>> | null = null;
       try {
         transcript = await transcribe(input);
       } catch {
         transcript = null;
       }
-      try {
-        visual = await sandboxAnalysis({ ...input, category: detected.category });
-      } catch {
-        visual = null;
-      }
-      if (!transcript && !visual) {
-        throw new HttpError(502, "The video could not be analyzed by either transcription or sandbox inspection.");
-      }
       return {
         text: [
+          local.text,
           ...(transcript ? ["[AUDIO TRANSCRIPT]", transcript.text] : []),
-          ...(visual ? ["[VISUAL / FILE INSPECTION]", visual.text] : []),
         ].join("\n\n"),
-        model: visual?.model ?? transcript?.model ?? config.ai.openaiArtifactModel,
+        model: transcript?.model ?? local.model,
         mode: "video" as const,
-        note: transcript && visual
-          ? "Video analysis combined audio transcription with best-effort computational frame/file inspection."
-          : transcript
-            ? "Only the audio track could be analyzed."
-            : "Only computational visual/file inspection could be completed.",
+        note: transcript
+          ? "Video analysis combined local metadata/frame inspection with audio transcription."
+          : local.note,
       };
     }
     case "best_effort":
