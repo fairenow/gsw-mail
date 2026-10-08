@@ -4,6 +4,7 @@ import { db } from "../../db/client.js";
 import { assets } from "../../db/schema.js";
 import { getR2Object } from "../../files/r2.js";
 import { analyzeStoredFile } from "../../files/intelligence.js";
+import { generateArtifactFile } from "../../files/artifacts.js";
 import { createAssetFromBuffer } from "../../files/service.js";
 import { attachExistingAssetToDraft } from "../../mail/draftAttachmentStore.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
@@ -33,6 +34,13 @@ const createTextFileInput = z.object({
   filename: z.string().trim().min(1).max(255),
   content: z.string().max(500_000),
   format: z.enum(["txt", "md", "csv", "json", "html"]).optional(),
+});
+const createArtifactInput = z.object({
+  filename: z.string().trim().min(1).max(255).refine(
+    (value) => /\.(pdf|docx|xlsx|pptx|csv|txt|md|html|json|png|jpe?g)$/i.test(value),
+    "unsupported artifact file extension",
+  ),
+  instruction: z.string().trim().min(1).max(20_000),
 });
 const attachInput = z.object({
   draftId: z.string().min(1).max(1000),
@@ -293,6 +301,57 @@ export const filesCreateTextTool: AgentToolDefinition = {
   },
 };
 
+
+
+export const filesCreateArtifactTool: AgentToolDefinition = {
+  name: "files.create_artifact",
+  description: "Create a finished downloadable artifact in the user's My Files library using a sandboxed code interpreter. Supports PDF, DOCX, XLSX, PPTX, CSV, TXT, Markdown, HTML, JSON, PNG, and JPEG outputs. Use this for native documents, spreadsheets, presentations, PDFs, charts, and other generated files.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      filename: { type: "string", description: "Exact output filename including a supported extension such as report.pdf, plan.docx, budget.xlsx, or deck.pptx." },
+      instruction: { type: "string", description: "Detailed instructions for the artifact's content, layout, calculations, tables, charts, or structure." },
+    },
+    required: ["filename", "instruction"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["files.write"],
+  risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = createArtifactInput.parse(rawInput);
+      const generated = await generateArtifactFile(input);
+      const asset = await createAssetFromBuffer({
+        userId: ctx.userId,
+        filename: generated.filename,
+        mimeType: generated.mimeType,
+        content: generated.bytes,
+        source: "chat_generated",
+        kind: generated.mimeType.includes("spreadsheet") || generated.filename.toLowerCase().endsWith(".xlsx")
+          ? "spreadsheet"
+          : generated.mimeType.includes("presentation") || generated.filename.toLowerCase().endsWith(".pptx")
+            ? "presentation"
+            : generated.mimeType.startsWith("image/")
+              ? "image"
+              : generated.mimeType === "application/pdf"
+                ? "pdf"
+                : "document",
+        addToFiles: true,
+      });
+      return success(ctx, toolCallId, startedAt, {
+        assetId: asset.id,
+        filename: asset.displayName || asset.filename,
+        mimeType: asset.mimeType,
+        sizeBytes: Number(asset.sizeBytes),
+        model: generated.model,
+      });
+    } catch (error) {
+      return failure(ctx, toolCallId, startedAt, error);
+    }
+  },
+};
+
 export const mailAttachFileTool: AgentToolDefinition = {
   name: "mail.attach_file",
   description: "Attach an existing GSW Files asset to an existing email draft. The draft must already exist. This changes the draft but does not send it.",
@@ -328,4 +387,4 @@ export const mailAttachFileTool: AgentToolDefinition = {
   },
 };
 
-export const fileTools: AgentToolDefinition[] = [filesListTool, filesSearchTool, filesReadTool, filesAnalyzeTool, filesCreateTextTool, mailAttachFileTool];
+export const fileTools: AgentToolDefinition[] = [filesListTool, filesSearchTool, filesReadTool, filesAnalyzeTool, filesCreateTextTool, filesCreateArtifactTool, mailAttachFileTool];
