@@ -345,13 +345,13 @@ export const filesCreateTextTool: AgentToolDefinition = {
 
 export const filesCreateArtifactTool: AgentToolDefinition = {
   name: "files.create_artifact",
-  description: "Create a finished downloadable artifact in the user's My Files library. Create a genuine finished file. For PDF, execute visual design requirements via the configured artifact service; never save the design brief itself as the PDF. Provide source text in content when available. If no design service is configured and source text is unavailable, return a clear error rather than a fake PDF.",
+  description: "Create a finished downloadable artifact in the user's My Files library. Create a genuine finished file. For PDF, create complete self-contained, print-ready HTML/CSS in the content field, with genuine document body copy (not the design brief). The PDF renderer runs locally in Chromium independently of the selected chat provider and does not require OpenAI credits. Keep styling directions in instruction. No external scripts, stylesheets or network assets.",
   inputSchema: {
     type: "object",
     properties: {
       filename: { type: "string", description: "Exact output filename including a supported extension such as report.pdf, plan.docx, budget.xlsx, or deck.pptx." },
       instruction: { type: "string", description: "Detailed layout, styling, calculations, tables, charts, or structure instructions." },
-      content: { type: "string", description: "Complete final body copy for the artifact. Actual source text/facts for the document, not style commands. Keep visual instructions in instruction." },
+      content: { type: "string", description: "Complete final body copy for the artifact. For PDFs provide full self-contained HTML/CSS for a designed document, or source text/Markdown for a basic PDF. Do not pass the design brief as document content." },
     },
     required: ["filename", "instruction"],
     additionalProperties: false,
