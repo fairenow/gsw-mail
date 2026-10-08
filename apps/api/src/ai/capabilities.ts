@@ -53,7 +53,7 @@ export function isAiScopeGloballyEnabled(settings: AiCapabilitySettings, scope: 
   if (scope === "mail.read" || scope === "contacts.read" || scope === "calendar.read" || scope === "workspace.read" || scope === "research.use") return settings.mailRead;
   if (scope === "mail.write" || scope === "mail.bulk_write") return settings.draftMutation;
   if (scope === "mail.send") return settings.emailSend;
-  if (scope === "automations.read" || scope === "automations.write") return settings.scheduledWork;
+  if (scope === "automations.read" || scope === "automations.write" || scope === "tasks.read" || scope === "tasks.write") return settings.scheduledWork;
   if (scope === "campaign.read" || scope === "campaign.write" || scope === "campaign.send") return settings.campaignLaunch;
   if (scope === "files.read" || scope === "files.write") return settings.fileAccess;
   if (scope === "images.generate") return settings.imageGeneration;
