@@ -47,7 +47,10 @@ function blocks(content: string): Block[] {
   for (const raw of lines) {
     const line = raw.trimEnd();
     if (!line.trim()) {
-      flush();
+      // Markdown models often place blank lines between numbered items. Keep an
+      // active list open so the browser renders 1, 2, 3 instead of restarting
+      // a new <ol> at 1 for every item.
+      if (!ordered.length && !unordered.length) flush();
       continue;
     }
     const heading = /^(#{1,3})\s+(.+)$/.exec(line.trim());
