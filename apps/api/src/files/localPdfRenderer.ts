@@ -13,7 +13,7 @@ export function validatePrintableHtml(html: string): void {
     || /@import\b/i.test(html)
     || /url\s*\(/i.test(html)
     || /\b(?:href|action)\s*=/i.test(html)
-    || /\bsrc\s*=\s*["\x27]?(?!data:image\/(?:png|jpeg|gif|webp);base64,)/i.test(html)) {
+    || [...html.matchAll(/\bsrc\s*=\s*(?:"([^"]*)"|\x27([^\x27]*)\x27|([^\s>]+))/gi)].some((match) => !/^data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(match[1] ?? match[2] ?? match[3] ?? ""))) {
     throw new Error("PDF HTML contains unsupported active or external content");
   }
 }
