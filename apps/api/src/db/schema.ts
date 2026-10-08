@@ -698,6 +698,7 @@ export const emailTemplates = pgTable(
     logoMimeType: text("logo_mime_type"),
     logoBase64: text("logo_base64"),
     logoFilename: text("logo_filename"),
+    logoAssetId: uuid("logo_asset_id").references(() => assets.id, { onDelete: "set null" }),
     ...timestamps,
   },
   (t) => [
