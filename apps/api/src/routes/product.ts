@@ -12,6 +12,7 @@ import { getEngine, getUserEngine } from "../engine/index.js";
 import { getAssetForUser } from "../files/service.js";
 import { badRequest } from "../lib/errors.js";
 import { emailAccounts, mailAccountMemberships } from "../db/schema.js";
+import { config } from "../config.js";
 
 const customValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 const contactInput = z.object({
@@ -52,6 +53,9 @@ export default async function productRoutes(app: FastifyInstance) {
       contacts: settings?.contacts ?? { autoCreateFromSent: true },
       ai: {
         enabled: settings?.ai?.enabled !== false,
+        modelProvider: settings?.ai?.modelProvider === "openai" || settings?.ai?.modelProvider === "claude" || settings?.ai?.modelProvider === "qwen"
+          ? settings.ai.modelProvider
+          : "qwen",
         mailRead: settings?.ai?.mailRead !== false,
         draftMutation: settings?.ai?.draftMutation !== false,
         emailSend: settings?.ai?.emailSend !== false,
@@ -67,6 +71,21 @@ export default async function productRoutes(app: FastifyInstance) {
 
   app.patch("/product/settings", async (req) => {
     const input = settingsSchema.parse(req.body);
+    const requestedModelProvider = input.ai?.modelProvider;
+    if (requestedModelProvider !== undefined) {
+      if (requestedModelProvider !== "qwen" && requestedModelProvider !== "openai" && requestedModelProvider !== "claude") {
+        throw badRequest("AI model must be Qwen, OpenAI, or Claude.");
+      }
+      if (requestedModelProvider === "qwen" && !config.ai.hetznerApiKey) {
+        throw badRequest("Qwen is not configured for this GSW Mail deployment.");
+      }
+      if (requestedModelProvider === "openai" && (!config.ai.openaiApiKey || !config.ai.openaiModel)) {
+        throw badRequest("OpenAI is not configured for this GSW Mail deployment.");
+      }
+      if (requestedModelProvider === "claude" && (!config.ai.anthropicApiKey || !config.ai.anthropicModel)) {
+        throw badRequest("Claude is not configured for this GSW Mail deployment.");
+      }
+    }
     const [current] = await db.select().from(userSettings).where(eq(userSettings.userId, req.user!.id)).limit(1);
     let nextGeneral = { ...(current?.general ?? {}), ...(input.general ?? {}) };
     if (input.general && "profileImageAssetId" in input.general) {
