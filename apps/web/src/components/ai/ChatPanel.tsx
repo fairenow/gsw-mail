@@ -294,6 +294,7 @@ export function ChatPanel() {
     const savedId = localStorage.getItem(key);
     setConversationId(savedId);
     setMessages([]);
+    setPendingAttachments([]);
     setError("");
     setIntervention(null);
     setExecutionActivities([]);
@@ -528,7 +529,7 @@ export function ChatPanel() {
       </div>
       <div className="gsw-chat-header-actions">
         <button className="gsw-chat-clear" type="button" onClick={() => { setHistoryOpen((current) => !current); if (!historyOpen) void refreshConversations(); }}><Clock3 size={15} /> History</button>
-        {(messages.length > 0 || conversationId) && <button className="gsw-chat-clear" type="button" onClick={() => { localStorage.removeItem(`gsw-chat-conversation:${account?.id ?? "none"}`); setConversationId(null); setMessages([]); setIntervention(null); setExecutionActivities([]); setInput(""); setError(""); }}><RefreshCcw size={15} /> New chat</button>}
+        {(messages.length > 0 || conversationId) && <button className="gsw-chat-clear" type="button" onClick={() => { localStorage.removeItem(`gsw-chat-conversation:${account?.id ?? "none"}`); setConversationId(null); setMessages([]); setPendingAttachments([]); setIntervention(null); setExecutionActivities([]); setInput(""); setError(""); }}><RefreshCcw size={15} /> New chat</button>}
       </div>
     </header>
 
