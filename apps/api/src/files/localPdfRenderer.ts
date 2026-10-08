@@ -26,7 +26,7 @@ export async function renderLocalPdf(html: string): Promise<Buffer> {
     await writeFile(source, html, "utf8");
     try {
       await execute("chromium", [
-        "--headless", "--no-sandbox", "--disable-dev-shm-usage",
+        "--headless", "--disable-dev-shm-usage",
         "--disable-background-networking", "--print-to-pdf-no-header",
         "--print-to-pdf=" + output, "file://" + source,
       ], { timeout: 45000, killSignal: "SIGKILL" });
