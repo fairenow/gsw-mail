@@ -18,7 +18,7 @@ import { SettingsPage } from "./SettingsPage";
 import { ChatPanel } from "../components/ai/ChatPanel";
 
 type MobileView = "messages" | "reader";
-type WorkspaceSection = "mail" | "contacts" | "calendar" | "settings" | "chat";
+type WorkspaceSection = "mail" | "contacts" | "calendar" | "settings" | "files" | "chat";
 const pageSize = 50;
 const fallbackTemplateKey = "none";
 const parseRecipients = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
@@ -128,8 +128,13 @@ export function MailPage() {
   const selectAccount = useCallback((id: string) => { const next = accounts.find((item) => item.id === id); if (!next) return; shellSelectAccount(id); setFolder("Inbox"); setSearch(""); setOpen(null); setSelectedIds(new Set()); setLastSend(null); setMobileView("messages"); setFoldersOpen(false); }, [accounts, shellSelectAccount]);
   const selectFolder = (name: Folder) => { setWorkspaceSection("mail"); setFolder(name); setSearch(""); setFoldersOpen(false); setOpen(null); setSelectedIds(new Set()); setMobileView("messages"); if (account) void loadFolder(account.id, name); };
   const refresh = useCallback(() => { if (account) { void loadFolder(account.id, folder); void loadFolderCounts(account.id); } }, [account, folder, loadFolder, loadFolderCounts]);
-  const openWorkspaceSection = useCallback((section: "contacts" | "calendar" | "settings" | "chat") => {
+  const openWorkspaceSection = useCallback((section: "contacts" | "calendar" | "settings" | "files" | "chat") => {
     setFoldersOpen(false);
+    if (section === "files") {
+      window.history.pushState({}, "", "/files");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      return;
+    }
     setWorkspaceSection(section);
     setOpen(null);
     setMobileView("reader");
@@ -143,21 +148,21 @@ export function MailPage() {
     };
 
     const pending = sessionStorage.getItem("gsw-mail-open-workspace");
-    if (pending === "mail" || pending === "contacts" || pending === "settings") {
+    if (pending === "mail" || pending === "contacts" || pending === "settings" || pending === "files") {
       sessionStorage.removeItem("gsw-mail-open-workspace");
       openFromMenu(pending);
     }
 
     const onWorkspaceOpen = (event: Event) => {
       const section = (event as CustomEvent<{ section?: WorkspaceSection }>).detail?.section;
-      if (section === "mail" || section === "contacts" || section === "calendar" || section === "settings" || section === "chat") {
+      if (section === "mail" || section === "contacts" || section === "calendar" || section === "settings" || section === "files" || section === "chat") {
         openFromMenu(section);
       }
     };
     window.addEventListener("gsw-workspace-open", onWorkspaceOpen as EventListener);
     return () => window.removeEventListener("gsw-workspace-open", onWorkspaceOpen as EventListener);
   }, []);
-  const prefetchWorkspaceSection = useCallback((section: "contacts" | "calendar" | "settings" | "chat") => {
+  const prefetchWorkspaceSection = useCallback((section: "contacts" | "calendar" | "settings" | "files" | "chat") => {
     if (section === "contacts") api.prefetchContactsPage();
     if (section === "settings") api.prefetchSettings();
     if (section === "calendar" && account) {
