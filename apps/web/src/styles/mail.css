@@ -2098,3 +2098,96 @@
 .gsw-chat-composer-box.voice-active .gsw-chat-send:not(:disabled) {
   opacity: 1;
 }
+
+
+/* GSW Chat file attachments */
+.gsw-chat-composer-box {
+  flex-wrap: wrap;
+}
+.gsw-chat-pending-files {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 2px 8px;
+  overflow-x: auto;
+}
+.gsw-chat-pending-file,
+.gsw-chat-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--gsw-border);
+  border-radius: 12px;
+  background: var(--gsw-surface);
+  color: var(--gsw-text-body);
+}
+.gsw-chat-pending-file {
+  max-width: 280px;
+  padding: 7px 8px 7px 10px;
+}
+.gsw-chat-pending-file > span,
+.gsw-chat-file-chip > span {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+  text-align: left;
+}
+.gsw-chat-pending-file strong,
+.gsw-chat-file-chip strong {
+  overflow: hidden;
+  color: var(--gsw-text-heading);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gsw-chat-pending-file small,
+.gsw-chat-file-chip small {
+  color: var(--gsw-text-muted);
+  font-size: 10px;
+}
+.gsw-chat-pending-file > button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  color: var(--gsw-text-muted);
+}
+.gsw-chat-pending-file > button:hover {
+  background: var(--gsw-bg);
+  color: var(--gsw-text-heading);
+}
+.gsw-chat-attach {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  color: var(--gsw-text-muted);
+}
+.gsw-chat-attach:hover:not(:disabled) {
+  background: var(--gsw-bg);
+  color: var(--gsw-text-heading);
+}
+.gsw-chat-attach:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.gsw-chat-message-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 8px;
+}
+.gsw-chat-file-chip {
+  max-width: min(320px, 100%);
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.gsw-chat-file-chip:hover {
+  background: var(--gsw-bg);
+}
