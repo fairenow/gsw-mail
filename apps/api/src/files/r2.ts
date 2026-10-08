@@ -11,11 +11,11 @@ const amzDate = (date: Date): string => date.toISOString().replace(/[:-]|\.\d{3}
 const dateStamp = (date: Date): string => amzDate(date).slice(0, 8);
 
 const credentials = () => {
-  const { accountId, accessKeyId, secretAccessKey, bucket } = config.r2;
+  const { accountId, accessKeyId, secretAccessKey, bucket, endpoint } = config.r2;
   if (!accountId || !accessKeyId || !secretAccessKey || !bucket) {
     throw new Error("R2 storage is not configured. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET.");
   }
-  return { accountId, accessKeyId, secretAccessKey, bucket };
+  return { accountId, accessKeyId, secretAccessKey, bucket, endpoint };
 };
 
 export const r2Configured = (): boolean => Boolean(
@@ -48,12 +48,13 @@ export function createR2PresignedUrl(input: {
   expiresSeconds?: number;
   now?: Date;
 }): string {
-  const { accountId, accessKeyId, secretAccessKey, bucket } = credentials();
+  const { accountId, accessKeyId, secretAccessKey, bucket, endpoint } = credentials();
   const now = input.now ?? new Date();
   const expires = Math.max(1, Math.min(input.expiresSeconds ?? 600, 604800));
   const timestamp = amzDate(now);
   const stamp = dateStamp(now);
-  const host = `${accountId}.r2.cloudflarestorage.com`;
+  const endpointUrl = new URL(endpoint || `https://${accountId}.r2.cloudflarestorage.com`);
+  const host = endpointUrl.host;
   const scope = `${stamp}/auto/s3/aws4_request`;
   const query: Array<[string, string]> = [
     ["X-Amz-Algorithm", "AWS4-HMAC-SHA256"],
@@ -78,7 +79,7 @@ export function createR2PresignedUrl(input: {
     hash(canonical),
   ].join("\n");
   const signature = createHmac("sha256", signingKey(secretAccessKey, stamp)).update(stringToSign).digest("hex");
-  return `https://${host}${uri}?${canonicalQuery([...query, ["X-Amz-Signature", signature]])}`;
+  return `${endpointUrl.protocol}//${host}${uri}?${canonicalQuery([...query, ["X-Amz-Signature", signature]])}`;
 }
 
 export async function headR2Object(key: string): Promise<{ size: number; contentType: string | null; etag: string | null } | null> {
@@ -95,4 +96,11 @@ export async function headR2Object(key: string): Promise<{ size: number; content
 export async function deleteR2Object(key: string): Promise<void> {
   const response = await fetch(createR2PresignedUrl({ method: "DELETE", key, expiresSeconds: 60 }), { method: "DELETE" });
   if (!response.ok && response.status !== 404) throw new Error(`R2 DELETE failed with status ${response.status}`);
+}
+
+
+export async function verifyR2Connection(): Promise<{ configured: boolean; reachable: boolean }> {
+  if (!r2Configured()) return { configured: false, reachable: false };
+  await headR2Object("_gsw/healthcheck/nonexistent");
+  return { configured: true, reachable: true };
 }
