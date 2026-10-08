@@ -86,6 +86,20 @@ export async function updateAgentTask(userId: string, taskId: string, input: {
   const now = new Date();
   const status = input.status ?? existing.status;
   const terminal = ["completed", "failed", "cancelled"].includes(status);
+
+  if (input.status === "planned" && existing.status === "waiting") {
+    await db.update(aiTaskSteps).set({
+      status: "pending",
+      nextAttemptAt: now,
+      lastError: null,
+      completedAt: null,
+      updatedAt: now,
+    }).where(and(
+      eq(aiTaskSteps.taskId, taskId),
+      eq(aiTaskSteps.status, "waiting"),
+    ));
+  }
+
   const [updated] = await db.update(aiTasks).set({
     ...(input.status !== undefined ? { status: input.status } : {}),
     ...(input.currentStep !== undefined ? { currentStep: Math.max(0, input.currentStep) } : {}),
