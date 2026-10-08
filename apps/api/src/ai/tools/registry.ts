@@ -7,6 +7,7 @@ import { contactTools } from "./contactTools.js";
 import { templateTools } from "./templateTools.js";
 import { domainTools } from "./domainTools.js";
 import { fileTools } from "./fileTools.js";
+import { taskTools } from "./taskTools.js";
 
 export class AgentToolRegistry {
   private readonly tools = new Map<string, AgentToolDefinition>();
@@ -76,5 +77,5 @@ export class AgentToolRegistry {
   }
 }
 
-export const agentMailRegistry = new AgentToolRegistry([...agentMailTools, ...automationTools, ...searchTools, ...contactTools, ...campaignTools, ...templateTools, ...domainTools, ...fileTools]);
+export const agentMailRegistry = new AgentToolRegistry([...agentMailTools, ...automationTools, ...taskTools, ...searchTools, ...contactTools, ...campaignTools, ...templateTools, ...domainTools, ...fileTools]);
 export const readOnlyMailRegistry = new AgentToolRegistry(readOnlyMailTools);
