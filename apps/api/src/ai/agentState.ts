@@ -289,6 +289,7 @@ export async function listConversationMessages(userId: string, conversationId: s
     id: aiMessages.id,
     role: aiMessages.role,
     content: aiMessages.content,
+    metadata: aiMessages.metadata,
     createdAt: aiMessages.createdAt,
   }).from(aiMessages).where(eq(aiMessages.conversationId, conversationId)).orderBy(aiMessages.createdAt);
   return { conversation, messages };
