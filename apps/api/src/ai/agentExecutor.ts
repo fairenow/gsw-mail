@@ -71,6 +71,12 @@ const permissionCopy = (scope: AiScope) => {
       description: "This lets GSW Chat create or change items in your GSW Files library when you ask it to.",
     };
   }
+  if (scope === "images.generate") {
+    return {
+      title: "Allow GSW Chat to generate images?",
+      description: "This lets GSW Chat create new images at your request and save them into your private GSW Files library.",
+    };
+  }
   if (scope === "campaign.write") {
     return {
       title: "Allow GSW Chat to prepare campaigns?",
