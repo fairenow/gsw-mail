@@ -23,6 +23,7 @@ const customTemplateSchema = z.object({
   backgroundColor: hex,
   logoDataUrl: z.string().max(1_500_000).nullable().optional(),
   logoFilename: z.string().max(255).nullable().optional(),
+  logoAssetId: z.string().uuid().nullable().optional(),
 });
 const customTemplatePatchSchema = customTemplateSchema.partial();
 const selectionSchema = z.object({ templateKey: z.string().min(1).max(200) });
