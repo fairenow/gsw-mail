@@ -226,6 +226,54 @@ export interface EmailTemplateInput extends EmailTemplateTheme {
   logoFilename?: string | null;
 }
 
+
+export interface StorageUsage {
+  planKey: string;
+  quotaBytes: number;
+  usedBytes: number;
+  availableBytes: number;
+}
+
+export interface FileNode {
+  id: string;
+  parentId: string | null;
+  name: string;
+  nodeType: "file" | "folder";
+  starred: boolean;
+  trashedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  assetId: string | null;
+  filename: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  kind: string | null;
+  source: string | null;
+  status: string | null;
+}
+
+export interface FileAsset {
+  id: string;
+  filename: string;
+  displayName: string;
+  mimeType: string;
+  sizeBytes: number;
+  kind: string;
+  source: string;
+  status: string;
+}
+
+export interface FileUploadIntent {
+  asset: FileAsset;
+  upload: {
+    method: "PUT";
+    url: string;
+    expiresInSeconds: number;
+    headers: Record<string, string>;
+  };
+  usage: StorageUsage;
+}
+
 export interface SendResult {
   sendId: string;
   messageId: string | null;
@@ -483,6 +531,32 @@ export const api = {
   sendStatus: (sendId: string) => get<never>("/mail/sends/" + sendId),
   cancelSend: (sendId: string) => post<{ status: string }>(`/mail/sends/${sendId}/cancel`),
   retrySend: (sendId: string, accountId: string) => post<{ status: string }>(`/mail/sends/${sendId}/retry`, { accountId }),
+
+  fileUsage: () => get<StorageUsage>("/product/files/usage"),
+  files: (parentId?: string | null) => get<{ files: FileNode[] }>(`/product/files${parentId ? `?parentId=${encodeURIComponent(parentId)}` : ""}`).then((r) => r.files),
+  createFileFolder: (name: string, parentId?: string | null) => post<{ folder: FileNode }>("/product/files/folders", { name, parentId: parentId ?? null }),
+  createFileUpload: (body: { filename: string; mimeType?: string; sizeBytes: number; source?: string; kind?: string; parentId?: string | null }) => post<FileUploadIntent>("/product/files/uploads", body),
+  completeFileUpload: (assetId: string) => post<{ asset: FileAsset; usage: StorageUsage }>(`/product/files/${encodeURIComponent(assetId)}/complete`),
+  fileDownload: (assetId: string) => get<{ assetId: string; filename: string; mimeType: string; sizeBytes: number; url: string; expiresInSeconds: number }>(`/product/files/${encodeURIComponent(assetId)}/download`),
+  deleteFile: (assetId: string) => request(`/product/files/${encodeURIComponent(assetId)}`, { method: "DELETE" }).then((res) => json<{ id: string; deleted: boolean }>(res)),
+  uploadFile: async (file: File, options?: { source?: string; kind?: string; parentId?: string | null }) => {
+    const intent = await post<FileUploadIntent>("/product/files/uploads", {
+      filename: file.name,
+      mimeType: file.type || "application/octet-stream",
+      sizeBytes: file.size,
+      ...(options?.source ? { source: options.source } : {}),
+      ...(options?.kind ? { kind: options.kind } : {}),
+      ...(options?.parentId ? { parentId: options.parentId } : {}),
+    });
+    const upload = await fetch(intent.upload.url, {
+      method: "PUT",
+      headers: intent.upload.headers,
+      body: file,
+    });
+    if (!upload.ok) throw new Error(`file upload failed: ${upload.status}`);
+    const completed = await post<{ asset: FileAsset; usage: StorageUsage }>(`/product/files/${encodeURIComponent(intent.asset.id)}/complete`);
+    return completed;
+  },
   settings: () => cachedGet<ProductSettings>("/product/settings", 60_000, 10 * 60_000),
   prefetchSettings: () => { void cachedGet<ProductSettings>("/product/settings", 60_000, 10 * 60_000).catch(() => undefined); },
   updateSettings: async (body: { general?: Record<string, unknown>; compose?: Record<string, unknown>; contacts?: Record<string, unknown>; ai?: Record<string, unknown> }) => { const result = await patch<ProductSettings>("/product/settings", body); readCache.delete("/product/settings"); return result; },
