@@ -77,9 +77,17 @@ const capabilities = (mailboxAccess: boolean) => ({
   streamingExecution: true as const,
 });
 
+type ChatAttachmentResult = {
+  assetId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  kind?: string | null;
+};
+
 type ChatTurnResult = {
   conversationId: string;
-  message: { role: "assistant"; content: string } | null;
+  message: { role: "assistant"; content: string; attachments?: ChatAttachmentResult[] } | null;
   intervention: AgentIntervention | null;
   model: string;
   capabilities: ReturnType<typeof capabilities>;
@@ -196,6 +204,7 @@ async function runConversationTurn(input: {
 
   let model = "";
   const toolActivity: Array<{ name: string; ok: boolean }> = [];
+  const generatedAttachments: ChatAttachmentResult[] = [];
 
   try {
     for (let turn = 0; turn < 4; turn += 1) {
@@ -216,12 +225,12 @@ async function runConversationTurn(input: {
           content,
           provider: provider.id,
           model,
-          metadata: { toolActivity },
+          metadata: { toolActivity, attachments: generatedAttachments },
         });
         await completeAiRun(run.id, { model, metadata: { toolActivity, toolTurns: turn } });
         return {
           conversationId: input.conversationId,
-          message: { role: "assistant" as const, content },
+          message: { role: "assistant" as const, content, ...(generatedAttachments.length ? { attachments: generatedAttachments } : {}) },
           intervention: null,
           model,
           capabilities: capabilities(Boolean(input.accountId)),
@@ -241,7 +250,7 @@ async function runConversationTurn(input: {
         await completeAiRun(run.id, { model, metadata: { toolActivity } });
         return {
           conversationId: input.conversationId,
-          message: { role: "assistant" as const, content },
+          message: { role: "assistant" as const, content, ...(generatedAttachments.length ? { attachments: generatedAttachments } : {}) },
           intervention: null,
           model,
           capabilities: capabilities(false),
@@ -307,6 +316,19 @@ async function runConversationTurn(input: {
 
         await recordAiToolResult(ledgerCall.id, outcome.result);
         toolActivity.push({ name: semanticName, ok: outcome.result.ok });
+        if (outcome.result.ok && (semanticName === "files.create_text" || semanticName === "files.create_artifact")) {
+          const data = outcome.result.data && typeof outcome.result.data === "object"
+            ? outcome.result.data as Record<string, unknown>
+            : {};
+          if (typeof data.assetId === "string" && typeof data.filename === "string") {
+            generatedAttachments.push({
+              assetId: data.assetId,
+              filename: data.filename,
+              mimeType: typeof data.mimeType === "string" ? data.mimeType : "application/octet-stream",
+              sizeBytes: typeof data.sizeBytes === "number" ? data.sizeBytes : Number(data.sizeBytes ?? 0),
+            });
+          }
+        }
 
         input.emit?.({
           type: "status",
@@ -331,7 +353,7 @@ async function runConversationTurn(input: {
       content,
       provider: provider.id,
       model,
-      metadata: { toolActivity, toolLimitReached: true },
+      metadata: { toolActivity, toolLimitReached: true, attachments: generatedAttachments },
     });
     await completeAiRun(run.id, { model, metadata: { toolActivity, toolLimitReached: true } });
     return {
