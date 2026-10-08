@@ -34,6 +34,38 @@ const ensureOpenAi = () => {
   };
 };
 
+async function uploadInputFile(input: { filename: string; mimeType: string; bytes: Buffer }) {
+  const { apiKey, baseUrl } = ensureOpenAi();
+  const form = new FormData();
+  form.append(
+    "file",
+    new Blob([new Uint8Array(input.bytes)], { type: input.mimeType || "application/octet-stream" }),
+    input.filename,
+  );
+  form.append("purpose", "user_data");
+  const response = await fetch(`${baseUrl}/files`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${apiKey}` },
+    body: form,
+  });
+  const body = await response.json().catch(() => ({})) as { id?: string; error?: { message?: string } };
+  if (!response.ok || !body.id) {
+    throw new HttpError(
+      response.status === 429 ? 429 : 502,
+      body.error?.message?.trim() || `OpenAI file upload returned HTTP ${response.status}`,
+    );
+  }
+  return body.id;
+}
+
+async function deleteInputFile(fileId: string) {
+  const { apiKey, baseUrl } = ensureOpenAi();
+  await fetch(`${baseUrl}/files/${encodeURIComponent(fileId)}`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${apiKey}` },
+  }).catch(() => undefined);
+}
+
 const documentLike = (mimeType: string, filename: string) =>
   mimeType === "application/pdf"
   || /\.(pdf|doc|docx|rtf|odt|ppt|pptx|xls|xlsx|csv|tsv|txt|md|json|html|xml)$/i.test(filename);
@@ -60,54 +92,93 @@ async function responseAnalysis(input: {
     throw new HttpError(400, "Files sent for deep document analysis must be 50 MB or smaller.");
   }
 
-  const base64 = input.bytes.toString("base64");
-  const dataUrl = `data:${input.mimeType || "application/octet-stream"};base64,${base64}`;
-  const filePart = input.image
-    ? { type: "input_image", image_url: dataUrl, detail: "auto" }
-    : {
+  let uploadedFileId: string | null = null;
+  try {
+    const filePart = input.image
+      ? {
+          type: "input_image",
+          image_url: `data:${input.mimeType || "application/octet-stream"};base64,${input.bytes.toString("base64")}`,
+          detail: "auto",
+        }
+      : (() => {
+          throw new Error("DOCUMENT_FILE_ID_PENDING");
+        })();
+
+    let contentFilePart: Record<string, unknown>;
+    if (input.image) {
+      contentFilePart = filePart;
+    } else {
+      uploadedFileId = await uploadInputFile(input);
+      contentFilePart = {
         type: "input_file",
-        filename: input.filename,
-        file_data: dataUrl,
+        file_id: uploadedFileId,
         ...(input.mimeType === "application/pdf" || /\.pdf$/i.test(input.filename) ? { detail: "auto" } : {}),
       };
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Math.max(config.ai.timeoutMs, 90_000));
-  try {
-    const response = await fetch(`${baseUrl}/responses`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        input: [{
-          role: "user",
-          content: [
-            filePart,
-            { type: "input_text", text: input.instruction },
-          ],
-        }],
-      }),
-      signal: controller.signal,
-    });
-    const body = await response.json().catch(() => ({})) as OpenAiResponse;
-    if (!response.ok) {
-      throw new HttpError(response.status === 429 ? 429 : 502, body.error?.message?.trim() || `OpenAI file analysis returned HTTP ${response.status}`);
     }
-    const text = outputText(body);
-    if (!text) throw new HttpError(502, "The file analysis service returned an empty response.");
-    return { text, model, mode: input.image ? "vision" as const : "document" as const };
-  } catch (error) {
-    if (error instanceof HttpError) throw error;
-    if (error instanceof Error && error.name === "AbortError") throw new HttpError(504, "File analysis timed out.");
-    throw new HttpError(502, "The file analysis service is temporarily unavailable.");
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), Math.max(config.ai.timeoutMs, 90_000));
+    try {
+      const response = await fetch(`${baseUrl}/responses`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          input: [{
+            role: "user",
+            content: [
+              contentFilePart,
+              { type: "input_text", text: input.instruction },
+            ],
+          }],
+        }),
+        signal: controller.signal,
+      });
+      const requestId = response.headers.get("x-request-id") ?? response.headers.get("request-id");
+      const body = await response.json().catch(() => ({})) as OpenAiResponse;
+      if (!response.ok) {
+        const message = body.error?.message?.trim() || `OpenAI file analysis returned HTTP ${response.status}`;
+        console.error("[file-intelligence] OpenAI analysis failed", {
+          filename: input.filename,
+          mimeType: input.mimeType,
+          model,
+          status: response.status,
+          requestId,
+          message,
+        });
+        throw new HttpError(response.status === 429 ? 429 : 502, message);
+      }
+      const text = outputText(body);
+      if (!text) {
+        console.error("[file-intelligence] OpenAI analysis returned empty output", {
+          filename: input.filename,
+          mimeType: input.mimeType,
+          model,
+          requestId,
+        });
+        throw new HttpError(502, "The file analysis service returned an empty response.");
+      }
+      return { text, model, mode: input.image ? "vision" as const : "document" as const };
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      if (error instanceof Error && error.name === "AbortError") throw new HttpError(504, "File analysis timed out.");
+      console.error("[file-intelligence] OpenAI analysis request failed", {
+        filename: input.filename,
+        mimeType: input.mimeType,
+        model,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new HttpError(502, "The file analysis service is temporarily unavailable.");
+    } finally {
+      clearTimeout(timeout);
+    }
   } finally {
-    clearTimeout(timeout);
+    if (uploadedFileId) await deleteInputFile(uploadedFileId);
   }
 }
-
 async function transcribe(input: {
   filename: string;
   mimeType: string;
