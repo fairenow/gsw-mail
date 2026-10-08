@@ -385,10 +385,15 @@ export const filesGenerateImageTool: AgentToolDefinition = {
     const startedAt = new Date().toISOString();
     try {
       const input = generateImageInput.parse(rawInput);
-      const generated = await generateImage(input);
-      const base = input.filename?.trim() || "generated-image";
-      const hasImageExt = /\.(png|jpe?g|webp)$/i.test(base);
-      const filename = hasImageExt ? base : `${base}.${generated.extension}`;
+      const requestedFormat = input.format
+        ?? (input.filename?.toLowerCase().endsWith(".jpg") || input.filename?.toLowerCase().endsWith(".jpeg")
+          ? "jpeg"
+          : input.filename?.toLowerCase().endsWith(".webp")
+            ? "webp"
+            : "png");
+      const generated = await generateImage({ ...input, format: requestedFormat });
+      const base = (input.filename?.trim() || "generated-image").replace(/\.(png|jpe?g|webp)$/i, "");
+      const filename = `${base}.${generated.extension}`;
       const asset = await createAssetFromBuffer({
         userId: ctx.userId,
         filename,
