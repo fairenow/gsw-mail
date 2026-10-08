@@ -27,7 +27,8 @@ import { getAiProvider, type AiProviderMessage } from "../ai/providers/index.js"
 import { agentMailRegistry } from "../ai/tools/registry.js";
 import type { AgentExecutionContext, ProviderToolDefinition } from "../ai/tools/types.js";
 import { aiScopes } from "../ai/permissions/types.js";
-import { getAiCapabilitySettings, isAiScopeGloballyEnabled } from "../ai/capabilities.js";
+import { getAiCapabilitySettings } from "../ai/capabilities.js";
+import { selectAgentTools } from "../ai/toolSelection.js";
 import { forbidden } from "../lib/errors.js";
 import { getAssetForUser } from "../files/service.js";
 import { getR2Object } from "../files/r2.js";
@@ -226,13 +227,17 @@ async function runConversationTurn(input: {
   const capabilitySettings = await getAiCapabilitySettings(input.userId);
   if (!capabilitySettings.enabled) throw forbidden("GSW AI is disabled in Settings.");
 
+  const latestUserText = [...input.providerMessages].reverse().find((message) => message.role === "user")?.content ?? "";
+  let toolSelection: ReturnType<typeof selectAgentTools> | undefined;
+
   if (input.accountId) {
-    const openAiOnlyTools = new Set(["files.transform"]);
-    tools = agentMailRegistry.providerDefinitions((tool) =>
-      tool.requiredScopes.every((scope) => isAiScopeGloballyEnabled(capabilitySettings, scope))
-      && (Boolean(config.ai.openaiApiKey) || !openAiOnlyTools.has(tool.name))
-      && (tool.name !== "files.generate_image" || Boolean(config.ai.huggingFaceApiToken || config.ai.openaiApiKey)),
-    );
+    toolSelection = selectAgentTools({
+      userMessage: latestUserText,
+      capabilitySettings,
+      hasOpenAi: Boolean(config.ai.openaiApiKey),
+      hasImageProvider: Boolean(config.ai.huggingFaceApiToken || config.ai.openaiApiKey),
+    });
+    tools = toolSelection.tools;
     toolContext = {
       userId: input.userId,
       authUserId: input.authUserId,
@@ -250,7 +255,16 @@ async function runConversationTurn(input: {
     userId: input.userId,
     accountId: input.accountId,
     provider: provider.id,
-    metadata: { route: "/product/chat", agentActions: true, streamingExecution: Boolean(input.emit) },
+    metadata: {
+      route: "/product/chat",
+      agentActions: true,
+      streamingExecution: Boolean(input.emit),
+      toolRouting: toolSelection ? {
+        dynamic: toolSelection.dynamic,
+        selectedSkillIds: toolSelection.selectedSkillIds,
+        selectedToolNames: toolSelection.selectedToolNames,
+      } : null,
+    },
   });
 
   let model = "";
