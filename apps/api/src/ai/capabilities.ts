@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { userSettings } from "../db/schema.js";
 
-export type AiModelProvider = "qwen" | "openai" | "claude";
+export type AiModelProvider = "qwen" | "openai" | "claude" | "gpt-oss-120b";
 
 export interface AiCapabilitySettings {
   enabled: boolean;
@@ -32,7 +32,7 @@ export async function getAiCapabilitySettings(userId: string): Promise<AiCapabil
   const [settings] = await db.select({ ai: userSettings.ai }).from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
   const ai = settings?.ai ?? {};
   const requestedProvider = ai.modelProvider;
-  const modelProvider: AiModelProvider = requestedProvider === "openai" || requestedProvider === "claude" || requestedProvider === "qwen"
+  const modelProvider: AiModelProvider = requestedProvider === "openai" || requestedProvider === "claude" || requestedProvider === "qwen" || requestedProvider === "gpt-oss-120b"
     ? requestedProvider
     : "qwen";
   return {
