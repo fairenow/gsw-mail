@@ -10,6 +10,7 @@ import {
   listFiles,
   storageUsage,
 } from "../files/service.js";
+import { verifyR2Connection } from "../files/r2.js";
 
 const uploadIntentSchema = z.object({
   filename: z.string().trim().min(1).max(255),
@@ -27,6 +28,8 @@ const folderSchema = z.object({
 
 export default async function fileRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
+
+  app.get("/product/files/storage-status", async () => verifyR2Connection());
 
   app.get("/product/files/usage", async (req) => storageUsage(req.user!.id));
 
@@ -64,6 +67,11 @@ export default async function fileRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { id: string } }>("/product/files/:id/download", async (req) =>
     createDownloadUrl(req.user!.id, req.params.id));
+
+  app.get<{ Params: { id: string } }>("/product/files/:id/content", async (req, reply) => {
+    const download = await createDownloadUrl(req.user!.id, req.params.id);
+    return reply.redirect(download.url);
+  });
 
   app.delete<{ Params: { id: string } }>("/product/files/:id", async (req) =>
     deleteAsset(req.user!.id, req.params.id));
