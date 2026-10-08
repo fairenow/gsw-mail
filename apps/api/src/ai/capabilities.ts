@@ -57,5 +57,6 @@ export function isAiScopeGloballyEnabled(settings: AiCapabilitySettings, scope: 
   if (scope === "campaign.read" || scope === "campaign.write" || scope === "campaign.send") return settings.campaignLaunch;
   if (scope === "files.read" || scope === "files.write") return settings.fileAccess;
   if (scope === "images.generate") return settings.imageGeneration;
+  if (scope === "browser.read" || scope === "browser.write") return true;
   return true;
 }
