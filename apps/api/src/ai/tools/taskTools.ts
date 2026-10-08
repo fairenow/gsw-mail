@@ -64,7 +64,7 @@ export const tasksCreateTool: AgentToolDefinition = {
       const input = createInput.parse(rawInput);
       const task = await createAgentTask({
         userId: ctx.userId,
-        accountId: ctx.accountId,
+        ...(ctx.accountId !== undefined ? { accountId: ctx.accountId } : {}),
         ...(ctx.conversationId !== undefined ? { conversationId: ctx.conversationId } : {}),
         title: input.title,
         instruction: input.instruction,
