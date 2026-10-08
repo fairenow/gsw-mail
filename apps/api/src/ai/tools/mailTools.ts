@@ -36,8 +36,8 @@ const searchInput = z.object({
 });
 
 const activityInput = z.object({
-  startIso: z.string().datetime(),
-  endIso: z.string().datetime(),
+  startIso: z.string().datetime({ offset: true }),
+  endIso: z.string().datetime({ offset: true }),
   mailboxes: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
 });
 
@@ -128,11 +128,20 @@ export const mailActivityTool: AgentToolDefinition = {
   async execute(ctx, rawInput, toolCallId) {
     const startedAt = new Date().toISOString();
     try {
-      const input = activityInput.parse(rawInput);
+      const parsed = activityInput.safeParse(rawInput);
+      if (!parsed.success) {
+        throw new Error("Invalid mail activity date range. Use ISO-8601 timestamps with a timezone offset, for example 2026-10-08T00:00:00-04:00. " + parsed.error.issues.map(issue => issue.path.join(".") + ": " + issue.message).join("; "));
+      }
+      const input = parsed.data;
       const mail = createMailService(ctx);
       const activity = await mail.activity(ctx.accountId, input.startIso, input.endIso, input.mailboxes);
       return success(ctx, toolCallId, startedAt, activity);
     } catch (error) {
+      console.warn("[mail.activity] failed", {
+        kind: error instanceof z.ZodError ? "validation" : error instanceof Error ? error.name : "unknown",
+        message: error instanceof Error ? error.message.slice(0, 500) : "Unknown error",
+        toolCallId,
+      });
       return failure(ctx, toolCallId, startedAt, error);
     }
   },
