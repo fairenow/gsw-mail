@@ -624,6 +624,14 @@ async function runConversationTurn(input: {
         }
 
         await recordAiToolResult(ledgerCall.id, outcome.result);
+        if (!outcome.result.ok && semanticName === "mail.activity") {
+          const reason = outcome.result.error?.message ?? "Mailbox activity could not be loaded.";
+          input.emit?.({ type: "status", phase: "tool_completed", label, toolName: semanticName, ok: false });
+          const content = "I couldn't retrieve complete mailbox activity, so I won't report unverified totals or create a PDF. " + reason;
+          await appendAiMessage({ conversationId: input.conversationId, role: "assistant", content, provider: provider.id, model, metadata: { toolActivity, mailboxActivityFailed: true } });
+          await completeAiRun(run.id, { model, metadata: { toolActivity, mailboxActivityFailed: true } });
+          return { conversationId: input.conversationId, message: { role: "assistant" as const, content }, intervention: null, model, capabilities: capabilities(Boolean(input.accountId)), toolActivity };
+        }
         if (!outcome.result.ok && semanticName.startsWith("mail.")) {
           // Capture operational metadata only. Never log message bodies or tool arguments.
           console.warn("[gsw-chat] mailbox tool attempt failed", {
