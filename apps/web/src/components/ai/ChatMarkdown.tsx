@@ -24,7 +24,7 @@ function inlineNodes(value: string): ReactNode[] {
 
 type Block =
   | { type: "paragraph"; lines: string[] }
-  | { type: "ordered"; items: string[] }
+  | { type: "ordered"; items: string[]; start: number }
   | { type: "unordered"; items: string[] }
   | { type: "heading"; level: number; text: string };
 
@@ -33,14 +33,16 @@ function blocks(content: string): Block[] {
   const lines = content.replace(/\r\n/g, "\n").split("\n");
   let paragraph: string[] = [];
   let ordered: string[] = [];
+  let orderedStart = 1;
   let unordered: string[] = [];
 
   const flush = () => {
     if (paragraph.length) output.push({ type: "paragraph", lines: paragraph });
-    if (ordered.length) output.push({ type: "ordered", items: ordered });
+    if (ordered.length) output.push({ type: "ordered", items: ordered, start: orderedStart });
     if (unordered.length) output.push({ type: "unordered", items: unordered });
     paragraph = [];
     ordered = [];
+    orderedStart = 1;
     unordered = [];
   };
 
@@ -62,6 +64,7 @@ function blocks(content: string): Block[] {
     const orderedMatch = /^\s*\d+[.)]\s+(.+)$/.exec(line);
     if (orderedMatch) {
       if (paragraph.length || unordered.length) flush();
+      if (!ordered.length) orderedStart = Number(line.trim().match(/^\d+/)?.[0] ?? "1");
       ordered.push(orderedMatch[1]!);
       continue;
     }
@@ -86,7 +89,7 @@ export function ChatMarkdown({ content }: { content: string }) {
         return <Tag key={index}>{inlineNodes(block.text)}</Tag>;
       }
       if (block.type === "ordered") {
-        return <ol key={index}>{block.items.map((item, itemIndex) => <li key={itemIndex}>{inlineNodes(item)}</li>)}</ol>;
+        return <ol key={index} start={block.start}>{block.items.map((item, itemIndex) => <li key={itemIndex}>{inlineNodes(item)}</li>)}</ol>;
       }
       if (block.type === "unordered") {
         return <ul key={index}>{block.items.map((item, itemIndex) => <li key={itemIndex}>{inlineNodes(item)}</li>)}</ul>;
