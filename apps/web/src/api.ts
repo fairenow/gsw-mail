@@ -536,8 +536,18 @@ export const api = {
 
   fileStorageStatus: () => get<{ configured: boolean; reachable: boolean }>("/product/files/storage-status"),
   fileUsage: () => get<StorageUsage>("/product/files/usage"),
-  files: (parentId?: string | null) => get<{ files: FileNode[] }>(`/product/files${parentId ? `?parentId=${encodeURIComponent(parentId)}` : ""}`).then((r) => r.files),
+  files: (parentId?: string | null, view: "folder" | "recent" | "starred" | "trash" = "folder") => {
+    const params = new URLSearchParams();
+    if (parentId) params.set("parentId", parentId);
+    if (view !== "folder") params.set("view", view);
+    const query = params.toString();
+    return get<{ files: FileNode[] }>(`/product/files${query ? `?${query}` : ""}`).then((r) => r.files);
+  },
   createFileFolder: (name: string, parentId?: string | null) => post<{ folder: FileNode }>("/product/files/folders", { name, parentId: parentId ?? null }),
+  updateFileNode: (id: string, body: { name?: string; parentId?: string | null; starred?: boolean }) => patch<{ node: FileNode }>(`/product/files/nodes/${encodeURIComponent(id)}`, body),
+  trashFileNode: (id: string) => post<{ node: FileNode }>(`/product/files/nodes/${encodeURIComponent(id)}/trash`),
+  restoreFileNode: (id: string) => post<{ node: FileNode }>(`/product/files/nodes/${encodeURIComponent(id)}/restore`),
+  deleteFileNode: (id: string) => request(`/product/files/nodes/${encodeURIComponent(id)}`, { method: "DELETE" }).then((res) => json<{ id: string; deleted: boolean }>(res)),
   createFileUpload: (body: { filename: string; mimeType?: string; sizeBytes: number; source?: string; kind?: string; parentId?: string | null }) => post<FileUploadIntent>("/product/files/uploads", body),
   completeFileUpload: (assetId: string) => post<{ asset: FileAsset; usage: StorageUsage }>(`/product/files/${encodeURIComponent(assetId)}/complete`),
   fileDownload: (assetId: string) => get<{ assetId: string; filename: string; mimeType: string; sizeBytes: number; url: string; expiresInSeconds: number }>(`/product/files/${encodeURIComponent(assetId)}/download`),
