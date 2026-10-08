@@ -484,6 +484,8 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       || input.scope === "templates.write"
       || input.scope === "settings.write"
       || input.scope === "signatures.write"
+      || input.scope === "files.write"
+      || input.scope === "images.generate"
       ? "read"
       : input.scope === "mail.write" || input.scope === "mail.send" || input.scope === "campaign.write" || input.scope === "campaign.send"
         ? "send"
