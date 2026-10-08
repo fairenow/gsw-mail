@@ -168,6 +168,7 @@ export function ChatPanel() {
     }
 
     if (event.phase === "tool_completed") {
+      if (event.toolName?.startsWith("tasks.")) window.dispatchEvent(new Event("gsw-agent-task-changed"));
       setExecutionActivities((current) => {
         const next = [...current];
         for (let index = next.length - 1; index >= 0; index -= 1) {
