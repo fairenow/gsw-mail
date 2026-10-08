@@ -9,6 +9,7 @@ import {
   failAutomationRun,
 } from "./automationService.js";
 import { getAiProvider, type AiProviderMessage } from "./providers/index.js";
+import { getAiCapabilitySettings } from "./capabilities.js";
 
 export interface AutomationWorker {
   start(): void;
@@ -62,7 +63,9 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
         const automationRun = await beginAutomationRun(automation.id, automation.conversationId);
         let aiRunId: string | undefined;
         try {
-          const provider = getAiProvider();
+          const aiSettings = await getAiCapabilitySettings(automation.userId);
+          if (!aiSettings.enabled) throw new Error("GSW AI is disabled for this user");
+          const provider = getAiProvider(aiSettings.modelProvider);
           if (!automation.conversationId) throw new Error("automation conversation is unavailable");
 
           const aiRun = await startAiRun({
