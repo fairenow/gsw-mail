@@ -56,6 +56,7 @@ const config = {
     accessKeyId: process.env.R2_ACCESS_KEY_ID,
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
     bucket: process.env.R2_BUCKET,
+    endpoint: process.env.R2_ENDPOINT,
     presignTtlSeconds: Number(env("R2_PRESIGN_TTL_SECONDS", "900")),
   },
   files: {
