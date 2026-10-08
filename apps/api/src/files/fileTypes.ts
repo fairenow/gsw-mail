@@ -127,14 +127,14 @@ export function detectFileType(filename: string, mimeType = "application/octet-s
       note: "Video analysis uses the audio track plus best-effort computational inspection of frames/metadata.",
     };
   }
+  if (EBOOK_EXTENSIONS.has(extension) || mime === "application/epub+zip") {
+    return { extension, category: "ebook", strategy: "code_interpreter", kind: "document", textLike: false };
+  }
   if (ARCHIVE_EXTENSIONS.has(extension) || /zip|gzip|x-7z|x-rar|x-tar|bzip|xz/.test(mime)) {
     return { extension, category: "archive", strategy: "code_interpreter", kind: "archive", textLike: false };
   }
   if (EMAIL_EXTENSIONS.has(extension) || mime === "message/rfc822") {
     return { extension, category: "email", strategy: extension === "eml" ? "text" : "code_interpreter", kind: "document", textLike: extension === "eml" };
-  }
-  if (EBOOK_EXTENSIONS.has(extension) || mime === "application/epub+zip") {
-    return { extension, category: "ebook", strategy: "code_interpreter", kind: "document", textLike: false };
   }
 
   return {
