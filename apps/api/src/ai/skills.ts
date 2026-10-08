@@ -5,6 +5,7 @@ export type AgentWorkerId =
   | "calendar"
   | "files"
   | "campaign"
+  | "browser"
   | "admin";
 
 export interface AgentSkillDefinition {
@@ -81,6 +82,14 @@ export const agentSkills: AgentSkillDefinition[] = [
     worker: "research",
     keywords: ["research", "find", "look up", "search", "investigate", "compare", "company", "organization"],
     toolPrefixes: ["search.", "mail.", "contacts.", "files."],
+  },
+  {
+    id: "browser_research",
+    title: "Browser research",
+    description: "Use an isolated browser worker to research public websites and inspect web pages without exposing the production server.",
+    worker: "browser",
+    keywords: ["website", "web", "browser", "online", "internet", "site", "portal", "research company", "download page"],
+    toolPrefixes: ["browser.", "files.", "search."],
   },
   {
     id: "domain_admin",
