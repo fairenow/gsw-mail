@@ -129,6 +129,10 @@ if (Boolean(config.stalwart.adminUsername) !== Boolean(config.stalwart.adminPass
   throw new Error("[config] STALWART_ADMIN_USERNAME and STALWART_ADMIN_PASSWORD must be configured together");
 }
 
+if (Boolean(config.browser.baseUrl) !== Boolean(config.browser.token)) {
+  throw new Error("[config] BROWSER_WORKER_BASE_URL and BROWSER_WORKER_TOKEN must be configured together");
+}
+
 if (isProduction) {
   assertExplicit("DATABASE_URL", explicit("DATABASE_URL"));
   assertExplicit("MAIL_ENGINE", explicit("MAIL_ENGINE"));
