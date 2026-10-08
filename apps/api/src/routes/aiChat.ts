@@ -75,13 +75,42 @@ const confirmationDecisionSchema = z.object({
 const shouldPreAnalyzeAttachments = (content: string) =>
   /\b(analy[sz]e|read|review|summari[sz]e|extract|understand|inspect|what(?:'s| is) (?:in|inside)|tell me about|scope|requirements?|dates?|pricing|spreadsheet|workbook|pdf|document|presentation|image|chart|table|clean|data)\b/i.test(content);
 
-const explicitImageGenerationIntent = (content: string) =>
-  /\b(generate|create|make|draw|render|design)\b/i.test(content)
-  && /\b(image|picture|illustration|graphic|banner|thumbnail|poster|artwork|logo)\b/i.test(content);
+const explicitPdfGenerationIntent = (content: string) =>
+  /\b(?:generate|create|make|build|export|produce|turn|convert)\b[\s\S]{0,100}\b(?:pdf|portable document)\b/i.test(content)
+  || /\b(?:pdf|portable document)\b[\s\S]{0,60}\b(?:generate|create|make|build|export|produce)\b/i.test(content);
+
+const explicitImageGenerationIntent = (content: string) => {
+  // Output-type precedence matters. A request such as "create a PDF using our
+  // colors and logo" contains image-adjacent nouns, but its requested artifact
+  // is a PDF. Never let a later "logo" or "image" mention hijack that request.
+  if (explicitPdfGenerationIntent(content)) return false;
+  return /\b(?:generate|create|make|draw|render|design|produce)\b[\s\S]{0,100}\b(?:image|picture|illustration|graphic|banner|thumbnail|poster|artwork)\b/i.test(content)
+    || /^\s*(?:can you\s+|please\s+)?(?:generate|create|make|draw|render|design|produce)\s+(?:me\s+)?(?:an?\s+)?(?:image|picture|illustration|graphic|banner|thumbnail|poster|artwork)\b/i.test(content);
+};
 
 const imagePromptFromRequest = (content: string) => content
-  .replace(/^\s*(?:can you\s+|please\s+)?(?:generate|create|make|draw|render|design)\s+(?:me\s+)?(?:an?\s+)?(?:image|picture|illustration|graphic|banner|thumbnail|poster|artwork)\s*(?:of|showing|that shows)?\s*/i, "")
+  .replace(/^\s*(?:can you\s+|please\s+)?(?:generate|create|make|draw|render|design|produce)\s+(?:me\s+)?(?:an?\s+)?(?:image|picture|illustration|graphic|banner|thumbnail|poster|artwork)\s*(?:of|showing|that shows)?\s*/i, "")
   .trim() || content.trim();
+
+const pastedPdfContentFromRequest = (content: string): string | null => {
+  if (!explicitPdfGenerationIntent(content) || content.length < 700) return null;
+  const marker = /(?:information|content|summary|text)\s+(?:from\s+)?(?:the\s+)?(?:video\s+)?below\s*:\s*/i.exec(content);
+  if (marker?.index !== undefined) {
+    const source = content.slice(marker.index + marker[0].length).trim();
+    return source.length >= 300 ? source : null;
+  }
+  const basedOn = content.search(/\bBased on (?:the )?(?:analysis|information|summary)\b/i);
+  if (basedOn >= 0) {
+    const source = content.slice(basedOn).trim();
+    return source.length >= 300 ? source : null;
+  }
+  const blank = content.indexOf("\n\n");
+  if (blank >= 0) {
+    const source = content.slice(blank + 2).trim();
+    return source.length >= 500 ? source : null;
+  }
+  return null;
+};
 
 const capabilities = (mailboxAccess: boolean) => ({
   actions: true as const,
@@ -230,6 +259,109 @@ async function runConversationTurn(input: {
 
   try {
     const latestUserContent = [...input.providerMessages].reverse().find((message) => message.role === "user")?.content;
+    const pastedPdfContent = typeof latestUserContent === "string"
+      ? pastedPdfContentFromRequest(latestUserContent)
+      : null;
+    if (
+      toolContext
+      && latestUserContent
+      && typeof latestUserContent === "string"
+      && pastedPdfContent
+      && tools?.some((tool) => tool.function.name === "files__create_artifact")
+    ) {
+      const providerToolCallId = `direct-pdf-${run.id}`;
+      const semanticName = "files.create_artifact";
+      const label = toolLabel(semanticName);
+      const rawArguments = JSON.stringify({
+        filename: "generated-document.pdf",
+        instruction: latestUserContent.slice(0, 20_000),
+        content: pastedPdfContent.slice(0, 120_000),
+      });
+
+      input.emit?.({ type: "status", phase: "tool_started", label, toolName: semanticName });
+      const definition = agentMailRegistry.definition("files__create_artifact");
+      const ledgerCall = await recordAiToolCall({
+        runId: run.id,
+        conversationId: input.conversationId,
+        providerToolCallId,
+        toolName: semanticName,
+        risk: definition?.risk ?? "reversible_write",
+        requiredScopes: definition?.requiredScopes ?? ["files.write"],
+        argumentsJson: rawArguments,
+      });
+
+      const outcome = await executeAgentTool({
+        registry: agentMailRegistry,
+        providerToolName: "files__create_artifact",
+        rawArguments,
+        ctx: toolContext,
+        providerToolCallId,
+        ledgerToolCallId: ledgerCall.id,
+        conversationId: input.conversationId,
+        runId: run.id,
+      });
+
+      if (outcome.kind === "intervention") {
+        const status = outcome.intervention.type === "permission" ? "awaiting_permission" : "awaiting_confirmation";
+        await markAiToolCallStatus(ledgerCall.id, status);
+        await pauseAiRun(run.id, status, { intervention: outcome.intervention, toolName: semanticName });
+        return {
+          conversationId: input.conversationId,
+          message: null,
+          intervention: outcome.intervention,
+          model: "direct-pdf-routing",
+          capabilities: capabilities(Boolean(input.accountId)),
+          toolActivity,
+        };
+      }
+
+      await recordAiToolResult(ledgerCall.id, outcome.result);
+      toolActivity.push({ name: semanticName, ok: outcome.result.ok });
+      input.emit?.({ type: "status", phase: "tool_completed", label, toolName: semanticName, ok: outcome.result.ok });
+
+      if (outcome.result.ok) {
+        const data = outcome.result.data && typeof outcome.result.data === "object"
+          ? outcome.result.data as Record<string, unknown>
+          : {};
+        const attachment = typeof data.assetId === "string" && typeof data.filename === "string"
+          ? {
+              assetId: data.assetId,
+              filename: data.filename,
+              mimeType: typeof data.mimeType === "string" ? data.mimeType : "application/pdf",
+              sizeBytes: typeof data.sizeBytes === "number" ? data.sizeBytes : Number(data.sizeBytes ?? 0),
+            }
+          : null;
+        if (attachment) generatedAttachments.push(attachment);
+        const content = attachment
+          ? "I created the PDF and saved it to your GSW Files."
+          : "I created the PDF.";
+        await appendAiMessage({
+          conversationId: input.conversationId,
+          role: "assistant",
+          content,
+          provider: "local-pdf",
+          model: typeof data.model === "string" ? data.model : "gsw-local-libreoffice-pdf",
+          metadata: { toolActivity, attachments: generatedAttachments, directPdfRouting: true },
+        });
+        await completeAiRun(run.id, {
+          model: typeof data.model === "string" ? data.model : "gsw-local-libreoffice-pdf",
+          metadata: { toolActivity, directPdfRouting: true },
+        });
+        return {
+          conversationId: input.conversationId,
+          message: { role: "assistant" as const, content, ...(generatedAttachments.length ? { attachments: generatedAttachments } : {}) },
+          intervention: null,
+          model: typeof data.model === "string" ? data.model : "gsw-local-libreoffice-pdf",
+          capabilities: capabilities(Boolean(input.accountId)),
+          toolActivity,
+        };
+      }
+
+      const message = outcome.result.error?.message ?? "PDF creation failed.";
+      await failAiRun(run.id, new Error(message));
+      throw new Error(message);
+    }
+
     if (
       toolContext
       && latestUserContent
