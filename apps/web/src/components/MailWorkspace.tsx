@@ -13,7 +13,7 @@ const goToMailbox = () => {
   window.dispatchEvent(new PopStateEvent("popstate"));
 };
 
-export function MailWorkspace({ section, children }: { section: "contacts" | "calendar" | "settings"; children: ReactNode }) {
+export function MailWorkspace({ section, children }: { section: "contacts" | "calendar" | "settings" | "files"; children: ReactNode }) {
   const { account, profileImageUrl, configureTopBar } = useAppShell();
   const [counts, setCounts] = useState<Record<Folder, { total: number; unread: number }>>(() => account ? countsCache.get(account.id) ?? emptyCounts() : emptyCounts());
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("gsw-mail-sidebar-collapsed") === "true");
