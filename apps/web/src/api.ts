@@ -199,6 +199,7 @@ export interface ProductSettings {
     emailSend: boolean;
     scheduledWork: boolean;
     campaignLaunch: boolean;
+    fileAccess: boolean;
     [key: string]: unknown;
   };
   signature: { id: string | null; signatureHtml: string; signatureText: string; enabled: boolean; onNew: boolean; onReply: boolean; onForward: boolean; position: "beforeQuotedText" | "afterQuotedText" };
