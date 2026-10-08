@@ -32,6 +32,7 @@ import { forbidden } from "../lib/errors.js";
 import { getAssetForUser } from "../files/service.js";
 import { getR2Object } from "../files/r2.js";
 import { analyzeStoredFile } from "../files/intelligence.js";
+import { supportedFileTypeSummary } from "../files/fileTypes.js";
 import { config } from "../config.js";
 
 const chatAttachmentSchema = z.object({
@@ -495,6 +496,8 @@ export default async function aiChatRoutes(app: FastifyInstance) {
     artifactModel: config.ai.openaiApiKey ? config.ai.openaiArtifactModel : null,
     imageModel: config.ai.openaiApiKey ? config.ai.openaiImageModel : null,
     directAttachmentPreprocessing: Boolean(config.ai.openaiApiKey),
+    supportedFileTypes: supportedFileTypeSummary,
+    fallbackForUnknownTypes: config.ai.openaiApiKey ? "best_effort_sandbox" : "storage_and_attachment_only",
   }));
 
   app.get("/product/chat/conversations", async (req) => {
