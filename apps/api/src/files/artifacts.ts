@@ -275,6 +275,9 @@ ${body}
 </body>
 </html>`;
 
+    const rendered = await renderLocalPdf(html);
+    return { filename: input.filename, bytes: rendered, mimeType: "application/pdf", model: "gsw-local-chromium-pdf" };
+
     await writeFile(htmlPath, html, "utf8");
     const { stderr } = await execFileAsync("libreoffice", [
       "--headless",
