@@ -822,3 +822,52 @@
   .gsw-agent-task-copy strong { font-size: 11px; }
   .gsw-agent-task-copy small { max-width: 135px; }
 }
+
+
+/* Settings: full-width, horizontally scrollable workspace categories. */
+.gsw-settings-layout.gsw-settings-layout-horizontal {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  width: 100%;
+  max-width: 1160px;
+  margin-inline: auto;
+  padding: 32px clamp(16px, 3vw, 40px) 60px;
+}
+.gsw-settings-layout-horizontal .gsw-settings-nav {
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  border-bottom: 1px solid var(--gsw-border, #e5dfd3);
+  padding-bottom: 10px;
+  margin: 0;
+}
+.gsw-settings-layout-horizontal .gsw-settings-nav p {
+  display: none;
+}
+.gsw-settings-layout-horizontal .gsw-settings-nav button {
+  flex: 1 0 auto;
+  justify-content: center;
+  text-align: center;
+  min-width: max-content;
+  white-space: nowrap;
+  padding: 12px 18px;
+}
+.gsw-settings-layout-horizontal .gsw-settings-content {
+  width: 100%;
+  min-width: 0;
+}
+.gsw-settings-layout-horizontal input[type="checkbox"],
+.gsw-settings-layout-horizontal input[type="radio"] {
+  accent-color: var(--gsw-accent, #ee9a00);
+}
+@media (max-width: 720px) {
+  .gsw-settings-layout.gsw-settings-layout-horizontal { padding: 20px 16px 40px; gap: 18px; }
+  .gsw-settings-layout-horizontal .gsw-settings-nav button { flex: 0 0 auto; }
+}
