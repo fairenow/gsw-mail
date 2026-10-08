@@ -759,7 +759,14 @@ async function prepareNewConversation(input: {
       };
     });
 
-  const providerMessages = [ ...previousTurns, input.messages[input.messages.length - 1]! ].map((message, index, workingMessages) => {
+  const latestClientMessage = input.messages[input.messages.length - 1]!;
+  const workingMessages: Array<{
+    role: "user" | "assistant";
+    content: string;
+    attachments?: Array<{ assetId: string; filename: string; mimeType: string; sizeBytes: number; kind?: string | null | undefined }>;
+  }> = [...previousTurns, latestClientMessage];
+
+  const providerMessages = workingMessages.map((message, index) => {
     const isLatestUser = index === workingMessages.length - 1 && message.role === "user";
     const messageAttachments = isLatestUser && attachmentSummaries.length > 0
       ? attachmentSummaries
