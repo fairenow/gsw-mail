@@ -8,7 +8,16 @@ import {
   createUploadIntent,
   deleteAsset,
   listFiles,
+  listRecentFiles,
+  listStarredFiles,
+  listTrashedFiles,
+  moveFileNode,
+  permanentlyDeleteFileNode,
+  renameFileNode,
+  restoreFileNode,
+  setFileNodeStarred,
   storageUsage,
+  trashFileNode,
 } from "../files/service.js";
 import { verifyR2Connection } from "../files/r2.js";
 
@@ -25,6 +34,11 @@ const folderSchema = z.object({
   name: z.string().trim().min(1).max(255),
   parentId: z.string().uuid().nullable().optional(),
 });
+const nodePatchSchema = z.object({
+  name: z.string().trim().min(1).max(255).optional(),
+  parentId: z.string().uuid().nullable().optional(),
+  starred: z.boolean().optional(),
+});
 
 export default async function fileRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
@@ -34,8 +48,19 @@ export default async function fileRoutes(app: FastifyInstance) {
   app.get("/product/files/usage", async (req) => storageUsage(req.user!.id));
 
   app.get("/product/files", async (req) => {
-    const query = z.object({ parentId: z.string().uuid().optional() }).parse(req.query);
-    return { files: await listFiles(req.user!.id, query.parentId ?? null) };
+    const query = z.object({
+      parentId: z.string().uuid().optional(),
+      view: z.enum(["folder", "recent", "starred", "trash"]).optional(),
+    }).parse(req.query);
+    const view = query.view ?? "folder";
+    const files = view === "recent"
+      ? await listRecentFiles(req.user!.id)
+      : view === "starred"
+        ? await listStarredFiles(req.user!.id)
+        : view === "trash"
+          ? await listTrashedFiles(req.user!.id)
+          : await listFiles(req.user!.id, query.parentId ?? null);
+    return { files };
   });
 
   app.post("/product/files/folders", async (req, reply) => {
@@ -72,6 +97,27 @@ export default async function fileRoutes(app: FastifyInstance) {
     const download = await createDownloadUrl(req.user!.id, req.params.id);
     return reply.redirect(download.url);
   });
+
+  app.patch<{ Params: { id: string } }>("/product/files/nodes/:id", async (req) => {
+    const input = nodePatchSchema.parse(req.body);
+    let node;
+    if (input.name !== undefined) node = await renameFileNode(req.user!.id, req.params.id, input.name);
+    if (input.parentId !== undefined) node = await moveFileNode(req.user!.id, req.params.id, input.parentId);
+    if (input.starred !== undefined) node = await setFileNodeStarred(req.user!.id, req.params.id, input.starred);
+    if (!node) throw new Error("no file changes supplied");
+    return { node };
+  });
+
+  app.post<{ Params: { id: string } }>("/product/files/nodes/:id/trash", async (req) => ({
+    node: await trashFileNode(req.user!.id, req.params.id),
+  }));
+
+  app.post<{ Params: { id: string } }>("/product/files/nodes/:id/restore", async (req) => ({
+    node: await restoreFileNode(req.user!.id, req.params.id),
+  }));
+
+  app.delete<{ Params: { id: string } }>("/product/files/nodes/:id", async (req) =>
+    permanentlyDeleteFileNode(req.user!.id, req.params.id));
 
   app.delete<{ Params: { id: string } }>("/product/files/:id", async (req) =>
     deleteAsset(req.user!.id, req.params.id));
