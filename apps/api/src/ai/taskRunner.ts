@@ -31,6 +31,10 @@ const backgroundSafeTools = [
   "campaign.read",
   "templates.list",
   "integrations.list",
+  "browser.search",
+  "browser.open",
+  "browser.read",
+  "browser.screenshot",
 ];
 
 const workers = new Set<AgentWorkerId>([
@@ -40,6 +44,7 @@ const workers = new Set<AgentWorkerId>([
   "calendar",
   "files",
   "campaign",
+  "browser",
   "admin",
 ]);
 
