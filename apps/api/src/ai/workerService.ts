@@ -31,13 +31,16 @@ export async function runReadOnlyWorker(input: {
   instruction: string;
   context: AgentExecutionContext;
   maxTurns?: number;
+  allowedToolNames?: string[];
 }) {
   const capabilitySettings = await getAiCapabilitySettings(input.context.userId);
   const active = await listActiveAiScopes(input.context.userId, input.context.accountId);
   const granted = new Set(active.map((item) => item.scope));
 
+  const allowedNames = input.allowedToolNames ? new Set(input.allowedToolNames) : null;
   const definitions = agentMailRegistry.definitions().filter((tool) =>
     allowedForWorker(tool, input.worker)
+    && (!allowedNames || allowedNames.has(tool.name))
     && tool.requiredScopes.every((scope) => isAiScopeGloballyEnabled(capabilitySettings, scope))
     && tool.requiredScopes.every((scope) => granted.has(scope)),
   );
