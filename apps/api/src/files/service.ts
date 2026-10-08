@@ -5,6 +5,7 @@ import { db } from "../db/client.js";
 import { assets, fileNodes, userStorageQuotas } from "../db/schema.js";
 import { badRequest, notFound, serviceUnavailable } from "../lib/errors.js";
 import { createR2PresignedUrl, deleteR2Object, headR2Object, putR2Object, r2Configured } from "./r2.js";
+import { detectFileType } from "./fileTypes.js";
 
 const ACTIVE_STORAGE_STATUSES = ["upload_pending", "ready"] as const;
 
@@ -22,16 +23,7 @@ const extensionFor = (filename: string): string | null => {
   return match?.[1]?.toLowerCase() ?? null;
 };
 
-const classifyKind = (mimeType: string): string => {
-  if (mimeType === "application/pdf") return "pdf";
-  if (mimeType.startsWith("image/")) return "image";
-  if (mimeType.startsWith("video/")) return "video";
-  if (mimeType.startsWith("audio/")) return "audio";
-  if (/wordprocessingml|msword/.test(mimeType)) return "document";
-  if (/spreadsheetml|ms-excel|csv/.test(mimeType)) return "spreadsheet";
-  if (/presentationml|ms-powerpoint/.test(mimeType)) return "presentation";
-  return "file";
-};
+
 
 const userPrefix = (userId: string): string =>
   createHash("sha256").update(userId).digest("hex").slice(0, 24);
@@ -106,7 +98,7 @@ export async function createUploadIntent(input: {
     mimeType,
     extension: extensionFor(filename),
     sizeBytes: input.sizeBytes,
-    kind: input.kind?.trim().slice(0, 80) || classifyKind(mimeType),
+    kind: input.kind?.trim().slice(0, 80) || detectFileType(filename, mimeType).kind,
     source: input.source?.trim().slice(0, 80) || "user_upload",
     status: "upload_pending",
   }).returning();
@@ -274,7 +266,7 @@ export async function createAssetFromBuffer(input: {
     mimeType,
     extension: extensionFor(filename),
     sizeBytes,
-    kind: input.kind?.trim().slice(0, 80) || classifyKind(mimeType),
+    kind: input.kind?.trim().slice(0, 80) || detectFileType(filename, mimeType).kind,
     source: input.source?.trim().slice(0, 80) || "user_upload",
     status: "upload_pending",
   }).returning();
