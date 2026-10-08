@@ -16,7 +16,7 @@ const failure = (ctx: AgentExecutionContext, toolCallId: string, startedAt: stri
   audit: { userId: ctx.userId, accountId: ctx.accountId, startedAt, completedAt: new Date().toISOString() },
 });
 
-const worker = z.enum(["coordinator", "mail", "research", "calendar", "files", "campaign", "admin"]);
+const worker = z.enum(["coordinator", "mail", "research", "calendar", "files", "campaign", "browser", "admin"]);
 
 const createInput = z.object({
   title: z.string().trim().min(1).max(160),
@@ -37,7 +37,7 @@ export const tasksCreateTool: AgentToolDefinition = {
     properties: {
       title: { type: "string" },
       instruction: { type: "string" },
-      worker: { type: "string", enum: ["coordinator", "mail", "research", "calendar", "files", "campaign", "admin"] },
+      worker: { type: "string", enum: ["coordinator", "mail", "research", "calendar", "files", "campaign", "browser", "admin"] },
       selectedSkills: { type: "array", items: { type: "string" }, maxItems: 12 },
       steps: {
         type: "array",
@@ -46,7 +46,7 @@ export const tasksCreateTool: AgentToolDefinition = {
           type: "object",
           properties: {
             title: { type: "string" },
-            worker: { type: "string", enum: ["coordinator", "mail", "research", "calendar", "files", "campaign", "admin"] },
+            worker: { type: "string", enum: ["coordinator", "mail", "research", "calendar", "files", "campaign", "browser", "admin"] },
           },
           required: ["title"],
           additionalProperties: false,
