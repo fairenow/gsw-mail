@@ -127,6 +127,9 @@ const toolLabel = (toolName: string): string => {
     case "files.list": return "Checking your files";
     case "files.search": return "Searching your files";
     case "files.read": return "Reading the file";
+    case "files.analyze": return "Analyzing the file";
+    case "files.create_text": return "Creating the file";
+    case "files.create_artifact": return "Building your file";
     case "mail.attach_file": return "Attaching the file to your draft";
     default: return "Working with your mailbox";
   }
