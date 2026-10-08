@@ -698,8 +698,33 @@ async function prepareNewConversation(input: {
     "Use this context when interpreting relative dates, scheduling requests, or file capabilities. Do not mention this hidden runtime context unless it is directly relevant.",
   ].join("\n");
 
-  const providerMessages = input.messages.map((message, index) => {
-    const isLatestUser = index === input.messages.length - 1 && message.role === "user";
+  // Server-owned history: never trust the browser's 24-message window as the
+  // source of conversational memory. The newest user turn was just persisted.
+  // Preserve the recent prior transcript independently of client UI paging.
+  const transcript = await listConversationMessages(input.userId, conversation.id);
+  const previousTurns = transcript.messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .slice(0, -1)
+    .slice(-23)
+    .map((message) => {
+      const metadata = message.metadata && typeof message.metadata === "object"
+        ? message.metadata as Record<string, unknown>
+        : {};
+      const attachments = Array.isArray(metadata.attachments) ? metadata.attachments : [];
+      const attachmentContext = attachments.map((item) => {
+        const asset = item && typeof item === "object" ? item as Record<string, unknown> : {};
+        return `- ${String(asset.filename ?? "file")} | assetId=${String(asset.assetId ?? "")} | ${String(asset.mimeType ?? "application/octet-stream")}`;
+      }).join("\\n");
+      return {
+        role: message.role as "user" | "assistant",
+        content: message.role === "user" && attachmentContext
+          ? `${message.content}\\n\\n[Attached GSW files]\\n${attachmentContext}`
+          : message.content,
+      };
+    });
+
+  const providerMessages = [ ...previousTurns, input.messages[input.messages.length - 1]! ].map((message, index, workingMessages) => {
+    const isLatestUser = index === workingMessages.length - 1 && message.role === "user";
     const messageAttachments = isLatestUser && attachmentSummaries.length > 0
       ? attachmentSummaries
       : (message.attachments ?? []);
