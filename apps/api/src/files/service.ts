@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { assets, fileNodes, userStorageQuotas } from "../db/schema.js";
-import { badRequest, notFound } from "../lib/errors.js";
+import { badRequest, notFound, serviceUnavailable } from "../lib/errors.js";
 import { createR2PresignedUrl, deleteR2Object, headR2Object, r2Configured } from "./r2.js";
 
 const ACTIVE_STORAGE_STATUSES = ["upload_pending", "ready"] as const;
@@ -75,7 +75,7 @@ export async function createUploadIntent(input: {
   kind?: string | undefined;
   parentId?: string | null | undefined;
 }) {
-  if (!r2Configured()) throw new Error("R2 storage is not configured.");
+  if (!r2Configured()) throw serviceUnavailable("File storage is not configured yet.");
   if (!Number.isSafeInteger(input.sizeBytes) || input.sizeBytes < 1) throw badRequest("file size must be greater than zero");
   if (input.sizeBytes > config.files.maxUploadBytes) throw badRequest(`file exceeds the ${config.files.maxUploadBytes} byte upload limit`);
 
