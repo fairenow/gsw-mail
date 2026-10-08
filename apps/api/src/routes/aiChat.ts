@@ -30,6 +30,8 @@ import { aiScopes } from "../ai/permissions/types.js";
 import { getAiCapabilitySettings, isAiScopeGloballyEnabled } from "../ai/capabilities.js";
 import { forbidden } from "../lib/errors.js";
 import { getAssetForUser } from "../files/service.js";
+import { getR2Object } from "../files/r2.js";
+import { analyzeStoredFile } from "../files/intelligence.js";
 import { config } from "../config.js";
 
 const chatAttachmentSchema = z.object({
@@ -69,6 +71,9 @@ const permissionGrantSchema = z.object({
 const confirmationDecisionSchema = z.object({
   decision: z.enum(["approved", "rejected"]),
 });
+
+const shouldPreAnalyzeAttachments = (content: string) =>
+  /\b(analy[sz]e|read|review|summari[sz]e|extract|understand|inspect|what(?:'s| is) (?:in|inside)|tell me about|scope|requirements?|dates?|pricing|spreadsheet|workbook|pdf|document|presentation|image|chart|table|clean|data)\b/i.test(content);
 
 const capabilities = (mailboxAccess: boolean) => ({
   actions: true as const,
@@ -407,6 +412,27 @@ async function prepareNewConversation(input: {
     kind: asset.kind,
   }));
 
+  const directAttachmentAnalyses = new Map<string, string>();
+  if (config.ai.openaiApiKey && attachedAssets.length > 0 && shouldPreAnalyzeAttachments(latestUserMessage.content)) {
+    for (const asset of attachedAssets.slice(0, 5)) {
+      try {
+        const object = await getR2Object(asset.r2Key);
+        const analysis = await analyzeStoredFile({
+          filename: asset.displayName || asset.filename,
+          mimeType: asset.mimeType,
+          bytes: object.content,
+          instruction: `Read this attached file for the user's current request: ${latestUserMessage.content}. Return grounded content from the actual file, including relevant facts, numbers, dates, requirements, structure, and actionable details. Do not discuss file-reading limitations.`,
+        });
+        directAttachmentAnalyses.set(asset.id, analysis.text.slice(0, 60_000));
+      } catch (error) {
+        directAttachmentAnalyses.set(
+          asset.id,
+          `[File preprocessing failed: ${error instanceof Error ? error.message : String(error)}]`,
+        );
+      }
+    }
+  }
+
   await appendAiMessage({
     conversationId: conversation.id,
     role: "user",
@@ -430,11 +456,17 @@ async function prepareNewConversation(input: {
       : (message.attachments ?? []);
     if (messageAttachments.length === 0) return { role: message.role, content: message.content };
     const attachmentContext = messageAttachments
-      .map((asset) => `- ${asset.filename} | assetId=${asset.assetId} | ${asset.mimeType} | ${asset.sizeBytes} bytes`)
-      .join("\n");
+      .map((asset) => {
+        const analysis = directAttachmentAnalyses.get(asset.assetId);
+        return [
+          `- ${asset.filename} | assetId=${asset.assetId} | ${asset.mimeType} | ${asset.sizeBytes} bytes`,
+          ...(analysis ? [`[Verified file content]\n${analysis}`] : []),
+        ].join("\n");
+      })
+      .join("\n\n");
     return {
       role: message.role,
-      content: `${message.content}\n\n[Attached GSW files]\n${attachmentContext}\nUse files.read when you need file metadata or available text content.`,
+      content: `${message.content}\n\n[Attached GSW files]\n${attachmentContext}\n\nIf verified file content is present above, answer from it directly. Do not claim the file is unreadable. If the user asks to modify or convert an attached file, use files.transform with its assetId.`,
     };
   });
 
