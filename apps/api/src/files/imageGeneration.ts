@@ -174,7 +174,7 @@ async function generateWithHuggingFace(input: ImageInput): Promise<GeneratedImag
     try {
       return await generateWithHuggingFaceModel(model, input);
     } catch (error) {
-      if (error instanceof HttpError && error.statusCode === 401) throw error;
+      if (error instanceof HttpError && error.status === 401) throw error;
       failures.push(error instanceof Error ? error.message : String(error));
     }
   }
