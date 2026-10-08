@@ -239,6 +239,82 @@ export const users = pgTable(
   ],
 );
 
+export const userStorageQuotas = pgTable(
+  "user_storage_quotas",
+  {
+    userId: text("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+    planKey: text("plan_key").default("free").notNull(),
+    quotaBytes: bigint("quota_bytes", { mode: "number" }).notNull(),
+    ...timestamps,
+  },
+);
+
+export const assets = pgTable(
+  "assets",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id").references(() => organizations.id, { onDelete: "set null" }),
+    r2Key: text("r2_key").notNull(),
+    filename: text("filename").notNull(),
+    displayName: text("display_name").notNull(),
+    mimeType: text("mime_type").default("application/octet-stream").notNull(),
+    extension: text("extension"),
+    sizeBytes: bigint("size_bytes", { mode: "number" }).default(0).notNull(),
+    etag: text("etag"),
+    kind: text("kind").default("file").notNull(),
+    source: text("source").default("user_upload").notNull(),
+    visibility: text("visibility").default("private").notNull(),
+    status: text("status").default("upload_pending").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("assets_r2_key_idx").on(t.r2Key),
+    index("assets_user_status_idx").on(t.userId, t.status, t.createdAt),
+    index("assets_workspace_idx").on(t.workspaceId, t.createdAt),
+  ],
+);
+
+export const fileNodes = pgTable(
+  "file_nodes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    assetId: uuid("asset_id").references(() => assets.id, { onDelete: "cascade" }),
+    parentId: uuid("parent_id"),
+    name: text("name").notNull(),
+    nodeType: text("node_type").notNull(),
+    starred: boolean("starred").default(false).notNull(),
+    trashedAt: timestamp("trashed_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    index("file_nodes_user_parent_idx").on(t.userId, t.parentId, t.createdAt),
+    uniqueIndex("file_nodes_asset_idx").on(t.assetId),
+  ],
+);
+
+export const assetLinks = pgTable(
+  "asset_links",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    assetId: uuid("asset_id").notNull().references(() => assets.id, { onDelete: "cascade" }),
+    relationType: text("relation_type").notNull(),
+    resourceType: text("resource_type"),
+    resourceId: text("resource_id"),
+    position: integer("position"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("asset_links_user_relation_idx").on(t.userId, t.relationType, t.createdAt),
+    index("asset_links_resource_idx").on(t.resourceType, t.resourceId),
+  ],
+);
+
 export const organizationMemberships = pgTable(
   "organization_memberships",
   {
