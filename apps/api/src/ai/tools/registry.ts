@@ -19,6 +19,25 @@ export class AgentToolRegistry {
     return this.tools.get(name.replaceAll("__", "."));
   }
 
+  definitions(): AgentToolDefinition[] {
+    return [...this.tools.values()];
+  }
+
+  search(query: string, limit = 12): AgentToolDefinition[] {
+    const terms = query.toLowerCase().split(/\s+/).filter((term) => term.length > 1);
+    if (terms.length === 0) return this.definitions().slice(0, limit);
+    return this.definitions()
+      .map((tool) => {
+        const haystack = `${tool.name} ${tool.description} ${tool.requiredScopes.join(" ")}`.toLowerCase();
+        const score = terms.reduce((total, term) => total + (haystack.includes(term) ? 1 : 0), 0);
+        return { tool, score };
+      })
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score || a.tool.name.localeCompare(b.tool.name))
+      .slice(0, Math.max(1, Math.min(limit, 30)))
+      .map((entry) => entry.tool);
+  }
+
   providerDefinitions(include?: (tool: AgentToolDefinition) => boolean): ProviderToolDefinition[] {
     return [...this.tools.values()].filter((tool) => include ? include(tool) : true).map((tool) => ({
       type: "function" as const,
