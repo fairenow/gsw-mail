@@ -51,6 +51,17 @@ const config = {
   mail: {
     defaultTemplateKey: env("DEFAULT_MAIL_TEMPLATE_KEY", "none"),
   },
+  r2: {
+    accountId: process.env.R2_ACCOUNT_ID,
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    bucket: process.env.R2_BUCKET,
+    presignTtlSeconds: Number(env("R2_PRESIGN_TTL_SECONDS", "900")),
+  },
+  files: {
+    freeQuotaBytes: Number(env("FILES_FREE_QUOTA_BYTES", String(500 * 1024 * 1024))),
+    maxUploadBytes: Number(env("FILES_MAX_UPLOAD_BYTES", String(500 * 1024 * 1024))),
+  },
   ai: {
     provider: env("AI_PROVIDER", "hetzner"),
     timeoutMs: Number(env("AI_TIMEOUT_MS", process.env.HETZNER_INFERENCE_TIMEOUT_MS ?? "45000")),
@@ -124,6 +135,16 @@ if (isProduction) {
   if (config.stalwart.pushJmapPassword) assertNotPlaceholder("STALWART_PUSH_JMAP_PASSWORD", config.stalwart.pushJmapPassword);
   if (config.send.delaySeconds < 0 || config.send.maxRecipients < 1) {
     throw new Error("[config] invalid send settings: SEND_DELAY_SECONDS must be >= 0 and MAX_RECIPIENTS >= 1");
+  }
+  const r2Values = [config.r2.accountId, config.r2.accessKeyId, config.r2.secretAccessKey, config.r2.bucket];
+  if (r2Values.some(Boolean) && !r2Values.every(Boolean)) {
+    throw new Error("[config] R2 storage must set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET together");
+  }
+  if (config.r2.presignTtlSeconds < 60 || config.r2.presignTtlSeconds > 604800) {
+    throw new Error("[config] R2_PRESIGN_TTL_SECONDS must be between 60 and 604800");
+  }
+  if (config.files.freeQuotaBytes < 1 || config.files.maxUploadBytes < 1) {
+    throw new Error("[config] file storage limits must be positive");
   }
   if (config.outbound.relay === "null") {
     throw new Error("[config] OUTBOUND_RELAY=null is not allowed in production; configure a real relay");
