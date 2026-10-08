@@ -10,10 +10,17 @@ const coreToolNames = new Set([
   "mail.read_thread",
 ]);
 
-const toolAvailable = (tool: AgentToolDefinition, settings: AiCapabilitySettings, hasOpenAi: boolean, hasImageProvider: boolean) => {
+const toolAvailable = (
+  tool: AgentToolDefinition,
+  settings: AiCapabilitySettings,
+  hasOpenAi: boolean,
+  hasImageProvider: boolean,
+  hasBrowserProvider: boolean,
+) => {
   if (!tool.requiredScopes.every((scope) => isAiScopeGloballyEnabled(settings, scope))) return false;
   if (tool.name === "files.transform" && !hasOpenAi) return false;
   if (tool.name === "files.generate_image" && !hasImageProvider) return false;
+  if (tool.name.startsWith("browser.") && !hasBrowserProvider) return false;
   return true;
 };
 
@@ -22,6 +29,7 @@ export function selectAgentTools(input: {
   capabilitySettings: AiCapabilitySettings;
   hasOpenAi: boolean;
   hasImageProvider: boolean;
+  hasBrowserProvider: boolean;
 }): {
   tools: ProviderToolDefinition[];
   selectedToolNames: string[];
@@ -29,7 +37,7 @@ export function selectAgentTools(input: {
   dynamic: boolean;
 } {
   const available = agentMailRegistry.definitions().filter((tool) =>
-    toolAvailable(tool, input.capabilitySettings, input.hasOpenAi, input.hasImageProvider),
+    toolAvailable(tool, input.capabilitySettings, input.hasOpenAi, input.hasImageProvider, input.hasBrowserProvider),
   );
   const skills = selectAgentSkills(input.userMessage);
 
