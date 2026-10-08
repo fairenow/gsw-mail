@@ -49,7 +49,7 @@ const normalizeComposeHtml = (value: string) => {
   return `${normalized}${keep}`;
 };
 
-export function MailPage() {
+export function MailPage({ initialSection = "chat" }: { initialSection?: WorkspaceSection } = {}) {
   const { account, accounts, profileImageUrl, selectAccount: shellSelectAccount, configureTopBar } = useAppShell();
   const [folder, setFolder] = useState<Folder>("Inbox");
   const [folderCounts, setFolderCounts] = useState<Record<Folder, { total: number; unread: number }>>(emptyFolderCounts);
@@ -90,7 +90,7 @@ export function MailPage() {
   const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved" | "notSaved">("idle");
   const [sendError, setSendError] = useState<string | null>(null);
   const [sendRequestId, setSendRequestId] = useState<string | null>(null);
-  const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>("chat");
+  const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>(initialSection);
 
   const loadFolder = useCallback(async (accountId: string, name: Folder, nextPage = 0) => {
     const request = ++listRequest.current;
