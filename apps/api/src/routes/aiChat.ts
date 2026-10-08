@@ -221,7 +221,7 @@ async function runConversationTurn(input: {
   const generatedAttachments: ChatAttachmentResult[] = [];
 
   try {
-    for (let turn = 0; turn < 4; turn += 1) {
+    for (let turn = 0; turn < 6; turn += 1) {
       input.emit?.({
         type: "status",
         phase: "thinking",
@@ -360,7 +360,10 @@ async function runConversationTurn(input: {
       }
     }
 
-    const content = "I reached the read-only tool limit for this request. Try asking for a narrower mailbox search.";
+    const failedTools = toolActivity.filter((item) => !item.ok).map((item) => item.name);
+    const content = failedTools.length
+      ? `I couldn't complete this request after several tool attempts. The last failing tool(s) were: ${[...new Set(failedTools)].join(", ")}. Please retry; if it fails again, the server logs will contain the underlying tool error.`
+      : "I reached the tool-execution limit for this request before a final response was produced. Please retry the request.";
     await appendAiMessage({
       conversationId: input.conversationId,
       role: "assistant",
