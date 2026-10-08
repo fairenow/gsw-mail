@@ -238,51 +238,55 @@ const simpleMarkdownToHtml = (source: string) => {
   return out.join("\n");
 };
 
+const pdfBaseStyles = `
+  @page { size: Letter; margin: 0; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  html, body { margin: 0; min-height: 100%; }
+  body { background: #fffdf9; color: #252c39; font-family: Arial, Helvetica, sans-serif; font-size: 10pt; line-height: 1.5; }
+  .gsw-page { padding: 44px 48px; }
+  .gsw-report-hero { background: #152f50; color: #fff; padding: 36px 42px; margin: -44px -48px 25px; }
+  .gsw-report-hero h1 { color: #fff; margin: 0 0 7px; font-size: 28pt; line-height: 1.13; }
+  .gsw-report-hero p { margin: 0; color: #e1edf8; }
+  .gsw-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 20px 0 25px; }
+  .gsw-metric { background: #eaf1f8; border: 1px solid #d7e4f1; border-radius: 10px; padding: 16px; }
+  .gsw-metric-value { display: block; color: #153a64; font-size: 25pt; line-height: 1.1; font-weight: 800; }
+  .gsw-metric-label { color: #475568; font-size: 9pt; }
+  .gsw-two-col { columns: 2; column-gap: 28px; }
+  .gsw-two-col li { break-inside: avoid; }
+  h1, h2, h3 { break-after: avoid; }
+  h1 { font-size: 24pt; line-height: 1.18; margin: 0 0 12px; }
+  h2 { font-size: 15pt; color: #1b4f77; margin: 17px 0 8px; }
+  h3 { font-size: 11pt; margin: 13px 0 6px; }
+  p { margin: 0 0 10px; }
+  ul, ol { margin: 6px 0 12px; padding-left: 22px; }
+  li { margin-bottom: 5px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid #dce3ea; }
+  th { background: #e8eef5; }
+  .gsw-report-footer { margin-top: 23px; border-top: 1px solid #dce3ea; padding-top: 10px; color: #697687; font-size: 8.5pt; }
+`;
+
+export function composePdfHtml(content: string): string {
+  const isHtml = /<\\/?(?:html|body|section|div|header|main|article|h[1-6]|p|table|ul|ol|li)\\b/i.test(content);
+  const body = isHtml ? content : simpleMarkdownToHtml(content);
+  const hasDocument = /<!doctype html|<html\\b/i.test(body);
+  if (hasDocument) {
+    // Preserve the model's full page composition, including its head/CSS.
+    // Append print-safe defaults rather than putting a second HTML document inside it.
+    return body.replace(/<\\/head>/i, `<style>${pdfBaseStyles}</style></head>`);
+  }
+  return `<!doctype html><html><head><meta charset="utf-8"><style>${pdfBaseStyles}</style></head><body><main class="gsw-page">${body}</main></body></html>`;
+}
+
 async function generateLocalPdf(input: { filename: string; content: string; instruction: string }) {
-  const dir = await mkdtemp(join(tmpdir(), "gsw-artifact-"));
   try {
-    const htmlPath = join(dir, "document.html");
-    const outputPath = join(dir, input.filename);
-    const body = /<\/?(?:html|body|section|div|h1|h2|h3|p|ul|ol|li|table|strong|em)\b/i.test(input.content)
-      ? input.content
-      : simpleMarkdownToHtml(input.content);
-
-    const html = `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-  @page { size: Letter; margin: 0.55in; }
-  * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; color: #292722; font-size: 10.5pt; line-height: 1.35; }
-  h1 { font-size: 24pt; line-height: 1.05; margin: 0 0 10pt; color: #25221d; }
-  h2 { font-size: 14pt; margin: 12pt 0 5pt; color: #b96f00; }
-  h3 { font-size: 11pt; margin: 9pt 0 3pt; color: #575047; }
-  p { margin: 0 0 7pt; }
-  ul, ol { margin: 4pt 0 8pt 18pt; padding: 0; }
-  li { margin: 0 0 3pt; }
-  strong { color: #25221d; }
-  table { width: 100%; border-collapse: collapse; margin: 8pt 0; }
-  th, td { border: 1px solid #e5dccb; padding: 5pt; text-align: left; vertical-align: top; }
-  th { background: #fbf2dc; }
-  .gsw-accent { height: 5pt; background: #ee9a00; margin: 0 0 14pt; }
-  .gsw-note { margin-top: 12pt; padding-top: 7pt; border-top: 1px solid #eadfca; color: #756d63; font-size: 8.5pt; }
-</style>
-</head>
-<body>
-<div class="gsw-accent"></div>
-${body}
-</body>
-</html>`;
-
+    const html = composePdfHtml(input.content);
     const rendered = await renderLocalPdf(html);
     return { filename: input.filename, bytes: rendered, mimeType: "application/pdf", model: "gsw-local-pdf" };
   } catch (error) {
     if (error instanceof HttpError) throw error;
     const message = error instanceof Error ? error.message : String(error);
     throw new HttpError(502, `Local PDF generation failed: ${message}`);
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 
