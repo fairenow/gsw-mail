@@ -410,7 +410,7 @@ export const filesCreateArtifactTool: AgentToolDefinition = {
 
 export const filesTransformTool: AgentToolDefinition = {
   name: "files.transform",
-  description: "Open one or more existing GSW Files in a sandboxed computational workspace, modify/analyze their real contents, and save a new output file. Use this for requests such as cleaning an XLSX, adding formulas/charts, converting data into a report, revising a DOCX, or turning source files into a new PDF/PPTX/XLSX/DOCX.",
+  description: "Open one or more existing GSW Files in a sandboxed computational workspace, modify/analyze their real contents, and save a new output file. Use this for revising existing PDFs, restyling documents to match brand templates, or transforming DOCX/XLSX/PPTX and other sources. When a user mentions a saved PDF and a branding template, search for BOTH files first, then pass both source asset IDs so the designer has the actual original content and brand reference. Never merely print the styling instructions as the resulting document.",
   inputSchema: {
     type: "object",
     properties: {
