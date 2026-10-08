@@ -12,3 +12,8 @@ test("rejects executable and external PDF content", () => {
   assert.throws(() => validatePrintableHtml('<div style="background:url(https://example.org/image.png)">x</div>'));
   assert.throws(() => validatePrintableHtml('<div onclick="run()">x</div>'));
 });
+
+test("supports embedded raster images but rejects remote image loading", () => {
+  assert.doesNotThrow(() => validatePrintableHtml('<img alt="Logo" src="data:image/png;base64,aGVsbG8=">'));
+  assert.throws(() => validatePrintableHtml('<img src="https://example.com/logo.png">'));
+});
