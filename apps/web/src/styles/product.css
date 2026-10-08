@@ -791,3 +791,34 @@
   border-color: var(--gsw-accent);
   box-shadow: 0 0 0 3px var(--gsw-accent-soft);
 }
+
+
+.gsw-agent-task-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 280px;
+  padding: 7px 12px;
+  border: 1px solid var(--gsw-border);
+  border-radius: 14px;
+  background: var(--gsw-surface);
+  color: var(--gsw-text-body);
+  text-align: left;
+  box-shadow: var(--shadow-1);
+}
+.gsw-agent-task-pill:hover { background: var(--gsw-accent-soft); }
+.gsw-agent-task-icon { display: grid; place-items: center; flex: 0 0 auto; color: var(--gsw-accent-dark); }
+.gsw-agent-task-icon .spin { animation: gsw-agent-spin 1.05s linear infinite; }
+.gsw-agent-task-copy { display: grid; min-width: 0; line-height: 1.15; }
+.gsw-agent-task-copy strong { color: var(--gsw-text-heading); font-size: 12px; font-weight: 700; }
+.gsw-agent-task-copy small { overflow: hidden; color: var(--gsw-text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.gsw-agent-task-pill.status-failed .gsw-agent-task-icon { color: #b33a2f; }
+.gsw-agent-task-pill.status-waiting .gsw-agent-task-icon { color: var(--gsw-accent-dark); }
+.gsw-agent-task-pill.status-completed .gsw-agent-task-icon { color: #2d8a58; }
+@keyframes gsw-agent-spin { to { transform: rotate(360deg); } }
+@media (max-width: 720px) {
+  .gsw-agent-task-pill { max-width: 190px; padding: 6px 9px; }
+  .gsw-agent-task-copy strong { font-size: 11px; }
+  .gsw-agent-task-copy small { max-width: 135px; }
+}
