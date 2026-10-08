@@ -27,7 +27,7 @@ import { getAiProvider, type AiProviderMessage } from "../ai/providers/index.js"
 import { agentMailRegistry } from "../ai/tools/registry.js";
 import type { AgentExecutionContext, ProviderToolDefinition } from "../ai/tools/types.js";
 import { aiScopes } from "../ai/permissions/types.js";
-import { getAiCapabilitySettings } from "../ai/capabilities.js";
+import { getAiCapabilitySettings, isAiScopeGloballyEnabled } from "../ai/capabilities.js";
 import { selectAgentTools } from "../ai/toolSelection.js";
 import { forbidden } from "../lib/errors.js";
 import { getAssetForUser } from "../files/service.js";
@@ -588,6 +588,28 @@ async function runConversationTurn(input: {
 
         await recordAiToolResult(ledgerCall.id, outcome.result);
         toolActivity.push({ name: semanticName, ok: outcome.result.ok });
+
+        if (outcome.result.ok && semanticName === "capabilities.search" && outcome.result.data && typeof outcome.result.data === "object") {
+          const discovered = (outcome.result.data as Record<string, unknown>).tools;
+          const names = new Set(
+            Array.isArray(discovered)
+              ? discovered
+                .map((item) => item && typeof item === "object" ? (item as Record<string, unknown>).name : undefined)
+                .filter((name): name is string => typeof name === "string")
+              : [],
+          );
+          if (names.size) {
+            const expanded = agentMailRegistry.providerDefinitions((tool) =>
+              names.has(tool.name)
+              && tool.requiredScopes.every((scope) => isAiScopeGloballyEnabled(capabilitySettings, scope))
+              && (Boolean(config.ai.openaiApiKey) || tool.name !== "files.transform")
+              && (tool.name !== "files.generate_image" || Boolean(config.ai.huggingFaceApiToken || config.ai.openaiApiKey)),
+            );
+            const existing = new Set((tools ?? []).map((tool) => tool.function.name));
+            tools = [...(tools ?? []), ...expanded.filter((tool) => !existing.has(tool.function.name))];
+          }
+        }
+
         if (outcome.result.ok && (semanticName === "files.create_text" || semanticName === "files.create_artifact" || semanticName === "files.transform" || semanticName === "files.generate_image")) {
           const data = outcome.result.data && typeof outcome.result.data === "object"
             ? outcome.result.data as Record<string, unknown>
