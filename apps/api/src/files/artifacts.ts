@@ -40,7 +40,6 @@ async function uploadOpenAiUserFile(input: { filename: string; mimeType: string;
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(input.bytes)], { type: input.mimeType || "application/octet-stream" }), input.filename);
   form.append("purpose", "user_data");
-  form.append("expires_after", JSON.stringify({ anchor: "created_at", seconds: 3600 }));
   const response = await fetch(`${baseUrl}/files`, {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}` },
