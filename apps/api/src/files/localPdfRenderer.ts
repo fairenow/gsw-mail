@@ -31,11 +31,16 @@ export async function renderLocalPdf(html: string): Promise<Buffer> {
         "--user-data-dir=" + join(dir, "chromium-profile"), "--print-to-pdf-no-header",
         "--print-to-pdf=" + output, "file://" + source,
       ], { timeout: 45000, killSignal: "SIGKILL" });
-    } catch {
-      await execute("libreoffice", [
+    } catch (chromiumError) {
+      try {
+        await execute("libreoffice", [
         "-env:UserInstallation=file://" + join(dir, "profile"),
         "--headless", "--convert-to", "pdf", "--outdir", dir, source,
-      ], { timeout: 45000, killSignal: "SIGKILL" });
+        ], { timeout: 45000, killSignal: "SIGKILL" });
+      } catch (libreOfficeError) {
+        const shortMessage = (error: unknown) => error instanceof Error ? error.message.slice(0, 900) : String(error).slice(0, 900);
+        throw new Error("Both local PDF renderers failed. Chromium: " + shortMessage(chromiumError) + "; LibreOffice: " + shortMessage(libreOfficeError));
+      }
     }
     const pdf = await readFile(output);
     if (pdf.length < 500 || pdf.toString("ascii", 0, 5) !== "%PDF-") {
