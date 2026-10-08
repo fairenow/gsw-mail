@@ -132,6 +132,12 @@ export function ChatPanel() {
 
   const visibleMessages = useMemo(() => messages, [messages]);
 
+  const scrollToLatestMessage = (behavior: ScrollBehavior = "auto") => {
+    window.requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({ behavior, block: "end" });
+    });
+  };
+
   const resizeComposerInput = (element: HTMLTextAreaElement) => {
     element.style.height = "0px";
     const computed = window.getComputedStyle(element);
@@ -148,6 +154,11 @@ export function ChatPanel() {
   useEffect(() => {
     if (!recording && composerInputRef.current) resizeComposerInput(composerInputRef.current);
   }, [input, recording]);
+
+  useEffect(() => {
+    if (conversationLoading || messages.length === 0) return;
+    scrollToLatestMessage("auto");
+  }, [conversationId, conversationLoading]);
 
   const handleStreamEvent = (event: AiChatStreamEvent) => {
     if (event.type !== "status") return;
@@ -329,6 +340,7 @@ export function ChatPanel() {
           attachments: attachmentsFromMetadata(message.metadata),
         }));
       setMessages(restored.slice(-24));
+      scrollToLatestMessage("auto");
     }).catch(() => {
       if (!cancelled) {
         localStorage.removeItem(key);
@@ -376,6 +388,7 @@ export function ChatPanel() {
       setConversationId(id);
       setMessages(restored.slice(-24));
       setIntervention(null);
+      scrollToLatestMessage("auto");
       setExecutionActivities([]);
       localStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`, id);
       setHistoryOpen(false);
@@ -469,7 +482,7 @@ export function ChatPanel() {
     setPendingAttachments([]);
     setError("");
     setSending(true);
-    window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
+    scrollToLatestMessage("smooth");
     try {
       setExecutionActivities([]);
       const response = await api.streamChat(account?.id ?? null, next, conversationId, handleStreamEvent, attachmentsForTurn.map((item) => item.assetId));
@@ -480,7 +493,7 @@ export function ChatPanel() {
       if (assistantMessage) setMessages((current) => [...current, assistantMessage].slice(-24));
       if (response.intervention) setExecutionActivities([]);
       else settleAndClearActivities();
-      window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
+      scrollToLatestMessage("smooth");
     } catch (err) {
       setExecutionActivities((current) => current.map((item) => item.status === "running" ? { ...item, status: "error" as const } : item));
       setPendingAttachments((current) => current.length ? current : attachmentsForTurn);
@@ -499,7 +512,7 @@ export function ChatPanel() {
     if (assistantMessage) setMessages((current) => [...current, assistantMessage].slice(-24));
     if (response.intervention) setExecutionActivities([]);
     else settleAndClearActivities();
-    window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
+    scrollToLatestMessage("smooth");
   };
 
   const allowPermission = async () => {
@@ -528,7 +541,7 @@ export function ChatPanel() {
         setMessages((current) => [...current, result.execution.message].slice(-24));
       }
       setExecutionActivities([]);
-      window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
+      scrollToLatestMessage("smooth");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
