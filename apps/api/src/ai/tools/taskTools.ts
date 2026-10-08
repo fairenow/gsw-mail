@@ -70,7 +70,7 @@ export const tasksCreateTool: AgentToolDefinition = {
         instruction: input.instruction,
         ...(input.worker !== undefined ? { worker: input.worker } : {}),
         ...(input.selectedSkills !== undefined ? { selectedSkills: input.selectedSkills } : {}),
-        ...(input.steps !== undefined ? { steps: input.steps } : {}),
+        ...(input.steps !== undefined ? { steps: input.steps.map((step) => ({ title: step.title, ...(step.worker !== undefined ? { worker: step.worker } : {}) })) } : {}),
       });
       return success(ctx, toolCallId, startedAt, { taskId: task.id, title: task.title, status: task.status });
     } catch (error) {
