@@ -8,7 +8,7 @@ const execute = promisify(execFile);
 
 export function validatePrintableHtml(html: string): void {
   if (html.length > 600_000) throw new Error("PDF HTML exceeds size limit");
-  if (/<(?:script|iframe|object|embed|link|base|form|meta)\b/i.test(html)
+  if (/<(?:script|iframe|object|embed|link|base|form)\b/i.test(html)
     || /\bon[a-z]+\s*=/i.test(html)
     || /@import\b/i.test(html)
     || /url\s*\(/i.test(html)
