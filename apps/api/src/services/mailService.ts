@@ -132,6 +132,58 @@ export function createMailService(context: MailServiceContext) {
       return engine.search(accountId, query, mailbox);
     },
 
+    async activity(accountId: string, startIso: string, endIso: string, requestedMailboxes?: string[]) {
+      await requireAccountPermission(context.userId, accountId, "read");
+      const engine = await engineFor(accountId);
+      const start = new Date(startIso);
+      const end = new Date(endIso);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+        throw new Error("mail activity requires a valid start/end time range");
+      }
+
+      const available = await engine.listMailboxes(accountId);
+      const defaults = ["inbox", "sent", "drafts", "outbox", "trash"];
+      const requested = (requestedMailboxes?.length ? requestedMailboxes : defaults).map((value) => value.trim().toLowerCase());
+      const targets = available.filter((mailbox) => {
+        const role = mailbox.role?.toLowerCase() ?? "";
+        const name = mailbox.engineName.toLowerCase();
+        return requested.includes(role) || requested.includes(name);
+      });
+
+      const folders = [];
+      for (const mailbox of targets) {
+        const messages = await engine.listMessages(accountId, { mailbox: mailbox.engineName, limit: 250, offset: 0 });
+        const inRange = messages
+          .filter((message) => message.date >= start && message.date < end)
+          .sort((a, b) => a.date.getTime() - b.date.getTime());
+        folders.push({
+          mailbox: mailbox.engineName,
+          role: mailbox.role,
+          count: inRange.length,
+          messages: inRange.map((message) => ({
+            messageId: message.engineId,
+            threadId: message.threadId,
+            subject: message.subject,
+            date: message.date,
+            from: message.from,
+            to: message.to,
+            cc: message.cc,
+            snippet: message.snippet,
+            read: message.read,
+            hasAttachments: message.hasAttachments,
+          })),
+        });
+      }
+
+      return {
+        start: start.toISOString(),
+        end: end.toISOString(),
+        total: folders.reduce((sum, folder) => sum + folder.count, 0),
+        folders,
+        missingRequestedMailboxes: requested.filter((needle) => !targets.some((mailbox) => mailbox.role?.toLowerCase() === needle || mailbox.engineName.toLowerCase() === needle)),
+      };
+    },
+
     async readThread(accountId: string, threadId: string) {
       await requireAccountPermission(context.userId, accountId, "read");
       const engine = await engineFor(accountId);
