@@ -45,6 +45,7 @@ const createArtifactInput = z.object({
     "unsupported artifact file extension",
   ),
   instruction: z.string().trim().min(1).max(20_000),
+  content: z.string().max(120_000).optional(),
 });
 const transformArtifactInput = z.object({
   sourceAssetIds: z.array(z.string().uuid()).min(1).max(5),
@@ -344,12 +345,13 @@ export const filesCreateTextTool: AgentToolDefinition = {
 
 export const filesCreateArtifactTool: AgentToolDefinition = {
   name: "files.create_artifact",
-  description: "Create a finished downloadable artifact in the user's My Files library using a sandboxed code interpreter. Supports PDF, DOCX, XLSX, PPTX, CSV, TXT, Markdown, HTML, JSON, PNG, and JPEG outputs. Use this for native documents, spreadsheets, presentations, PDFs, charts, and other generated files.",
+  description: "Create a finished downloadable artifact in the user's My Files library. PDF creation is provider-neutral and rendered locally with LibreOffice; include the complete final document copy in content and use instruction for layout/style guidance. Other native artifact formats may use an available computational artifact service.",
   inputSchema: {
     type: "object",
     properties: {
       filename: { type: "string", description: "Exact output filename including a supported extension such as report.pdf, plan.docx, budget.xlsx, or deck.pptx." },
-      instruction: { type: "string", description: "Detailed instructions for the artifact's content, layout, calculations, tables, charts, or structure." },
+      instruction: { type: "string", description: "Detailed layout, styling, calculations, tables, charts, or structure instructions." },
+      content: { type: "string", description: "Complete final body copy for the artifact. For PDFs, provide the actual finished document text/Markdown or safe HTML here rather than only describing what the PDF should contain." },
     },
     required: ["filename", "instruction"],
     additionalProperties: false,
