@@ -1,5 +1,6 @@
 import { and, desc, eq, ilike, isNull, or } from "drizzle-orm";
 import { z } from "zod";
+import { config } from "../../config.js";
 import { db } from "../../db/client.js";
 import { assets } from "../../db/schema.js";
 import { getR2Object } from "../../files/r2.js";
@@ -186,9 +187,23 @@ export const filesReadTool: AgentToolDefinition = {
       if (!row) throw new Error("file not found");
 
       let textPreview: string | undefined;
+      let deepAnalysis: string | undefined;
+      let analysisMode: string | undefined;
+      let analysisModel: string | undefined;
       if (readableTextMime(row.mimeType, row.filename) && Number(row.sizeBytes) <= 2 * 1024 * 1024) {
         const object = await getR2Object(row.r2Key);
         textPreview = object.content.toString("utf8").slice(0, 40_000);
+      } else if (config.ai.openaiApiKey) {
+        const object = await getR2Object(row.r2Key);
+        const result = await analyzeStoredFile({
+          filename: row.filename,
+          mimeType: row.mimeType,
+          bytes: object.content,
+          instruction: "Read and understand this file. Return a concise but useful analysis of its actual contents, including key facts, structure, important numbers, dates, obligations, risks, and action items when present.",
+        });
+        deepAnalysis = result.text.slice(0, 80_000);
+        analysisMode = result.mode;
+        analysisModel = result.model;
       }
 
       return success(ctx, toolCallId, startedAt, {
@@ -200,8 +215,11 @@ export const filesReadTool: AgentToolDefinition = {
         kind: row.kind,
         source: row.source,
         textPreview,
-        processingNote: textPreview === undefined
-          ? "Use files.analyze when you need deep understanding of this file."
+        deepAnalysis,
+        analysisMode,
+        analysisModel,
+        processingNote: textPreview === undefined && deepAnalysis === undefined
+          ? "Deep content extraction is unavailable because the enhanced file intelligence service is not configured."
           : undefined,
       });
     } catch (error) {
