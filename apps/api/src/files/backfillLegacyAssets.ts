@@ -2,6 +2,7 @@ import { eq, isNull } from "drizzle-orm";
 import { pool, db } from "../db/client.js";
 import { emailTemplates } from "../db/schema.js";
 import { createAssetFromBuffer } from "./service.js";
+import { r2Configured } from "./r2.js";
 
 async function backfillTemplateLogos() {
   const rows = await db.select().from(emailTemplates)
@@ -90,6 +91,11 @@ async function backfillDraftAttachments() {
 }
 
 async function main() {
+  if (!r2Configured()) {
+    throw new Error(
+      "R2 credentials are not available in this shell. Run this through Railway so its service variables are injected: railway run npm run files:backfill:r2 --workspace apps/api",
+    );
+  }
   const templates = await backfillTemplateLogos();
   const attachments = await backfillDraftAttachments();
   console.log(`[r2-backfill] complete: ${templates} template logos, ${attachments} draft attachments`);
