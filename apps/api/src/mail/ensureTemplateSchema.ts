@@ -14,10 +14,12 @@ export async function ensureEmailTemplateSchema(): Promise<void> {
       "logo_mime_type" text,
       "logo_base64" text,
       "logo_filename" text,
+      "logo_asset_id" uuid REFERENCES "assets"("id") ON DELETE SET NULL,
       "created_at" timestamp with time zone DEFAULT now() NOT NULL,
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     );
   `);
+  await pool.query(`ALTER TABLE "email_templates" ADD COLUMN IF NOT EXISTS "logo_asset_id" uuid REFERENCES "assets"("id") ON DELETE SET NULL;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "email_templates_key_idx" ON "email_templates" ("key");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "email_templates_user_idx" ON "email_templates" ("user_id", "created_at");`);
 }
