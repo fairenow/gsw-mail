@@ -200,6 +200,7 @@ export interface ProductSettings {
     scheduledWork: boolean;
     campaignLaunch: boolean;
     fileAccess: boolean;
+    imageGeneration: boolean;
     [key: string]: unknown;
   };
   signature: { id: string | null; signatureHtml: string; signatureText: string; enabled: boolean; onNew: boolean; onReply: boolean; onForward: boolean; position: "beforeQuotedText" | "afterQuotedText" };
