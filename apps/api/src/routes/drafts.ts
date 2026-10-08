@@ -12,6 +12,7 @@ import { DEFAULT_MAIL_TEMPLATE_KEY } from "../mail/templates/index.js";
 import { sanitizeRichText } from "../lib/richText.js";
 import {
   appendDraftAttachments,
+  attachExistingAssetToDraft,
   clearDraftAttachments,
   listDraftAttachments,
   loadDraftAttachments,
@@ -71,6 +72,11 @@ const scheduleDraftSchema = z.object({
 const draftAttachmentsSchema = z.object({
   accountId: z.string().uuid(),
   attachments: z.array(attachmentSchema).max(20),
+});
+
+const draftFileAssetsSchema = z.object({
+  accountId: z.string().uuid(),
+  assetIds: z.array(z.string().uuid()).min(1).max(20),
 });
 
 export default async (app: FastifyInstance) => {
@@ -178,6 +184,37 @@ export default async (app: FastifyInstance) => {
     if (existing.length + input.attachments.length > 20) throw badRequest("too many draft attachments (max 20)");
     await appendDraftAttachments(input.accountId, req.params.id, input.attachments, req.user!.id);
     return { attachments: await listDraftAttachments(input.accountId, req.params.id) };
+  });
+
+  app.post<{ Params: { id: string } }>("/mail/drafts/:id/attachments/from-files", async (req) => {
+    const input = draftFileAssetsSchema.parse(req.body);
+    await requireAccountPermission(req.user!.id, input.accountId, "send");
+
+    const existing = await listDraftAttachments(input.accountId, req.params.id);
+    const uniqueAssetIds = [...new Set(input.assetIds)].filter((assetId) => !existing.some((item) => item.assetId === assetId));
+    if (existing.length + uniqueAssetIds.length > 20) throw badRequest("too many draft attachments (max 20)");
+
+    const added = [];
+    for (const assetId of uniqueAssetIds) {
+      added.push(await attachExistingAssetToDraft({
+        accountId: input.accountId,
+        draftEngineId: req.params.id,
+        userId: req.user!.id,
+        assetId,
+        contentDisposition: "attachment",
+      }));
+    }
+
+    const attachments = await listDraftAttachments(input.accountId, req.params.id);
+    const totalBytes = attachments.reduce((sum, item) => sum + item.size, 0);
+    if (totalBytes > 20 * 1024 * 1024) {
+      for (const item of added) {
+        await removeDraftAttachment(input.accountId, req.params.id, item.position, req.user!.id).catch(() => undefined);
+      }
+      throw badRequest("attachments are limited to 20 MB total");
+    }
+
+    return { attachments };
   });
 
   app.delete<{ Params: { id: string; position: string }; Querystring: { accountId?: string } }>("/mail/drafts/:id/attachments/:position", async (req) => {
