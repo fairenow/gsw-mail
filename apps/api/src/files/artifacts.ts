@@ -1,13 +1,7 @@
-import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { promisify } from "node:util";
 import { config } from "../config.js";
 import { renderLocalPdf } from "./localPdfRenderer.js";
 import { HttpError } from "../lib/errors.js";
 
-const execFileAsync = promisify(execFile);
 
 type ContainerFileCitation = {
   type: "container_file_citation";
