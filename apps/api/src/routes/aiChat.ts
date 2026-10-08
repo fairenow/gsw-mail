@@ -482,6 +482,21 @@ async function prepareNewConversation(input: {
 export default async function aiChatRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
 
+  app.get("/product/chat/file-capabilities", async () => ({
+    provider: config.ai.provider,
+    primaryModel: config.ai.provider === "hetzner"
+      ? config.ai.hetznerModel
+      : config.ai.provider === "openai"
+        ? config.ai.openaiModel
+        : config.ai.anthropicModel,
+    openAiConfigured: Boolean(config.ai.openaiApiKey),
+    fileModel: config.ai.openaiApiKey ? config.ai.openaiFileModel : null,
+    transcriptionModel: config.ai.openaiApiKey ? config.ai.openaiTranscriptionModel : null,
+    artifactModel: config.ai.openaiApiKey ? config.ai.openaiArtifactModel : null,
+    imageModel: config.ai.openaiApiKey ? config.ai.openaiImageModel : null,
+    directAttachmentPreprocessing: Boolean(config.ai.openaiApiKey),
+  }));
+
   app.get("/product/chat/conversations", async (req) => {
     const query = z.object({ limit: z.coerce.number().int().min(1).max(50).optional() }).parse(req.query);
     return { conversations: await listRecentConversations(req.user!.id, query.limit ?? 20) };
