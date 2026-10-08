@@ -1,4 +1,5 @@
 import { getAiCapabilitySettings, isAiScopeGloballyEnabled } from "./capabilities.js";
+import { config } from "../config.js";
 import { listActiveAiScopes } from "./agentState.js";
 import { getAiProvider, type AiProviderMessage } from "./providers/index.js";
 import { agentMailRegistry, AgentToolRegistry } from "./tools/registry.js";
@@ -41,6 +42,9 @@ export async function runReadOnlyWorker(input: {
   const definitions = agentMailRegistry.definitions().filter((tool) =>
     allowedForWorker(tool, input.worker)
     && (!allowedNames || allowedNames.has(tool.name))
+    && (!tool.name.startsWith("browser.") || Boolean(config.browser.baseUrl && config.browser.token))
+    && (tool.name !== "files.transform" || Boolean(config.ai.openaiApiKey))
+    && (tool.name !== "files.generate_image" || Boolean(config.ai.huggingFaceApiToken || config.ai.openaiApiKey))
     && tool.requiredScopes.every((scope) => isAiScopeGloballyEnabled(capabilitySettings, scope))
     && tool.requiredScopes.every((scope) => granted.has(scope)),
   );
