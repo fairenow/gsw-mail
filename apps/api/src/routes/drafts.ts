@@ -167,7 +167,7 @@ export default async (app: FastifyInstance) => {
   app.put<{ Params: { id: string } }>("/mail/drafts/:id/attachments", async (req) => {
     const input = draftAttachmentsSchema.parse(req.body);
     await requireAccountPermission(req.user!.id, input.accountId, "send");
-    await replaceDraftAttachments(input.accountId, req.params.id, input.attachments);
+    await replaceDraftAttachments(input.accountId, req.params.id, input.attachments, req.user!.id);
     return { attachments: await listDraftAttachments(input.accountId, req.params.id) };
   });
 
@@ -176,7 +176,7 @@ export default async (app: FastifyInstance) => {
     await requireAccountPermission(req.user!.id, input.accountId, "send");
     const existing = await listDraftAttachments(input.accountId, req.params.id);
     if (existing.length + input.attachments.length > 20) throw badRequest("too many draft attachments (max 20)");
-    await appendDraftAttachments(input.accountId, req.params.id, input.attachments);
+    await appendDraftAttachments(input.accountId, req.params.id, input.attachments, req.user!.id);
     return { attachments: await listDraftAttachments(input.accountId, req.params.id) };
   });
 
@@ -186,7 +186,7 @@ export default async (app: FastifyInstance) => {
     await requireAccountPermission(req.user!.id, accountId, "send");
     const position = Number(req.params.position);
     if (!Number.isInteger(position) || position < 0) throw badRequest("attachment position must be a non-negative integer");
-    await removeDraftAttachment(accountId, req.params.id, position);
+    await removeDraftAttachment(accountId, req.params.id, position, req.user!.id);
     return { attachments: await listDraftAttachments(accountId, req.params.id) };
   });
 
@@ -257,7 +257,7 @@ export default async (app: FastifyInstance) => {
 
     try {
       await engine.move(body.accountId, [req.params.id], "Trash");
-      await clearDraftAttachments(body.accountId, req.params.id);
+      await clearDraftAttachments(body.accountId, req.params.id, req.user!.id);
     } catch {
       app.log.warn({ draftId: req.params.id }, "draft cleanup failed after send");
     }
