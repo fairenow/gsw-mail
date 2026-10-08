@@ -13,7 +13,7 @@ export const agentWorkerProfiles: Record<AgentWorkerId, AgentWorkerProfile> = {
     id: "coordinator",
     title: "Coordinator",
     description: "Owns the user request, resolves ambiguity, chooses skills, and coordinates multi-step work.",
-    toolPrefixes: ["mail.", "automations.", "search.", "contacts.", "campaign.", "templates.", "domain.", "files."],
+    toolPrefixes: ["mail.", "automations.", "search.", "contacts.", "campaign.", "templates.", "domain.", "files.", "browser."],
     canDelegate: true,
   },
   mail: {
@@ -49,6 +49,13 @@ export const agentWorkerProfiles: Record<AgentWorkerId, AgentWorkerProfile> = {
     title: "Campaign worker",
     description: "Specializes in audience preparation, personalized outreach, campaigns, and campaign metrics.",
     toolPrefixes: ["campaign.", "contacts.", "templates.", "search.", "mail."],
+    canDelegate: false,
+  },
+  browser: {
+    id: "browser",
+    title: "Browser worker",
+    description: "Uses an isolated browser runtime for public-web research and bounded navigation.",
+    toolPrefixes: ["browser.", "files.", "search."],
     canDelegate: false,
   },
   admin: {
