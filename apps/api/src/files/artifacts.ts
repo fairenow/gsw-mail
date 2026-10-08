@@ -52,6 +52,22 @@ async function uploadOpenAiUserFile(input: { filename: string; mimeType: string;
   return body.id;
 }
 
+async function uploadContainerFile(containerId: string, input: { filename: string; mimeType: string; bytes: Buffer }) {
+  const { apiKey, baseUrl } = ensureOpenAi();
+  const form = new FormData();
+  form.append("file", new Blob([new Uint8Array(input.bytes)], { type: input.mimeType || "application/octet-stream" }), input.filename);
+  const response = await fetch(`${baseUrl}/containers/${encodeURIComponent(containerId)}/files`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${apiKey}` },
+    body: form,
+  });
+  const body = await response.json().catch(() => ({})) as { id?: string; error?: { message?: string } };
+  if (!response.ok || !body.id) {
+    throw new HttpError(response.status === 429 ? 429 : 502, body.error?.message?.trim() || `OpenAI container file upload returned HTTP ${response.status}`);
+  }
+  return body.id;
+}
+
 async function deleteOpenAiFile(fileId: string) {
   const { apiKey, baseUrl } = ensureOpenAi();
   await fetch(`${baseUrl}/files/${encodeURIComponent(fileId)}`, {
@@ -95,6 +111,7 @@ async function runArtifactResponse(input: {
   filename: string;
   prompt: string;
   sourceFileIds?: string[];
+  containerId?: string;
 }) {
   const { apiKey, baseUrl, model } = ensureOpenAi();
   const target = input.filename.trim();
@@ -112,10 +129,12 @@ async function runArtifactResponse(input: {
         model,
         tools: [{
           type: "code_interpreter",
-          container: {
-            type: "auto",
-            ...(input.sourceFileIds?.length ? { file_ids: input.sourceFileIds } : {}),
-          },
+          container: input.containerId
+            ? input.containerId
+            : {
+                type: "auto",
+                ...(input.sourceFileIds?.length ? { file_ids: input.sourceFileIds } : {}),
+              },
         }],
         tool_choice: "required",
         input: input.prompt,
@@ -162,6 +181,7 @@ async function runArtifactResponse(input: {
 export async function generateArtifactFile(input: {
   filename: string;
   instruction: string;
+  containerId?: string;
 }) {
   const target = input.filename.trim();
   const prompt = [
@@ -172,21 +192,28 @@ export async function generateArtifactFile(input: {
     input.instruction,
     `Before finishing, save the final artifact using the exact filename: ${target}`,
   ].join("\n");
-  return runArtifactResponse({ filename: target, prompt });
+  return runArtifactResponse({ filename: target, prompt, containerId: input.containerId });
 }
 
 export async function transformArtifactFile(input: {
   filename: string;
   instruction: string;
   sources: Array<{ filename: string; mimeType: string; bytes: Buffer }>;
+  containerId?: string;
 }) {
   if (!input.sources.length) throw new HttpError(400, "At least one source file is required.");
   if (input.sources.length > 5) throw new HttpError(400, "A maximum of 5 source files can be transformed at once.");
 
   const uploadedIds: string[] = [];
   try {
-    for (const source of input.sources) {
-      uploadedIds.push(await uploadOpenAiUserFile(source));
+    if (input.containerId) {
+      for (const source of input.sources) {
+        await uploadContainerFile(input.containerId, source);
+      }
+    } else {
+      for (const source of input.sources) {
+        uploadedIds.push(await uploadOpenAiUserFile(source));
+      }
     }
 
     const sourceNames = input.sources.map((source) => source.filename).join(", ");
@@ -204,9 +231,12 @@ export async function transformArtifactFile(input: {
     return await runArtifactResponse({
       filename: target,
       prompt,
-      sourceFileIds: uploadedIds,
+      sourceFileIds: input.containerId ? undefined : uploadedIds,
+      containerId: input.containerId,
     });
   } finally {
-    await Promise.all(uploadedIds.map((fileId) => deleteOpenAiFile(fileId)));
+    if (!input.containerId) {
+      await Promise.all(uploadedIds.map((fileId) => deleteOpenAiFile(fileId)));
+    }
   }
 }
