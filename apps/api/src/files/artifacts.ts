@@ -192,7 +192,11 @@ export async function generateArtifactFile(input: {
     input.instruction,
     `Before finishing, save the final artifact using the exact filename: ${target}`,
   ].join("\n");
-  return runArtifactResponse({ filename: target, prompt, containerId: input.containerId });
+  return runArtifactResponse({
+    filename: target,
+    prompt,
+    ...(input.containerId ? { containerId: input.containerId } : {}),
+  });
 }
 
 export async function transformArtifactFile(input: {
@@ -231,8 +235,8 @@ export async function transformArtifactFile(input: {
     return await runArtifactResponse({
       filename: target,
       prompt,
-      sourceFileIds: input.containerId ? undefined : uploadedIds,
-      containerId: input.containerId,
+      ...(!input.containerId ? { sourceFileIds: uploadedIds } : {}),
+      ...(input.containerId ? { containerId: input.containerId } : {}),
     });
   } finally {
     if (!input.containerId) {
