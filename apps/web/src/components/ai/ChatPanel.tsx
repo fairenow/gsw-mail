@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, Clock3, Copy, LoaderCircle, Mic, RefreshCcw, ShieldCheck, Square, Trash2, X } from "lucide-react";
-import { api, type AiChatMessage, type AiChatStreamEvent, type AiConversationRecord, type AiIntervention } from "../../api";
+import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, Clock3, Copy, File, LoaderCircle, Mic, Paperclip, RefreshCcw, ShieldCheck, Square, Trash2, X } from "lucide-react";
+import { api, type AiChatAttachment, type AiChatMessage, type AiChatStreamEvent, type AiConversationRecord, type AiIntervention } from "../../api";
 import { useAppShell } from "../AppShell";
 import { ChatMarkdown } from "./ChatMarkdown";
 
@@ -76,6 +76,27 @@ const cleanAssistantText = (content: string) => content
   .replace(/<\/email_draft>/gi, "")
   .trim();
 
+const attachmentsFromMetadata = (metadata: Record<string, unknown> | null | undefined): AiChatAttachment[] => {
+  const items = Array.isArray(metadata?.attachments) ? metadata.attachments : [];
+  return items.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const value = item as Record<string, unknown>;
+    if (typeof value.assetId !== "string" || typeof value.filename !== "string") return [];
+    return [{
+      assetId: value.assetId,
+      filename: value.filename,
+      mimeType: typeof value.mimeType === "string" ? value.mimeType : "application/octet-stream",
+      sizeBytes: typeof value.sizeBytes === "number" ? value.sizeBytes : Number(value.sizeBytes ?? 0),
+      kind: typeof value.kind === "string" ? value.kind : null,
+    }];
+  });
+};
+
+const formatAttachmentSize = (size: number) =>
+  size < 1024 ? `${size} B`
+    : size < 1024 * 1024 ? `${(size / 1024).toFixed(size < 10 * 1024 ? 1 : 0)} KB`
+      : `${(size / (1024 * 1024)).toFixed(size < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+
 export function ChatPanel() {
   const { account } = useAppShell();
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
@@ -92,6 +113,9 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [pendingAttachments, setPendingAttachments] = useState<AiChatAttachment[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [recording, setRecording] = useState(false);
   const [voiceLevel, setVoiceLevel] = useState(0);
   const speechRef = useRef<SpeechRecognitionLike | null>(null);
@@ -102,7 +126,7 @@ export function ChatPanel() {
   const voiceAudioContextRef = useRef<AudioContext | null>(null);
   const voiceAnimationFrameRef = useRef<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const canSend = (input.trim().length > 0 || recording) && !sending;
+  const canSend = (input.trim().length > 0 || pendingAttachments.length > 0 || recording) && !sending && !uploadingFiles;
   const speechSupported = typeof window !== "undefined" && speechRecognitionConstructor() !== null;
 
   const visibleMessages = useMemo(() => messages, [messages]);
@@ -280,7 +304,11 @@ export function ChatPanel() {
       if (cancelled) return;
       const restored = detail.messages
         .filter((message) => message.role === "user" || message.role === "assistant")
-        .map((message) => ({ role: message.role as "user" | "assistant", content: message.content }));
+        .map((message) => ({
+          role: message.role as "user" | "assistant",
+          content: message.content,
+          attachments: attachmentsFromMetadata(message.metadata),
+        }));
       setMessages(restored.slice(-24));
     }).catch(() => {
       if (!cancelled) {
@@ -321,7 +349,11 @@ export function ChatPanel() {
       const detail = await api.chatConversation(id);
       const restored = detail.messages
         .filter((message) => message.role === "user" || message.role === "assistant")
-        .map((message) => ({ role: message.role as "user" | "assistant", content: message.content }));
+        .map((message) => ({
+          role: message.role as "user" | "assistant",
+          content: message.content,
+          attachments: attachmentsFromMetadata(message.metadata),
+        }));
       setConversationId(id);
       setMessages(restored.slice(-24));
       setIntervention(null);
