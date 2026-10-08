@@ -116,6 +116,10 @@ const toolLabel = (toolName: string): string => {
     case "templates.update": return "Updating your email template";
     case "templates.select": return "Selecting your default email template";
     case "domain.read": return "Checking your domain";
+    case "files.list": return "Checking your files";
+    case "files.search": return "Searching your files";
+    case "files.read": return "Reading the file";
+    case "mail.attach_file": return "Attaching the file to your draft";
     default: return "Working with your mailbox";
   }
 };
@@ -565,7 +569,21 @@ export default async function aiChatRoutes(app: FastifyInstance) {
     const providerMessages: AiProviderMessage[] = detail.messages
       .filter((message) => message.role === "user" || message.role === "assistant")
       .slice(-24)
-      .map((message) => ({ role: message.role as "user" | "assistant", content: message.content }));
+      .map((message) => {
+        const metadata = message.metadata && typeof message.metadata === "object" ? message.metadata as Record<string, unknown> : {};
+        const attachments = Array.isArray(metadata.attachments) ? metadata.attachments : [];
+        if (message.role !== "user" || attachments.length === 0) {
+          return { role: message.role as "user" | "assistant", content: message.content };
+        }
+        const attachmentContext = attachments.map((item) => {
+          const asset = item && typeof item === "object" ? item as Record<string, unknown> : {};
+          return `- ${String(asset.filename ?? "file")} | assetId=${String(asset.assetId ?? "")} | ${String(asset.mimeType ?? "application/octet-stream")}`;
+        }).join("\n");
+        return {
+          role: "user" as const,
+          content: `${message.content}\n\n[Attached GSW files]\n${attachmentContext}`,
+        };
+      });
 
     return runConversationTurn({
       userId: req.user!.id,
@@ -589,7 +607,21 @@ export default async function aiChatRoutes(app: FastifyInstance) {
     const providerMessages: AiProviderMessage[] = detail.messages
       .filter((message) => message.role === "user" || message.role === "assistant")
       .slice(-24)
-      .map((message) => ({ role: message.role as "user" | "assistant", content: message.content }));
+      .map((message) => {
+        const metadata = message.metadata && typeof message.metadata === "object" ? message.metadata as Record<string, unknown> : {};
+        const attachments = Array.isArray(metadata.attachments) ? metadata.attachments : [];
+        if (message.role !== "user" || attachments.length === 0) {
+          return { role: message.role as "user" | "assistant", content: message.content };
+        }
+        const attachmentContext = attachments.map((item) => {
+          const asset = item && typeof item === "object" ? item as Record<string, unknown> : {};
+          return `- ${String(asset.filename ?? "file")} | assetId=${String(asset.assetId ?? "")} | ${String(asset.mimeType ?? "application/octet-stream")}`;
+        }).join("\n");
+        return {
+          role: "user" as const,
+          content: `${message.content}\n\n[Attached GSW files]\n${attachmentContext}`,
+        };
+      });
 
     const stream = openEventStream(reply);
     try {
@@ -622,6 +654,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       messages: input.messages,
       timeZone: input.timeZone,
       localDateTime: input.localDateTime,
+      assetIds: input.assetIds,
     });
 
     return runConversationTurn({
@@ -645,6 +678,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       messages: input.messages,
       timeZone: input.timeZone,
       localDateTime: input.localDateTime,
+      assetIds: input.assetIds,
     });
 
     const stream = openEventStream(reply);
