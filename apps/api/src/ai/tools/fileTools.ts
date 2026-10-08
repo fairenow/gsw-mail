@@ -370,7 +370,9 @@ export const filesCreateArtifactTool: AgentToolDefinition = {
         ? await getOrCreateFileWorkspace(ctx.userId, ctx.conversationId)
         : null;
       const generated = await generateArtifactFile({
-        ...input,
+        filename: input.filename,
+        instruction: input.instruction,
+        ...(input.content !== undefined ? { content: input.content } : {}),
         ...(workspace ? { containerId: workspace.externalContainerId } : {}),
       });
       const asset = await createAssetFromBuffer({
