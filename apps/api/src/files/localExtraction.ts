@@ -1,8 +1,7 @@
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, extname, join, parse } from "node:path";
+import { extname, join } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -68,16 +67,18 @@ export async function extractOfficeDocumentText(input: {
     await run("libreoffice", [
       "--headless",
       "--convert-to",
-      "txt:Text",
+      "pdf",
       "--outdir",
       dir,
       inputPath,
-    ], 90_000);
+    ], 120_000);
 
     const files = await readdir(dir);
-    const txt = files.find((name) => name.toLowerCase().endsWith(".txt"));
-    if (!txt) throw new Error("LibreOffice could not convert this document to text.");
-    const text = cap(await readFile(join(dir, txt), "utf8"), maxChars);
+    const pdf = files.find((name) => name.toLowerCase().endsWith(".pdf"));
+    if (!pdf) throw new Error("LibreOffice could not render this document.");
+    const outputPath = join(dir, "document.txt");
+    await run("pdftotext", ["-layout", "-enc", "UTF-8", join(dir, pdf), outputPath], 60_000);
+    const text = cap(await readFile(outputPath, "utf8"), maxChars);
     if (!text) throw new Error("No readable text was extracted from this document.");
     return text;
   });
