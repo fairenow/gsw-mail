@@ -345,13 +345,13 @@ export const filesCreateTextTool: AgentToolDefinition = {
 
 export const filesCreateArtifactTool: AgentToolDefinition = {
   name: "files.create_artifact",
-  description: "Create a finished downloadable artifact in the user's My Files library. Create a genuine finished file. For PDF, create complete self-contained, print-ready HTML/CSS in the content field, with genuine document body copy (not the design brief). The PDF renderer runs locally in Chromium independently of the selected chat provider and does not require OpenAI credits. Keep styling directions in instruction. No external scripts, stylesheets or network assets.",
+  description: "Create a finished downloadable artifact in the user's My Files library. Create a genuine finished file. For PDF, produce a complete standalone HTML document with head/style and body in the content field, with the actual report contents (not the design brief). Use a cohesive art-directed layout: full-bleed hero (class gsw-report-hero), three metric cards in gsw-metrics, and balanced columns (gsw-two-col) where appropriate. High contrast is required; never put light text on a light background. Prefer CSS grid for cards and real list/section markup. The PDF renderer runs locally in Chromium independently of the selected chat provider and does not require OpenAI credits. Keep styling directions in instruction. No external scripts, stylesheets or network assets.",
   inputSchema: {
     type: "object",
     properties: {
       filename: { type: "string", description: "Exact output filename including a supported extension such as report.pdf, plan.docx, budget.xlsx, or deck.pptx." },
       instruction: { type: "string", description: "Detailed layout, styling, calculations, tables, charts, or structure instructions." },
-      content: { type: "string", description: "Complete final body copy for the artifact. For PDFs provide full self-contained HTML/CSS for a designed document, or source text/Markdown for a basic PDF. Do not pass the design brief as document content." },
+      content: { type: "string", description: "Complete final body copy for the artifact. For designed PDFs supply a full HTML document with embedded style. Use the available gsw-report-hero, gsw-metrics, gsw-metric, gsw-metric-value, gsw-metric-label, gsw-two-col, and gsw-report-footer classes; do not simply describe a layout. Markdown produces only a basic PDF. Do not pass the design brief as document content." },
     },
     required: ["filename", "instruction"],
     additionalProperties: false,

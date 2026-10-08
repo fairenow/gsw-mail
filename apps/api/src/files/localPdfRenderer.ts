@@ -47,6 +47,12 @@ export async function renderLocalPdf(html: string): Promise<Buffer> {
     if (pdf.length < 500 || pdf.toString("ascii", 0, 5) !== "%PDF-") {
       throw new Error("PDF renderer returned invalid output");
     }
+    // Preflight the generated file instead of accepting a header-only PDF.
+    const { stdout } = await execute("pdfinfo", [output], { timeout: 10000, maxBuffer: 1024 * 1024 });
+    const pages = Number(stdout.match(/^Pages:\s+(\d+)/m)?.[1] ?? 0);
+    if (!Number.isInteger(pages) || pages < 1 || pages > 30) {
+      throw new Error("PDF failed pagination preflight: " + pages + " pages");
+    }
     return pdf;
   } finally {
     await rm(dir, { recursive: true, force: true });
