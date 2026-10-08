@@ -3,6 +3,8 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import { assets } from "../../db/schema.js";
 import { getR2Object } from "../../files/r2.js";
+import { analyzeStoredFile } from "../../files/intelligence.js";
+import { createAssetFromBuffer } from "../../files/service.js";
 import { attachExistingAssetToDraft } from "../../mail/draftAttachmentStore.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
 
@@ -23,6 +25,15 @@ const failure = (ctx: AgentExecutionContext, toolCallId: string, startedAt: stri
 const listInput = z.object({ limit: z.number().int().min(1).max(100).optional() });
 const searchInput = z.object({ query: z.string().trim().min(1).max(300), limit: z.number().int().min(1).max(50).optional() });
 const readInput = z.object({ assetId: z.string().uuid() });
+const analyzeInput = z.object({
+  assetId: z.string().uuid(),
+  instruction: z.string().trim().min(1).max(4_000).optional(),
+});
+const createTextFileInput = z.object({
+  filename: z.string().trim().min(1).max(255),
+  content: z.string().max(500_000),
+  format: z.enum(["txt", "md", "csv", "json", "html"]).optional(),
+});
 const attachInput = z.object({
   draftId: z.string().min(1).max(1000),
   assetId: z.string().uuid(),
@@ -136,7 +147,7 @@ const readableTextMime = (mimeType: string, filename: string) =>
 
 export const filesReadTool: AgentToolDefinition = {
   name: "files.read",
-  description: "Read metadata for a GSW file and, for plain text/CSV/JSON/code files, return a bounded text preview. PDF, Office, image, audio, and video understanding will use the document-processing layer in the next phase.",
+  description: "Read metadata for a GSW file and, for plain text/CSV/JSON/code files, return a bounded text preview. Use files.analyze for PDFs, Office files, images, audio, or video-audio transcription.",
   inputSchema: {
     type: "object",
     properties: { assetId: { type: "string", description: "Asset ID returned by files.list/files.search or supplied with a chat attachment." } },
@@ -173,8 +184,108 @@ export const filesReadTool: AgentToolDefinition = {
         source: row.source,
         textPreview,
         processingNote: textPreview === undefined
-          ? "This file is stored and attachable, but deep content extraction for this format is not enabled yet."
+          ? "Use files.analyze when you need deep understanding of this file."
           : undefined,
+      });
+    } catch (error) {
+      return failure(ctx, toolCallId, startedAt, error);
+    }
+  },
+};
+
+
+
+export const filesAnalyzeTool: AgentToolDefinition = {
+  name: "files.analyze",
+  description: "Deeply analyze a stored GSW file. Supports PDFs, Word documents, PowerPoint presentations, spreadsheets, images, and audio transcription. Video files currently provide audio-track transcription rather than visual frame analysis.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      assetId: { type: "string", description: "Asset ID returned by files.list/files.search or supplied with a chat attachment." },
+      instruction: { type: "string", description: "What to extract, understand, summarize, compare, or answer from the file." },
+    },
+    required: ["assetId"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["files.read"],
+  risk: "read",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = analyzeInput.parse(rawInput);
+      const [row] = await db.select().from(assets).where(and(
+        eq(assets.id, input.assetId),
+        eq(assets.userId, ctx.userId),
+        eq(assets.status, "ready"),
+        isNull(assets.deletedAt),
+      )).limit(1);
+      if (!row) throw new Error("file not found");
+
+      const object = await getR2Object(row.r2Key);
+      const result = await analyzeStoredFile({
+        filename: row.filename,
+        mimeType: row.mimeType,
+        bytes: object.content,
+        instruction: input.instruction ?? "Analyze this file. Give a concise summary, identify the most important information, and answer any obvious questions the user may have about it.",
+      });
+      return success(ctx, toolCallId, startedAt, {
+        assetId: row.id,
+        filename: row.displayName || row.filename,
+        mimeType: row.mimeType,
+        mode: result.mode,
+        model: result.model,
+        analysis: result.text.slice(0, 80_000),
+        ...("note" in result && result.note ? { note: result.note } : {}),
+      });
+    } catch (error) {
+      return failure(ctx, toolCallId, startedAt, error);
+    }
+  },
+};
+
+const mimeForFormat = (format: string) => ({
+  txt: "text/plain",
+  md: "text/markdown",
+  csv: "text/csv",
+  json: "application/json",
+  html: "text/html",
+}[format] ?? "text/plain");
+
+export const filesCreateTextTool: AgentToolDefinition = {
+  name: "files.create_text",
+  description: "Create a new text-based file in the user's My Files library. Supports TXT, Markdown, CSV, JSON, and HTML. Use CSV for simple spreadsheet-style outputs. This does not create native DOCX/XLSX/PPTX yet.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      filename: { type: "string" },
+      content: { type: "string" },
+      format: { type: "string", enum: ["txt", "md", "csv", "json", "html"] },
+    },
+    required: ["filename", "content"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["files.write"],
+  risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = createTextFileInput.parse(rawInput);
+      const format = input.format ?? (input.filename.split(".").pop()?.toLowerCase() || "txt");
+      const filename = input.filename.includes(".") ? input.filename : `${input.filename}.${format}`;
+      const asset = await createAssetFromBuffer({
+        userId: ctx.userId,
+        filename,
+        mimeType: mimeForFormat(format),
+        content: Buffer.from(input.content, "utf8"),
+        source: "chat_generated",
+        kind: format === "csv" ? "spreadsheet" : "document",
+        addToFiles: true,
+      });
+      return success(ctx, toolCallId, startedAt, {
+        assetId: asset.id,
+        filename: asset.displayName || asset.filename,
+        mimeType: asset.mimeType,
+        sizeBytes: Number(asset.sizeBytes),
       });
     } catch (error) {
       return failure(ctx, toolCallId, startedAt, error);
@@ -217,4 +328,4 @@ export const mailAttachFileTool: AgentToolDefinition = {
   },
 };
 
-export const fileTools: AgentToolDefinition[] = [filesListTool, filesSearchTool, filesReadTool, mailAttachFileTool];
+export const fileTools: AgentToolDefinition[] = [filesListTool, filesSearchTool, filesReadTool, filesAnalyzeTool, filesCreateTextTool, mailAttachFileTool];
