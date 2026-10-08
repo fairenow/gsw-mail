@@ -1626,9 +1626,10 @@
 .gsw-chat-composer textarea {
   flex: 1;
   min-width: 0;
-  max-height: 150px;
+  min-height: 30px;
+  max-height: 71px;
   resize: none;
-  overflow-y: auto;
+  overflow-y: hidden;
   padding: 5px 2px;
   border: 0;
   outline: 0;
@@ -1637,6 +1638,7 @@
   font: inherit;
   font-size: 13.5px;
   line-height: 1.5;
+  scrollbar-width: thin;
 }
 
 .gsw-chat-send {
