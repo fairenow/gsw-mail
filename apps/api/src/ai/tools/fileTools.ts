@@ -64,9 +64,12 @@ const generateImageInput = z.object({
 });
 const attachInput = z.object({
   draftId: z.string().min(1).max(1000),
-  assetId: z.string().uuid(),
+  assetId: z.string().uuid().optional(),
+  assetIds: z.array(z.string().uuid()).min(1).max(20).optional(),
   contentDisposition: z.enum(["attachment", "inline"]).optional(),
   contentId: z.string().max(500).optional(),
+}).refine((value) => Boolean(value.assetId || value.assetIds?.length), {
+  message: "assetId or assetIds is required",
 });
 
 const serialize = (row: {
@@ -531,16 +534,17 @@ export const filesGenerateImageTool: AgentToolDefinition = {
 
 export const mailAttachFileTool: AgentToolDefinition = {
   name: "mail.attach_file",
-  description: "Attach an existing GSW Files asset to an existing email draft. The draft must already exist. This changes the draft but does not send it.",
+  description: "Attach one or more existing GSW Files assets to an existing email draft. Use files.search or files.list first when the user refers to a saved file by name. If there is no draft yet, create it with mail.create_draft, then attach the file(s). This changes the draft but never sends it.",
   inputSchema: {
     type: "object",
     properties: {
       draftId: { type: "string", description: "Existing draft ID returned by mail.create_draft or mail.update_draft." },
-      assetId: { type: "string", description: "GSW Files asset ID returned by files.list/files.search or a chat attachment." },
+      assetId: { type: "string", description: "Single GSW Files asset ID returned by files.list/files.search or a chat attachment." },
+      assetIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 20, description: "Multiple GSW Files asset IDs to attach in one action." },
       contentDisposition: { type: "string", enum: ["attachment", "inline"] },
       contentId: { type: "string" },
     },
-    required: ["draftId", "assetId"],
+    required: ["draftId"],
     additionalProperties: false,
   },
   requiredScopes: ["mail.write", "files.read"],
@@ -549,15 +553,19 @@ export const mailAttachFileTool: AgentToolDefinition = {
     const startedAt = new Date().toISOString();
     try {
       const input = attachInput.parse(rawInput);
-      const attachment = await attachExistingAssetToDraft({
-        accountId: ctx.accountId,
-        draftEngineId: input.draftId,
-        userId: ctx.userId,
-        assetId: input.assetId,
-        contentDisposition: input.contentDisposition,
-        contentId: input.contentId,
-      });
-      return success(ctx, toolCallId, startedAt, { draftId: input.draftId, attachment });
+      const assetIds = [...new Set([...(input.assetId ? [input.assetId] : []), ...(input.assetIds ?? [])])];
+      const attachments = [];
+      for (const assetId of assetIds) {
+        attachments.push(await attachExistingAssetToDraft({
+          accountId: ctx.accountId,
+          draftEngineId: input.draftId,
+          userId: ctx.userId,
+          assetId,
+          contentDisposition: input.contentDisposition,
+          contentId: assetIds.length === 1 ? input.contentId : undefined,
+        }));
+      }
+      return success(ctx, toolCallId, startedAt, { draftId: input.draftId, attachments });
     } catch (error) {
       return failure(ctx, toolCallId, startedAt, error);
     }
