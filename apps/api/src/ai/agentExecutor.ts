@@ -59,6 +59,18 @@ const permissionCopy = (scope: AiScope) => {
       description: "This lets GSW Chat read basic domain details for the selected mailbox. DNS configuration and verification diagnostics are only returned to workspace owners and admins.",
     };
   }
+  if (scope === "files.read") {
+    return {
+      title: "Allow GSW Chat to use your files?",
+      description: "This lets GSW Chat find and inspect files in your private GSW Files library when you ask it to.",
+    };
+  }
+  if (scope === "files.write") {
+    return {
+      title: "Allow GSW Chat to update your files?",
+      description: "This lets GSW Chat create or change items in your GSW Files library when you ask it to.",
+    };
+  }
   if (scope === "campaign.write") {
     return {
       title: "Allow GSW Chat to prepare campaigns?",
