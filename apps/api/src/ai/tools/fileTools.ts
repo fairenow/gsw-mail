@@ -1,7 +1,7 @@
 import { and, desc, eq, ilike, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
-import { assets, fileNodes } from "../../db/schema.js";
+import { assets } from "../../db/schema.js";
 import { getR2Object } from "../../files/r2.js";
 import { attachExistingAssetToDraft } from "../../mail/draftAttachmentStore.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
