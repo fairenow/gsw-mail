@@ -152,14 +152,25 @@ export function createMailService(context: MailServiceContext) {
 
       const folders = [];
       for (const mailbox of targets) {
-        const messages = await engine.listMessages(accountId, { mailbox: mailbox.engineName, limit: 250, offset: 0 });
-        const inRange = messages
-          .filter((message) => message.date >= start && message.date < end)
-          .sort((a, b) => a.date.getTime() - b.date.getTime());
+        // Page across the folder before applying the date filter. A single
+        // 250-message page could silently undercount busy outreach mailboxes.
+        const pageSize = 250;
+        const maxPages = 20;
+        const inRange = [];
+        let exhausted = false;
+        for (let page = 0; page < maxPages; page += 1) {
+          const messages = await engine.listMessages(accountId, {
+            mailbox: mailbox.engineName, limit: pageSize, offset: page * pageSize,
+          });
+          inRange.push(...messages.filter((message) => message.date >= start && message.date < end));
+          if (messages.length < pageSize) { exhausted = true; break; }
+        }
+        inRange.sort((a, b) => a.date.getTime() - b.date.getTime());
         folders.push({
           mailbox: mailbox.engineName,
           role: mailbox.role,
           count: inRange.length,
+          complete: exhausted,
           messages: inRange.map((message) => ({
             messageId: message.engineId,
             threadId: message.threadId,
@@ -179,6 +190,7 @@ export function createMailService(context: MailServiceContext) {
         start: start.toISOString(),
         end: end.toISOString(),
         total: folders.reduce((sum, folder) => sum + folder.count, 0),
+        complete: folders.every((folder) => folder.complete),
         folders,
         missingRequestedMailboxes: requested.filter((needle) => !targets.some((mailbox) => mailbox.role?.toLowerCase() === needle || mailbox.engineName.toLowerCase() === needle)),
       };
