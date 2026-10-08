@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { assets, fileNodes, userStorageQuotas } from "../db/schema.js";
@@ -304,4 +304,153 @@ export async function createAssetFromBuffer(input: {
     await deleteR2Object(key).catch(() => undefined);
     throw error;
   }
+}
+
+
+export async function listRecentFiles(userId: string, limit = 50) {
+  return db.select({
+    id: fileNodes.id,
+    parentId: fileNodes.parentId,
+    name: fileNodes.name,
+    nodeType: fileNodes.nodeType,
+    starred: fileNodes.starred,
+    trashedAt: fileNodes.trashedAt,
+    createdAt: fileNodes.createdAt,
+    updatedAt: fileNodes.updatedAt,
+    assetId: assets.id,
+    filename: assets.filename,
+    mimeType: assets.mimeType,
+    sizeBytes: assets.sizeBytes,
+    kind: assets.kind,
+    source: assets.source,
+    status: assets.status,
+  }).from(fileNodes)
+    .leftJoin(assets, eq(fileNodes.assetId, assets.id))
+    .where(and(eq(fileNodes.userId, userId), isNull(fileNodes.trashedAt)))
+    .orderBy(desc(fileNodes.updatedAt))
+    .limit(Math.min(Math.max(limit, 1), 100));
+}
+
+export async function listStarredFiles(userId: string) {
+  return db.select({
+    id: fileNodes.id,
+    parentId: fileNodes.parentId,
+    name: fileNodes.name,
+    nodeType: fileNodes.nodeType,
+    starred: fileNodes.starred,
+    trashedAt: fileNodes.trashedAt,
+    createdAt: fileNodes.createdAt,
+    updatedAt: fileNodes.updatedAt,
+    assetId: assets.id,
+    filename: assets.filename,
+    mimeType: assets.mimeType,
+    sizeBytes: assets.sizeBytes,
+    kind: assets.kind,
+    source: assets.source,
+    status: assets.status,
+  }).from(fileNodes)
+    .leftJoin(assets, eq(fileNodes.assetId, assets.id))
+    .where(and(eq(fileNodes.userId, userId), eq(fileNodes.starred, true), isNull(fileNodes.trashedAt)))
+    .orderBy(desc(fileNodes.updatedAt));
+}
+
+export async function listTrashedFiles(userId: string) {
+  return db.select({
+    id: fileNodes.id,
+    parentId: fileNodes.parentId,
+    name: fileNodes.name,
+    nodeType: fileNodes.nodeType,
+    starred: fileNodes.starred,
+    trashedAt: fileNodes.trashedAt,
+    createdAt: fileNodes.createdAt,
+    updatedAt: fileNodes.updatedAt,
+    assetId: assets.id,
+    filename: assets.filename,
+    mimeType: assets.mimeType,
+    sizeBytes: assets.sizeBytes,
+    kind: assets.kind,
+    source: assets.source,
+    status: assets.status,
+  }).from(fileNodes)
+    .leftJoin(assets, eq(fileNodes.assetId, assets.id))
+    .where(and(eq(fileNodes.userId, userId), isNotNull(fileNodes.trashedAt)))
+    .orderBy(desc(fileNodes.trashedAt));
+}
+
+export async function renameFileNode(userId: string, nodeId: string, name: string) {
+  const nextName = safeFilename(name);
+  const [node] = await db.update(fileNodes).set({ name: nextName, updatedAt: new Date() })
+    .where(and(eq(fileNodes.id, nodeId), eq(fileNodes.userId, userId)))
+    .returning();
+  if (!node) throw notFound("file or folder not found");
+  if (node.assetId) {
+    await db.update(assets).set({ displayName: nextName, updatedAt: new Date() })
+      .where(and(eq(assets.id, node.assetId), eq(assets.userId, userId)));
+  }
+  return node;
+}
+
+export async function moveFileNode(userId: string, nodeId: string, parentId: string | null) {
+  const [node] = await db.select().from(fileNodes)
+    .where(and(eq(fileNodes.id, nodeId), eq(fileNodes.userId, userId)))
+    .limit(1);
+  if (!node) throw notFound("file or folder not found");
+  if (parentId === nodeId) throw badRequest("a folder cannot contain itself");
+  if (parentId) {
+    const [parent] = await db.select().from(fileNodes)
+      .where(and(
+        eq(fileNodes.id, parentId),
+        eq(fileNodes.userId, userId),
+        eq(fileNodes.nodeType, "folder"),
+        isNull(fileNodes.trashedAt),
+      ))
+      .limit(1);
+    if (!parent) throw notFound("destination folder not found");
+  }
+  const [updated] = await db.update(fileNodes).set({ parentId, updatedAt: new Date() })
+    .where(eq(fileNodes.id, nodeId))
+    .returning();
+  return updated!;
+}
+
+export async function setFileNodeStarred(userId: string, nodeId: string, starred: boolean) {
+  const [node] = await db.update(fileNodes).set({ starred, updatedAt: new Date() })
+    .where(and(eq(fileNodes.id, nodeId), eq(fileNodes.userId, userId)))
+    .returning();
+  if (!node) throw notFound("file or folder not found");
+  return node;
+}
+
+export async function trashFileNode(userId: string, nodeId: string) {
+  const now = new Date();
+  const [node] = await db.update(fileNodes).set({ trashedAt: now, updatedAt: now })
+    .where(and(eq(fileNodes.id, nodeId), eq(fileNodes.userId, userId), isNull(fileNodes.trashedAt)))
+    .returning();
+  if (!node) throw notFound("file or folder not found");
+  return node;
+}
+
+export async function restoreFileNode(userId: string, nodeId: string) {
+  const [node] = await db.update(fileNodes).set({ trashedAt: null, updatedAt: new Date() })
+    .where(and(eq(fileNodes.id, nodeId), eq(fileNodes.userId, userId)))
+    .returning();
+  if (!node) throw notFound("file or folder not found");
+  return node;
+}
+
+export async function permanentlyDeleteFileNode(userId: string, nodeId: string) {
+  const [node] = await db.select().from(fileNodes)
+    .where(and(eq(fileNodes.id, nodeId), eq(fileNodes.userId, userId)))
+    .limit(1);
+  if (!node) throw notFound("file or folder not found");
+
+  if (node.nodeType === "folder") {
+    const children = await db.select({ id: fileNodes.id }).from(fileNodes)
+      .where(and(eq(fileNodes.userId, userId), eq(fileNodes.parentId, node.id)));
+    if (children.length) throw badRequest("folder must be empty before permanent deletion");
+  }
+
+  if (node.assetId) await deleteAsset(userId, node.assetId);
+  await db.delete(fileNodes).where(and(eq(fileNodes.id, node.id), eq(fileNodes.userId, userId)));
+  return { id: node.id, deleted: true };
 }
