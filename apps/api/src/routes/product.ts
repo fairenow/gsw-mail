@@ -58,6 +58,7 @@ export default async function productRoutes(app: FastifyInstance) {
         scheduledWork: settings?.ai?.scheduledWork !== false,
         campaignLaunch: settings?.ai?.campaignLaunch !== false,
         fileAccess: settings?.ai?.fileAccess !== false,
+        imageGeneration: settings?.ai?.imageGeneration !== false,
         ...(settings?.ai ?? {}),
       },
       signature: signature ? { ...signature, signatureHtml: signature.signatureHtml, signatureText: signature.signatureText } : defaultSignature(),
