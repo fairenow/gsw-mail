@@ -52,6 +52,7 @@ export default async function productRoutes(app: FastifyInstance) {
       compose: settings?.compose ?? { defaultFormat: "rich" },
       contacts: settings?.contacts ?? { autoCreateFromSent: true },
       ai: {
+        ...(settings?.ai ?? {}),
         enabled: settings?.ai?.enabled !== false,
         modelProvider: settings?.ai?.modelProvider === "openai" || settings?.ai?.modelProvider === "claude" || settings?.ai?.modelProvider === "qwen"
           ? settings.ai.modelProvider
@@ -63,7 +64,6 @@ export default async function productRoutes(app: FastifyInstance) {
         campaignLaunch: settings?.ai?.campaignLaunch !== false,
         fileAccess: settings?.ai?.fileAccess !== false,
         imageGeneration: settings?.ai?.imageGeneration !== false,
-        ...(settings?.ai ?? {}),
       },
       signature: signature ? { ...signature, signatureHtml: signature.signatureHtml, signatureText: signature.signatureText } : defaultSignature(),
     };
