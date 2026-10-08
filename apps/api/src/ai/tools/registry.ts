@@ -8,6 +8,7 @@ import { templateTools } from "./templateTools.js";
 import { domainTools } from "./domainTools.js";
 import { fileTools } from "./fileTools.js";
 import { taskTools } from "./taskTools.js";
+import { workerTools } from "./workerTools.js";
 
 export class AgentToolRegistry {
   private readonly tools = new Map<string, AgentToolDefinition>();
@@ -77,7 +78,7 @@ export class AgentToolRegistry {
   }
 }
 
-const baseAgentTools: AgentToolDefinition[] = [...agentMailTools, ...automationTools, ...taskTools, ...searchTools, ...contactTools, ...campaignTools, ...templateTools, ...domainTools, ...fileTools];
+const baseAgentTools: AgentToolDefinition[] = [...agentMailTools, ...automationTools, ...taskTools, ...workerTools, ...searchTools, ...contactTools, ...campaignTools, ...templateTools, ...domainTools, ...fileTools];
 const baseAgentRegistry = new AgentToolRegistry(baseAgentTools);
 
 const capabilitySearchTool: AgentToolDefinition = {
