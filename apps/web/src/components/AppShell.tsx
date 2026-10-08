@@ -8,6 +8,7 @@ type AppShellContextValue = {
   account: Account | null;
   accounts: Account[];
   profileImageUrl: string;
+  setProfileImageUrl: (url: string) => void;
   selectAccount: (id: string) => void;
   configureTopBar: (options: Partial<AppTopBarOptions>) => void;
 };
@@ -102,6 +103,18 @@ export function AppShell({ children }: { children: ReactNode }) {
     account,
     accounts,
     profileImageUrl,
+    setProfileImageUrl: (url) => {
+      setProfileImageUrl(url);
+      void getSession().then((session) => {
+        if (!session) return;
+        rememberIdentity({
+          id: session.user.id,
+          email: session.user.email,
+          name: session.user.name || session.user.email,
+          image: url || session.user.image,
+        });
+      }).catch(() => undefined);
+    },
     selectAccount,
     configureTopBar: (options) => setTopBar((current) => ({ ...current, ...options })),
   }), [account, accounts, profileImageUrl]);
