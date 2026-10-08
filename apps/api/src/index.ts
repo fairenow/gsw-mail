@@ -7,12 +7,14 @@ import { ensureCalendarRsvpSchema } from "./calendar/ensureRsvpSchema.js";
 import { ensureAiAgentSchema } from "./ai/ensureAgentSchema.js";
 import { getOutboundWorker } from "./outbound/worker.js";
 import { getAutomationWorker } from "./ai/automationWorker.js";
+import { getAgentTaskRunner } from "./ai/taskRunner.js";
 import { ensureEmailTemplateSchema } from "./mail/ensureTemplateSchema.js";
 import { ensureFilesSchema } from "./files/ensureFilesSchema.js";
 
 const app = buildApp();
 const worker = getOutboundWorker();
 const automationWorker = getAutomationWorker();
+const agentTaskRunner = getAgentTaskRunner();
 
 async function main() {
   await ensureScheduledSendSchema();
@@ -23,6 +25,7 @@ async function main() {
   await ensureWebOAuthTestClient();
   worker.start();
   automationWorker.start();
+  agentTaskRunner.start();
   await app.listen({ port: config.port, host: "0.0.0.0" });
 }
 
@@ -30,6 +33,7 @@ const shutdown = async (signal: string) => {
   app.log.info(`received ${signal}, shutting down`);
   worker.stop();
   automationWorker.stop();
+  agentTaskRunner.stop();
   await app.close();
   await pool.end();
   process.exit(0);
