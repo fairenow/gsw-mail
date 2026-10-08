@@ -353,7 +353,7 @@ export const filesCreateArtifactTool: AgentToolDefinition = {
       instruction: { type: "string", description: "Detailed layout, styling, calculations, tables, charts, or structure instructions." },
       content: { type: "string", description: "Complete final body copy for the artifact. For PDFs provide full self-contained HTML/CSS for a designed document, or source text/Markdown for a basic PDF. Do not pass the design brief as document content." },
     },
-    required: ["filename", "instruction"],
+    required: ["filename", "instruction", "content"],
     additionalProperties: false,
   },
   requiredScopes: ["files.write"],
@@ -363,6 +363,7 @@ export const filesCreateArtifactTool: AgentToolDefinition = {
     try {
       const input = createArtifactInput.parse(rawInput);
       const localPdf = /\.pdf$/i.test(input.filename);
+      if (localPdf && !input.content?.trim()) throw new Error("The PDF tool call omitted document content. The model must provide the finished report in the content field.");
       // Use a standalone code-interpreter session for designed PDFs. The
       // generator handles local fallback only when complete source copy exists.
       const workspace = !localPdf && ctx.conversationId
@@ -400,6 +401,11 @@ export const filesCreateArtifactTool: AgentToolDefinition = {
         model: generated.model,
       });
     } catch (error) {
+      // Do not log document contents, user prompts, or mail data.
+      console.error("[files.create_artifact] failed", {
+        error: error instanceof Error ? error.message : String(error),
+        toolCallId,
+      });
       return failure(ctx, toolCallId, startedAt, error);
     }
   },
