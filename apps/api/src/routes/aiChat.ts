@@ -626,6 +626,29 @@ async function runConversationTurn(input: {
         await recordAiToolResult(ledgerCall.id, outcome.result);
         toolActivity.push({ name: semanticName, ok: outcome.result.ok });
 
+        if (!outcome.result.ok && semanticName === "files.create_artifact") {
+          const errorMessage = outcome.result.error?.message ?? "The PDF tool could not generate the file.";
+          input.emit?.({ type: "status", phase: "tool_completed", label, toolName: semanticName, ok: false });
+          const content = `I couldn't create the requested file. ${errorMessage} I stopped rather than repeating the same failed operation. No file was saved.`;
+          await appendAiMessage({
+            conversationId: input.conversationId,
+            role: "assistant",
+            content,
+            provider: provider.id,
+            model,
+            metadata: { toolActivity, attachments: generatedAttachments },
+          });
+          await completeAiRun(run.id, { model, metadata: { toolActivity, fileCreationFailed: true } });
+          return {
+            conversationId: input.conversationId,
+            message: { role: "assistant" as const, content },
+            intervention: null,
+            model,
+            capabilities: capabilities(Boolean(input.accountId)),
+            toolActivity,
+          };
+        }
+
         if (outcome.result.ok && semanticName === "capabilities.search" && outcome.result.data && typeof outcome.result.data === "object") {
           const discovered = (outcome.result.data as Record<string, unknown>).tools;
           const names = new Set(
