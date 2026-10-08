@@ -571,6 +571,12 @@ export function ChatPanel() {
                 </section>
               : <div className="gsw-chat-message-body" key={`text-${segmentIndex}`}><ChatMarkdown content={segment.content} /></div>)}
           </div> : <div className="gsw-chat-message-body">{message.content}</div>}
+          {message.attachments && message.attachments.length > 0 && <div className="gsw-chat-message-files">
+            {message.attachments.map((attachment) => <button type="button" className="gsw-chat-file-chip" key={attachment.assetId} onClick={() => void openAttachedFile(attachment)}>
+              <File size={15} />
+              <span><strong>{attachment.filename}</strong><small>{formatAttachmentSize(attachment.sizeBytes)}</small></span>
+            </button>)}
+          </div>}
           <button className="gsw-chat-copy" type="button" aria-label={message.role === "user" ? "Copy prompt" : "Copy full response"} title={message.role === "user" ? "Copy prompt" : "Copy full response"} onClick={() => void navigator.clipboard.writeText(message.role === "assistant" ? cleanAssistantText(message.content) : message.content)}><Copy size={14} strokeWidth={1.8} /></button>
         </article>;
       })}
@@ -603,7 +609,19 @@ export function ChatPanel() {
     </div>
 
     <footer className="gsw-chat-composer">
-      <div className={`gsw-chat-composer-box ${recording ? "voice-active" : ""}`}>
+      <div
+        className={`gsw-chat-composer-box ${recording ? "voice-active" : ""}`}
+        onDragOver={(event) => { event.preventDefault(); if (!sending) event.dataTransfer.dropEffect = "copy"; }}
+        onDrop={(event) => { event.preventDefault(); if (!sending && event.dataTransfer.files.length) void uploadChatFiles(event.dataTransfer.files); }}
+      >
+        <input ref={fileInputRef} className="gsw-hidden-input" type="file" multiple onChange={(event) => event.target.files && void uploadChatFiles(event.target.files)} />
+        {pendingAttachments.length > 0 && <div className="gsw-chat-pending-files">
+          {pendingAttachments.map((attachment) => <span className="gsw-chat-pending-file" key={attachment.assetId}>
+            <File size={14} />
+            <span><strong>{attachment.filename}</strong><small>{formatAttachmentSize(attachment.sizeBytes)}</small></span>
+            <button type="button" aria-label={`Remove ${attachment.filename}`} onClick={() => setPendingAttachments((current) => current.filter((item) => item.assetId !== attachment.assetId))}><X size={13} /></button>
+          </span>)}
+        </div>}
         {recording ? <div className="gsw-chat-voice-live" aria-live="polite" aria-label="Microphone is recording">
           <span className="gsw-chat-recording-dot" />
           <span className="gsw-chat-listening-label">Listening</span>
@@ -626,6 +644,14 @@ export function ChatPanel() {
           rows={1}
         />}
         <button
+          className="gsw-chat-attach"
+          type="button"
+          aria-label="Attach files"
+          title="Attach files"
+          disabled={sending || uploadingFiles || pendingAttachments.length >= 10}
+          onClick={() => fileInputRef.current?.click()}
+        >{uploadingFiles ? <LoaderCircle size={17} className="gsw-chat-spin" /> : <Paperclip size={17} strokeWidth={2} />}</button>
+        <button
           className={`gsw-chat-voice ${recording ? "recording" : ""}`}
           type="button"
           aria-label={recording ? "Stop voice dictation" : "Start voice dictation"}
@@ -635,7 +661,7 @@ export function ChatPanel() {
         >{recording ? <Square size={15} fill="currentColor" /> : <Mic size={17} strokeWidth={2} />}</button>
         <button className="gsw-chat-send" type="button" aria-label={recording ? "Stop dictation and send" : "Send message"} title={recording ? "Send what you've dictated" : "Send message"} disabled={!canSend} onClick={() => void send()}><ArrowUp size={18} strokeWidth={2} /></button>
       </div>
-      <p>{recording ? "Listening… tap stop to review your words, or send when you're done." : "Chat can search mail and saved chats, manage drafts, and create scheduled work. Sending still requires explicit confirmation."}</p>
+      <p>{recording ? "Listening… tap stop to review your words, or send when you're done." : uploadingFiles ? "Uploading file to your private GSW Files storage…" : "Attach files or drag them here. GSW Chat can use stored files in drafts; sending still requires explicit confirmation."}</p>
     </footer>
   </div>;
 }
