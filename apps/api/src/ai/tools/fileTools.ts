@@ -197,7 +197,10 @@ export const filesReadTool: AgentToolDefinition = {
       if (isTextLikeFile(row.filename, row.mimeType) && Number(row.sizeBytes) <= 2 * 1024 * 1024) {
         const object = await getR2Object(row.r2Key);
         textPreview = object.content.toString("utf8").slice(0, 40_000);
-      } else if (detected.category === "pdf" || config.ai.openaiApiKey) {
+      } else if (
+        ["pdf", "document", "spreadsheet", "presentation", "image", "video"].includes(detected.category)
+        || config.ai.openaiApiKey
+      ) {
         const object = await getR2Object(row.r2Key);
         const result = await analyzeStoredFile({
           filename: row.filename,
