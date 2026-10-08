@@ -25,6 +25,7 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
   const [notice, setNotice] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [profileUploading, setProfileUploading] = useState(false);
 
   const loadTemplates = async () => {
     const catalog = await api.templates();
@@ -65,6 +66,37 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
       setNotice(err instanceof Error ? err.message : String(err));
     }
   };
+  const uploadProfileImage = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = "";
+    if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(file.type)) {
+      setNotice("Profile image must be PNG, JPEG, WEBP, or GIF.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setNotice("Profile image must be 10 MB or smaller.");
+      return;
+    }
+    setProfileUploading(true);
+    setNotice("Uploading profile image…");
+    try {
+      const uploaded = await api.uploadFile(file, { source: "profile", kind: "profile_image" });
+      const general = {
+        ...settings.general,
+        profileImageAssetId: uploaded.asset.id,
+        profileImageUrl: `/product/files/${uploaded.asset.id}/content`,
+      };
+      const saved = await api.updateSettings({ general });
+      setSettings((current) => current ? { ...current, ...saved } : current);
+      setNotice("Profile image saved");
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err));
+    } finally {
+      setProfileUploading(false);
+    }
+  };
+
   const deleteAccount = async () => {
     setDeleteBusy(true);
     setNotice("");
@@ -81,7 +113,10 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
 
   return wrap(<main className="gsw-settings-layout"><aside className="gsw-settings-nav"><p>Workspace</p>{sections.map((item) => <button key={item} className={section === item ? "active" : ""} onClick={() => setSection(item)}>{item}</button>)}</aside>
     <section className="gsw-settings-content"><div className="gsw-page-heading"><div><p className="gsw-eyebrow">Preferences</p><h1>{section}</h1><p>{section === "Signature" ? "A reusable, editable identity for every message." : section === "Templates" ? "Create a reusable email look that stays consistent across GSW Mail and AI-generated drafts." : "Keep the parts of GSW Mail that make communication feel like yours."}</p></div>{notice && <span className="gsw-save-notice">{notice}</span>}</div>
-      {section === "General" && <div className="gsw-settings-card"><label>Timezone<select value={String(settings.general.timezone ?? "America/Detroit")} onChange={(event) => setSettings({ ...settings, general: { ...settings.general, timezone: event.target.value } })}><option>America/Detroit</option><option>America/New_York</option><option>America/Chicago</option><option>UTC</option></select></label><label>Language<select value={String(settings.general.language ?? "en-US")} onChange={(event) => setSettings({ ...settings, general: { ...settings.general, language: event.target.value } })}><option value="en-US">English (US)</option></select></label><label>Profile image URL<input type="url" value={String(settings.general.profileImageUrl ?? "")} placeholder="https://example.com/profile.jpg" onChange={(event) => setSettings({ ...settings, general: { ...settings.general, profileImageUrl: event.target.value } })} /><small>Use a publicly accessible HTTPS image. Initials remain as a fallback.</small></label><button className="gsw-primary-btn" onClick={() => void saveSettings({ general: settings.general })}>Save general settings</button></div>}
+      {section === "General" && <div className="gsw-settings-card"><label>Timezone<select value={String(settings.general.timezone ?? "America/Detroit")} onChange={(event) => setSettings({ ...settings, general: { ...settings.general, timezone: event.target.value } })}><option>America/Detroit</option><option>America/New_York</option><option>America/Chicago</option><option>UTC</option></select></label><label>Language<select value={String(settings.general.language ?? "en-US")} onChange={(event) => setSettings({ ...settings, general: { ...settings.general, language: event.target.value } })}><option value="en-US">English (US)</option></select></label><label><strong>Profile image</strong><span className="gsw-template-logo-picker">{settings.general.profileImageUrl ? <img src={String(settings.general.profileImageUrl)} alt="Profile" /> : <span>Initials</span>}<span><label className="gsw-secondary-btn">{profileUploading ? "Uploading…" : "Upload image"}<input className="gsw-hidden-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={profileUploading} onChange={(event) => void uploadProfileImage(event)} /></label>{settings.general.profileImageAssetId && <button className="gsw-link-btn" type="button" disabled={profileUploading} onClick={() => {
+        const general = { ...settings.general, profileImageAssetId: null, profileImageUrl: "" };
+        void api.updateSettings({ general }).then((saved) => { setSettings((current) => current ? { ...current, ...saved } : current); setNotice("Profile image removed"); }).catch((err) => setNotice(err instanceof Error ? err.message : String(err)));
+      }}>Remove</button>}</span></span><small>Stored privately in GSW Files. PNG, JPEG, WEBP, or GIF. Maximum 10 MB.</small></label><button className="gsw-primary-btn" onClick={() => void saveSettings({ general: settings.general })}>Save general settings</button></div>}
       {section === "Signature" && <div className="gsw-settings-card"><div className="gsw-settings-card-head"><div><h2>Default signature</h2><p>Paste from Gmail, Outlook, Word, a website, or another editor. Unsafe scripts and links are removed.</p></div><label className="gsw-switch"><input type="checkbox" checked={signature.enabled} onChange={(event) => setSignature({ ...signature, enabled: event.target.checked })} /><span>Enabled</span></label></div><RichTextEditor value={signature.signatureHtml} onChange={(value) => setSignature({ ...signature, signatureHtml: value })} placeholder="Write your signature" minHeight={190} /><div className="gsw-option-grid"><label><input type="checkbox" checked={signature.onNew} onChange={(event) => setSignature({ ...signature, onNew: event.target.checked })} /> New messages</label><label><input type="checkbox" checked={signature.onReply} onChange={(event) => setSignature({ ...signature, onReply: event.target.checked })} /> Replies</label><label><input type="checkbox" checked={signature.onForward} onChange={(event) => setSignature({ ...signature, onForward: event.target.checked })} /> Forwards</label><label>Placement<select value={signature.position} onChange={(event) => setSignature({ ...signature, position: event.target.value as ProductSettings["signature"]["position"] })}><option value="beforeQuotedText">Before quoted history</option><option value="afterQuotedText">After quoted history</option></select></label></div><p className="gsw-muted">Plaintext preview: {signature.signatureText || "Your signature text will appear here."}</p><button className="gsw-primary-btn" onClick={() => void saveSignature()}>Save signature</button></div>}
       {section === "Compose" && <div className="gsw-settings-card"><h2>Compose preferences</h2><label className="gsw-setting-row"><span><strong>Rich text by default</strong><small>Keep formatting when pasting into new messages.</small></span><input type="checkbox" checked={settings.compose.defaultFormat !== "plain"} onChange={(event) => setSettings({ ...settings, compose: { ...settings.compose, defaultFormat: event.target.checked ? "rich" : "plain" } })} /></label><button className="gsw-primary-btn" onClick={() => void saveSettings({ compose: settings.compose })}>Save compose settings</button></div>}
       {section === "Contacts" && <div className="gsw-settings-card"><h2>Contact capture</h2><label className="gsw-setting-row"><span><strong>Create contacts from sent mail</strong><small>New recipients become lightweight contacts and existing contacts gain engagement history.</small></span><input type="checkbox" checked={settings.contacts.autoCreateFromSent !== false} onChange={(event) => setSettings({ ...settings, contacts: { ...settings.contacts, autoCreateFromSent: event.target.checked } })} /></label><button className="gsw-secondary-btn gsw-inline-btn" type="button" onClick={() => window.dispatchEvent(new CustomEvent("gsw-workspace-open", { detail: { section: "contacts" } }))}>Open contacts</button><button className="gsw-primary-btn" onClick={() => void saveSettings({ contacts: settings.contacts })}>Save contact settings</button></div>}
@@ -205,13 +240,16 @@ function TemplateBuilder({
   const [theme, setTheme] = useState<EmailTemplateTheme>({ ...initialTheme });
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(template?.logoUrl ?? null);
   const [logoFilename, setLogoFilename] = useState<string | null>(template?.logoFilename ?? null);
+  const [logoAssetId, setLogoAssetId] = useState<string | null>(template?.logoAssetId ?? null);
   const [logoChanged, setLogoChanged] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const updateColor = (field: keyof EmailTemplateTheme, value: string) => setTheme((current) => ({ ...current, [field]: value }));
-  const uploadLogo = (event: ChangeEvent<HTMLInputElement>) => {
+  const uploadLogo = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    event.target.value = "";
     if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(file.type)) {
       onNotice("Logo must be PNG, JPEG, WEBP, or GIF.");
       return;
@@ -221,12 +259,22 @@ function TemplateBuilder({
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => {
-      setLogoDataUrl(typeof reader.result === "string" ? reader.result : null);
+    reader.onload = () => setLogoDataUrl(typeof reader.result === "string" ? reader.result : null);
+    reader.readAsDataURL(file);
+    setLogoUploading(true);
+    onNotice("Uploading logo…");
+    try {
+      const uploaded = await api.uploadFile(file, { source: "template", kind: "template_asset" });
+      setLogoAssetId(uploaded.asset.id);
       setLogoFilename(file.name);
       setLogoChanged(true);
-    };
-    reader.readAsDataURL(file);
+      onNotice("Logo uploaded");
+    } catch (err) {
+      onNotice(err instanceof Error ? err.message : String(err));
+      setLogoDataUrl(template?.logoUrl ?? null);
+    } finally {
+      setLogoUploading(false);
+    }
   };
 
   const save = async () => {
@@ -239,7 +287,7 @@ function TemplateBuilder({
       const body: EmailTemplateInput = {
         name: name.trim(),
         ...theme,
-        ...(logoChanged ? { logoDataUrl: logoDataUrl?.startsWith("data:") ? logoDataUrl : null, logoFilename } : {}),
+        ...(logoChanged ? { logoAssetId, logoFilename, logoDataUrl: null } : {}),
       };
       const result = mode === "edit" && template?.id
         ? await api.updateTemplate(template.id, body)
@@ -268,7 +316,7 @@ function TemplateBuilder({
     <div className="gsw-template-builder-grid">
       <div className="gsw-template-controls">
         <label><strong>Template name</strong><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Customer outreach" maxLength={120} required /></label>
-        <label><strong>Logo</strong><span className="gsw-template-logo-picker">{logoDataUrl ? <img src={logoDataUrl} alt="" /> : <span>No logo</span>}<span><label className="gsw-secondary-btn">Upload logo<input className="gsw-hidden-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={uploadLogo} /></label>{logoDataUrl && <button className="gsw-link-btn" type="button" onClick={() => { setLogoDataUrl(null); setLogoFilename(null); setLogoChanged(true); }}>Remove</button>}</span></span><small>PNG, JPEG, WEBP, or GIF. Maximum 1 MB.</small></label>
+        <label><strong>Logo</strong><span className="gsw-template-logo-picker">{logoDataUrl ? <img src={logoDataUrl} alt="" /> : <span>No logo</span>}<span><label className="gsw-secondary-btn">{logoUploading ? "Uploading…" : "Upload logo"}<input className="gsw-hidden-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={logoUploading} onChange={(event) => void uploadLogo(event)} /></label>{logoDataUrl && <button className="gsw-link-btn" type="button" onClick={() => { setLogoDataUrl(null); setLogoFilename(null); setLogoAssetId(null); setLogoChanged(true); }}>Remove</button>}</span></span><small>PNG, JPEG, WEBP, or GIF. Maximum 1 MB.</small></label>
         <ColorField label="Border" value={theme.borderColor} onChange={(value) => updateColor("borderColor", value)} />
         <ColorField label="Font" value={theme.fontColor} onChange={(value) => updateColor("fontColor", value)} />
         <ColorField label="Buttons & links" value={theme.buttonColor} onChange={(value) => updateColor("buttonColor", value)} />
@@ -276,7 +324,7 @@ function TemplateBuilder({
       </div>
       <div className="gsw-template-preview-column"><span className="gsw-eyebrow">Responsive preview</span><TemplatePreview template={previewTemplate} /></div>
     </div>
-    <button className="gsw-primary-btn" disabled={busy || !name.trim()} onClick={() => void save()}>{busy ? "Saving…" : "Save Template"}</button>
+    <button className="gsw-primary-btn" disabled={busy || logoUploading || !name.trim()} onClick={() => void save()}>{busy ? "Saving…" : logoUploading ? "Uploading logo…" : "Save Template"}</button>
   </div>;
 }
 
