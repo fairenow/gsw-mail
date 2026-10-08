@@ -126,7 +126,7 @@ export async function createUploadIntent(input: {
       method: "PUT" as const,
       url: createR2PresignedUrl({ method: "PUT", key, expiresSeconds: config.r2.presignTtlSeconds }),
       expiresInSeconds: config.r2.presignTtlSeconds,
-      headers: { "content-type": mimeType },
+      headers: {},
     },
     usage,
   };
