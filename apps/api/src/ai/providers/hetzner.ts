@@ -64,6 +64,12 @@ async function attempt(input: AiProviderRunInput) {
     const message = body.choices?.[0]?.message;
     const content = message?.content?.trim() || null;
     const toolCalls = message?.tool_calls ?? [];
+    // Some Qwen-compatible endpoints emit imitation tool XML in message text
+    // instead of the OpenAI-compatible tool_calls field. Never present such
+    // markup to the user as successful tool execution.
+    if (toolCalls.length === 0 && content && /<tool_(?:code|output)>/i.test(content)) {
+      throw new HttpError(502, "The selected model returned tool instructions as text rather than a callable action. No mailbox search or file creation was performed. Please retry or select another AI model.");
+    }
     if (!content && toolCalls.length === 0) throw new HetznerAttemptError("Hetzner inference returned an empty response.", true, 502);
     return { content, toolCalls, model: config.ai.hetznerModel };
   } catch (error) {
