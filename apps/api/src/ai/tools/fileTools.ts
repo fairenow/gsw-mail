@@ -345,13 +345,13 @@ export const filesCreateTextTool: AgentToolDefinition = {
 
 export const filesCreateArtifactTool: AgentToolDefinition = {
   name: "files.create_artifact",
-  description: "Create a finished downloadable artifact in the user's My Files library. PDF creation is provider-neutral and rendered locally with LibreOffice; include the complete final document copy in content and use instruction for layout/style guidance. Other native artifact formats may use an available computational artifact service.",
+  description: "Create a finished downloadable artifact in the user's My Files library. Create a genuine finished file. For PDF, execute visual design requirements via the configured artifact service; never save the design brief itself as the PDF. Provide source text in content when available. If no design service is configured and source text is unavailable, return a clear error rather than a fake PDF.",
   inputSchema: {
     type: "object",
     properties: {
       filename: { type: "string", description: "Exact output filename including a supported extension such as report.pdf, plan.docx, budget.xlsx, or deck.pptx." },
       instruction: { type: "string", description: "Detailed layout, styling, calculations, tables, charts, or structure instructions." },
-      content: { type: "string", description: "Complete final body copy for the artifact. For PDFs, provide the actual finished document text/Markdown or safe HTML here rather than only describing what the PDF should contain." },
+      content: { type: "string", description: "Complete final body copy for the artifact. Actual source text/facts for the document, not style commands. Keep visual instructions in instruction." },
     },
     required: ["filename", "instruction"],
     additionalProperties: false,
@@ -363,9 +363,8 @@ export const filesCreateArtifactTool: AgentToolDefinition = {
     try {
       const input = createArtifactInput.parse(rawInput);
       const localPdf = /\.pdf$/i.test(input.filename);
-      // PDF generation is fully local (LibreOffice). Do not create an OpenAI
-      // Code Interpreter workspace for a PDF, otherwise Qwen users can fail
-      // on OpenAI billing before the local renderer is ever reached.
+      // Use a standalone code-interpreter session for designed PDFs. The
+      // generator handles local fallback only when complete source copy exists.
       const workspace = !localPdf && ctx.conversationId
         ? await getOrCreateFileWorkspace(ctx.userId, ctx.conversationId)
         : null;
@@ -411,7 +410,7 @@ export const filesCreateArtifactTool: AgentToolDefinition = {
 
 export const filesTransformTool: AgentToolDefinition = {
   name: "files.transform",
-  description: "Open one or more existing GSW Files in a sandboxed computational workspace, modify/analyze their real contents, and save a new output file. Use this for requests such as cleaning an XLSX, adding formulas/charts, converting data into a report, revising a DOCX, or turning source files into a new PDF/PPTX/XLSX/DOCX.",
+  description: "Open one or more existing GSW Files in a sandboxed computational workspace, modify/analyze their real contents, and save a new output file. Use this for revising existing PDFs, restyling documents to match brand templates, or transforming DOCX/XLSX/PPTX and other sources. When a user mentions a saved PDF and a branding template, search for BOTH files first, then pass both source asset IDs so the designer has the actual original content and brand reference. Never merely print the styling instructions as the resulting document.",
   inputSchema: {
     type: "object",
     properties: {

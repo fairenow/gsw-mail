@@ -170,9 +170,13 @@ async function runArtifactResponse(input: {
       throw new HttpError(502, `Could not retrieve generated artifact: HTTP ${fileResponse.status}`);
     }
 
+    const bytes = Buffer.from(await fileResponse.arrayBuffer());
+    if (/\.pdf$/i.test(target) && (!bytes.subarray(0, 5).equals(Buffer.from("%PDF-")) || bytes.length < 500)) {
+      throw new HttpError(502, "Artifact service returned an invalid PDF, so nothing was saved.");
+    }
     return {
       filename: target,
-      bytes: Buffer.from(await fileResponse.arrayBuffer()),
+      bytes,
       mimeType: artifactMimeType(target),
       model,
     };
@@ -306,9 +310,36 @@ export async function generateArtifactFile(input: {
 }) {
   const target = input.filename.trim();
   if (/\.pdf$/i.test(target)) {
+    if (!input.content?.trim() && !config.ai.openaiApiKey) {
+      throw new HttpError(503, "Designed PDF generation requires an enabled artifact service. No PDF was saved: design instructions are not document content.");
+    }
+    // Design-first PDFs use the code-interpreter artifact service, which can
+    // compose real vector graphics, typography, layouts, tables and embedded
+    // images. Local LibreOffice is retained only when that service is absent.
+    // Do not silently downgrade when a configured service actually fails.
+    if (config.ai.openaiApiKey) {
+      const prompt = [
+        `Produce a finished, professionally art-directed PDF named "${target}".`,
+        "Use the code_interpreter tool to programmatically DESIGN and CREATE the PDF (ReportLab, matplotlib, PIL, or other available tools).",
+        "This is a graphic-design task, NOT a plain-text Markdown-to-PDF export.",
+        "Compose a distinctive layout with thoughtful typography, contrasting color fields, designed section hierarchy, vector icons/ornamentation, structured tables and intentional whitespace when appropriate.",
+        "Make the design specific to the subject and the user's brand instructions; do not force GSW's own brand onto another organization's document.",
+        "If the request calls for one page, fit the content legibly on exactly one page; simplify the editorial copy rather than shrinking it into illegibility.",
+        "Draw text and vector elements as real PDF objects, so text remains selectable and the layout stays sharp.",
+        "Never print raw Markdown notation such as #, ####, **, or code fences. Convert all supplied content into proper visual elements.",
+        "Treat content supplied below as source facts: do not fabricate statistics, dates, logos, screenshots, claims or brand assets.",
+        "Use a supplied logo only when its actual bytes are available. Otherwise create a refined typographic treatment, never invent a brand logo.",
+        "Check the final page count, visible legibility, margins, overflow, and content completeness using the available file tools before finishing.",
+        "Your answer must include the finished file as a downloadable container_file_citation.",
+        `User design requirements: ${input.instruction}`,
+        `Source content to preserve and visually organize:\n${input.content?.trim() || input.instruction}`,
+        `Save the final PDF with exactly this filename: ${target}`,
+      ].join("\n");
+      return runArtifactResponse({ filename: target, prompt, ...(input.containerId ? { containerId: input.containerId } : {}) });
+    }
     return generateLocalPdf({
       filename: target,
-      content: input.content?.trim() || input.instruction,
+      content: input.content!.trim(),
       instruction: input.instruction,
     });
   }
@@ -356,6 +387,15 @@ export async function transformArtifactFile(input: {
       "Use the python/code interpreter tool to inspect and modify the actual source file contents.",
       "Preserve useful structure, formulas, formatting, tables, charts, and data when relevant unless the user's instruction asks to change them.",
       "Do not invent data that is not present in the source files unless explicitly requested.",
+      ...(/\.pdf$/i.test(target) ? [
+        "PDF-specific requirement: produce a genuinely redesigned final document, not an explanation of the instructions or a plain-text transcript.",
+        "Analyze supplied PDF pages for content and visual structure. Use the source as the factual reference, and the user instruction as the design brief.",
+        "Use proper page composition, contrasting shapes, professional typography, custom tables and graphics as appropriate to the topic.",
+        "Where a named brand is requested, use accessible brand assets from the uploaded files; never fabricate logos or claim an asset was used if it was not available.",
+        "Preserve the requested number of pages and keep body copy readable. If a one-page output is requested, honor it.",
+        "Do not print Markdown tokens, source prompts, or design specification instructions as the PDF body.",
+        "Verify the output file exists, opens as a PDF, and has legible complete pages before finishing.",
+      ] : []),
       input.instruction,
       `Before finishing, save the final transformed file using the exact filename: ${target}`,
     ].join("\n");
