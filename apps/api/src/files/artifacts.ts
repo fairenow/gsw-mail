@@ -387,6 +387,15 @@ export async function transformArtifactFile(input: {
       "Use the python/code interpreter tool to inspect and modify the actual source file contents.",
       "Preserve useful structure, formulas, formatting, tables, charts, and data when relevant unless the user's instruction asks to change them.",
       "Do not invent data that is not present in the source files unless explicitly requested.",
+      ...(/\\.pdf$/i.test(target) ? [
+        "PDF-specific requirement: produce a genuinely redesigned final document, not an explanation of the instructions or a plain-text transcript.",
+        "Analyze supplied PDF pages for content and visual structure. Use the source as the factual reference, and the user instruction as the design brief.",
+        "Use proper page composition, contrasting shapes, professional typography, custom tables and graphics as appropriate to the topic.",
+        "Where a named brand is requested, use accessible brand assets from the uploaded files; never fabricate logos or claim an asset was used if it was not available.",
+        "Preserve the requested number of pages and keep body copy readable. If a one-page output is requested, honor it.",
+        "Do not print Markdown tokens, source prompts, or design specification instructions as the PDF body.",
+        "Verify the output file exists, opens as a PDF, and has legible complete pages before finishing.",
+      ] : []),
       input.instruction,
       `Before finishing, save the final transformed file using the exact filename: ${target}`,
     ].join("\n");
