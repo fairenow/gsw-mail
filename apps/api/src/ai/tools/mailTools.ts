@@ -35,6 +35,12 @@ const searchInput = z.object({
   mailbox: z.string().trim().min(1).max(100).optional(),
 });
 
+const activityInput = z.object({
+  startIso: z.string().datetime(),
+  endIso: z.string().datetime(),
+  mailboxes: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
+});
+
 const readInput = z.object({
   messageId: z.string().min(1).max(1_000),
 });
@@ -98,6 +104,34 @@ export const mailSearchTool: AgentToolDefinition = {
           read: message.read,
         })),
       });
+    } catch (error) {
+      return failure(ctx, toolCallId, startedAt, error);
+    }
+  },
+};
+
+export const mailActivityTool: AgentToolDefinition = {
+  name: "mail.activity",
+  description: "Read mailbox activity across Inbox, Sent, Drafts, Outbox, and Trash for an exact time window. Use this for requests like 'what happened in email yesterday', daily email summaries, or activity recaps instead of relying on a keyword search in one folder.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      startIso: { type: "string", description: "Inclusive ISO-8601 start of the requested period, including timezone offset when known." },
+      endIso: { type: "string", description: "Exclusive ISO-8601 end of the requested period, including timezone offset when known." },
+      mailboxes: { type: "array", items: { type: "string" }, description: "Optional mailbox names/roles. Defaults to Inbox, Sent, Drafts, Outbox, and Trash." },
+    },
+    required: ["startIso", "endIso"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["mail.read"],
+  risk: "read",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = activityInput.parse(rawInput);
+      const mail = createMailService(ctx);
+      const activity = await mail.activity(ctx.accountId, input.startIso, input.endIso, input.mailboxes);
+      return success(ctx, toolCallId, startedAt, activity);
     } catch (error) {
       return failure(ctx, toolCallId, startedAt, error);
     }
@@ -280,6 +314,7 @@ export const mailSendDraftTool: AgentToolDefinition = {
 };
 
 export const agentMailTools: AgentToolDefinition[] = [
+  mailActivityTool,
   mailSearchTool,
   mailReadTool,
   mailReadThreadTool,
@@ -289,6 +324,7 @@ export const agentMailTools: AgentToolDefinition[] = [
 ];
 
 export const readOnlyMailTools: AgentToolDefinition[] = [
+  mailActivityTool,
   mailSearchTool,
   mailReadTool,
   mailReadThreadTool,
