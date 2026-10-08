@@ -5,7 +5,7 @@ import { db } from "../../db/client.js";
 import { assets } from "../../db/schema.js";
 import { getR2Object } from "../../files/r2.js";
 import { analyzeStoredFile } from "../../files/intelligence.js";
-import { generateArtifactFile } from "../../files/artifacts.js";
+import { generateArtifactFile, transformArtifactFile } from "../../files/artifacts.js";
 import { generateImage } from "../../files/imageGeneration.js";
 import { createAssetFromBuffer } from "../../files/service.js";
 import { attachExistingAssetToDraft } from "../../mail/draftAttachmentStore.js";
@@ -41,6 +41,14 @@ const createArtifactInput = z.object({
   filename: z.string().trim().min(1).max(255).refine(
     (value) => /\.(pdf|docx|xlsx|pptx|csv|txt|md|html|json|png|jpe?g)$/i.test(value),
     "unsupported artifact file extension",
+  ),
+  instruction: z.string().trim().min(1).max(20_000),
+});
+const transformArtifactInput = z.object({
+  sourceAssetIds: z.array(z.string().uuid()).min(1).max(5),
+  filename: z.string().trim().min(1).max(255).refine(
+    (value) => /\.(pdf|docx|xlsx|pptx|csv|txt|md|html|json|png|jpe?g)$/i.test(value),
+    "unsupported output file extension",
   ),
   instruction: z.string().trim().min(1).max(20_000),
 });
@@ -381,6 +389,86 @@ export const filesCreateArtifactTool: AgentToolDefinition = {
 
 
 
+
+
+export const filesTransformTool: AgentToolDefinition = {
+  name: "files.transform",
+  description: "Open one or more existing GSW Files in a sandboxed computational workspace, modify/analyze their real contents, and save a new output file. Use this for requests such as cleaning an XLSX, adding formulas/charts, converting data into a report, revising a DOCX, or turning source files into a new PDF/PPTX/XLSX/DOCX.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      sourceAssetIds: {
+        type: "array",
+        items: { type: "string" },
+        minItems: 1,
+        maxItems: 5,
+        description: "Asset IDs of the source files to transform.",
+      },
+      filename: { type: "string", description: "Exact filename for the new output, including extension." },
+      instruction: { type: "string", description: "Detailed transformation instructions." },
+    },
+    required: ["sourceAssetIds", "filename", "instruction"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["files.read", "files.write"],
+  risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = transformArtifactInput.parse(rawInput);
+      const sourceRows = [];
+      for (const assetId of input.sourceAssetIds) {
+        const [row] = await db.select().from(assets).where(and(
+          eq(assets.id, assetId),
+          eq(assets.userId, ctx.userId),
+          eq(assets.status, "ready"),
+          isNull(assets.deletedAt),
+        )).limit(1);
+        if (!row) throw new Error(`source file not found: ${assetId}`);
+        const object = await getR2Object(row.r2Key);
+        sourceRows.push({
+          filename: row.displayName || row.filename,
+          mimeType: row.mimeType,
+          bytes: object.content,
+        });
+      }
+
+      const generated = await transformArtifactFile({
+        filename: input.filename,
+        instruction: input.instruction,
+        sources: sourceRows,
+      });
+      const asset = await createAssetFromBuffer({
+        userId: ctx.userId,
+        filename: generated.filename,
+        mimeType: generated.mimeType,
+        content: generated.bytes,
+        source: "chat_transformed",
+        kind: generated.mimeType.includes("spreadsheet") || generated.filename.toLowerCase().endsWith(".xlsx")
+          ? "spreadsheet"
+          : generated.mimeType.includes("presentation") || generated.filename.toLowerCase().endsWith(".pptx")
+            ? "presentation"
+            : generated.mimeType.startsWith("image/")
+              ? "image"
+              : generated.mimeType === "application/pdf"
+                ? "pdf"
+                : "document",
+        addToFiles: true,
+      });
+      return success(ctx, toolCallId, startedAt, {
+        assetId: asset.id,
+        filename: asset.displayName || asset.filename,
+        mimeType: asset.mimeType,
+        sizeBytes: Number(asset.sizeBytes),
+        sourceAssetIds: input.sourceAssetIds,
+        model: generated.model,
+      });
+    } catch (error) {
+      return failure(ctx, toolCallId, startedAt, error);
+    }
+  },
+};
+
 export const filesGenerateImageTool: AgentToolDefinition = {
   name: "files.generate_image",
   description: "Generate a new image from a text prompt and save it into the user's private My Files library. Use this for illustrations, graphics, concepts, banners, thumbnails, and other generated images.",
@@ -469,4 +557,4 @@ export const mailAttachFileTool: AgentToolDefinition = {
   },
 };
 
-export const fileTools: AgentToolDefinition[] = [filesListTool, filesSearchTool, filesReadTool, filesAnalyzeTool, filesCreateTextTool, filesCreateArtifactTool, filesGenerateImageTool, mailAttachFileTool];
+export const fileTools: AgentToolDefinition[] = [filesListTool, filesSearchTool, filesReadTool, filesAnalyzeTool, filesCreateTextTool, filesCreateArtifactTool, filesTransformTool, filesGenerateImageTool, mailAttachFileTool];
