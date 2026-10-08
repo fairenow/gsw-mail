@@ -6,7 +6,7 @@ export interface AgentIntegrationDescriptor {
   category: "mail" | "inference" | "delivery" | "storage" | "files" | "browser" | "calendar" | "other";
   configured: boolean;
   capabilities: string[];
-  notes?: string;
+  notes?: string | undefined;
 }
 
 export function listAgentIntegrations(): AgentIntegrationDescriptor[] {
