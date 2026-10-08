@@ -190,10 +190,11 @@ async function runConversationTurn(input: {
   if (!capabilitySettings.enabled) throw forbidden("GSW AI is disabled in Settings.");
 
   if (input.accountId) {
-    const openAiOnlyTools = new Set(["files.create_artifact", "files.transform", "files.generate_image"]);
+    const openAiOnlyTools = new Set(["files.transform"]);
     tools = agentMailRegistry.providerDefinitions((tool) =>
       tool.requiredScopes.every((scope) => isAiScopeGloballyEnabled(capabilitySettings, scope))
-      && (Boolean(config.ai.openaiApiKey) || !openAiOnlyTools.has(tool.name)),
+      && (Boolean(config.ai.openaiApiKey) || !openAiOnlyTools.has(tool.name))
+      && (tool.name !== "files.generate_image" || Boolean(config.ai.huggingFaceApiToken || config.ai.openaiApiKey)),
     );
     toolContext = {
       userId: input.userId,
@@ -446,7 +447,7 @@ async function prepareNewConversation(input: {
     `Time zone: ${input.timeZone ?? "unknown"}`,
     `User local date/time: ${input.localDateTime ?? "unknown"}`,
     "GSW file tools can extract provider-neutral document content for the selected AI model. Some advanced media/artifact operations may require an additional configured service.",
-    `Native artifact and image generation: ${config.ai.openaiApiKey ? "available" : "not configured"}`,
+    `Local PDF generation: available. Image generation: ${config.ai.huggingFaceApiToken ? "FLUX via Hugging Face" : config.ai.openaiApiKey ? "OpenAI" : "not configured"}.`,
     "Use this context when interpreting relative dates, scheduling requests, or file capabilities. Do not mention this hidden runtime context unless it is directly relevant.",
   ].join("\n");
 
