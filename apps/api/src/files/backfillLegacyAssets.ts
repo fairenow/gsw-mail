@@ -4,6 +4,26 @@ import { emailTemplates } from "../db/schema.js";
 import { createAssetFromBuffer } from "./service.js";
 import { r2Configured } from "./r2.js";
 
+async function ensureBackfillSchema() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "draft_attachment_assets" (
+      "account_id" uuid NOT NULL,
+      "draft_engine_id" text NOT NULL,
+      "position" integer NOT NULL,
+      "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+      "asset_id" uuid NOT NULL REFERENCES "assets"("id") ON DELETE CASCADE,
+      "filename" text NOT NULL,
+      "content_type" text NOT NULL,
+      "size" integer NOT NULL,
+      "content_disposition" text,
+      "content_id" text,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+      PRIMARY KEY ("account_id", "draft_engine_id", "position")
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "draft_attachment_assets_asset_idx" ON "draft_attachment_assets" ("asset_id")`);
+}
+
 async function backfillTemplateLogos() {
   const rows = await db.select().from(emailTemplates)
     .where(isNull(emailTemplates.logoAssetId));
@@ -96,6 +116,7 @@ async function main() {
       "R2 credentials are not available in this shell. Run this through Railway so its service variables are injected: railway run npm run files:backfill:r2 --workspace apps/api",
     );
   }
+  await ensureBackfillSchema();
   const templates = await backfillTemplateLogos();
   const attachments = await backfillDraftAttachments();
   console.log(`[r2-backfill] complete: ${templates} template logos, ${attachments} draft attachments`);
