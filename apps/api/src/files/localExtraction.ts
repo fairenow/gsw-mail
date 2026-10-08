@@ -214,11 +214,60 @@ export async function inspectImageLocally(input: {
   });
 }
 
-export async function inspectVideoLocally(input: {
+export type ExtractedVideoFrame = {
+  timestampSeconds: number;
+  bytes: Buffer;
+  mimeType: "image/jpeg";
+  ocrText: string;
+};
+
+export type LocalVideoInspection = {
+  text: string;
+  metadata: string;
+  durationSeconds: number | null;
+  frames: ExtractedVideoFrame[];
+};
+
+const parseVideoDuration = (metadata: string): number | null => {
+  try {
+    const parsed = JSON.parse(metadata) as {
+      format?: { duration?: string | number };
+      streams?: Array<{ duration?: string | number; codec_type?: string }>;
+    };
+    const candidates = [
+      parsed.format?.duration,
+      ...(parsed.streams ?? []).filter((stream) => stream.codec_type === "video").map((stream) => stream.duration),
+    ];
+    for (const value of candidates) {
+      const duration = Number(value);
+      if (Number.isFinite(duration) && duration > 0) return duration;
+    }
+  } catch {
+    // Keep best-effort behavior when ffprobe output is malformed.
+  }
+  return null;
+};
+
+const representativeTimestamps = (durationSeconds: number | null, maxFrames = 8): number[] => {
+  if (!durationSeconds || durationSeconds <= 0) return [0];
+  if (durationSeconds <= 2) return [Math.max(0, durationSeconds / 2)];
+
+  // Mirrors the successful strategy in flmlnk: sample across the full timeline
+  // instead of taking only the first N frames or a fixed every-30-second cadence.
+  const count = Math.min(maxFrames, Math.max(3, Math.ceil(durationSeconds / 20)));
+  const edge = Math.min(0.5, durationSeconds * 0.02);
+  const usable = Math.max(0.1, durationSeconds - edge * 2);
+  return Array.from({ length: count }, (_, index) => {
+    const ratio = count === 1 ? 0.5 : index / (count - 1);
+    return Number((edge + usable * ratio).toFixed(3));
+  });
+};
+
+export async function inspectVideoLocallyDetailed(input: {
   filename: string;
   bytes: Buffer;
   maxChars?: number;
-}): Promise<string> {
+}): Promise<LocalVideoInspection> {
   const maxChars = input.maxChars ?? 80_000;
   return withTempDir("gsw-video-", async (dir) => {
     const extension = extname(input.filename) || ".mp4";
@@ -239,41 +288,62 @@ export async function inspectVideoLocally(input: {
       metadata = "Video metadata unavailable";
     }
 
-    const framePattern = join(dir, "frame-%02d.png");
-    try {
-      await run("ffmpeg", [
-        "-hide_banner", "-loglevel", "error",
-        "-i", inputPath,
-        "-vf", "fps=1/30,scale='min(1280,iw)':-2",
-        "-frames:v", "6",
-        framePattern,
-      ], 120_000);
-    } catch {
-      // Metadata is still useful even when frame extraction fails.
-    }
+    const durationSeconds = parseVideoDuration(metadata);
+    const timestamps = representativeTimestamps(durationSeconds);
+    const frames: ExtractedVideoFrame[] = [];
 
-    const files = (await readdir(dir)).filter((name) => /^frame-\d+\.png$/i.test(name)).sort();
-    const frameNotes: string[] = [];
-    for (const [index, file] of files.entries()) {
-      let ocr = "";
+    for (const [index, timestampSeconds] of timestamps.entries()) {
+      const framePath = join(dir, `frame-${String(index + 1).padStart(2, "0")}.jpg`);
       try {
-        const result = await run("tesseract", [join(dir, file), "stdout", "--psm", "6"], 45_000);
-        ocr = result.stdout.trim();
+        await run("ffmpeg", [
+          "-hide_banner", "-loglevel", "error",
+          "-ss", String(timestampSeconds),
+          "-i", inputPath,
+          "-frames:v", "1",
+          "-vf", "scale='min(960,iw)':-2",
+          "-q:v", "4",
+          framePath,
+        ], 60_000);
+
+        let ocrText = "";
+        try {
+          const result = await run("tesseract", [framePath, "stdout", "--psm", "6"], 45_000);
+          ocrText = result.stdout.trim();
+        } catch {
+          ocrText = "";
+        }
+
+        frames.push({
+          timestampSeconds,
+          bytes: await readFile(framePath),
+          mimeType: "image/jpeg",
+          ocrText,
+        });
       } catch {
-        ocr = "";
+        // A single bad timestamp/frame must not make the whole video unreadable.
       }
-      frameNotes.push(`[FRAME ${index + 1}] ${ocr || "No readable on-screen text detected."}`);
     }
 
-    return cap([
+    const frameNotes = frames.map((frame, index) =>
+      `[FRAME ${index + 1} @ ${frame.timestampSeconds.toFixed(1)}s] ${frame.ocrText || "No readable on-screen text detected."}`,
+    );
+
+    const text = cap([
       "[VIDEO METADATA]",
       metadata,
       "",
       "[REPRESENTATIVE FRAME OCR]",
       frameNotes.length ? frameNotes.join("\n\n") : "No representative frames could be extracted.",
-      "",
-      "[LIMITATION]",
-      "This local fallback inspects metadata and representative frame text. Full visual-semantic understanding and speech transcription require a compatible multimodal/transcription model.",
     ].join("\n"), maxChars);
+
+    return { text, metadata, durationSeconds, frames };
   });
+}
+
+export async function inspectVideoLocally(input: {
+  filename: string;
+  bytes: Buffer;
+  maxChars?: number;
+}): Promise<string> {
+  return (await inspectVideoLocallyDetailed(input)).text;
 }
