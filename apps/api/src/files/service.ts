@@ -4,7 +4,7 @@ import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { assets, fileNodes, userStorageQuotas } from "../db/schema.js";
 import { badRequest, notFound, serviceUnavailable } from "../lib/errors.js";
-import { createR2PresignedUrl, deleteR2Object, headR2Object, r2Configured } from "./r2.js";
+import { createR2PresignedUrl, deleteR2Object, headR2Object, putR2Object, r2Configured } from "./r2.js";
 
 const ACTIVE_STORAGE_STATUSES = ["upload_pending", "ready"] as const;
 
@@ -240,4 +240,68 @@ export async function deleteAsset(userId: string, assetId: string) {
     await tx.update(fileNodes).set({ trashedAt: new Date(), updatedAt: new Date() }).where(eq(fileNodes.assetId, asset.id));
   });
   return { id: asset.id, deleted: true };
+}
+
+
+export async function createAssetFromBuffer(input: {
+  userId: string;
+  filename: string;
+  mimeType?: string | undefined;
+  content: Buffer;
+  source?: string | undefined;
+  kind?: string | undefined;
+  addToFiles?: boolean | undefined;
+}) {
+  if (!r2Configured()) throw serviceUnavailable("File storage is not configured yet.");
+  const sizeBytes = input.content.byteLength;
+  if (sizeBytes < 1) throw badRequest("file size must be greater than zero");
+  if (sizeBytes > config.files.maxUploadBytes) throw badRequest(`file exceeds the ${config.files.maxUploadBytes} byte upload limit`);
+
+  const usage = await storageUsage(input.userId);
+  if (sizeBytes > usage.availableBytes) throw badRequest("storage quota exceeded");
+
+  const id = randomUUID();
+  const filename = safeFilename(input.filename);
+  const mimeType = input.mimeType?.trim().slice(0, 255) || "application/octet-stream";
+  const key = `users/${userPrefix(input.userId)}/assets/${id}/original/${filename}`;
+
+  const [asset] = await db.insert(assets).values({
+    id,
+    userId: input.userId,
+    r2Key: key,
+    filename,
+    displayName: filename,
+    mimeType,
+    extension: extensionFor(filename),
+    sizeBytes,
+    kind: input.kind?.trim().slice(0, 80) || classifyKind(mimeType),
+    source: input.source?.trim().slice(0, 80) || "user_upload",
+    status: "upload_pending",
+  }).returning();
+  if (!asset) throw new Error("failed to create asset");
+
+  try {
+    const uploaded = await putR2Object(key, input.content, mimeType);
+    const [ready] = await db.update(assets).set({
+      status: "ready",
+      etag: uploaded.etag,
+      updatedAt: new Date(),
+    }).where(eq(assets.id, asset.id)).returning();
+
+    if (input.addToFiles) {
+      await db.insert(fileNodes).values({
+        userId: input.userId,
+        assetId: asset.id,
+        parentId: null,
+        name: filename,
+        nodeType: "file",
+      }).onConflictDoNothing();
+    }
+
+    return ready!;
+  } catch (error) {
+    await db.update(assets).set({ status: "deleted", deletedAt: new Date(), updatedAt: new Date() }).where(eq(assets.id, asset.id));
+    await deleteR2Object(key).catch(() => undefined);
+    throw error;
+  }
 }
