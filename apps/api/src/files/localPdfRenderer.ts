@@ -1,0 +1,48 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+
+const execute = promisify(execFile);
+
+export function validatePrintableHtml(html: string): void {
+  if (html.length > 600_000) throw new Error("PDF HTML exceeds size limit");
+  if (/<(?:script|iframe|object|embed|link|base|form)\b/i.test(html)
+    || /\bon[a-z]+\s*=/i.test(html)
+    || /@import\b/i.test(html)
+    || /url\s*\(/i.test(html)
+    || /\b(?:href|src|action)\s*=/i.test(html)) {
+    throw new Error("PDF HTML contains unsupported active or external content");
+  }
+}
+
+export async function renderLocalPdf(html: string): Promise<Buffer> {
+  validatePrintableHtml(html);
+  const dir = await mkdtemp(join(tmpdir(), "gsw-pdf-"));
+  try {
+    const source = join(dir, "page.html");
+    const output = join(dir, "page.pdf");
+    await writeFile(source, html, "utf8");
+    try {
+      await execute("chromium", [
+        "--headless", "--disable-dev-shm-usage",
+        "--disable-background-networking", "--disable-extensions",
+        "--user-data-dir=" + join(dir, "chromium-profile"), "--print-to-pdf-no-header",
+        "--print-to-pdf=" + output, "file://" + source,
+      ], { timeout: 45000, killSignal: "SIGKILL" });
+    } catch {
+      await execute("libreoffice", [
+        "-env:UserInstallation=file://" + join(dir, "profile"),
+        "--headless", "--convert-to", "pdf", "--outdir", dir, source,
+      ], { timeout: 45000, killSignal: "SIGKILL" });
+    }
+    const pdf = await readFile(output);
+    if (pdf.length < 500 || pdf.toString("ascii", 0, 5) !== "%PDF-") {
+      throw new Error("PDF renderer returned invalid output");
+    }
+    return pdf;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}

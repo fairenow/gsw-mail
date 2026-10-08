@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { config } from "../config.js";
+import { renderLocalPdf } from "./localPdfRenderer.js";
 import { HttpError } from "../lib/errors.js";
 
 const execFileAsync = promisify(execFile);
@@ -215,7 +216,7 @@ const simpleMarkdownToHtml = (source: string) => {
       closeList();
       continue;
     }
-    if (/^###\s+/.test(line)) { closeList(); out.push(`<h3>${inline(line.replace(/^###\s+/, ""))}</h3>`); continue; }
+    if (/^#{3,6}\s+/.test(line)) { closeList(); out.push(`<h3>${inline(line.replace(/^#{3,6}\s+/, ""))}</h3>`); continue; }
     if (/^##\s+/.test(line)) { closeList(); out.push(`<h2>${inline(line.replace(/^##\s+/, ""))}</h2>`); continue; }
     if (/^#\s+/.test(line)) { closeList(); out.push(`<h1>${inline(line.replace(/^#\s+/, ""))}</h1>`); continue; }
     const ordered = line.match(/^\d+[.)]\s+(.+)$/);
@@ -274,6 +275,9 @@ ${body}
 </body>
 </html>`;
 
+    const rendered = await renderLocalPdf(html);
+    return { filename: input.filename, bytes: rendered, mimeType: "application/pdf", model: "gsw-local-chromium-pdf" };
+
     await writeFile(htmlPath, html, "utf8");
     const { stderr } = await execFileAsync("libreoffice", [
       "--headless",
@@ -310,38 +314,10 @@ export async function generateArtifactFile(input: {
 }) {
   const target = input.filename.trim();
   if (/\.pdf$/i.test(target)) {
-    if (!input.content?.trim() && !config.ai.openaiApiKey) {
-      throw new HttpError(503, "Designed PDF generation requires an enabled artifact service. No PDF was saved: design instructions are not document content.");
+    if (!input.content?.trim()) {
+      throw new HttpError(422, "PDF document content or HTML is required separately from design directions.");
     }
-    // Design-first PDFs use the code-interpreter artifact service, which can
-    // compose real vector graphics, typography, layouts, tables and embedded
-    // images. Local LibreOffice is retained only when that service is absent.
-    // Do not silently downgrade when a configured service actually fails.
-    if (config.ai.openaiApiKey) {
-      const prompt = [
-        `Produce a finished, professionally art-directed PDF named "${target}".`,
-        "Use the code_interpreter tool to programmatically DESIGN and CREATE the PDF (ReportLab, matplotlib, PIL, or other available tools).",
-        "This is a graphic-design task, NOT a plain-text Markdown-to-PDF export.",
-        "Compose a distinctive layout with thoughtful typography, contrasting color fields, designed section hierarchy, vector icons/ornamentation, structured tables and intentional whitespace when appropriate.",
-        "Make the design specific to the subject and the user's brand instructions; do not force GSW's own brand onto another organization's document.",
-        "If the request calls for one page, fit the content legibly on exactly one page; simplify the editorial copy rather than shrinking it into illegibility.",
-        "Draw text and vector elements as real PDF objects, so text remains selectable and the layout stays sharp.",
-        "Never print raw Markdown notation such as #, ####, **, or code fences. Convert all supplied content into proper visual elements.",
-        "Treat content supplied below as source facts: do not fabricate statistics, dates, logos, screenshots, claims or brand assets.",
-        "Use a supplied logo only when its actual bytes are available. Otherwise create a refined typographic treatment, never invent a brand logo.",
-        "Check the final page count, visible legibility, margins, overflow, and content completeness using the available file tools before finishing.",
-        "Your answer must include the finished file as a downloadable container_file_citation.",
-        `User design requirements: ${input.instruction}`,
-        `Source content to preserve and visually organize:\n${input.content?.trim() || input.instruction}`,
-        `Save the final PDF with exactly this filename: ${target}`,
-      ].join("\n");
-      return runArtifactResponse({ filename: target, prompt, ...(input.containerId ? { containerId: input.containerId } : {}) });
-    }
-    return generateLocalPdf({
-      filename: target,
-      content: input.content!.trim(),
-      instruction: input.instruction,
-    });
+    return generateLocalPdf({ filename: target, content: input.content.trim(), instruction: input.instruction });
   }
   const prompt = [
     `Create exactly one finished file named "${target}".`,
