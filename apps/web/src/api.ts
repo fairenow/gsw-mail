@@ -134,6 +134,17 @@ export interface CalendarRsvpStatus {
 
 export type AiChatRole = "user" | "assistant";
 
+export interface AiFileCapabilities {
+  provider: string;
+  primaryModel: string | null | undefined;
+  openAiConfigured: boolean;
+  fileModel: string | null;
+  transcriptionModel: string | null;
+  artifactModel: string | null;
+  imageModel: string | null;
+  directAttachmentPreprocessing: boolean;
+}
+
 export interface AiChatAttachment {
   assetId: string;
   filename: string;
