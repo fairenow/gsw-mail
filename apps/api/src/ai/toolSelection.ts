@@ -43,7 +43,7 @@ export function selectAgentTools(input: {
   }
 
   const selected = available.filter((tool) =>
-    coreToolNames.has(tool.name) || tool.name === "capabilities.search" || tool.name === "workers.delegate" || tool.name.startsWith("tasks.") || skills.some((skill) => skillToolMatch(skill, tool.name)),
+    coreToolNames.has(tool.name) || tool.name === "capabilities.search" || tool.name.startsWith("workers.") || tool.name.startsWith("tasks.") || skills.some((skill) => skillToolMatch(skill, tool.name)),
   );
 
   const minimum = selected.length >= 3 ? selected : available;
