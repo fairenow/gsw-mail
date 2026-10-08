@@ -75,6 +75,14 @@ const confirmationDecisionSchema = z.object({
 const shouldPreAnalyzeAttachments = (content: string) =>
   /\b(analy[sz]e|read|review|summari[sz]e|extract|understand|inspect|what(?:'s| is) (?:in|inside)|tell me about|scope|requirements?|dates?|pricing|spreadsheet|workbook|pdf|document|presentation|image|chart|table|clean|data)\b/i.test(content);
 
+const explicitImageGenerationIntent = (content: string) =>
+  /\b(generate|create|make|draw|render|design)\b/i.test(content)
+  && /\b(image|picture|illustration|graphic|banner|thumbnail|poster|artwork|logo)\b/i.test(content);
+
+const imagePromptFromRequest = (content: string) => content
+  .replace(/^\s*(?:can you\s+|please\s+)?(?:generate|create|make|draw|render|design)\s+(?:me\s+)?(?:an?\s+)?(?:image|picture|illustration|graphic|banner|thumbnail|poster|artwork)\s*(?:of|showing|that shows)?\s*/i, "")
+  .trim() || content.trim();
+
 const capabilities = (mailboxAccess: boolean) => ({
   actions: true as const,
   mailboxAccess,
@@ -221,6 +229,110 @@ async function runConversationTurn(input: {
   const generatedAttachments: ChatAttachmentResult[] = [];
 
   try {
+    const latestUserContent = [...input.providerMessages].reverse().find((message) => message.role === "user")?.content;
+    if (
+      toolContext
+      && latestUserContent
+      && typeof latestUserContent === "string"
+      && explicitImageGenerationIntent(latestUserContent)
+      && tools?.some((tool) => tool.function.name === "files__generate_image")
+    ) {
+      const providerToolCallId = `direct-image-${run.id}`;
+      const semanticName = "files.generate_image";
+      const label = toolLabel(semanticName);
+      const rawArguments = JSON.stringify({
+        prompt: imagePromptFromRequest(latestUserContent),
+        size: "auto",
+        quality: "auto",
+        format: "png",
+        filename: "generated-image.png",
+      });
+
+      input.emit?.({ type: "status", phase: "tool_started", label, toolName: semanticName });
+      const definition = agentMailRegistry.definition("files__generate_image");
+      const ledgerCall = await recordAiToolCall({
+        runId: run.id,
+        conversationId: input.conversationId,
+        providerToolCallId,
+        toolName: semanticName,
+        risk: definition?.risk ?? "reversible_write",
+        requiredScopes: definition?.requiredScopes ?? ["files.write", "images.generate"],
+        argumentsJson: rawArguments,
+      });
+
+      const outcome = await executeAgentTool({
+        registry: agentMailRegistry,
+        providerToolName: "files__generate_image",
+        rawArguments,
+        ctx: toolContext,
+        providerToolCallId,
+        ledgerToolCallId: ledgerCall.id,
+        conversationId: input.conversationId,
+        runId: run.id,
+      });
+
+      if (outcome.kind === "intervention") {
+        const status = outcome.intervention.type === "permission" ? "awaiting_permission" : "awaiting_confirmation";
+        await markAiToolCallStatus(ledgerCall.id, status);
+        await pauseAiRun(run.id, status, { intervention: outcome.intervention, toolName: semanticName });
+        return {
+          conversationId: input.conversationId,
+          message: null,
+          intervention: outcome.intervention,
+          model: "direct-image-routing",
+          capabilities: capabilities(Boolean(input.accountId)),
+          toolActivity,
+        };
+      }
+
+      await recordAiToolResult(ledgerCall.id, outcome.result);
+      toolActivity.push({ name: semanticName, ok: outcome.result.ok });
+      input.emit?.({ type: "status", phase: "tool_completed", label, toolName: semanticName, ok: outcome.result.ok });
+
+      if (outcome.result.ok) {
+        const data = outcome.result.data && typeof outcome.result.data === "object"
+          ? outcome.result.data as Record<string, unknown>
+          : {};
+        const attachment = typeof data.assetId === "string" && typeof data.filename === "string"
+          ? {
+              assetId: data.assetId,
+              filename: data.filename,
+              mimeType: typeof data.mimeType === "string" ? data.mimeType : "image/png",
+              sizeBytes: typeof data.sizeBytes === "number" ? data.sizeBytes : Number(data.sizeBytes ?? 0),
+            }
+          : null;
+        if (attachment) generatedAttachments.push(attachment);
+
+        const content = attachment
+          ? "I generated the image and saved it to your GSW Files."
+          : "I generated the image.";
+        await appendAiMessage({
+          conversationId: input.conversationId,
+          role: "assistant",
+          content,
+          provider: "image-generator",
+          model: typeof data.model === "string" ? data.model : "configured-image-provider",
+          metadata: { toolActivity, attachments: generatedAttachments, directImageRouting: true },
+        });
+        await completeAiRun(run.id, {
+          model: typeof data.model === "string" ? data.model : "configured-image-provider",
+          metadata: { toolActivity, directImageRouting: true },
+        });
+        return {
+          conversationId: input.conversationId,
+          message: { role: "assistant" as const, content, ...(generatedAttachments.length ? { attachments: generatedAttachments } : {}) },
+          intervention: null,
+          model: typeof data.model === "string" ? data.model : "configured-image-provider",
+          capabilities: capabilities(Boolean(input.accountId)),
+          toolActivity,
+        };
+      }
+
+      const message = outcome.result.error?.message ?? "Image generation failed.";
+      await failAiRun(run.id, new Error(message));
+      throw new Error(message);
+    }
+
     for (let turn = 0; turn < 6; turn += 1) {
       input.emit?.({
         type: "status",
