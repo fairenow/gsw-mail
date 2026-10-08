@@ -110,7 +110,7 @@ async function transcribe(input: {
     throw new HttpError(400, "Audio/video transcription inputs must be 25 MB or smaller.");
   }
   const form = new FormData();
-  form.append("file", new Blob([input.bytes], { type: input.mimeType || "application/octet-stream" }), input.filename);
+  form.append("file", new Blob([new Uint8Array(input.bytes)], { type: input.mimeType || "application/octet-stream" }), input.filename);
   form.append("model", config.ai.openaiTranscriptionModel);
 
   const controller = new AbortController();
