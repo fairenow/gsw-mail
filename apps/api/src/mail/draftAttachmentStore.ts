@@ -350,3 +350,55 @@ export async function clearDraftAttachments(
   if (!rows.length && explicitUserId) await resolveUserId(accountId, explicitUserId);
   await cleanupAssets(rows);
 }
+
+
+export async function attachExistingAssetToDraft(input: {
+  accountId: string;
+  draftEngineId: string;
+  userId: string;
+  assetId: string;
+  contentDisposition?: "attachment" | "inline" | undefined;
+  contentId?: string | undefined;
+}): Promise<DraftAttachmentMeta> {
+  await ensureTable();
+  const [asset] = await db.select({
+    id: assets.id,
+    userId: assets.userId,
+    filename: assets.filename,
+    displayName: assets.displayName,
+    mimeType: assets.mimeType,
+    sizeBytes: assets.sizeBytes,
+    status: assets.status,
+    deletedAt: assets.deletedAt,
+  }).from(assets).where(and(
+    eq(assets.id, input.assetId),
+    eq(assets.userId, input.userId),
+  )).limit(1);
+  if (!asset || asset.status !== "ready" || asset.deletedAt) throw new Error("file asset is not available");
+
+  const existing = await listDraftAttachments(input.accountId, input.draftEngineId);
+  const position = existing.reduce((max, item) => Math.max(max, item.position), -1) + 1;
+  const filename = asset.displayName || asset.filename;
+  await db.insert(draftAttachmentAssets).values({
+    accountId: input.accountId,
+    draftEngineId: input.draftEngineId,
+    position,
+    userId: input.userId,
+    assetId: asset.id,
+    filename,
+    contentType: asset.mimeType || "application/octet-stream",
+    size: Number(asset.sizeBytes),
+    contentDisposition: input.contentDisposition ?? "attachment",
+    contentId: input.contentId ?? null,
+  });
+
+  return {
+    position,
+    filename,
+    contentType: asset.mimeType || "application/octet-stream",
+    size: Number(asset.sizeBytes),
+    assetId: asset.id,
+    contentDisposition: input.contentDisposition ?? "attachment",
+    ...(input.contentId ? { contentId: input.contentId } : {}),
+  };
+}
