@@ -10,7 +10,7 @@ import { MailSidebar } from "../components/mail/MailSidebar";
 import { MessageListHeader } from "../components/mail/MessageListHeader";
 import { MessageReader } from "../components/mail/MessageReader";
 import { MessageRow } from "../components/mail/MessageRow";
-import { appendDraftAttachments, listDraftAttachments, removeDraftAttachment, type DraftAttachmentMeta } from "../lib/draftAttachments";
+import { appendDraftAttachments, attachStoredFilesToDraft, listDraftAttachments, removeDraftAttachment, type DraftAttachmentMeta } from "../lib/draftAttachments";
 import { browserTimeZone, scheduleDraft, type ScheduleDraftInput } from "../lib/scheduledSend";
 import { CalendarPage } from "./CalendarPage";
 import { ContactsPage } from "./ContactsPage";
@@ -331,6 +331,22 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
     });
   }, [attachments.length, syncLocalAttachments]);
 
+  const attachStoredFiles = useCallback(async (assetIds: string[]) => {
+    if (!account || assetIds.length === 0) return;
+    setAttachmentSyncing(true);
+    try {
+      const id = draftId ?? await saveDraft(true);
+      if (!id) throw new Error("Save the draft before attaching files.");
+      const synced = await attachStoredFilesToDraft(account.id, id, assetIds);
+      setDraftId(id);
+      setPersistedAttachments(synced);
+      setDraftStatus("saved");
+      setSendError(null);
+    } finally {
+      setAttachmentSyncing(false);
+    }
+  }, [account, draftId, saveDraft]);
+
   const removePersisted = useCallback(async (attachment: DraftAttachmentMeta) => {
     if (!account || !draftId) return;
     setAttachmentSyncing(true);
@@ -408,6 +424,6 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
         <div className="gsw-operational-surface" hidden={workspaceSection !== "chat"}><ChatPanel /></div>
       </section>
     </main>
-    {compose && <ComposeWindow mode={composeMode} minimized={composeMinimized} to={to} cc={cc} bcc={bcc} subject={subject} html={html} attachments={attachments} persistedAttachments={persistedAttachments} attachmentSyncing={attachmentSyncing} sending={sending} draftStatus={draftStatus} sendError={sendError} sendNote={lastSend ? `${lastSend.status === "scheduled" ? "Scheduled" : "Sent"} · ${lastSend.status}` : undefined} defaultTimeZone={browserTimeZone()} onToChange={(value) => { setTo(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onCcChange={(value) => { setCc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onBccChange={(value) => { setBcc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onSubjectChange={(value) => { setSubject(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onHtmlChange={(value) => { setHtml(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onAttachmentsChange={changeAttachments} onRemovePersistedAttachment={(attachment) => { void removePersisted(attachment); }} onMinimize={() => { void saveDraft(); setComposeMinimized((current) => !current); }} onClose={() => { void saveDraft(true); setCompose(false); }} onSubmit={() => void runSend()} onSchedule={(schedule) => void runSchedule(schedule)} onRetry={() => void runSend()} onUndo={lastSend ? () => void runUndo() : undefined} />}
+    {compose && <ComposeWindow mode={composeMode} minimized={composeMinimized} to={to} cc={cc} bcc={bcc} subject={subject} html={html} attachments={attachments} persistedAttachments={persistedAttachments} attachmentSyncing={attachmentSyncing} sending={sending} draftStatus={draftStatus} sendError={sendError} sendNote={lastSend ? `${lastSend.status === "scheduled" ? "Scheduled" : "Sent"} · ${lastSend.status}` : undefined} defaultTimeZone={browserTimeZone()} onToChange={(value) => { setTo(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onCcChange={(value) => { setCc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onBccChange={(value) => { setBcc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onSubjectChange={(value) => { setSubject(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onHtmlChange={(value) => { setHtml(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onAttachmentsChange={changeAttachments} onAttachStoredFiles={attachStoredFiles} onRemovePersistedAttachment={(attachment) => { void removePersisted(attachment); }} onMinimize={() => { void saveDraft(); setComposeMinimized((current) => !current); }} onClose={() => { void saveDraft(true); setCompose(false); }} onSubmit={() => void runSend()} onSchedule={(schedule) => void runSchedule(schedule)} onRetry={() => void runSend()} onUndo={lastSend ? () => void runUndo() : undefined} />}
   </>;
 }
