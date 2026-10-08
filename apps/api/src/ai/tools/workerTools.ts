@@ -51,4 +51,56 @@ export const workerDelegateTool: AgentToolDefinition = {
   },
 };
 
-export const workerTools: AgentToolDefinition[] = [workerDelegateTool];
+export const workersParallelTool: AgentToolDefinition = {
+  name: "workers.parallel",
+  description: "Run up to four independent read-only specialized investigations in parallel, then return all findings to the coordinator. Use this for substantial work that can be safely split into independent research, mail, file, campaign, calendar, or admin subtasks.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      tasks: {
+        type: "array",
+        minItems: 2,
+        maxItems: 4,
+        items: {
+          type: "object",
+          properties: {
+            worker: { type: "string", enum: ["mail", "research", "calendar", "files", "campaign", "admin"] },
+            instruction: { type: "string" },
+          },
+          required: ["worker", "instruction"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["tasks"],
+    additionalProperties: false,
+  },
+  requiredScopes: [],
+  risk: "read",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = z.object({
+        tasks: z.array(z.object({
+          worker: workerSchema,
+          instruction: z.string().trim().min(1).max(20_000),
+        })).min(2).max(4),
+      }).parse(rawInput);
+
+      const results = await Promise.all(input.tasks.map((task) =>
+        runReadOnlyWorker({
+          worker: task.worker,
+          instruction: task.instruction,
+          context: ctx,
+          maxTurns: 4,
+        }),
+      ));
+
+      return success(ctx, toolCallId, startedAt, { results });
+    } catch (error) {
+      return failure(ctx, toolCallId, startedAt, error);
+    }
+  },
+};
+
+export const workerTools: AgentToolDefinition[] = [workerDelegateTool, workersParallelTool];
