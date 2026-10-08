@@ -35,12 +35,15 @@ const CODE_EXTENSIONS = new Set([
   "dockerfile","makefile","gradle","properties","env","ipynb"
 ]);
 const PDF_EXTENSIONS = new Set(["pdf"]);
-const DOCUMENT_EXTENSIONS = new Set(["doc","docx","rtf","odt","pages"]);
-const SPREADSHEET_EXTENSIONS = new Set(["xls","xlsx","xlsm","xlsb","ods","numbers"]);
-const PRESENTATION_EXTENSIONS = new Set(["ppt","pptx","odp","key","keynote"]);
+const DOCUMENT_EXTENSIONS = new Set(["doc","docx","rtf"]);
+const ALT_DOCUMENT_EXTENSIONS = new Set(["odt","pages"]);
+const SPREADSHEET_EXTENSIONS = new Set(["xls","xlsx","xlsm","xlsb"]);
+const ALT_SPREADSHEET_EXTENSIONS = new Set(["ods","numbers"]);
+const PRESENTATION_EXTENSIONS = new Set(["ppt","pptx"]);
+const ALT_PRESENTATION_EXTENSIONS = new Set(["odp","key","keynote"]);
 const VISION_IMAGE_EXTENSIONS = new Set(["png","jpg","jpeg","webp","gif"]);
 const CONVERT_IMAGE_EXTENSIONS = new Set(["bmp","tif","tiff","heic","heif","avif","svg","ico"]);
-const AUDIO_EXTENSIONS = new Set(["flac","mp3","mpeg","mpga","m4a","ogg","oga","wav","webm","aac","wma"]);
+const AUDIO_EXTENSIONS = new Set(["flac","mp3","mpga","m4a","ogg","oga","wav","aac","wma"]);
 const VIDEO_EXTENSIONS = new Set(["mp4","mpeg","mpg","webm","m4v","mov","mkv","avi"]);
 const ARCHIVE_EXTENSIONS = new Set(["zip","tar","tgz","gz","bz2","xz","7z","rar"]);
 const EMAIL_EXTENSIONS = new Set(["eml","msg"]);
@@ -67,14 +70,36 @@ export function detectFileType(filename: string, mimeType = "application/octet-s
   if (PDF_EXTENSIONS.has(extension) || mime === "application/pdf") {
     return { extension, category: "pdf", strategy: "openai_file", kind: "pdf", textLike: false };
   }
-  if (SPREADSHEET_EXTENSIONS.has(extension) || /spreadsheetml|ms-excel|opendocument\.spreadsheet/.test(mime)) {
+  if (mime.startsWith("video/")) {
+    return {
+      extension,
+      category: "video",
+      strategy: "video",
+      kind: "video",
+      textLike: false,
+      note: "Video analysis uses the audio track plus best-effort computational inspection of frames/metadata.",
+    };
+  }
+  if (mime.startsWith("audio/")) {
+    return { extension, category: "audio", strategy: "transcription", kind: "audio", textLike: false };
+  }
+  if (SPREADSHEET_EXTENSIONS.has(extension) || /spreadsheetml|ms-excel/.test(mime)) {
     return { extension, category: "spreadsheet", strategy: "code_interpreter", kind: "spreadsheet", textLike: false };
   }
-  if (PRESENTATION_EXTENSIONS.has(extension) || /presentationml|ms-powerpoint|opendocument\.presentation/.test(mime)) {
+  if (ALT_SPREADSHEET_EXTENSIONS.has(extension) || /opendocument\.spreadsheet/.test(mime)) {
+    return { extension, category: "spreadsheet", strategy: "code_interpreter", kind: "spreadsheet", textLike: false };
+  }
+  if (PRESENTATION_EXTENSIONS.has(extension) || /presentationml|ms-powerpoint/.test(mime)) {
     return { extension, category: "presentation", strategy: "openai_file", kind: "presentation", textLike: false };
   }
-  if (DOCUMENT_EXTENSIONS.has(extension) || /wordprocessingml|msword|opendocument\.text|rtf/.test(mime)) {
+  if (ALT_PRESENTATION_EXTENSIONS.has(extension) || /opendocument\.presentation/.test(mime)) {
+    return { extension, category: "presentation", strategy: "code_interpreter", kind: "presentation", textLike: false };
+  }
+  if (DOCUMENT_EXTENSIONS.has(extension) || /wordprocessingml|msword|rtf/.test(mime)) {
     return { extension, category: "document", strategy: "openai_file", kind: "document", textLike: false };
+  }
+  if (ALT_DOCUMENT_EXTENSIONS.has(extension) || /opendocument\.text/.test(mime)) {
+    return { extension, category: "document", strategy: "code_interpreter", kind: "document", textLike: false };
   }
   if (VISION_IMAGE_EXTENSIONS.has(extension) || /^image\/(png|jpeg|jpg|webp|gif)$/.test(mime)) {
     return { extension, category: "image", strategy: "vision", kind: "image", textLike: false };
@@ -89,10 +114,10 @@ export function detectFileType(filename: string, mimeType = "application/octet-s
       note: "This image format is converted or inspected in the computational workspace before analysis.",
     };
   }
-  if (AUDIO_EXTENSIONS.has(extension) || mime.startsWith("audio/")) {
+  if (AUDIO_EXTENSIONS.has(extension)) {
     return { extension, category: "audio", strategy: "transcription", kind: "audio", textLike: false };
   }
-  if (VIDEO_EXTENSIONS.has(extension) || mime.startsWith("video/")) {
+  if (VIDEO_EXTENSIONS.has(extension)) {
     return {
       extension,
       category: "video",
@@ -128,9 +153,9 @@ export function isTextLikeFile(filename: string, mimeType?: string | null) {
 
 export const supportedFileTypeSummary = {
   text: [...TEXT_EXTENSIONS, ...CODE_EXTENSIONS],
-  documents: [...PDF_EXTENSIONS, ...DOCUMENT_EXTENSIONS],
-  spreadsheets: [...SPREADSHEET_EXTENSIONS],
-  presentations: [...PRESENTATION_EXTENSIONS],
+  documents: [...PDF_EXTENSIONS, ...DOCUMENT_EXTENSIONS, ...ALT_DOCUMENT_EXTENSIONS],
+  spreadsheets: [...SPREADSHEET_EXTENSIONS, ...ALT_SPREADSHEET_EXTENSIONS],
+  presentations: [...PRESENTATION_EXTENSIONS, ...ALT_PRESENTATION_EXTENSIONS],
   images: [...VISION_IMAGE_EXTENSIONS, ...CONVERT_IMAGE_EXTENSIONS],
   audio: [...AUDIO_EXTENSIONS],
   video: [...VIDEO_EXTENSIONS],
