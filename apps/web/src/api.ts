@@ -554,7 +554,7 @@ export const api = {
     const upload = await fetch(intent.upload.url, {
       method: "PUT",
       headers: intent.upload.headers,
-      body: file,
+      body: await file.arrayBuffer(),
     });
     if (!upload.ok) throw new Error(`file upload failed: ${upload.status}`);
     const completed = await post<{ asset: FileAsset; usage: StorageUsage }>(`/product/files/${encodeURIComponent(intent.asset.id)}/complete`);
