@@ -182,6 +182,46 @@ export interface AiConversationDetail {
   messages: Array<{ id: string; role: string; content: string; metadata?: Record<string, unknown> | null; createdAt: string }>;
 }
 
+export interface AiTaskRecord {
+  id: string;
+  userId: string;
+  accountId: string | null;
+  conversationId: string | null;
+  title: string;
+  instruction: string;
+  status: "planned" | "running" | "waiting" | "completed" | "failed" | "cancelled" | string;
+  worker: string;
+  selectedSkills: string[];
+  currentStep: number;
+  progressPercent: number;
+  metadata: Record<string, unknown>;
+  startedAt: string | null;
+  completedAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiTaskStepRecord {
+  id: string;
+  taskId: string;
+  sequence: number;
+  title: string;
+  worker: string;
+  status: string;
+  input: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiTaskDetail {
+  task: AiTaskRecord;
+  steps: AiTaskStepRecord[];
+}
+
 export type AiChatStreamEvent =
   | { type: "status"; phase: "thinking" | "tool_started" | "tool_completed"; label: string; toolName?: string; ok?: boolean }
   | { type: "result"; response: AiChatResponse }
@@ -618,6 +658,8 @@ export const api = {
   resumeChatStream: (accountId: string, conversationId: string, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/resume/stream", { ...chatRuntimeContext(), accountId, conversationId }, onEvent, "/product/chat/resume"),
   grantChatPermission: (accountId: string, scope: string) => post<{ grant: { id: string; scope: string } }>("/product/chat/permissions", { accountId, scope }),
   decideChatConfirmation: (confirmationId: string, decision: "approved" | "rejected") => post<{ confirmation: { id: string; status: string }; execution: { conversationId: string; message: AiChatMessage; toolResult?: unknown } }>(`/product/chat/confirmations/${encodeURIComponent(confirmationId)}`, { decision }),
+  chatTasks: (limit = 20) => get<{ tasks: AiTaskRecord[] }>(`/product/chat/tasks?limit=${limit}`),
+  chatTask: (id: string) => get<AiTaskDetail>(`/product/chat/tasks/${encodeURIComponent(id)}`),
   chatConversations: () => get<{ conversations: AiConversationRecord[] }>("/product/chat/conversations?limit=50"),
   chatConversation: (id: string) => get<AiConversationDetail>(`/product/chat/conversations/${encodeURIComponent(id)}`),
   updateChatConversation: (id: string, body: { title?: string; status?: "active" | "archived" }) => patch<{ conversation: AiConversationRecord }>(`/product/chat/conversations/${encodeURIComponent(id)}`, body),
