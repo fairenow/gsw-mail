@@ -77,5 +77,50 @@ export class AgentToolRegistry {
   }
 }
 
-export const agentMailRegistry = new AgentToolRegistry([...agentMailTools, ...automationTools, ...taskTools, ...searchTools, ...contactTools, ...campaignTools, ...templateTools, ...domainTools, ...fileTools]);
+const baseAgentTools: AgentToolDefinition[] = [...agentMailTools, ...automationTools, ...taskTools, ...searchTools, ...contactTools, ...campaignTools, ...templateTools, ...domainTools, ...fileTools];
+const baseAgentRegistry = new AgentToolRegistry(baseAgentTools);
+
+const capabilitySearchTool: AgentToolDefinition = {
+  name: "capabilities.search",
+  description: "Search GSW's available agent capabilities when the current toolset is missing something needed for the user's request. Use concise capability words such as calendar, campaign, files, domain, contacts, research, or email.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "Capability or action to find." },
+      limit: { type: "number", minimum: 1, maximum: 20 },
+    },
+    required: ["query"],
+    additionalProperties: false,
+  },
+  requiredScopes: [],
+  risk: "read",
+  async execute(ctx, input, toolCallId) {
+    const startedAt = new Date().toISOString();
+    const value = input && typeof input === "object" ? input as Record<string, unknown> : {};
+    const query = typeof value.query === "string" ? value.query.trim() : "";
+    const limit = typeof value.limit === "number" ? Math.max(1, Math.min(Math.trunc(value.limit), 20)) : 12;
+    const matches = query ? baseAgentRegistry.search(query, limit) : baseAgentRegistry.definitions().slice(0, limit);
+    return {
+      ok: true,
+      toolCallId,
+      data: {
+        query,
+        tools: matches.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          requiredScopes: tool.requiredScopes,
+          risk: tool.risk,
+        })),
+      },
+      audit: {
+        userId: ctx.userId,
+        accountId: ctx.accountId,
+        startedAt,
+        completedAt: new Date().toISOString(),
+      },
+    };
+  },
+};
+
+export const agentMailRegistry = new AgentToolRegistry([...baseAgentTools, capabilitySearchTool]);
 export const readOnlyMailRegistry = new AgentToolRegistry(readOnlyMailTools);
