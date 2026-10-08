@@ -17,7 +17,7 @@ const failure = (ctx: AgentExecutionContext, toolCallId: string, startedAt: stri
   audit: { userId: ctx.userId, accountId: ctx.accountId, startedAt, completedAt: new Date().toISOString() },
 });
 
-const workerSchema = z.enum(["mail", "research", "calendar", "files", "campaign", "admin"]);
+const workerSchema = z.enum(["mail", "research", "calendar", "files", "campaign", "browser", "admin"]);
 
 export const workerDelegateTool: AgentToolDefinition = {
   name: "workers.delegate",
@@ -25,7 +25,7 @@ export const workerDelegateTool: AgentToolDefinition = {
   inputSchema: {
     type: "object",
     properties: {
-      worker: { type: "string", enum: ["mail", "research", "calendar", "files", "campaign", "admin"] },
+      worker: { type: "string", enum: ["mail", "research", "calendar", "files", "campaign", "browser", "admin"] },
       instruction: { type: "string", description: "A self-contained subtask with the exact question to investigate." },
     },
     required: ["worker", "instruction"],
@@ -65,7 +65,7 @@ export const workersParallelTool: AgentToolDefinition = {
         items: {
           type: "object",
           properties: {
-            worker: { type: "string", enum: ["mail", "research", "calendar", "files", "campaign", "admin"] },
+            worker: { type: "string", enum: ["mail", "research", "calendar", "files", "campaign", "browser", "admin"] },
             instruction: { type: "string" },
           },
           required: ["worker", "instruction"],
