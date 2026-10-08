@@ -714,11 +714,11 @@ async function prepareNewConversation(input: {
       const attachmentContext = attachments.map((item) => {
         const asset = item && typeof item === "object" ? item as Record<string, unknown> : {};
         return `- ${String(asset.filename ?? "file")} | assetId=${String(asset.assetId ?? "")} | ${String(asset.mimeType ?? "application/octet-stream")}`;
-      }).join("\\n");
+      }).join("\n");
       return {
         role: message.role as "user" | "assistant",
         content: message.role === "user" && attachmentContext
-          ? `${message.content}\\n\\n[Attached GSW files]\\n${attachmentContext}`
+          ? `${message.content}\n\n[Attached GSW files]\n${attachmentContext}`
           : message.content,
       };
     });
