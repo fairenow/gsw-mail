@@ -6,7 +6,19 @@ import { promisify } from "node:util";
 
 const execute = promisify(execFile);
 
+export function validatePrintableHtml(html: string): void {
+  if (html.length > 600_000) throw new Error("PDF HTML exceeds size limit");
+  if (/<(?:script|iframe|object|embed|link|base|form|meta)\\b/i.test(html)
+    || /\\bon[a-z]+\\s*=/i.test(html)
+    || /@import\\b/i.test(html)
+    || /url\\s*\\(/i.test(html)
+    || /(?:href|src|action)\\s*=\\s*["']?(?!data:image\\/(?:png|jpeg|gif|webp);base64,)/i.test(html)) {
+    throw new Error("PDF HTML contains unsupported active or external content");
+  }
+}
+
 export async function renderLocalPdf(html: string): Promise<Buffer> {
+  validatePrintableHtml(html);
   const dir = await mkdtemp(join(tmpdir(), "gsw-pdf-"));
   try {
     const source = join(dir, "page.html");
