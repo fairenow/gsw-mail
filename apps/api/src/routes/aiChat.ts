@@ -138,6 +138,7 @@ const toolLabel = (toolName: string): string => {
     case "files.analyze": return "Analyzing the file";
     case "files.create_text": return "Creating the file";
     case "files.create_artifact": return "Building your file";
+    case "files.generate_image": return "Generating your image";
     case "mail.attach_file": return "Attaching the file to your draft";
     default: return "Working with your mailbox";
   }
@@ -316,7 +317,7 @@ async function runConversationTurn(input: {
 
         await recordAiToolResult(ledgerCall.id, outcome.result);
         toolActivity.push({ name: semanticName, ok: outcome.result.ok });
-        if (outcome.result.ok && (semanticName === "files.create_text" || semanticName === "files.create_artifact")) {
+        if (outcome.result.ok && (semanticName === "files.create_text" || semanticName === "files.create_artifact" || semanticName === "files.generate_image")) {
           const data = outcome.result.data && typeof outcome.result.data === "object"
             ? outcome.result.data as Record<string, unknown>
             : {};
