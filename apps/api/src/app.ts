@@ -37,6 +37,7 @@ import recovery from "./routes/recovery.js";
 import pushDevices from "./routes/pushDevices.js";
 import mailChanges from "./routes/mailChanges.js";
 import domainAdmin from "./routes/domainAdmin.js";
+import files from "./routes/files.js";
 import { auth as betterAuth } from "./auth/better.js";
 import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } from "@better-auth/oauth-provider";
 import { config } from "./config.js";
@@ -105,6 +106,7 @@ export function buildApp() {
   app.register(drafts);
   app.register(admin);
   app.register(domainAdmin);
+  app.register(files);
   app.register(suppressions);
   app.register(webhooks);
   app.register(stalwartWebhooks);
