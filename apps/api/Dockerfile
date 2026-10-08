@@ -14,7 +14,7 @@ CMD ["npm", "run", "db:migrate"]
 FROM node:22-bookworm-slim AS runtime
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-    poppler-utils \
+    poppler-utils chromium fonts-dejavu-core \
     libreoffice-core libreoffice-writer libreoffice-calc libreoffice-impress \
     python3 python3-openpyxl \
     imagemagick tesseract-ocr \
