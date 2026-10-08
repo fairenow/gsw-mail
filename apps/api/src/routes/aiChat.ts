@@ -30,6 +30,7 @@ import { aiScopes } from "../ai/permissions/types.js";
 import { getAiCapabilitySettings, isAiScopeGloballyEnabled } from "../ai/capabilities.js";
 import { forbidden } from "../lib/errors.js";
 import { getAssetForUser } from "../files/service.js";
+import { config } from "../config.js";
 
 const chatAttachmentSchema = z.object({
   assetId: z.string().uuid(),
@@ -182,7 +183,11 @@ async function runConversationTurn(input: {
   if (!capabilitySettings.enabled) throw forbidden("GSW AI is disabled in Settings.");
 
   if (input.accountId) {
-    tools = agentMailRegistry.providerDefinitions((tool) => tool.requiredScopes.every((scope) => isAiScopeGloballyEnabled(capabilitySettings, scope)));
+    const enhancedFileTools = new Set(["files.analyze", "files.create_artifact", "files.generate_image"]);
+    tools = agentMailRegistry.providerDefinitions((tool) =>
+      tool.requiredScopes.every((scope) => isAiScopeGloballyEnabled(capabilitySettings, scope))
+      && (Boolean(config.ai.openaiApiKey) || !enhancedFileTools.has(tool.name)),
+    );
     toolContext = {
       userId: input.userId,
       authUserId: input.authUserId,
@@ -412,7 +417,9 @@ async function prepareNewConversation(input: {
     "GSW runtime context for this turn:",
     `Time zone: ${input.timeZone ?? "unknown"}`,
     `User local date/time: ${input.localDateTime ?? "unknown"}`,
-    "Use this context when interpreting relative dates or scheduling requests. Do not mention this hidden runtime context unless it is directly relevant.",
+    `Deep document/image/audio intelligence: ${config.ai.openaiApiKey ? "available" : "not configured"}`,
+    `Native artifact and image generation: ${config.ai.openaiApiKey ? "available" : "not configured"}`,
+    "Use this context when interpreting relative dates, scheduling requests, or file capabilities. Do not mention this hidden runtime context unless it is directly relevant.",
   ].join("\n");
 
   const providerMessages = input.messages.map((message, index) => {
