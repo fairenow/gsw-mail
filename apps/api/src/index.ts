@@ -8,6 +8,7 @@ import { ensureAiAgentSchema } from "./ai/ensureAgentSchema.js";
 import { getOutboundWorker } from "./outbound/worker.js";
 import { getAutomationWorker } from "./ai/automationWorker.js";
 import { ensureEmailTemplateSchema } from "./mail/ensureTemplateSchema.js";
+import { ensureFilesSchema } from "./files/ensureFilesSchema.js";
 
 const app = buildApp();
 const worker = getOutboundWorker();
@@ -18,6 +19,7 @@ async function main() {
   await ensureCalendarRsvpSchema();
   await ensureAiAgentSchema();
   await ensureEmailTemplateSchema();
+  await ensureFilesSchema();
   await ensureWebOAuthTestClient();
   worker.start();
   automationWorker.start();
