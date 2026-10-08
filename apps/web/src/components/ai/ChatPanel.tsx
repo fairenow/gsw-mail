@@ -398,24 +398,62 @@ export function ChatPanel() {
     }
   };
 
+  const uploadChatFiles = async (files: FileList | File[]) => {
+    const selected = Array.from(files).slice(0, Math.max(0, 10 - pendingAttachments.length));
+    if (!selected.length) return;
+    setUploadingFiles(true);
+    setError("");
+    try {
+      const uploaded: AiChatAttachment[] = [];
+      for (const file of selected) {
+        const result = await api.uploadFile(file, { source: "chat_upload", kind: file.type.startsWith("image/") ? "image" : undefined });
+        uploaded.push({
+          assetId: result.asset.id,
+          filename: result.asset.displayName || result.asset.filename,
+          mimeType: result.asset.mimeType,
+          sizeBytes: result.asset.sizeBytes,
+          kind: result.asset.kind,
+        });
+      }
+      setPendingAttachments((current) => [...current, ...uploaded].slice(0, 10));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUploadingFiles(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const openAttachedFile = async (attachment: AiChatAttachment) => {
+    try {
+      const result = await api.fileDownload(attachment.assetId);
+      window.open(result.url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   async function send(override?: string) {
     if (recording && speechRef.current) {
       sendVoiceOnEndRef.current = true;
       speechRef.current.stop();
       return;
     }
-    const content = (override ?? input).trim();
-    if (!content || sending) return;
-    const userMessage: AiChatMessage = { role: "user", content };
+    const typedContent = (override ?? input).trim();
+    const attachmentsForTurn = pendingAttachments;
+    const content = typedContent || (attachmentsForTurn.length > 1 ? "Please review the attached files." : "Please review the attached file.");
+    if ((!typedContent && attachmentsForTurn.length === 0) || sending || uploadingFiles) return;
+    const userMessage: AiChatMessage = { role: "user", content, attachments: attachmentsForTurn };
     const next = [...messages, userMessage].slice(-23);
     setMessages(next);
     setInput("");
+    setPendingAttachments([]);
     setError("");
     setSending(true);
     window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
     try {
       setExecutionActivities([]);
-      const response = await api.streamChat(account?.id ?? null, next, conversationId, handleStreamEvent);
+      const response = await api.streamChat(account?.id ?? null, next, conversationId, handleStreamEvent, attachmentsForTurn.map((item) => item.assetId));
       setConversationId(response.conversationId);
       localStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`, response.conversationId);
       setIntervention(response.intervention);
@@ -426,6 +464,7 @@ export function ChatPanel() {
       window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
     } catch (err) {
       setExecutionActivities((current) => current.map((item) => item.status === "running" ? { ...item, status: "error" as const } : item));
+      setPendingAttachments((current) => current.length ? current : attachmentsForTurn);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSending(false);
