@@ -206,7 +206,7 @@ async function runConversationTurn(input: {
     };
   }
 
-  const provider = getAiProvider();
+  const provider = getAiProvider(capabilitySettings.modelProvider);
   const run = await startAiRun({
     conversationId: input.conversationId,
     userId: input.userId,
