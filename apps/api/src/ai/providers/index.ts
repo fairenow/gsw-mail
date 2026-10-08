@@ -11,10 +11,21 @@ const providers: Record<AiProviderId, AiProvider> = {
   anthropic: anthropicProvider,
 };
 
+export type UserAiModelProvider = "qwen" | "openai" | "claude";
+
+const providerAliases: Record<UserAiModelProvider, AiProviderId> = {
+  qwen: "hetzner",
+  openai: "openai",
+  claude: "anthropic",
+};
+
 export const getAiProvider = (providerId?: string): AiProvider => {
-  const id = (providerId ?? config.ai.provider) as AiProviderId;
+  const requested = providerId ?? config.ai.provider;
+  const id = (requested in providerAliases
+    ? providerAliases[requested as UserAiModelProvider]
+    : requested) as AiProviderId;
   const provider = providers[id];
-  if (!provider) throw new HttpError(500, `Unsupported AI provider: ${id}`);
+  if (!provider) throw new HttpError(500, `Unsupported AI provider: ${requested}`);
   return provider;
 };
 
