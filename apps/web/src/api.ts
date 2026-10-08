@@ -134,9 +134,18 @@ export interface CalendarRsvpStatus {
 
 export type AiChatRole = "user" | "assistant";
 
+export interface AiChatAttachment {
+  assetId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  kind?: string | null;
+}
+
 export interface AiChatMessage {
   role: AiChatRole;
   content: string;
+  attachments?: AiChatAttachment[];
 }
 
 export type AiIntervention =
@@ -170,7 +179,7 @@ export interface AiConversationRecord {
 
 export interface AiConversationDetail {
   conversation: AiConversationRecord;
-  messages: Array<{ id: string; role: string; content: string; createdAt: string }>;
+  messages: Array<{ id: string; role: string; content: string; metadata?: Record<string, unknown> | null; createdAt: string }>;
 }
 
 export type AiChatStreamEvent =
@@ -600,8 +609,8 @@ export const api = {
   calendarRsvpStatuses: (accountId: string, eventId: string) => get<{ responses: CalendarRsvpStatus[] }>(`/product/calendar-rsvps?accountId=${encodeURIComponent(accountId)}&eventId=${encodeURIComponent(eventId)}`),
   calendarRsvpPublic: (token: string) => get<CalendarRsvpPublic>(`/product/calendar-rsvp?token=${encodeURIComponent(token)}`),
   respondCalendarRsvp: (token: string, response: CalendarRsvpResponse) => post<CalendarRsvpPublic>("/product/calendar-rsvp", { token, response }),
-  chat: (accountId: string | null, messages: AiChatMessage[], conversationId?: string | null) => post<AiChatResponse>("/product/chat", { ...chatRuntimeContext(), ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages }, 100_000),
-  streamChat: (accountId: string | null, messages: AiChatMessage[], conversationId: string | null | undefined, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/stream", { ...chatRuntimeContext(), ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages }, onEvent, "/product/chat"),
+  chat: (accountId: string | null, messages: AiChatMessage[], conversationId?: string | null, assetIds?: string[]) => post<AiChatResponse>("/product/chat", { ...chatRuntimeContext(), ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages: messages.map(({ role, content }) => ({ role, content })), ...(assetIds?.length ? { assetIds } : {}) }, 100_000),
+  streamChat: (accountId: string | null, messages: AiChatMessage[], conversationId: string | null | undefined, onEvent: (event: AiChatStreamEvent) => void, assetIds?: string[]) => postEventStream("/product/chat/stream", { ...chatRuntimeContext(), ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages: messages.map(({ role, content }) => ({ role, content })), ...(assetIds?.length ? { assetIds } : {}) }, onEvent, "/product/chat"),
   resumeChat: (accountId: string, conversationId: string) => post<AiChatResponse>("/product/chat/resume", { ...chatRuntimeContext(), accountId, conversationId }, 100_000),
   resumeChatStream: (accountId: string, conversationId: string, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/resume/stream", { ...chatRuntimeContext(), accountId, conversationId }, onEvent, "/product/chat/resume"),
   grantChatPermission: (accountId: string, scope: string) => post<{ grant: { id: string; scope: string } }>("/product/chat/permissions", { accountId, scope }),
