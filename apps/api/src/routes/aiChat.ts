@@ -184,7 +184,7 @@ async function runConversationTurn(input: {
   if (!capabilitySettings.enabled) throw forbidden("GSW AI is disabled in Settings.");
 
   if (input.accountId) {
-    const enhancedFileTools = new Set(["files.analyze", "files.create_artifact", "files.generate_image"]);
+    const enhancedFileTools = new Set(["files.analyze", "files.create_artifact", "files.transform", "files.generate_image"]);
     tools = agentMailRegistry.providerDefinitions((tool) =>
       tool.requiredScopes.every((scope) => isAiScopeGloballyEnabled(capabilitySettings, scope))
       && (Boolean(config.ai.openaiApiKey) || !enhancedFileTools.has(tool.name)),
