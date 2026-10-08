@@ -1,7 +1,7 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { db } from "../db/client.js";
-import { assets, emailAccounts } from "../db/schema.js";
+import { assets, emailAccounts, fileNodes } from "../db/schema.js";
 import type { SendAttachment } from "../engine/types.js";
 import { createAssetFromBuffer, deleteAsset } from "../files/service.js";
 import { getR2Object } from "../files/r2.js";
@@ -123,7 +123,15 @@ async function ingestAttachment(
 }
 
 async function cleanupAssets(rows: Array<{ userId: string; assetId: string }>) {
-  await Promise.all(rows.map((row) => deleteAsset(row.userId, row.assetId).catch(() => undefined)));
+  await Promise.all(rows.map(async (row) => {
+    const [libraryNode] = await db.select({ id: fileNodes.id }).from(fileNodes)
+      .where(and(eq(fileNodes.userId, row.userId), eq(fileNodes.assetId, row.assetId)))
+      .limit(1);
+    // Assets that live in My Files are references, not disposable draft payloads.
+    // Only attachment-only assets should be deleted when the draft/send lifecycle ends.
+    if (libraryNode) return;
+    await deleteAsset(row.userId, row.assetId).catch(() => undefined);
+  }));
 }
 
 export async function replaceDraftAttachments(
@@ -207,7 +215,7 @@ export async function removeDraftAttachment(
       eq(draftAttachmentAssets.draftEngineId, draftEngineId),
       eq(draftAttachmentAssets.position, position),
     ));
-    await deleteAsset(row.userId, row.assetId).catch(() => undefined);
+    await cleanupAssets([row]);
     return;
   }
 
