@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { api, type AiFileCapabilities, type EmailTemplateInput, type EmailTemplateOption, type EmailTemplateTheme, type ProductSettings } from "../api";
 import { requestAccountDeletion } from "../auth";
 import { useAppShell } from "../components/AppShell";
@@ -258,6 +258,22 @@ function TemplateBuilder({
   const [logoChanged, setLogoChanged] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [compactBuilder, setCompactBuilder] = useState(false);
+  const [compactView, setCompactView] = useState<"edit" | "preview">("edit");
+  const builderRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const builder = builderRef.current;
+    if (!builder || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      const width = entry?.contentRect.width ?? builder.clientWidth;
+      const compact = width < 760;
+      setCompactBuilder(compact);
+      if (!compact) setCompactView("edit");
+    });
+    observer.observe(builder);
+    return () => observer.disconnect();
+  }, []);
 
   const updateColor = (field: keyof EmailTemplateTheme, value: string) => setTheme((current) => ({ ...current, [field]: value }));
   const uploadLogo = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -325,10 +341,14 @@ function TemplateBuilder({
     logoFilename,
   };
 
-  return <div className="gsw-settings-card gsw-template-builder">
+  return <div ref={builderRef} className={`gsw-settings-card gsw-template-builder ${compactBuilder ? "is-compact" : ""}`}>
     <div className="gsw-settings-card-head"><div><h2>{mode === "create" ? "Create email template" : "Edit email template"}</h2><p>Keep the structure simple, then let your brand show through the logo and colors.</p></div><button className="gsw-secondary-btn" type="button" onClick={onCancel}>Cancel</button></div>
+    {compactBuilder && <div className="gsw-template-builder-toggle" role="tablist" aria-label="Template builder view">
+      <button type="button" role="tab" aria-selected={compactView === "edit"} className={compactView === "edit" ? "active" : ""} onClick={() => setCompactView("edit")}>Edit</button>
+      <button type="button" role="tab" aria-selected={compactView === "preview"} className={compactView === "preview" ? "active" : ""} onClick={() => setCompactView("preview")}>Preview</button>
+    </div>}
     <div className="gsw-template-builder-grid">
-      <div className="gsw-template-controls">
+      <div className={`gsw-template-controls ${compactBuilder && compactView !== "edit" ? "gsw-template-pane-hidden" : ""}`}>
         <label><strong>Template name</strong><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Customer outreach" maxLength={120} required /></label>
         <label><strong>Logo</strong><span className="gsw-template-logo-picker">{logoDataUrl ? <img src={logoDataUrl} alt="" /> : <span>No logo</span>}<span><label className="gsw-secondary-btn">{logoUploading ? "Uploading…" : "Upload logo"}<input className="gsw-hidden-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={logoUploading} onChange={(event) => void uploadLogo(event)} /></label>{logoDataUrl && <button className="gsw-link-btn" type="button" onClick={() => { setLogoDataUrl(null); setLogoFilename(null); setLogoAssetId(null); setLogoChanged(true); }}>Remove</button>}</span></span><small>PNG, JPEG, WEBP, or GIF. Maximum 1 MB.</small></label>
         <ColorField label="Border" value={theme.borderColor} onChange={(value) => updateColor("borderColor", value)} />
@@ -336,7 +356,7 @@ function TemplateBuilder({
         <ColorField label="Buttons & links" value={theme.buttonColor} onChange={(value) => updateColor("buttonColor", value)} />
         <ColorField label="Background" value={theme.backgroundColor} onChange={(value) => updateColor("backgroundColor", value)} />
       </div>
-      <div className="gsw-template-preview-column"><span className="gsw-eyebrow">Responsive preview</span><TemplatePreview template={previewTemplate} /></div>
+      <div className={`gsw-template-preview-column ${compactBuilder && compactView !== "preview" ? "gsw-template-pane-hidden" : ""}`}><span className="gsw-eyebrow">Responsive preview</span><TemplatePreview template={previewTemplate} /></div>
     </div>
     <button className="gsw-primary-btn" disabled={busy || logoUploading || !name.trim()} onClick={() => void save()}>{busy ? "Saving…" : logoUploading ? "Uploading logo…" : "Save Template"}</button>
   </div>;
