@@ -624,6 +624,15 @@ async function runConversationTurn(input: {
         }
 
         await recordAiToolResult(ledgerCall.id, outcome.result);
+        if (!outcome.result.ok && semanticName.startsWith("mail.")) {
+          // Capture operational metadata only. Never log message bodies or tool arguments.
+          console.warn("[gsw-chat] mailbox tool attempt failed", {
+            tool: semanticName,
+            code: outcome.result.error?.code ?? "unknown",
+            retryable: outcome.result.error?.retryable ?? false,
+            runId: run.id,
+          });
+        }
         toolActivity.push({ name: semanticName, ok: outcome.result.ok });
 
         if (outcome.result.ok && semanticName === "capabilities.search" && outcome.result.data && typeof outcome.result.data === "object") {
