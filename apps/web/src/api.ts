@@ -212,6 +212,7 @@ export interface EmailTemplateOption {
   description?: string;
   logoUrl?: string | null;
   logoFilename?: string | null;
+  logoAssetId?: string | null;
   theme: EmailTemplateTheme | null;
 }
 
@@ -224,6 +225,7 @@ export interface EmailTemplateInput extends EmailTemplateTheme {
   name: string;
   logoDataUrl?: string | null;
   logoFilename?: string | null;
+  logoAssetId?: string | null;
 }
 
 
@@ -532,6 +534,7 @@ export const api = {
   cancelSend: (sendId: string) => post<{ status: string }>(`/mail/sends/${sendId}/cancel`),
   retrySend: (sendId: string, accountId: string) => post<{ status: string }>(`/mail/sends/${sendId}/retry`, { accountId }),
 
+  fileStorageStatus: () => get<{ configured: boolean; reachable: boolean }>("/product/files/storage-status"),
   fileUsage: () => get<StorageUsage>("/product/files/usage"),
   files: (parentId?: string | null) => get<{ files: FileNode[] }>(`/product/files${parentId ? `?parentId=${encodeURIComponent(parentId)}` : ""}`).then((r) => r.files),
   createFileFolder: (name: string, parentId?: string | null) => post<{ folder: FileNode }>("/product/files/folders", { name, parentId: parentId ?? null }),
