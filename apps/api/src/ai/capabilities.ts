@@ -9,6 +9,7 @@ export interface AiCapabilitySettings {
   emailSend: boolean;
   scheduledWork: boolean;
   campaignLaunch: boolean;
+  fileAccess: boolean;
 }
 
 export const defaultAiCapabilities: AiCapabilitySettings = {
@@ -18,6 +19,7 @@ export const defaultAiCapabilities: AiCapabilitySettings = {
   emailSend: true,
   scheduledWork: true,
   campaignLaunch: true,
+  fileAccess: true,
 };
 
 export async function getAiCapabilitySettings(userId: string): Promise<AiCapabilitySettings> {
@@ -30,6 +32,7 @@ export async function getAiCapabilitySettings(userId: string): Promise<AiCapabil
     emailSend: ai.emailSend !== false,
     scheduledWork: ai.scheduledWork !== false,
     campaignLaunch: ai.campaignLaunch !== false,
+    fileAccess: ai.fileAccess !== false,
   };
 }
 
@@ -40,5 +43,6 @@ export function isAiScopeGloballyEnabled(settings: AiCapabilitySettings, scope: 
   if (scope === "mail.send") return settings.emailSend;
   if (scope === "automations.read" || scope === "automations.write") return settings.scheduledWork;
   if (scope === "campaign.read" || scope === "campaign.write" || scope === "campaign.send") return settings.campaignLaunch;
+  if (scope === "files.read" || scope === "files.write") return settings.fileAccess;
   return true;
 }
