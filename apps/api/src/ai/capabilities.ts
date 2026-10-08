@@ -2,8 +2,11 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { userSettings } from "../db/schema.js";
 
+export type AiModelProvider = "qwen" | "openai" | "claude";
+
 export interface AiCapabilitySettings {
   enabled: boolean;
+  modelProvider: AiModelProvider;
   mailRead: boolean;
   draftMutation: boolean;
   emailSend: boolean;
@@ -15,6 +18,7 @@ export interface AiCapabilitySettings {
 
 export const defaultAiCapabilities: AiCapabilitySettings = {
   enabled: true,
+  modelProvider: "qwen",
   mailRead: true,
   draftMutation: true,
   emailSend: true,
@@ -27,8 +31,13 @@ export const defaultAiCapabilities: AiCapabilitySettings = {
 export async function getAiCapabilitySettings(userId: string): Promise<AiCapabilitySettings> {
   const [settings] = await db.select({ ai: userSettings.ai }).from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
   const ai = settings?.ai ?? {};
+  const requestedProvider = ai.modelProvider;
+  const modelProvider: AiModelProvider = requestedProvider === "openai" || requestedProvider === "claude" || requestedProvider === "qwen"
+    ? requestedProvider
+    : "qwen";
   return {
     enabled: ai.enabled !== false,
+    modelProvider,
     mailRead: ai.mailRead !== false,
     draftMutation: ai.draftMutation !== false,
     emailSend: ai.emailSend !== false,
