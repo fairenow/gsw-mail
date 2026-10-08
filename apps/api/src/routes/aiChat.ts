@@ -340,6 +340,7 @@ async function prepareNewConversation(input: {
   timeZone?: string | undefined;
   localDateTime?: string | undefined;
   messages: Array<{ role: "user" | "assistant"; content: string }>;
+  assetIds?: string[] | undefined;
 }) {
   const latestUserMessage = [...input.messages].reverse().find((message) => message.role === "user");
   if (!latestUserMessage) throw new Error("chat request requires a user message");
@@ -351,11 +352,22 @@ async function prepareNewConversation(input: {
     firstMessage: latestUserMessage.content,
   });
 
+  const attachedAssets = input.assetIds?.length
+    ? await Promise.all(input.assetIds.map((assetId) => getAssetForUser(input.userId, assetId)))
+    : [];
+  const attachmentSummaries = attachedAssets.map((asset) => ({
+    assetId: asset.id,
+    filename: asset.displayName || asset.filename,
+    mimeType: asset.mimeType,
+    sizeBytes: Number(asset.sizeBytes),
+    kind: asset.kind,
+  }));
+
   await appendAiMessage({
     conversationId: conversation.id,
     role: "user",
     content: latestUserMessage.content,
-    metadata: { accountId: input.accountId ?? null },
+    metadata: { accountId: input.accountId ?? null, attachments: attachmentSummaries },
   });
 
   const runtimeContext = [
@@ -365,14 +377,23 @@ async function prepareNewConversation(input: {
     "Use this context when interpreting relative dates or scheduling requests. Do not mention this hidden runtime context unless it is directly relevant.",
   ].join("\n");
 
+  const providerMessages = input.messages.map((message, index) => {
+    const isLatestUser = index === input.messages.length - 1 && message.role === "user";
+    if (!isLatestUser || attachmentSummaries.length === 0) return { role: message.role, content: message.content };
+    const attachmentContext = attachmentSummaries
+      .map((asset) => `- ${asset.filename} | assetId=${asset.assetId} | ${asset.mimeType} | ${asset.sizeBytes} bytes`)
+      .join("\n");
+    return {
+      role: message.role,
+      content: `${message.content}\n\n[Attached GSW files]\n${attachmentContext}\nUse files.read when you need file metadata or available text content.`,
+    };
+  });
+
   return {
     conversation,
     providerMessages: [
       { role: "user" as const, content: runtimeContext },
-      ...input.messages.map((message) => ({
-        role: message.role,
-        content: message.content,
-      })),
+      ...providerMessages,
     ] as AiProviderMessage[],
   };
 }
