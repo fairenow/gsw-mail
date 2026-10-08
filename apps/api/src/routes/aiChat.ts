@@ -195,6 +195,12 @@ const toolLabel = (toolName: string): string => {
     case "workers.delegate": return "Delegating a focused investigation";
     case "workers.parallel": return "Running parallel investigations";
     case "workers.review": return "Reviewing prepared work";
+    case "browser.search": return "Searching the web";
+    case "browser.open": return "Opening the webpage";
+    case "browser.read": return "Reading the webpage";
+    case "browser.screenshot": return "Capturing the webpage";
+    case "browser.click": return "Navigating the webpage";
+    case "browser.type": return "Filling the webpage";
     default: return "Working with your mailbox";
   }
 };
@@ -245,6 +251,7 @@ async function runConversationTurn(input: {
       capabilitySettings,
       hasOpenAi: Boolean(config.ai.openaiApiKey),
       hasImageProvider: Boolean(config.ai.huggingFaceApiToken || config.ai.openaiApiKey),
+      hasBrowserProvider: Boolean(config.browser.baseUrl && config.browser.token),
     });
     tools = toolSelection.tools;
     toolContext = {
@@ -633,7 +640,8 @@ async function runConversationTurn(input: {
               names.has(tool.name)
               && tool.requiredScopes.every((scope) => isAiScopeGloballyEnabled(capabilitySettings, scope))
               && (Boolean(config.ai.openaiApiKey) || tool.name !== "files.transform")
-              && (tool.name !== "files.generate_image" || Boolean(config.ai.huggingFaceApiToken || config.ai.openaiApiKey)),
+              && (tool.name !== "files.generate_image" || Boolean(config.ai.huggingFaceApiToken || config.ai.openaiApiKey))
+              && (!tool.name.startsWith("browser.") || Boolean(config.browser.baseUrl && config.browser.token)),
             );
             const existing = new Set((tools ?? []).map((tool) => tool.function.name));
             tools = [...(tools ?? []), ...expanded.filter((tool) => !existing.has(tool.function.name))];
