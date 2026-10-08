@@ -117,6 +117,7 @@ type ChatStreamEmitter = (event: ChatStreamStatus) => void;
 
 const toolLabel = (toolName: string): string => {
   switch (toolName) {
+    case "mail.activity": return "Reviewing email activity";
     case "mail.search": return "Searching your mailbox";
     case "mail.read": return "Reading the matching email";
     case "mail.read_thread": return "Reading the conversation";
@@ -189,10 +190,10 @@ async function runConversationTurn(input: {
   if (!capabilitySettings.enabled) throw forbidden("GSW AI is disabled in Settings.");
 
   if (input.accountId) {
-    const enhancedFileTools = new Set(["files.analyze", "files.create_artifact", "files.transform", "files.generate_image"]);
+    const openAiOnlyTools = new Set(["files.create_artifact", "files.transform", "files.generate_image"]);
     tools = agentMailRegistry.providerDefinitions((tool) =>
       tool.requiredScopes.every((scope) => isAiScopeGloballyEnabled(capabilitySettings, scope))
-      && (Boolean(config.ai.openaiApiKey) || !enhancedFileTools.has(tool.name)),
+      && (Boolean(config.ai.openaiApiKey) || !openAiOnlyTools.has(tool.name)),
     );
     toolContext = {
       userId: input.userId,
@@ -413,7 +414,7 @@ async function prepareNewConversation(input: {
   }));
 
   const directAttachmentAnalyses = new Map<string, string>();
-  if (config.ai.openaiApiKey && attachedAssets.length > 0 && shouldPreAnalyzeAttachments(latestUserMessage.content)) {
+  if (attachedAssets.length > 0 && shouldPreAnalyzeAttachments(latestUserMessage.content)) {
     for (const asset of attachedAssets.slice(0, 5)) {
       try {
         const object = await getR2Object(asset.r2Key);
@@ -444,7 +445,7 @@ async function prepareNewConversation(input: {
     "GSW runtime context for this turn:",
     `Time zone: ${input.timeZone ?? "unknown"}`,
     `User local date/time: ${input.localDateTime ?? "unknown"}`,
-    `Deep document/image/audio intelligence: ${config.ai.openaiApiKey ? "available" : "not configured"}`,
+    "GSW file tools can extract provider-neutral document content for the selected AI model. Some advanced media/artifact operations may require an additional configured service.",
     `Native artifact and image generation: ${config.ai.openaiApiKey ? "available" : "not configured"}`,
     "Use this context when interpreting relative dates, scheduling requests, or file capabilities. Do not mention this hidden runtime context unless it is directly relevant.",
   ].join("\n");
