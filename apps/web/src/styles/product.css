@@ -617,3 +617,99 @@
 @media (max-width: 760px) {
   .gsw-ai-status-card { grid-template-columns: 1fr; }
 }
+
+
+/* Files workspace inside the shared operational pane */
+.gsw-files-page-embedded {
+  max-width: none;
+  margin: 0;
+  padding: 26px 28px 34px;
+}
+.gsw-embedded-files {
+  height: 100%;
+  overflow: auto;
+}
+.gsw-files-page-embedded .gsw-page-heading {
+  margin-bottom: 18px;
+}
+.gsw-files-page-embedded .gsw-files-layout {
+  grid-template-columns: 156px minmax(0, 1fr);
+  gap: 18px;
+}
+.gsw-files-page-embedded .gsw-files-browser {
+  min-height: 0;
+}
+.gsw-new-folder-wrap {
+  position: relative;
+}
+.gsw-new-folder-popover {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 280px;
+  padding: 14px;
+  border: 1px solid var(--gsw-border);
+  border-radius: 14px;
+  background: var(--gsw-surface);
+  box-shadow: 0 14px 36px rgba(45, 41, 35, .14);
+}
+.gsw-new-folder-popover label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--gsw-text-heading);
+  font-size: 12px;
+  font-weight: 700;
+}
+.gsw-new-folder-popover input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 11px;
+  border: 1px solid var(--gsw-border);
+  border-radius: 10px;
+  outline: 0;
+  background: var(--gsw-surface);
+  color: var(--gsw-text-body);
+  font: inherit;
+  font-size: 13px;
+}
+.gsw-new-folder-popover input:focus {
+  border-color: var(--gsw-accent);
+  box-shadow: 0 0 0 3px var(--gsw-accent-soft);
+}
+.gsw-new-folder-popover > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+.gsw-new-folder-popover .gsw-primary-btn {
+  min-height: 34px;
+  padding: 7px 13px;
+}
+.gsw-new-folder-popover .gsw-text-btn {
+  padding: 7px 10px;
+  border-radius: 9px;
+  color: var(--gsw-text-muted);
+  font-size: 12px;
+}
+.gsw-new-folder-popover .gsw-text-btn:hover {
+  background: var(--gsw-bg);
+  color: var(--gsw-text-heading);
+}
+@media (max-width: 820px) {
+  .gsw-files-page-embedded {
+    padding: 18px 16px 28px;
+  }
+  .gsw-files-page-embedded .gsw-files-layout {
+    grid-template-columns: 1fr;
+  }
+  .gsw-new-folder-popover {
+    position: fixed;
+    top: 50%;
+    right: auto;
+    left: 50%;
+    width: min(320px, calc(100vw - 32px));
+    transform: translate(-50%, -50%);
+  }
+}
