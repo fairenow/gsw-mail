@@ -1,9 +1,11 @@
 import { config } from "../config.js";
 import { HttpError } from "../lib/errors.js";
 
-type OpenAiOutputItem =
-  | { type: "message"; content?: Array<{ type?: string; text?: string }> }
-  | Record<string, unknown>;
+type OpenAiOutputItem = {
+  type?: string;
+  content?: Array<{ type?: string; text?: string }>;
+  [key: string]: unknown;
+};
 
 type OpenAiResponse = {
   output?: OpenAiOutputItem[];
