@@ -586,3 +586,34 @@
   .gsw-file-updated { display: none; }
   .gsw-file-row { grid-template-columns: minmax(0, 1fr) auto auto; }
 }
+
+
+.gsw-ai-status-card {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 4px;
+  border: 1px solid var(--gsw-border-soft);
+  border-radius: 12px;
+  background: var(--gsw-bg);
+}
+.gsw-ai-status-card > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.gsw-ai-status-card strong {
+  color: var(--gsw-text-heading);
+  font-size: 11px;
+}
+.gsw-ai-status-card span {
+  overflow: hidden;
+  color: var(--gsw-text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .gsw-ai-status-card { grid-template-columns: 1fr; }
+}
