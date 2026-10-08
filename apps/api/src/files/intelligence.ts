@@ -64,7 +64,12 @@ async function responseAnalysis(input: {
   const dataUrl = `data:${input.mimeType || "application/octet-stream"};base64,${base64}`;
   const filePart = input.image
     ? { type: "input_image", image_url: dataUrl, detail: "auto" }
-    : { type: "input_file", filename: input.filename, file_data: base64 };
+    : {
+        type: "input_file",
+        filename: input.filename,
+        file_data: dataUrl,
+        ...(input.mimeType === "application/pdf" || /\.pdf$/i.test(input.filename) ? { detail: "auto" } : {}),
+      };
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), Math.max(config.ai.timeoutMs, 90_000));
