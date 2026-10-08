@@ -261,13 +261,13 @@ const pdfBaseStyles = `
 `;
 
 export function composePdfHtml(content: string): string {
-  const isHtml = /<\\/?(?:html|body|section|div|header|main|article|h[1-6]|p|table|ul|ol|li)\\b/i.test(content);
+  const isHtml = /<\/?(?:html|body|section|div|header|main|article|h[1-6]|p|table|ul|ol|li)\b/i.test(content);
   const body = isHtml ? content : simpleMarkdownToHtml(content);
-  const hasDocument = /<!doctype html|<html\\b/i.test(body);
+  const hasDocument = /<!doctype html|<html\b/i.test(body);
   if (hasDocument) {
     // Preserve the model's full page composition, including its head/CSS.
     // Append print-safe defaults rather than putting a second HTML document inside it.
-    return body.replace(/<\\/head>/i, `<style>${pdfBaseStyles}</style></head>`);
+    return body.replace(/<head([^>]*)>/i, `<head$1><style>${pdfBaseStyles}</style>`);
   }
   return `<!doctype html><html><head><meta charset="utf-8"><style>${pdfBaseStyles}</style></head><body><main class="gsw-page">${body}</main></body></html>`;
 }
