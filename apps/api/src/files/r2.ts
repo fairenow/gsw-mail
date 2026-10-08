@@ -104,3 +104,23 @@ export async function verifyR2Connection(): Promise<{ configured: boolean; reach
   await headR2Object("_gsw/healthcheck/nonexistent");
   return { configured: true, reachable: true };
 }
+
+
+export async function putR2Object(key: string, content: Buffer, contentType = "application/octet-stream"): Promise<{ etag: string | null }> {
+  const response = await fetch(createR2PresignedUrl({ method: "PUT", key, expiresSeconds: 300 }), {
+    method: "PUT",
+    headers: { "content-type": contentType },
+    body: content,
+  });
+  if (!response.ok) throw new Error(`R2 PUT failed with status ${response.status}`);
+  return { etag: response.headers.get("etag")?.replace(/^"|"$/g, "") ?? null };
+}
+
+export async function getR2Object(key: string): Promise<{ content: Buffer; contentType: string | null }> {
+  const response = await fetch(createR2PresignedUrl({ method: "GET", key, expiresSeconds: 300 }));
+  if (!response.ok) throw new Error(`R2 GET failed with status ${response.status}`);
+  return {
+    content: Buffer.from(await response.arrayBuffer()),
+    contentType: response.headers.get("content-type"),
+  };
+}
