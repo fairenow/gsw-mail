@@ -1,6 +1,7 @@
 import { config } from "../config.js";
 import { HttpError } from "../lib/errors.js";
 import { detectFileType } from "./fileTypes.js";
+import { extractPdfText } from "./localExtraction.js";
 
 type OpenAiOutputItem = {
   type?: string;
@@ -167,41 +168,31 @@ async function textAnalysis(input: {
   bytes: Buffer;
   instruction: string;
 }) {
-  const { apiKey, baseUrl, model } = ensureOpenAi();
-  const text = input.bytes.toString("utf8").slice(0, 120_000);
-  const response = await fetch(`${baseUrl}/responses`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      input: [{
-        role: "user",
-        content: [{
-          type: "input_text",
-          text: [
-            `Filename: ${input.filename}`,
-            `MIME type: ${input.mimeType}`,
-            input.instruction,
-            "",
-            "[FILE CONTENT]",
-            text,
-          ].join("\n"),
-        }],
-      }],
-    }),
-  });
-  const body = await response.json().catch(() => ({})) as OpenAiResponse;
-  if (!response.ok) {
-    throw new HttpError(response.status === 429 ? 429 : 502, body.error?.message?.trim() || `OpenAI text analysis returned HTTP ${response.status}`);
-  }
-  const analyzed = outputText(body);
-  if (!analyzed) throw new HttpError(502, "The text analysis service returned an empty response.");
-  return { text: analyzed, model, mode: "text" as const };
+  void input.instruction;
+  const text = input.bytes.toString("utf8").slice(0, 120_000).trim();
+  if (!text) throw new HttpError(422, "No readable text was found in this file.");
+  return { text, model: "gsw-local-text-extractor", mode: "text" as const };
 }
 
+async function pdfTextAnalysis(input: {
+  filename: string;
+  mimeType: string;
+  bytes: Buffer;
+  instruction: string;
+}) {
+  void input.filename;
+  void input.mimeType;
+  void input.instruction;
+  try {
+    const text = extractPdfText(input.bytes, 120_000);
+    return { text, model: "gsw-local-pdf-extractor", mode: "document" as const };
+  } catch (error) {
+    if (config.ai.openaiApiKey) {
+      return responseAnalysis({ ...input, image: false });
+    }
+    throw new HttpError(422, error instanceof Error ? error.message : "The PDF could not be read.");
+  }
+}
 async function sandboxAnalysis(input: {
   filename: string;
   mimeType: string;
@@ -329,7 +320,9 @@ export async function analyzeStoredFile(input: {
     case "vision":
       return responseAnalysis({ ...input, image: true });
     case "openai_file":
-      return responseAnalysis({ ...input, image: false });
+      return detected.category === "pdf"
+        ? pdfTextAnalysis(input)
+        : responseAnalysis({ ...input, image: false });
     case "code_interpreter":
       return sandboxAnalysis({ ...input, category: detected.category });
     case "transcription":
