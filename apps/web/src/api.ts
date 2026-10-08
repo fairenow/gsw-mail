@@ -618,7 +618,6 @@ export const api = {
   resumeChatStream: (accountId: string, conversationId: string, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/resume/stream", { ...chatRuntimeContext(), accountId, conversationId }, onEvent, "/product/chat/resume"),
   grantChatPermission: (accountId: string, scope: string) => post<{ grant: { id: string; scope: string } }>("/product/chat/permissions", { accountId, scope }),
   decideChatConfirmation: (confirmationId: string, decision: "approved" | "rejected") => post<{ confirmation: { id: string; status: string }; execution: { conversationId: string; message: AiChatMessage; toolResult?: unknown } }>(`/product/chat/confirmations/${encodeURIComponent(confirmationId)}`, { decision }),
-  chatFileCapabilities: () => get<AiFileCapabilities>("/product/chat/file-capabilities"),
   chatConversations: () => get<{ conversations: AiConversationRecord[] }>("/product/chat/conversations?limit=50"),
   chatConversation: (id: string) => get<AiConversationDetail>(`/product/chat/conversations/${encodeURIComponent(id)}`),
   updateChatConversation: (id: string, body: { title?: string; status?: "active" | "archived" }) => patch<{ conversation: AiConversationRecord }>(`/product/chat/conversations/${encodeURIComponent(id)}`, body),
