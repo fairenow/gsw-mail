@@ -1,0 +1,1 @@
+ALTER TABLE "email_templates" ADD COLUMN IF NOT EXISTS "logo_asset_id" uuid REFERENCES "assets"("id") ON DELETE SET NULL;
