@@ -16,7 +16,7 @@ const defaultTheme: EmailTemplateTheme = {
 };
 
 export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) {
-  const { configureTopBar } = useAppShell();
+  const { configureTopBar, setProfileImageUrl } = useAppShell();
   const [section, setSection] = useState<Section>("General");
   const [settings, setSettings] = useState<ProductSettings | null>(null);
   const [signature, setSignature] = useState<ProductSettings["signature"] | null>(null);
@@ -88,6 +88,8 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
       };
       const saved = await api.updateSettings({ general });
       setSettings((current) => current ? { ...current, ...saved } : current);
+      const nextUrl = typeof saved.general?.profileImageUrl === "string" ? saved.general.profileImageUrl : "";
+      setProfileImageUrl(nextUrl);
       setNotice("Profile image saved");
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err));
@@ -114,7 +116,11 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
     <section className="gsw-settings-content"><div className="gsw-page-heading"><div><p className="gsw-eyebrow">Preferences</p><h1>{section}</h1><p>{section === "Signature" ? "A reusable, editable identity for every message." : section === "Templates" ? "Create a reusable email look that stays consistent across GSW Mail and AI-generated drafts." : "Keep the parts of GSW Mail that make communication feel like yours."}</p></div>{notice && <span className="gsw-save-notice">{notice}</span>}</div>
       {section === "General" && <div className="gsw-settings-card"><label>Timezone<select value={String(settings.general.timezone ?? "America/Detroit")} onChange={(event) => setSettings({ ...settings, general: { ...settings.general, timezone: event.target.value } })}><option>America/Detroit</option><option>America/New_York</option><option>America/Chicago</option><option>UTC</option></select></label><label>Language<select value={String(settings.general.language ?? "en-US")} onChange={(event) => setSettings({ ...settings, general: { ...settings.general, language: event.target.value } })}><option value="en-US">English (US)</option></select></label><label><strong>Profile image</strong><span className="gsw-template-logo-picker">{settings.general.profileImageUrl ? <img src={String(settings.general.profileImageUrl)} alt="Profile" /> : <span>Initials</span>}<span><label className="gsw-secondary-btn">{profileUploading ? "Uploading…" : "Upload image"}<input className="gsw-hidden-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={profileUploading} onChange={(event) => void uploadProfileImage(event)} /></label>{Boolean(settings.general.profileImageAssetId) && <button className="gsw-link-btn" type="button" disabled={profileUploading} onClick={() => {
         const general = { ...settings.general, profileImageAssetId: null, profileImageUrl: "" };
-        void api.updateSettings({ general }).then((saved) => { setSettings((current) => current ? { ...current, ...saved } : current); setNotice("Profile image removed"); }).catch((err) => setNotice(err instanceof Error ? err.message : String(err)));
+        void api.updateSettings({ general }).then((saved) => {
+          setSettings((current) => current ? { ...current, ...saved } : current);
+          setProfileImageUrl("");
+          setNotice("Profile image removed");
+        }).catch((err) => setNotice(err instanceof Error ? err.message : String(err)));
       }}>Remove</button>}</span></span><small>Stored privately in GSW Files. PNG, JPEG, WEBP, or GIF. Maximum 10 MB.</small></label><button className="gsw-primary-btn" onClick={() => void saveSettings({ general: settings.general })}>Save general settings</button></div>}
       {section === "Signature" && <div className="gsw-settings-card"><div className="gsw-settings-card-head"><div><h2>Default signature</h2><p>Paste from Gmail, Outlook, Word, a website, or another editor. Unsafe scripts and links are removed.</p></div><label className="gsw-switch"><input type="checkbox" checked={signature.enabled} onChange={(event) => setSignature({ ...signature, enabled: event.target.checked })} /><span>Enabled</span></label></div><RichTextEditor value={signature.signatureHtml} onChange={(value) => setSignature({ ...signature, signatureHtml: value })} placeholder="Write your signature" minHeight={190} /><div className="gsw-option-grid"><label><input type="checkbox" checked={signature.onNew} onChange={(event) => setSignature({ ...signature, onNew: event.target.checked })} /> New messages</label><label><input type="checkbox" checked={signature.onReply} onChange={(event) => setSignature({ ...signature, onReply: event.target.checked })} /> Replies</label><label><input type="checkbox" checked={signature.onForward} onChange={(event) => setSignature({ ...signature, onForward: event.target.checked })} /> Forwards</label><label>Placement<select value={signature.position} onChange={(event) => setSignature({ ...signature, position: event.target.value as ProductSettings["signature"]["position"] })}><option value="beforeQuotedText">Before quoted history</option><option value="afterQuotedText">After quoted history</option></select></label></div><p className="gsw-muted">Plaintext preview: {signature.signatureText || "Your signature text will appear here."}</p><button className="gsw-primary-btn" onClick={() => void saveSignature()}>Save signature</button></div>}
       {section === "Compose" && <div className="gsw-settings-card"><h2>Compose preferences</h2><label className="gsw-setting-row"><span><strong>Rich text by default</strong><small>Keep formatting when pasting into new messages.</small></span><input type="checkbox" checked={settings.compose.defaultFormat !== "plain"} onChange={(event) => setSettings({ ...settings, compose: { ...settings.compose, defaultFormat: event.target.checked ? "rich" : "plain" } })} /></label><button className="gsw-primary-btn" onClick={() => void saveSettings({ compose: settings.compose })}>Save compose settings</button></div>}
