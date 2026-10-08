@@ -170,9 +170,13 @@ async function runArtifactResponse(input: {
       throw new HttpError(502, `Could not retrieve generated artifact: HTTP ${fileResponse.status}`);
     }
 
+    const bytes = Buffer.from(await fileResponse.arrayBuffer());
+    if (/\.pdf$/i.test(target) && (!bytes.subarray(0, 5).equals(Buffer.from("%PDF-")) || bytes.length < 500)) {
+      throw new HttpError(502, "Artifact service returned an invalid PDF, so nothing was saved.");
+    }
     return {
       filename: target,
-      bytes: Buffer.from(await fileResponse.arrayBuffer()),
+      bytes,
       mimeType: artifactMimeType(target),
       model,
     };
@@ -306,6 +310,9 @@ export async function generateArtifactFile(input: {
 }) {
   const target = input.filename.trim();
   if (/\.pdf$/i.test(target)) {
+    if (!input.content?.trim() && !config.ai.openaiApiKey) {
+      throw new HttpError(503, "Designed PDF generation requires an enabled artifact service. No PDF was saved: design instructions are not document content.");
+    }
     // Design-first PDFs use the code-interpreter artifact service, which can
     // compose real vector graphics, typography, layouts, tables and embedded
     // images. Local LibreOffice is retained only when that service is absent.
@@ -332,7 +339,7 @@ export async function generateArtifactFile(input: {
     }
     return generateLocalPdf({
       filename: target,
-      content: input.content?.trim() || input.instruction,
+      content: input.content!.trim(),
       instruction: input.instruction,
     });
   }
