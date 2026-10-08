@@ -8,7 +8,7 @@ import { analyzeStoredFile } from "../../files/intelligence.js";
 import { generateArtifactFile, transformArtifactFile } from "../../files/artifacts.js";
 import { generateImage } from "../../files/imageGeneration.js";
 import { createAssetFromBuffer } from "../../files/service.js";
-import { getOrCreateFileWorkspace, touchFileWorkspace } from "../../files/workspaces.js";
+import { getOrCreateFileWorkspace } from "../../files/workspaces.js";
 import { attachExistingAssetToDraft } from "../../mail/draftAttachmentStore.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
 
@@ -438,10 +438,12 @@ export const filesTransformTool: AgentToolDefinition = {
         });
       }
 
+      const workspace = ctx.conversationId ? await getOrCreateFileWorkspace(ctx.userId, ctx.conversationId) : null;
       const generated = await transformArtifactFile({
         filename: input.filename,
         instruction: input.instruction,
         sources: sourceRows,
+        ...(workspace ? { containerId: workspace.externalContainerId } : {}),
       });
       const asset = await createAssetFromBuffer({
         userId: ctx.userId,
