@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { runReadOnlyWorker } from "../workerService.js";
+import { runReviewer } from "../reviewerService.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
 
 const success = <T>(ctx: AgentExecutionContext, toolCallId: string, startedAt: string, data: T): AgentToolResult<T> => ({
@@ -103,4 +104,40 @@ export const workersParallelTool: AgentToolDefinition = {
   },
 };
 
-export const workerTools: AgentToolDefinition[] = [workerDelegateTool, workersParallelTool];
+export const workerReviewTool: AgentToolDefinition = {
+  name: "workers.review",
+  description: "Ask the bounded GSW Reviewer to quality-check prepared work before it is sent, launched, scheduled, or presented for approval. The reviewer cannot take actions.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      workType: { type: "string", description: "Short label such as email draft, campaign, meeting, research summary, or document." },
+      content: { type: "string", description: "The prepared work to review." },
+      context: { type: "string", description: "Optional relevant facts or constraints the reviewer should check against." },
+    },
+    required: ["workType", "content"],
+    additionalProperties: false,
+  },
+  requiredScopes: [],
+  risk: "read",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = z.object({
+        workType: z.string().trim().min(1).max(120),
+        content: z.string().trim().min(1).max(24_000),
+        context: z.string().trim().max(12_000).optional(),
+      }).parse(rawInput);
+      const result = await runReviewer({
+        userId: ctx.userId,
+        workType: input.workType,
+        content: input.content,
+        ...(input.context !== undefined ? { context: input.context } : {}),
+      });
+      return success(ctx, toolCallId, startedAt, result);
+    } catch (error) {
+      return failure(ctx, toolCallId, startedAt, error);
+    }
+  },
+};
+
+export const workerTools: AgentToolDefinition[] = [workerDelegateTool, workersParallelTool, workerReviewTool];
