@@ -94,19 +94,13 @@ async function responseAnalysis(input: {
 
   let uploadedFileId: string | null = null;
   try {
-    const filePart = input.image
-      ? {
-          type: "input_image",
-          image_url: `data:${input.mimeType || "application/octet-stream"};base64,${input.bytes.toString("base64")}`,
-          detail: "auto",
-        }
-      : (() => {
-          throw new Error("DOCUMENT_FILE_ID_PENDING");
-        })();
-
     let contentFilePart: Record<string, unknown>;
     if (input.image) {
-      contentFilePart = filePart;
+      contentFilePart = {
+        type: "input_image",
+        image_url: `data:${input.mimeType || "application/octet-stream"};base64,${input.bytes.toString("base64")}`,
+        detail: "auto",
+      };
     } else {
       uploadedFileId = await uploadInputFile(input);
       contentFilePart = {
