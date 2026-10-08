@@ -7,6 +7,7 @@ export type DraftAttachmentMeta = {
   size: number;
   contentDisposition?: string;
   contentId?: string;
+  assetId?: string;
 };
 
 const parse = async <T,>(response: Response): Promise<T> => {
@@ -30,6 +31,16 @@ export async function appendDraftAttachments(accountId: string, draftId: string,
     credentials: "include",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ accountId, attachments }),
+  });
+  return parse<{ attachments: DraftAttachmentMeta[] }>(response).then((result) => result.attachments);
+}
+
+export async function attachStoredFilesToDraft(accountId: string, draftId: string, assetIds: string[]): Promise<DraftAttachmentMeta[]> {
+  const response = await fetch(`${path(draftId)}/from-files`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ accountId, assetIds }),
   });
   return parse<{ attachments: DraftAttachmentMeta[] }>(response).then((result) => result.attachments);
 }
