@@ -12,7 +12,8 @@ export function validatePrintableHtml(html: string): void {
     || /\bon[a-z]+\s*=/i.test(html)
     || /@import\b/i.test(html)
     || /url\s*\(/i.test(html)
-    || /\b(?:href|src|action)\s*=/i.test(html)) {
+    || /\b(?:href|action)\s*=/i.test(html)
+    || /\bsrc\s*=\s*["\x27]?(?!data:image\/(?:png|jpeg|gif|webp);base64,)/i.test(html)) {
     throw new Error("PDF HTML contains unsupported active or external content");
   }
 }
