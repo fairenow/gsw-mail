@@ -184,12 +184,9 @@ async function pdfTextAnalysis(input: {
   void input.mimeType;
   void input.instruction;
   try {
-    const text = extractPdfText(input.bytes, 120_000);
+    const text = await extractPdfText(input.bytes, 120_000);
     return { text, model: "gsw-local-pdf-extractor", mode: "document" as const };
   } catch (error) {
-    if (config.ai.openaiApiKey) {
-      return responseAnalysis({ ...input, image: false });
-    }
     throw new HttpError(422, error instanceof Error ? error.message : "The PDF could not be read.");
   }
 }
