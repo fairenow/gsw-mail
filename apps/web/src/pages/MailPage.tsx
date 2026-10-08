@@ -15,6 +15,7 @@ import { browserTimeZone, scheduleDraft, type ScheduleDraftInput } from "../lib/
 import { CalendarPage } from "./CalendarPage";
 import { ContactsPage } from "./ContactsPage";
 import { SettingsPage } from "./SettingsPage";
+import { FilesPage } from "./FilesPage";
 import { ChatPanel } from "../components/ai/ChatPanel";
 
 type MobileView = "messages" | "reader";
@@ -130,11 +131,6 @@ export function MailPage() {
   const refresh = useCallback(() => { if (account) { void loadFolder(account.id, folder); void loadFolderCounts(account.id); } }, [account, folder, loadFolder, loadFolderCounts]);
   const openWorkspaceSection = useCallback((section: "contacts" | "calendar" | "settings" | "files" | "chat") => {
     setFoldersOpen(false);
-    if (section === "files") {
-      window.history.pushState({}, "", "/files");
-      window.dispatchEvent(new PopStateEvent("popstate"));
-      return;
-    }
     setWorkspaceSection(section);
     setOpen(null);
     setMobileView("reader");
@@ -408,6 +404,7 @@ export function MailPage() {
         <div className="gsw-operational-surface" hidden={workspaceSection !== "contacts"}><ContactsPage embedded /></div>
         <div className="gsw-operational-surface" hidden={workspaceSection !== "calendar"}><CalendarPage embedded active={workspaceSection === "calendar"} /></div>
         <div className="gsw-operational-surface" hidden={workspaceSection !== "settings"}><SettingsPage embedded /></div>
+        <div className="gsw-operational-surface" hidden={workspaceSection !== "files"}><FilesPage embedded /></div>
         <div className="gsw-operational-surface" hidden={workspaceSection !== "chat"}><ChatPanel /></div>
       </section>
     </main>
