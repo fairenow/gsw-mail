@@ -13,7 +13,12 @@ CMD ["npm", "run", "db:migrate"]
 
 FROM node:22-bookworm-slim AS runtime
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends poppler-utils \
+  && apt-get install -y --no-install-recommends \
+    poppler-utils \
+    libreoffice-core libreoffice-writer libreoffice-calc libreoffice-impress \
+    python3 python3-openpyxl \
+    imagemagick tesseract-ocr \
+    ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 WORKDIR /app
