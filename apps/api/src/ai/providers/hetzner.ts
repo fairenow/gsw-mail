@@ -49,7 +49,7 @@ async function attempt(input: AiProviderRunInput) {
         messages: [{ role: "system", content: gswSystemPrompt }, ...input.messages],
         ...(input.tools?.length ? { tools: input.tools, tool_choice: "auto" } : {}),
         temperature: 0.35,
-        max_tokens: 1600,
+        max_tokens: 4096,
         stream: false,
       }),
       signal: controller.signal,
