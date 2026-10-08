@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { api, type Account } from "../api";
+import { api, type Account, type AiTaskRecord } from "../api";
 import { getSession } from "../auth";
 import { rememberIdentity } from "../lib/rememberedIdentities";
 import { AppTopBar, type AppTopBarOptions } from "./AppTopBar";
@@ -8,6 +8,7 @@ type AppShellContextValue = {
   account: Account | null;
   accounts: Account[];
   profileImageUrl: string;
+  activeAgentTask: AiTaskRecord | null;
   setProfileImageUrl: (url: string) => void;
   selectAccount: (id: string) => void;
   configureTopBar: (options: Partial<AppTopBarOptions>) => void;
@@ -58,6 +59,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [account, setAccount] = useState<Account | null>(null);
   const [profileImageUrl, setProfileImageUrl] = useState("");
+  const [activeAgentTask, setActiveAgentTask] = useState<AiTaskRecord | null>(null);
   const [topBar, setTopBar] = useState<AppTopBarOptions>({
     search: "",
     searchPlaceholder: "Search mail",
@@ -65,6 +67,41 @@ export function AppShell({ children }: { children: ReactNode }) {
     onSearch: () => undefined,
     searchDisabled: true,
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | null = null;
+
+    const refresh = async () => {
+      try {
+        const response = await api.chatTasks(12);
+        if (cancelled) return;
+        const now = Date.now();
+        const relevant = response.tasks.find((task) => {
+          if (account?.id && task.accountId && task.accountId !== account.id) return false;
+          if (task.status === "running" || task.status === "waiting" || task.status === "planned") return true;
+          if ((task.status === "completed" || task.status === "failed") && task.completedAt) {
+            return now - new Date(task.completedAt).getTime() < 12_000;
+          }
+          return false;
+        }) ?? null;
+        setActiveAgentTask(relevant);
+      } catch {
+        if (!cancelled) setActiveAgentTask(null);
+      } finally {
+        if (!cancelled) timer = window.setTimeout(refresh, activeAgentTask ? 3_000 : 7_000);
+      }
+    };
+
+    void refresh();
+    const handleTaskChange = () => { if (timer !== null) window.clearTimeout(timer); void refresh(); };
+    window.addEventListener("gsw-agent-task-changed", handleTaskChange);
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+      window.removeEventListener("gsw-agent-task-changed", handleTaskChange);
+    };
+  }, [account?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +140,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     account,
     accounts,
     profileImageUrl,
+    activeAgentTask,
     setProfileImageUrl: (url) => {
       setProfileImageUrl(url);
       void getSession().then((session) => {
@@ -117,12 +155,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     },
     selectAccount,
     configureTopBar: (options) => setTopBar((current) => ({ ...current, ...options })),
-  }), [account, accounts, profileImageUrl]);
+  }), [account, accounts, profileImageUrl, activeAgentTask]);
 
   return (
     <AppShellContext.Provider value={value}>
       <div className="gsw-app-shell">
-        <AppTopBar account={account} accounts={accounts} profileImageUrl={profileImageUrl} {...topBar} onSelectAccount={topBar.onSelectAccount ?? value.selectAccount} />
+        <AppTopBar account={account} accounts={accounts} profileImageUrl={profileImageUrl} agentTask={activeAgentTask} {...topBar} onSelectAccount={topBar.onSelectAccount ?? value.selectAccount} />
         {children}
       </div>
     </AppShellContext.Provider>
