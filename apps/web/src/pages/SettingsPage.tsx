@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
-import { api, type EmailTemplateInput, type EmailTemplateOption, type EmailTemplateTheme, type ProductSettings } from "../api";
+import { api, type AiFileCapabilities, type EmailTemplateInput, type EmailTemplateOption, type EmailTemplateTheme, type ProductSettings } from "../api";
 import { requestAccountDeletion } from "../auth";
 import { useAppShell } from "../components/AppShell";
 import { RichTextEditor } from "../components/RichTextEditor";
@@ -26,6 +26,7 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [profileUploading, setProfileUploading] = useState(false);
+  const [fileCapabilities, setFileCapabilities] = useState<AiFileCapabilities | null>(null);
 
   const loadTemplates = async () => {
     const catalog = await api.templates();
@@ -34,12 +35,13 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
   };
 
   useEffect(() => {
-    void Promise.all([api.settings(), api.templates()])
-      .then(([value, catalog]) => {
+    void Promise.all([api.settings(), api.templates(), api.chatFileCapabilities()])
+      .then(([value, catalog, capabilities]) => {
         setSettings(value);
         setSignature(value.signature);
         setTemplates(catalog.templates);
         setTemplateChoice(catalog.selectedTemplateKey || "none");
+        setFileCapabilities(capabilities);
       })
       .catch((err) => setNotice(err instanceof Error ? err.message : String(err)));
   }, []);
@@ -126,6 +128,11 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
       {section === "Compose" && <div className="gsw-settings-card"><h2>Compose preferences</h2><label className="gsw-setting-row"><span><strong>Rich text by default</strong><small>Keep formatting when pasting into new messages.</small></span><input type="checkbox" checked={settings.compose.defaultFormat !== "plain"} onChange={(event) => setSettings({ ...settings, compose: { ...settings.compose, defaultFormat: event.target.checked ? "rich" : "plain" } })} /></label><button className="gsw-primary-btn" onClick={() => void saveSettings({ compose: settings.compose })}>Save compose settings</button></div>}
       {section === "Contacts" && <div className="gsw-settings-card"><h2>Contact capture</h2><label className="gsw-setting-row"><span><strong>Create contacts from sent mail</strong><small>New recipients become lightweight contacts and existing contacts gain engagement history.</small></span><input type="checkbox" checked={settings.contacts.autoCreateFromSent !== false} onChange={(event) => setSettings({ ...settings, contacts: { ...settings.contacts, autoCreateFromSent: event.target.checked } })} /></label><button className="gsw-secondary-btn gsw-inline-btn" type="button" onClick={() => window.dispatchEvent(new CustomEvent("gsw-workspace-open", { detail: { section: "contacts" } }))}>Open contacts</button><button className="gsw-primary-btn" onClick={() => void saveSettings({ contacts: settings.contacts })}>Save contact settings</button></div>}
       {section === "AI" && <div className="gsw-settings-card"><div className="gsw-settings-card-head"><div><h2>GSW AI capabilities</h2><p>These switches control which capabilities GSW Chat is allowed to request anywhere in the app. Per-chat permissions and confirmations still apply.</p></div><label className="gsw-switch"><input type="checkbox" checked={settings.ai.enabled !== false} onChange={(event) => setSettings({ ...settings, ai: { ...settings.ai, enabled: event.target.checked } })} /><span>AI enabled</span></label></div>
+        {fileCapabilities && <div className="gsw-ai-status-card">
+          <div><strong>Primary reasoning</strong><span>{fileCapabilities.primaryModel || fileCapabilities.provider}</span></div>
+          <div><strong>File intelligence</strong><span>{fileCapabilities.openAiConfigured ? `Connected · ${fileCapabilities.fileModel || "OpenAI"}` : "Not configured"}</span></div>
+          <div><strong>Direct attachments</strong><span>{fileCapabilities.directAttachmentPreprocessing ? "Preprocessed before reasoning" : "Tool-only"}</span></div>
+        </div>}
         <label className="gsw-setting-row"><span><strong>Read mail</strong><small>Allow AI to search, read, summarize, and reason over mailbox content.</small></span><input type="checkbox" disabled={settings.ai.enabled === false} checked={settings.ai.mailRead !== false} onChange={(event) => setSettings({ ...settings, ai: { ...settings.ai, mailRead: event.target.checked } })} /></label>
         <label className="gsw-setting-row"><span><strong>Create and edit drafts</strong><small>Allow AI to create and mutate drafts after the user grants mail.write permission.</small></span><input type="checkbox" disabled={settings.ai.enabled === false} checked={settings.ai.draftMutation !== false} onChange={(event) => setSettings({ ...settings, ai: { ...settings.ai, draftMutation: event.target.checked } })} /></label>
         <label className="gsw-setting-row"><span><strong>Send email</strong><small>Allow AI to request email sending. Every interactive send still requires explicit confirmation.</small></span><input type="checkbox" disabled={settings.ai.enabled === false} checked={settings.ai.emailSend !== false} onChange={(event) => setSettings({ ...settings, ai: { ...settings.ai, emailSend: event.target.checked } })} /></label>
