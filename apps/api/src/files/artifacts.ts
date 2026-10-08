@@ -216,7 +216,7 @@ const simpleMarkdownToHtml = (source: string) => {
       closeList();
       continue;
     }
-    if (/^###\s+/.test(line)) { closeList(); out.push(`<h3>${inline(line.replace(/^###\s+/, ""))}</h3>`); continue; }
+    if (/^#{3,6}\s+/.test(line)) { closeList(); out.push(`<h3>${inline(line.replace(/^#{3,6}\s+/, ""))}</h3>`); continue; }
     if (/^##\s+/.test(line)) { closeList(); out.push(`<h2>${inline(line.replace(/^##\s+/, ""))}</h2>`); continue; }
     if (/^#\s+/.test(line)) { closeList(); out.push(`<h1>${inline(line.replace(/^#\s+/, ""))}</h1>`); continue; }
     const ordered = line.match(/^\d+[.)]\s+(.+)$/);
