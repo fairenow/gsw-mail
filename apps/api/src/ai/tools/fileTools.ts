@@ -197,7 +197,7 @@ export const filesReadTool: AgentToolDefinition = {
       if (isTextLikeFile(row.filename, row.mimeType) && Number(row.sizeBytes) <= 2 * 1024 * 1024) {
         const object = await getR2Object(row.r2Key);
         textPreview = object.content.toString("utf8").slice(0, 40_000);
-      } else if (config.ai.openaiApiKey) {
+      } else if (detected.category === "pdf" || config.ai.openaiApiKey) {
         const object = await getR2Object(row.r2Key);
         const result = await analyzeStoredFile({
           filename: row.filename,
@@ -225,7 +225,7 @@ export const filesReadTool: AgentToolDefinition = {
         analysisMode,
         analysisModel,
         processingNote: textPreview === undefined && deepAnalysis === undefined
-          ? "Deep content extraction is unavailable because the enhanced file intelligence service is not configured."
+          ? "This file type could not be deeply extracted with the currently available GSW file tools."
           : undefined,
       });
     } catch (error) {
