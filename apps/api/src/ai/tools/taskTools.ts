@@ -68,9 +68,9 @@ export const tasksCreateTool: AgentToolDefinition = {
         conversationId: ctx.conversationId,
         title: input.title,
         instruction: input.instruction,
-        worker: input.worker,
-        selectedSkills: input.selectedSkills,
-        steps: input.steps,
+        ...(input.worker !== undefined ? { worker: input.worker } : {}),
+        ...(input.selectedSkills !== undefined ? { selectedSkills: input.selectedSkills } : {}),
+        ...(input.steps !== undefined ? { steps: input.steps } : {}),
       });
       return success(ctx, toolCallId, startedAt, { taskId: task.id, title: task.title, status: task.status });
     } catch (error) {
@@ -144,9 +144,9 @@ export const tasksUpdateTool: AgentToolDefinition = {
         stepStatus: z.enum(["pending", "running", "waiting", "completed", "failed", "skipped"]).optional(),
       }).parse(rawInput);
       const task = await updateAgentTask(ctx.userId, input.taskId, {
-        status: input.status,
-        currentStep: input.currentStep,
-        progressPercent: input.progressPercent,
+        ...(input.status !== undefined ? { status: input.status } : {}),
+        ...(input.currentStep !== undefined ? { currentStep: input.currentStep } : {}),
+        ...(input.progressPercent !== undefined ? { progressPercent: input.progressPercent } : {}),
       });
       const step = input.stepSequence !== undefined && input.stepStatus
         ? await updateAgentTaskStep(ctx.userId, input.taskId, input.stepSequence, { status: input.stepStatus })
