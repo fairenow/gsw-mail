@@ -116,6 +116,7 @@ export function ChatPanel() {
   const [pendingAttachments, setPendingAttachments] = useState<AiChatAttachment[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const [recording, setRecording] = useState(false);
   const [voiceLevel, setVoiceLevel] = useState(0);
   const speechRef = useRef<SpeechRecognitionLike | null>(null);
@@ -130,6 +131,23 @@ export function ChatPanel() {
   const speechSupported = typeof window !== "undefined" && speechRecognitionConstructor() !== null;
 
   const visibleMessages = useMemo(() => messages, [messages]);
+
+  const resizeComposerInput = (element: HTMLTextAreaElement) => {
+    element.style.height = "0px";
+    const computed = window.getComputedStyle(element);
+    const lineHeight = Number.parseFloat(computed.lineHeight) || 20;
+    const paddingTop = Number.parseFloat(computed.paddingTop) || 0;
+    const paddingBottom = Number.parseFloat(computed.paddingBottom) || 0;
+    const oneLine = lineHeight + paddingTop + paddingBottom;
+    const maxHeight = lineHeight * 3 + paddingTop + paddingBottom;
+    const nextHeight = Math.min(Math.max(element.scrollHeight, oneLine), maxHeight);
+    element.style.height = `${nextHeight}px`;
+    element.style.overflowY = element.scrollHeight > maxHeight ? "auto" : "hidden";
+  };
+
+  useEffect(() => {
+    if (!recording && composerInputRef.current) resizeComposerInput(composerInputRef.current);
+  }, [input, recording]);
 
   const handleStreamEvent = (event: AiChatStreamEvent) => {
     if (event.type !== "status") return;
@@ -632,9 +650,13 @@ export function ChatPanel() {
             ))}
           </div>
         </div> : <textarea
+          ref={composerInputRef}
           value={input}
           aria-label="Message GSW Chat"
-          onChange={(event) => setInput(event.target.value)}
+          onChange={(event) => {
+            setInput(event.target.value);
+            resizeComposerInput(event.currentTarget);
+          }}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
