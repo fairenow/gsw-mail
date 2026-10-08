@@ -85,7 +85,6 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
       const general = {
         ...settings.general,
         profileImageAssetId: uploaded.asset.id,
-        profileImageUrl: `/product/files/${uploaded.asset.id}/content`,
       };
       const saved = await api.updateSettings({ general });
       setSettings((current) => current ? { ...current, ...saved } : current);
