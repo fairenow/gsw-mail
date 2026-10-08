@@ -29,6 +29,7 @@ import type { AgentExecutionContext, ProviderToolDefinition } from "../ai/tools/
 import { aiScopes } from "../ai/permissions/types.js";
 import { getAiCapabilitySettings, isAiScopeGloballyEnabled } from "../ai/capabilities.js";
 import { forbidden } from "../lib/errors.js";
+import { getAssetForUser } from "../files/service.js";
 
 const chatMessagesSchema = z.array(z.object({
   role: z.enum(["user", "assistant"]),
@@ -41,6 +42,7 @@ const bodySchema = z.object({
   timeZone: z.string().trim().min(1).max(100).optional(),
   localDateTime: z.string().trim().min(1).max(200).optional(),
   messages: chatMessagesSchema,
+  assetIds: z.array(z.string().uuid()).max(10).optional(),
 });
 
 const resumeSchema = z.object({
