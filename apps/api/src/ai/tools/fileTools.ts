@@ -362,7 +362,13 @@ export const filesCreateArtifactTool: AgentToolDefinition = {
     const startedAt = new Date().toISOString();
     try {
       const input = createArtifactInput.parse(rawInput);
-      const workspace = ctx.conversationId ? await getOrCreateFileWorkspace(ctx.userId, ctx.conversationId) : null;
+      const localPdf = /\.pdf$/i.test(input.filename);
+      // PDF generation is fully local (LibreOffice). Do not create an OpenAI
+      // Code Interpreter workspace for a PDF, otherwise Qwen users can fail
+      // on OpenAI billing before the local renderer is ever reached.
+      const workspace = !localPdf && ctx.conversationId
+        ? await getOrCreateFileWorkspace(ctx.userId, ctx.conversationId)
+        : null;
       const generated = await generateArtifactFile({
         ...input,
         ...(workspace ? { containerId: workspace.externalContainerId } : {}),
