@@ -7,7 +7,8 @@ import {
   extractPresentationText,
   extractSpreadsheetText,
   inspectImageLocally,
-  inspectVideoLocally,
+  inspectVideoLocallyDetailed,
+  type ExtractedVideoFrame,
 } from "./localExtraction.js";
 
 type OpenAiOutputItem = {
@@ -210,6 +211,84 @@ async function localImageAnalysis(input: {
   return { text, model: "gsw-local-image-inspector", mode: "vision" as const };
 }
 
+async function qwenVideoFrameAnalysis(input: {
+  filename: string;
+  frames: ExtractedVideoFrame[];
+  instruction: string;
+}) {
+  if (!config.ai.hetznerApiKey || !input.frames.length) return null;
+
+  const content: Array<Record<string, unknown>> = [
+    {
+      type: "text",
+      text: [
+        `Analyze representative frames extracted across the timeline of the video "${input.filename}".`,
+        input.instruction,
+        "Treat the frames as ordered snapshots of one video. Describe visible subjects, actions, settings, UI/screens, text, transitions, and the apparent purpose or story of the video.",
+        "Be explicit about what is visually observed versus what cannot be inferred from frames alone.",
+      ].join("\n"),
+    },
+  ];
+
+  for (const frame of input.frames.slice(0, 8)) {
+    content.push({
+      type: "text",
+      text: `Frame at ${frame.timestampSeconds.toFixed(1)} seconds:`,
+    });
+    content.push({
+      type: "image_url",
+      image_url: {
+        url: `data:${frame.mimeType};base64,${frame.bytes.toString("base64")}`,
+      },
+    });
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.max(config.ai.timeoutMs, 120_000));
+  try {
+    const response = await fetch(`${config.ai.hetznerBaseUrl.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${config.ai.hetznerApiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: config.ai.hetznerModel,
+        messages: [{
+          role: "user",
+          content,
+        }],
+        temperature: 0.2,
+        max_tokens: 2200,
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+    const body = await response.json().catch(() => ({})) as {
+      choices?: Array<{ message?: { content?: string | null } }>;
+      error?: { message?: string };
+    };
+    if (!response.ok) {
+      console.warn("[file-intelligence] Qwen video-frame analysis unavailable", {
+        filename: input.filename,
+        status: response.status,
+        message: body.error?.message,
+      });
+      return null;
+    }
+    const text = body.choices?.[0]?.message?.content?.trim();
+    return text ? { text, model: config.ai.hetznerModel } : null;
+  } catch (error) {
+    console.warn("[file-intelligence] Qwen video-frame analysis failed", {
+      filename: input.filename,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function localVideoAnalysis(input: {
   filename: string;
   mimeType: string;
@@ -217,13 +296,23 @@ async function localVideoAnalysis(input: {
   instruction: string;
 }) {
   void input.mimeType;
-  void input.instruction;
-  const text = await inspectVideoLocally({ filename: input.filename, bytes: input.bytes });
+  const inspection = await inspectVideoLocallyDetailed({ filename: input.filename, bytes: input.bytes });
+  const qwenVision = await qwenVideoFrameAnalysis({
+    filename: input.filename,
+    frames: inspection.frames,
+    instruction: input.instruction,
+  });
+
   return {
-    text,
-    model: "gsw-local-video-inspector",
+    text: [
+      inspection.text,
+      ...(qwenVision ? ["[VISUAL FRAME ANALYSIS]", qwenVision.text] : []),
+    ].join("\n\n"),
+    model: qwenVision?.model ?? "gsw-local-video-inspector",
     mode: "video" as const,
-    note: "Local video fallback inspects metadata and representative frame OCR. Full visual semantics and speech transcription require a compatible multimodal/transcription model.",
+    note: qwenVision
+      ? "Video analysis used FFmpeg/FFprobe frame extraction across the full timeline plus Qwen multimodal frame understanding."
+      : "Video analysis used FFmpeg/FFprobe metadata and representative frame OCR. Visual-semantic analysis could not be obtained from the configured Qwen endpoint.",
   };
 }
 
@@ -406,10 +495,10 @@ export async function analyzeStoredFile(input: {
           local.text,
           ...(transcript ? ["[AUDIO TRANSCRIPT]", transcript.text] : []),
         ].join("\n\n"),
-        model: transcript?.model ?? local.model,
+        model: transcript ? `${local.model} + ${transcript.model}` : local.model,
         mode: "video" as const,
         note: transcript
-          ? "Video analysis combined local metadata/frame inspection with audio transcription."
+          ? "Video analysis combined FFmpeg/FFprobe timeline sampling, Qwen visual-frame understanding when available, and audio transcription."
           : local.note,
       };
     }
