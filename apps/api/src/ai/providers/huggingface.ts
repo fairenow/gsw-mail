@@ -55,6 +55,7 @@ async function attempt(input: AiProviderRunInput) {
         messages: [{ role: "system", content: gswSystemPrompt }, ...input.messages],
         ...(input.tools?.length ? { tools: input.tools, tool_choice: "auto" } : {}),
         max_tokens: 1600,
+        reasoning_effort: config.ai.huggingFaceReasoningEffort,
         stream: false,
       }),
       signal: controller.signal,
