@@ -717,6 +717,9 @@ async function prepareNewConversation(input: {
       }).join("\n");
       return {
         role: message.role as "user" | "assistant",
+        // Historical attachments are already embedded in content above.
+        // Keep the shape consistent with current-turn provider messages.
+        attachments: [] as typeof attachmentSummaries,
         content: message.role === "user" && attachmentContext
           ? `${message.content}\n\n[Attached GSW files]\n${attachmentContext}`
           : message.content,
