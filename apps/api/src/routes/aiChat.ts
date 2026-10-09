@@ -1,3 +1,4 @@
+import { reportChatError, chatErrorText } from "../ai/chatSafeErrors.js";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { requireAccountPermission } from "../auth/authorize.js";
@@ -388,7 +389,7 @@ async function runConversationTurn(input: {
         };
       }
 
-      const message = outcome.result.error?.message ?? "PDF creation failed.";
+      const message = chatErrorText(reportChatError(outcome.result.error, { operation: "files.create_artifact", category: "files", correlationId: run.id }));
       await failAiRun(run.id, new Error(message));
       throw new Error(message);
     }
@@ -491,7 +492,7 @@ async function runConversationTurn(input: {
         };
       }
 
-      const message = outcome.result.error?.message ?? "Image generation failed.";
+      const message = chatErrorText(reportChatError(outcome.result.error, { operation: "files.generate_image", category: "files", correlationId: run.id }));
       await failAiRun(run.id, new Error(message));
       throw new Error(message);
     }
@@ -625,7 +626,7 @@ async function runConversationTurn(input: {
 
         await recordAiToolResult(ledgerCall.id, outcome.result);
         if (!outcome.result.ok && semanticName === "mail.activity") {
-          const reason = outcome.result.error?.message ?? "Mailbox activity could not be loaded.";
+          const reason = chatErrorText(reportChatError(outcome.result.error, { operation: semanticName, category: "mail", correlationId: run.id }));
           input.emit?.({ type: "status", phase: "tool_completed", label, toolName: semanticName, ok: false });
           const content = "I couldn't retrieve complete mailbox activity, so I won't report unverified totals or create a PDF. " + reason;
           await appendAiMessage({ conversationId: input.conversationId, role: "assistant", content, provider: provider.id, model, metadata: { toolActivity, mailboxActivityFailed: true } });
@@ -767,7 +768,7 @@ async function prepareNewConversation(input: {
       } catch (error) {
         directAttachmentAnalyses.set(
           asset.id,
-          `[File preprocessing failed: ${error instanceof Error ? error.message : String(error)}]`,
+          `[File preprocessing failed: ${chatErrorText(reportChatError(error, { operation: "files.preprocess", category: "files" }))}]`,
         );
       }
     }
@@ -994,8 +995,8 @@ export default async function aiChatRoutes(app: FastifyInstance) {
             ? `Campaign launch queued ${String(resultData.sent ?? 0)} message(s)${Number(resultData.failed ?? 0) > 0 ? ` with ${String(resultData.failed)} failure(s)` : ""}.`
             : "Approved action completed."
       : execution.toolCall.toolName === "mail.send_draft"
-        ? `I couldn't send the email: ${outcome.result.error?.message ?? "the send failed"}`
-        : `I couldn't complete that action: ${outcome.result.error?.message ?? "the action failed"}`;
+        ? chatErrorText(reportChatError(outcome.result.error, { operation: "mail.send_draft", category: "action" }))
+        : chatErrorText(reportChatError(outcome.result.error, { operation: execution.toolCall.toolName, category: "action" }));
 
     await appendAiMessage({
       conversationId: execution.toolCall.conversationId,
@@ -1099,7 +1100,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       stream.send({ type: "result", response });
     } catch (error) {
       req.log.error(error);
-      stream.send({ type: "error", message: error instanceof Error ? error.message : "Chat failed to respond." });
+      stream.send({ type: "error", message: chatErrorText(reportChatError(error, { operation: "chat.stream", category: "chat" })) });
     } finally {
       stream.close();
     }
@@ -1156,7 +1157,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       stream.send({ type: "result", response });
     } catch (error) {
       req.log.error(error);
-      stream.send({ type: "error", message: error instanceof Error ? error.message : "Chat failed to respond." });
+      stream.send({ type: "error", message: chatErrorText(reportChatError(error, { operation: "chat.stream", category: "chat" })) });
     } finally {
       stream.close();
     }
