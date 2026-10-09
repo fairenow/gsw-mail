@@ -13,15 +13,17 @@ const providers: Record<AiProviderId, AiProvider> = {
   anthropic: anthropicProvider,
   huggingface: huggingFaceProvider,
   modal: modalProvider,
+  "modal-deepseek": modalDeepseekProvider,
 };
 
-export type UserAiModelProvider = "qwen" | "openai" | "claude" | "gpt-oss-120b";
+export type UserAiModelProvider = "qwen" | "openai" | "claude" | "gpt-oss-120b" | "deepseek-v4.1-flash";
 
 const providerAliases: Record<UserAiModelProvider, AiProviderId> = {
   qwen: "hetzner",
   openai: "openai",
   claude: "anthropic",
   "gpt-oss-120b": "modal",
+  "deepseek-v4.1-flash": "modal-deepseek",
 };
 
 export const getAiProvider = (providerId?: string): AiProvider => {
