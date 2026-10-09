@@ -61,4 +61,101 @@ export const calendarEventsTool: AgentToolDefinition = {
     } catch (error) { return failed(ctx, toolCallId, startedAt, error); }
   },
 };
-export const calendarTools: AgentToolDefinition[] = [calendarListTool, calendarEventsTool];
+
+const eventInput = z.object({
+  calendarId: z.string().min(1).max(250),
+  title: z.string().trim().min(1).max(500),
+  description: z.string().max(20_000).optional(),
+  start: z.string().datetime({ offset: true }),
+  durationMinutes: z.number().int().min(1).max(10_080),
+  location: z.string().max(1000).optional(),
+  meetingLink: z.string().url().max(2000).optional(),
+  attendees: z.array(z.string().email()).max(50).default([]),
+  sendSchedulingMessages: z.boolean().default(false),
+  timeZone: z.string().max(100).optional(),
+  allDay: z.boolean().default(false),
+});
+
+const writableEngine = (ctx: AgentExecutionContext) => getUserEngine({
+  productUserId: ctx.userId, authUserId: ctx.authUserId,
+  accountId: ctx.accountId, headers: ctx.headers, permission: "send",
+});
+
+const calendarWriteSchema: Record<string, unknown> = {
+  type: "object",
+  properties: {
+    calendarId: { type: "string", description: "Calendar ID from calendar.list" },
+    title: { type: "string" },
+    description: { type: "string" },
+    start: { type: "string", description: "ISO 8601 time with timezone offset" },
+    durationMinutes: { type: "integer", minimum: 1, maximum: 10080 },
+    location: { type: "string" },
+    meetingLink: { type: "string" },
+    attendees: { type: "array", items: { type: "string" }, maxItems: 50 },
+    sendSchedulingMessages: { type: "boolean", description: "Whether to notify attendees; explicit approval is required" },
+    timeZone: { type: "string" },
+    allDay: { type: "boolean" },
+  },
+  required: ["calendarId","title","start","durationMinutes"],
+  additionalProperties: false,
+};
+
+export const calendarEventCreateTool: AgentToolDefinition = {
+  name: "calendar.events.create",
+  description: "Create a calendar event, with optional attendee invitations. Requires user confirmation before execution. Review title, start, timezone, attendees and invitation sending first.",
+  inputSchema: calendarWriteSchema,
+  requiredScopes: ["calendar.write"],
+  risk: "external",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = eventInput.parse(rawInput);
+      const engine = await writableEngine(ctx);
+      const calendars = await engine.listCalendars(ctx.accountId);
+      if (!calendars.some(calendar => calendar.engineId === input.calendarId)) throw new Error("Calendar not found");
+      const event = await engine.createCalendarEvent(ctx.accountId, input);
+      return success(ctx, toolCallId, startedAt, { event, invitedAttendees: input.sendSchedulingMessages, requiresReview: false });
+    } catch (error) { return failed(ctx, toolCallId, startedAt, error); }
+  },
+};
+
+export const calendarEventUpdateTool: AgentToolDefinition = {
+  name: "calendar.events.update",
+  description: "Replace an existing calendar event with specified complete fields. Read the event first, then confirm all attendee and scheduling changes. Requires user confirmation.",
+  inputSchema: {
+    ...calendarWriteSchema,
+    properties: { ...calendarWriteSchema.properties as Record<string, unknown>, eventId: { type: "string", description: "Existing engine event ID" } },
+    required: ["eventId","calendarId","title","start","durationMinutes"],
+  },
+  requiredScopes: ["calendar.write"],
+  risk: "external",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = eventInput.extend({ eventId: z.string().min(1).max(500) }).parse(rawInput);
+      const { eventId, ...patch } = input;
+      const engine = await writableEngine(ctx);
+      const event = await engine.updateCalendarEvent(ctx.accountId, eventId, patch);
+      return success(ctx, toolCallId, startedAt, { event });
+    } catch (error) { return failed(ctx, toolCallId, startedAt, error); }
+  },
+};
+
+export const calendarEventDeleteTool: AgentToolDefinition = {
+  name: "calendar.events.delete",
+  description: "Delete an existing event. Requires explicit user approval and must not run for ambiguous events.",
+  inputSchema: { type: "object", properties: { eventId: { type: "string", description: "Existing engine event ID" } }, required: ["eventId"], additionalProperties: false },
+  requiredScopes: ["calendar.write"],
+  risk: "external",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const { eventId } = z.object({ eventId: z.string().min(1).max(500) }).parse(rawInput);
+      const engine = await writableEngine(ctx);
+      await engine.destroyCalendarEvent(ctx.accountId, eventId);
+      return success(ctx, toolCallId, startedAt, { deleted: true, eventId });
+    } catch (error) { return failed(ctx, toolCallId, startedAt, error); }
+  },
+};
+
+export const calendarTools: AgentToolDefinition[] = [calendarListTool, calendarEventsTool, calendarEventCreateTool, calendarEventUpdateTool, calendarEventDeleteTool];
