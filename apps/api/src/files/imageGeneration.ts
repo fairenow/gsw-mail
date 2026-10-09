@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import { HttpError } from "../lib/errors.js";
+import { verifyGeneratedImage } from "./imageValidation.js";
 
 type ImageResponse = {
   data?: Array<{ b64_json?: string }>;
@@ -19,6 +20,8 @@ type GeneratedImage = {
   mimeType: string;
   extension: string;
   model: string;
+  width: number;
+  height: number;
 };
 
 const dimensionsFor = (size: ImageInput["size"]) => {
@@ -30,8 +33,7 @@ const dimensionsFor = (size: ImageInput["size"]) => {
   }
 };
 
-const extensionForMime = (mimeType: string) =>
-  mimeType.includes("jpeg") ? "jpg" : mimeType.includes("webp") ? "webp" : "png";
+const validate = (bytes: Buffer, model: string): GeneratedImage => ({ ...verifyGeneratedImage(bytes), model });
 
 const parseProviderError = async (response: Response) => {
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
@@ -75,22 +77,16 @@ async function generateWithDedicatedHuggingFaceEndpoint(input: ImageInput): Prom
     const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
     if (!response.ok || contentType.includes("application/json")) {
       const detail = await parseProviderError(response);
-      throw new HttpError(response.status === 429 ? 429 : 502, detail || `Hugging Face image endpoint returned HTTP ${response.status}`);
+      throw new HttpError([400,401,403,404,422,429].includes(response.status) ? response.status : 502, `Hugging Face endpoint HTTP ${response.status}`);
     }
 
     const bytes = Buffer.from(await response.arrayBuffer());
     if (!bytes.length) throw new HttpError(502, "Hugging Face image endpoint returned no image data.");
-    const mimeType = contentType.startsWith("image/") ? contentType.split(";")[0]! : "image/png";
-    return {
-      bytes,
-      mimeType,
-      extension: extensionForMime(mimeType),
-      model: config.ai.huggingFaceImageModel,
-    };
+    return validate(bytes, config.ai.huggingFaceImageModel);
   } catch (error) {
     if (error instanceof HttpError) throw error;
     if (error instanceof Error && error.name === "AbortError") throw new HttpError(504, "Hugging Face image endpoint timed out.");
-    throw new HttpError(502, error instanceof Error ? `Hugging Face image endpoint failed: ${error.message}` : "Hugging Face image endpoint failed.");
+    throw new HttpError(502, "Hugging Face image endpoint failed.");
   } finally {
     clearTimeout(timeout);
   }
@@ -132,59 +128,19 @@ async function generateWithHuggingFaceModel(model: string, input: ImageInput): P
       if (response.status === 401) {
         throw new HttpError(401, detail || "Hugging Face rejected the configured token.");
       }
-      throw new HttpError(response.status === 429 ? 429 : 502, detail || `Hugging Face model ${model} returned HTTP ${response.status}`);
+      throw new HttpError([400,401,403,404,422,429].includes(response.status) ? response.status : 502, `Hugging Face model HTTP ${response.status}`);
     }
 
     const bytes = Buffer.from(await response.arrayBuffer());
     if (!bytes.length) throw new HttpError(502, `Hugging Face model ${model} returned no image data.`);
-    const mimeType = contentType.startsWith("image/") ? contentType.split(";")[0]! : "image/png";
-    return {
-      bytes,
-      mimeType,
-      extension: extensionForMime(mimeType),
-      model,
-    };
+    return validate(bytes, model);
   } catch (error) {
     if (error instanceof HttpError) throw error;
     if (error instanceof Error && error.name === "AbortError") throw new HttpError(504, `Hugging Face model ${model} timed out.`);
-    throw new HttpError(502, error instanceof Error ? `Hugging Face model ${model} failed: ${error.message}` : `Hugging Face model ${model} failed.`);
+    throw new HttpError(502, "Hugging Face image model failed.");
   } finally {
     clearTimeout(timeout);
   }
-}
-
-async function generateWithHuggingFace(input: ImageInput): Promise<GeneratedImage> {
-  if (!config.ai.huggingFaceApiToken) throw new HttpError(503, "Hugging Face image generation is not configured.");
-
-  const failures: string[] = [];
-
-  if (config.ai.huggingFaceImageEndpointUrl) {
-    try {
-      return await generateWithDedicatedHuggingFaceEndpoint(input);
-    } catch (error) {
-      failures.push(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  const models = config.ai.huggingFaceImageModels.length
-    ? config.ai.huggingFaceImageModels
-    : [config.ai.huggingFaceImageModel];
-
-  for (const model of models) {
-    try {
-      return await generateWithHuggingFaceModel(model, input);
-    } catch (error) {
-      if (error instanceof HttpError && error.status === 401) throw error;
-      failures.push(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  throw new HttpError(
-    502,
-    failures.length
-      ? `Hugging Face image generation failed across configured models: ${failures.join(" | ")}`
-      : "Hugging Face image generation failed across configured models.",
-  );
 }
 
 async function generateWithOpenAi(input: ImageInput): Promise<GeneratedImage> {
@@ -210,17 +166,11 @@ async function generateWithOpenAi(input: ImageInput): Promise<GeneratedImage> {
     });
     const body = await response.json().catch(() => ({})) as ImageResponse;
     if (!response.ok) {
-      throw new HttpError(response.status === 429 ? 429 : 502, body.error?.message?.trim() || `OpenAI image generation returned HTTP ${response.status}`);
+      throw new HttpError([400,401,403,404,422,429].includes(response.status) ? response.status : 502, `OpenAI image generation HTTP ${response.status}`);
     }
     const encoded = body.data?.[0]?.b64_json;
     if (!encoded) throw new HttpError(502, "The image generation service returned no image data.");
-    const format = input.format ?? "png";
-    return {
-      bytes: Buffer.from(encoded, "base64"),
-      mimeType: format === "jpeg" ? "image/jpeg" : `image/${format}`,
-      extension: format === "jpeg" ? "jpg" : format,
-      model: config.ai.openaiImageModel,
-    };
+    return validate(Buffer.from(encoded, "base64"), config.ai.openaiImageModel);
   } catch (error) {
     if (error instanceof HttpError) throw error;
     if (error instanceof Error && error.name === "AbortError") throw new HttpError(504, "Image generation timed out.");
@@ -230,14 +180,48 @@ async function generateWithOpenAi(input: ImageInput): Promise<GeneratedImage> {
   }
 }
 
-export async function generateImage(input: ImageInput) {
+export type ImageGenerationOptions = { correlationId?: string; maxDurationMs?: number };
+export async function generateImage(input: ImageInput, options: ImageGenerationOptions = {}) {
+  const started = Date.now();
+  const budget = Math.max(5_000, Math.min(options.maxDurationMs ?? 90_000, 180_000));
+  const correlationId = options.correlationId ?? "untracked";
+  const attempts: Array<{ provider: "huggingface" | "openai"; model: string; run: () => Promise<GeneratedImage> }> = [];
   if (config.ai.huggingFaceApiToken) {
-    try {
-      return await generateWithHuggingFace(input);
-    } catch (error) {
-      if (!config.ai.openaiApiKey) throw error;
+    if (config.ai.huggingFaceImageEndpointUrl) attempts.push({
+      provider: "huggingface", model: config.ai.huggingFaceImageModel,
+      run: () => generateWithDedicatedHuggingFaceEndpoint(input),
+    });
+    for (const model of (config.ai.huggingFaceImageModels.length ? config.ai.huggingFaceImageModels : [config.ai.huggingFaceImageModel]).slice(0, 2)) {
+      attempts.push({ provider: "huggingface", model, run: () => generateWithHuggingFaceModel(model, input) });
     }
   }
-
-  return generateWithOpenAi(input);
+  if (config.ai.openaiApiKey) attempts.push({
+    provider: "openai", model: config.ai.openaiImageModel, run: () => generateWithOpenAi(input),
+  });
+  if (!attempts.length) throw new HttpError(503, "Image generation is not configured.");
+  let lastStatus = 502;
+  for (const [index, attempt] of attempts.slice(0, 3).entries()) {
+    const remaining = budget - (Date.now() - started);
+    if (remaining < 1_000) break;
+    const began = Date.now();
+    try {
+      const result = await Promise.race([
+        attempt.run(),
+        new Promise<never>((_, reject) => {
+          const timer = setTimeout(() => reject(new HttpError(504, "Image generation deadline reached.")), remaining);
+          // Timer is cleared by the settled race below at the orchestration level via finally.
+          timer.unref?.();
+        }),
+      ]);
+      console.info("[gsw-image] attempt", { correlationId, provider: attempt.provider, model: attempt.model, attempt: index + 1, durationMs: Date.now()-began, outcome: "success", width: result.width, height: result.height, mimeType: result.mimeType, bytes: result.bytes.length });
+      return result;
+    } catch (error) {
+      const status = error instanceof HttpError ? error.status : 502;
+      lastStatus = status;
+      const category = [400,401,403,404,422].includes(status) ? "permanent" : status === 429 ? "rate_limit" : status === 504 ? "timeout" : "provider_error";
+      console.warn("[gsw-image] attempt", { correlationId, provider: attempt.provider, model: attempt.model, attempt: index + 1, durationMs: Date.now()-began, outcome: "failure", status, category });
+      if (category === "permanent") break;
+    }
+  }
+  throw new HttpError(lastStatus === 429 ? 429 : 502, "Image generation failed. Please retry later.");
 }
