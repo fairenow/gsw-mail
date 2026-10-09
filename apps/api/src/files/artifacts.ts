@@ -257,7 +257,21 @@ const pdfBaseStyles = `
   table { width: 100%; border-collapse: collapse; margin: 12px 0; }
   th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid #dce3ea; }
   th { background: #e8eef5; }
-  .gsw-report-footer { margin-top: 23px; border-top: 1px solid #dce3ea; padding-top: 10px; color: #697687; font-size: 8.5pt; }
+  /* GSW:TC branded print components */
+  .gsw-tc { --gsw-brand: #41865b; --gsw-cream: #f4e8cd; --gsw-ink: #484640; --gsw-stroke: #e8e1d4; color: var(--gsw-ink); background: #fffdf8; }
+  .gsw-tc .gsw-report-hero { background: var(--gsw-brand); color: #fff; }
+  .gsw-tc .gsw-report-hero h1, .gsw-tc .gsw-report-hero p { color: #fff; }
+  .gsw-tc h2 { color: var(--gsw-brand); }
+  .gsw-tc .gsw-metric { background: var(--gsw-cream); border-color: var(--gsw-stroke); }
+  .gsw-tc .gsw-metric-value { color: var(--gsw-brand); }
+  .gsw-tc .gsw-metric-label { color: var(--gsw-ink); }
+  .gsw-feature-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+  .gsw-feature-card { padding: 15px; background: #fff; border: 1px solid #e8e1d4; border-radius: 9px; break-inside: avoid; page-break-inside: avoid; }
+  .gsw-feature-card h3 { margin-top: 0; color: #41865b; }
+  .gsw-page-section { break-inside: avoid; page-break-inside: avoid; }
+  .gsw-report-hero, .gsw-metric, .gsw-feature-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .gsw-tc .gsw-report-footer { border-color: var(--gsw-stroke); color: var(--gsw-ink); }
+    .gsw-report-footer { margin-top: 23px; border-top: 1px solid #dce3ea; padding-top: 10px; color: #697687; font-size: 8.5pt; }
 `;
 
 export function composePdfHtml(content: string): string {
