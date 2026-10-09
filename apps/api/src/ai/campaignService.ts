@@ -105,6 +105,73 @@ export async function getCampaign(userId: string, id: string) {
   return { campaign, recipients };
 }
 
+/**
+ * Atomically replace a draft campaign's audience using owned contact IDs.
+ * The saved recipient snapshot is the reviewed audience; tag membership cannot
+ * silently change it after approval. Never mutate launched campaigns.
+ */
+export async function replaceCampaignAudience(input: {
+  userId: string; accountId: string; campaignId: string; contactIds: string[];
+}) {
+  const unique = [...new Set(input.contactIds)];
+  if (!unique.length || unique.length > 100) throw badRequest("select between 1 and 100 contacts");
+  return db.transaction(async (tx) => {
+    const [campaign] = await tx.select().from(aiCampaigns).where(and(eq(aiCampaigns.id,input.campaignId), eq(aiCampaigns.userId,input.userId), eq(aiCampaigns.accountId,input.accountId))).for("update");
+    if (!campaign) throw notFound("campaign not found");
+    if (campaign.status !== "draft") throw badRequest("only draft campaign audiences can be edited");
+    const selected = await tx.select({ id: contacts.id, displayName: contacts.displayName, firstName: contacts.firstName }).from(contacts)
+      .where(and(eq(contacts.ownerUserId,input.userId),inArray(contacts.id,unique)));
+    if (selected.length !== unique.length) throw badRequest("some contacts are not available");
+    const emails = await tx.select().from(contactEmails).where(inArray(contactEmails.contactId,unique));
+    const recipients = selected.map(contact=>{
+      const options = emails.filter(email=>email.contactId===contact.id);
+      const preferred = options.find(email=>email.isPrimary) ?? options[0];
+      if (!preferred) throw badRequest("every selected contact needs an email");
+      return {
+        campaignId: input.campaignId, contactId: contact.id,
+        email: preferred.normalizedEmail || preferred.email.toLowerCase(),
+        displayName: contact.displayName, firstName: contact.firstName,
+      };
+    });
+    if (new Set(recipients.map(r=>r.email)).size !== recipients.length) throw badRequest("selected contacts have duplicate email addresses");
+    await tx.delete(aiCampaignRecipients).where(eq(aiCampaignRecipients.campaignId,input.campaignId));
+    await tx.insert(aiCampaignRecipients).values(recipients);
+    await tx.update(aiCampaigns).set({ recipientCount: recipients.length, updatedAt: new Date() }).where(eq(aiCampaigns.id,input.campaignId));
+    return { campaignId: input.campaignId, recipientCount: recipients.length, recipients: recipients.map(r=>({ contactId:r.contactId,email:r.email,displayName:r.displayName })) };
+  });
+}
+
+export async function updateDraftCampaign(input: {
+  userId: string; accountId: string; campaignId: string;
+  subject?: string; textBody?: string; htmlBody?: string;
+}) {
+  return db.transaction(async tx=>{
+    const [campaign] = await tx.select().from(aiCampaigns).where(and(eq(aiCampaigns.id,input.campaignId),eq(aiCampaigns.userId,input.userId),eq(aiCampaigns.accountId,input.accountId))).for("update");
+    if (!campaign) throw notFound("campaign not found");
+    if (campaign.status !== "draft") throw badRequest("only draft campaigns can be edited");
+    const [saved] = await tx.update(aiCampaigns).set({
+      ...(input.subject !== undefined ? { subject:input.subject } : {}),
+      ...(input.textBody !== undefined ? { textBody:input.textBody } : {}),
+      ...(input.htmlBody !== undefined ? { htmlBody:input.htmlBody } : {}),
+      updatedAt:new Date(),
+    }).where(eq(aiCampaigns.id,input.campaignId)).returning();
+    return saved!;
+  });
+}
+
+export async function previewCampaign(input: {userId:string; accountId:string; campaignId:string}) {
+  const {campaign,recipients} = await getCampaign(input.userId,input.campaignId);
+  if (campaign.accountId !== input.accountId) throw notFound("campaign not found");
+  return { campaign: {id:campaign.id,title:campaign.title,subject:campaign.subject,status:campaign.status,recipientCount:recipients.length},
+    recipients:recipients.slice(0,100).map(recipient=>({
+      id:recipient.id, contactId:recipient.contactId,email:recipient.email,displayName:recipient.displayName,
+      subject:personalize(campaign.subject,recipient),
+      textBody:personalize(campaign.textBody,recipient),
+      // Do not render untrusted HTML previews without sanitization.
+    }))
+  };
+}
+
 const personalize = (value: string | null, recipient: { firstName: string | null; displayName: string | null; email: string }) => {
   if (!value) return undefined;
   const firstName = recipient.firstName?.trim()
