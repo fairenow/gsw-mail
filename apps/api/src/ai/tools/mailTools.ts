@@ -1,3 +1,4 @@
+import { reportChatError } from "../chatSafeErrors.js";
 import { z } from "zod";
 import { createMailService } from "../../services/mailService.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
@@ -17,11 +18,7 @@ const success = <T>(ctx: AgentExecutionContext, toolCallId: string, startedAt: s
 const failure = (ctx: AgentExecutionContext, toolCallId: string, startedAt: string, error: unknown): AgentToolResult => ({
   ok: false,
   toolCallId,
-  error: {
-    code: "tool_failed",
-    message: error instanceof Error ? error.message : String(error),
-    retryable: false,
-  },
+  error: reportChatError(error, { operation: "mail.tool", category: "mail" }),
   audit: {
     userId: ctx.userId,
     accountId: ctx.accountId,
@@ -137,11 +134,6 @@ export const mailActivityTool: AgentToolDefinition = {
       const activity = await mail.activity(ctx.accountId, input.startIso, input.endIso, input.mailboxes);
       return success(ctx, toolCallId, startedAt, activity);
     } catch (error) {
-      console.warn("[mail.activity] failed", {
-        kind: error instanceof z.ZodError ? "validation" : error instanceof Error ? error.name : "unknown",
-        message: error instanceof Error ? error.message.slice(0, 500) : "Unknown error",
-        toolCallId,
-      });
       return failure(ctx, toolCallId, startedAt, error);
     }
   },
