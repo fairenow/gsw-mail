@@ -235,7 +235,7 @@ export const campaignPreviewTool: AgentToolDefinition = {
     const startedAt=new Date().toISOString();
     try{
       const {campaignId}=z.object({campaignId:z.string().uuid()}).parse(rawInput);
-      return success(ctx,toolCallId,startedAt,await previewCampaign({userId:ctx.userId,accountId:ctx.accountId,campaignId}));
+      return success(ctx,toolCallId,startedAt,{...await previewCampaign({userId:ctx.userId,accountId:ctx.accountId,campaignId}),reviewUrl:`/campaigns/${campaignId}`});
     }catch(error){return failure(ctx,toolCallId,startedAt,error);}
   },
 };
