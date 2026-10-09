@@ -214,9 +214,9 @@ async function runInBatches<T>(items: T[], size: number, fn: (item: T) => Promis
 }
 
 export async function launchCampaign(ctx: AgentExecutionContext, campaignId: string) {
-  const { campaign, recipients } = await getCampaign(ctx.userId, campaignId);
+  const { campaign, recipients: initialRecipients } = await getCampaign(ctx.userId, campaignId);
   if (campaign.accountId !== ctx.accountId) throw badRequest("campaign belongs to a different mailbox");
-  if (campaign.status === "launched") return { campaign, sent: recipients.filter((recipient) => recipient.status === "queued").length, failed: recipients.filter((recipient) => recipient.status === "failed").length, replay: true };
+  if (campaign.status === "launched") return { campaign, sent: initialRecipients.filter((recipient) => recipient.status === "queued").length, failed: initialRecipients.filter((recipient) => recipient.status === "failed").length, replay: true };
   if (campaign.status === "launching") throw badRequest("campaign is already launching");
 
   // Atomically claim the draft before external sends. A concurrent edit or launch
@@ -224,6 +224,9 @@ export async function launchCampaign(ctx: AgentExecutionContext, campaignId: str
   const [claimed] = await db.update(aiCampaigns).set({ status: "launching", lastError: null, updatedAt: new Date() })
     .where(and(eq(aiCampaigns.id, campaign.id), eq(aiCampaigns.userId, ctx.userId), eq(aiCampaigns.accountId, ctx.accountId), eq(aiCampaigns.status, "draft"))).returning({ id: aiCampaigns.id });
   if (!claimed) throw badRequest("campaign is no longer a draft; refresh its status before retrying");
+  // Reload the snapshot only after the draft is claimed. Audience edits lock the
+  // same campaign row, so in-flight selections cannot leak into an approved send.
+  const recipients = await db.select().from(aiCampaignRecipients).where(eq(aiCampaignRecipients.campaignId,campaign.id));
 
   const mail = createMailService(ctx);
   let sent = 0;
