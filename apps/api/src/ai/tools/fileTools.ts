@@ -2,7 +2,7 @@ import { and, desc, eq, ilike, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { config } from "../../config.js";
 import { db } from "../../db/client.js";
-import { assets } from "../../db/schema.js";
+import { assets, userSettings } from "../../db/schema.js";
 import { getR2Object } from "../../files/r2.js";
 import { analyzeStoredFile } from "../../files/intelligence.js";
 import { detectFileType, isTextLikeFile } from "../../files/fileTypes.js";
@@ -526,7 +526,10 @@ export const filesGenerateImageTool: AgentToolDefinition = {
           : input.filename?.toLowerCase().endsWith(".webp")
             ? "webp"
             : "png");
-      const generated = await generateImage({ ...input, format: requestedFormat }, { correlationId: toolCallId });
+      const [prefs] = await db.select({ ai: userSettings.ai }).from(userSettings).where(eq(userSettings.userId, ctx.userId)).limit(1);
+      const selected = input.model && input.model !== "auto" ? input.model : prefs?.ai?.imageModel;
+      const model = selected === "qwen-image-2512" || selected === "openai-image" ? selected : "auto";
+      const generated = await generateImage({ ...input, model, format: requestedFormat }, { correlationId: toolCallId });
       const base = (input.filename?.trim() || "generated-image").replace(/\.(png|jpe?g|webp)$/i, "");
       const filename = `${base}.${generated.extension}`;
       const asset = await createAssetFromBuffer({
