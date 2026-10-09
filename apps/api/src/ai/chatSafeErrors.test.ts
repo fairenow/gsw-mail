@@ -17,3 +17,9 @@ test("only safe metadata is returned for arbitrary errors", () => {
   assert.equal(err.message, "GSW Mail couldn't process the file. Please try again.");
   assert.doesNotMatch(JSON.stringify(err), /api-key-value/);
 });
+
+test("chat display text never includes incident ID or internal error code", () => {
+  const err = reportChatError(new Error("modal backend secret diagnostics"), { operation: "chat.stream" });
+  assert.equal(chatErrorText(err), "Failed to respond. Please retry.");
+  assert.doesNotMatch(chatErrorText(err), /GSW-|chat_failed|modal|diagnostics/);
+});
