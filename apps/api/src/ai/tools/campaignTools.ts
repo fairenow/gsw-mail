@@ -127,11 +127,11 @@ export const campaignReadTool: AgentToolDefinition = {
 
 export const campaignLaunchTool: AgentToolDefinition = {
   name: "campaign.launch",
-  description: "Launch a prepared campaign to its tagged contact audience. This queues one individual GSW Mail message per contact and requires explicit confirmation.",
+  description: "Launch the EXACT campaign snapshot last seen in campaign.preview. Requires reviewHash from preview and explicit user confirmation. If audience, content, or attachments changed, preview again.",
   inputSchema: {
     type: "object",
-    properties: { campaignId: { type: "string" } },
-    required: ["campaignId"],
+    properties: { campaignId: { type: "string" }, reviewHash: { type:"string",description:"SHA-256 review hash returned from campaign.preview" } },
+    required: ["campaignId","reviewHash"],
     additionalProperties: false,
   },
   requiredScopes: ["campaign.send"],
@@ -139,8 +139,8 @@ export const campaignLaunchTool: AgentToolDefinition = {
   async execute(ctx, rawInput, toolCallId) {
     const startedAt = new Date().toISOString();
     try {
-      const input = z.object({ campaignId: z.string().uuid() }).parse(rawInput);
-      const result = await launchCampaign(ctx, input.campaignId);
+      const input = z.object({ campaignId: z.string().uuid(),reviewHash:z.string().regex(/^[0-9a-f]{64}$/) }).parse(rawInput);
+      const result = await launchCampaign(ctx, input.campaignId,input.reviewHash);
       return success(ctx, toolCallId, startedAt, {
         campaignId: input.campaignId,
         sent: result.sent,
