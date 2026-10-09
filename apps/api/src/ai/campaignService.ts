@@ -179,7 +179,7 @@ export async function updateDraftCampaign(input: {
 export async function previewCampaign(input: {userId:string; accountId:string; campaignId:string}) {
   const {campaign,recipients} = await getCampaign(input.userId,input.campaignId);
   if (campaign.accountId !== input.accountId) throw notFound("campaign not found");
-  return { campaign: {id:campaign.id,title:campaign.title,subject:campaign.subject,status:campaign.status,recipientCount:recipients.length,attachmentAssetIds:campaign.attachmentAssetIds},
+  return { campaign: {id:campaign.id,title:campaign.title,subject:campaign.subject,textBody:campaign.textBody??"",htmlBody:campaign.htmlBody??"",status:campaign.status,recipientCount:recipients.length,attachmentAssetIds:campaign.attachmentAssetIds},
     recipients:recipients.slice(0,100).map(recipient=>({
       id:recipient.id, contactId:recipient.contactId,email:recipient.email,displayName:recipient.displayName,
       subject:personalize(campaign.subject,recipient),
