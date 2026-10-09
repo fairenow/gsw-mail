@@ -92,7 +92,7 @@ async function generateWithDedicatedHuggingFaceEndpoint(input: ImageInput, deadl
   }
 }
 
-async function generateWithHuggingFaceModel(model: string, input: ImageInput): Promise<GeneratedImage> {
+async function generateWithHuggingFaceModel(model: string, input: ImageInput, deadline: number): Promise<GeneratedImage> {
   if (!config.ai.huggingFaceApiToken) throw new HttpError(503, "Hugging Face image generation is not configured.");
 
   const { width, height } = dimensionsFor(input.size);
@@ -143,7 +143,7 @@ async function generateWithHuggingFaceModel(model: string, input: ImageInput): P
   }
 }
 
-async function generateWithOpenAi(input: ImageInput): Promise<GeneratedImage> {
+async function generateWithOpenAi(input: ImageInput, deadline: number): Promise<GeneratedImage> {
   if (!config.ai.openaiApiKey) throw new HttpError(503, "No image generation provider is configured.");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), Math.max(1, Math.min(90_000, deadline - Date.now())));
