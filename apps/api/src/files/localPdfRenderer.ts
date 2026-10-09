@@ -20,6 +20,27 @@ export function validatePrintableHtml(html: string): void {
 
 export async function renderLocalPdf(html: string): Promise<Buffer> {
   validatePrintableHtml(html);
+  const workerUrl = process.env.PDF_RENDER_WORKER_URL;
+  if (workerUrl) {
+    const token = process.env.PDF_RENDER_TOKEN;
+    if (!token) throw new Error("PDF worker token is missing");
+    const url = new URL(workerUrl);
+    if (url.protocol !== "http:" || !url.hostname.endsWith(".railway.internal") || url.username || url.password || url.search || url.hash || (url.pathname !== "/" && url.pathname !== "")) throw new Error("Invalid private PDF worker address");
+    try {
+      const response = await fetch(new URL("/render", url), {
+        method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        body: JSON.stringify({ html }), signal: AbortSignal.timeout(52_000),
+      });
+      if (!response.ok) throw new Error("worker_failed");
+      const pdf = Buffer.from(await response.arrayBuffer());
+      if (pdf.length < 500 || pdf.length > 15_000_000 || pdf.toString("ascii", 0, 5) !== "%PDF-") throw new Error("invalid_pdf");
+      return pdf;
+    } catch (error) {
+      console.error("[pdf.render] isolated worker failure", { errorType: error instanceof Error ? error.name : "Unknown" });
+      throw new Error("PDF generation is temporarily unavailable. Please retry.");
+    }
+  }
+  if (process.env.NODE_ENV === "production") throw new Error("Private PDF rendering service is not configured");
   const dir = await mkdtemp(join(tmpdir(), "gsw-pdf-"));
   try {
     const source = join(dir, "page.html");
