@@ -234,4 +234,50 @@ export const calendarRsvpStatusTool: AgentToolDefinition = {
   },
 };
 
-export const calendarTools: AgentToolDefinition[] = [calendarListTool, calendarEventsTool, calendarAvailabilityTool, calendarRsvpStatusTool, calendarEventCreateTool, calendarEventUpdateTool, calendarEventDeleteTool];
+export const calendarEventPreviewChangeTool: AgentToolDefinition = {
+  name: "calendar.events.preview_change",
+  description: "Preview an event reschedule and attendee additions/removals without writing or notifying anyone. This is NOT an external attendee free/busy check; user approval is still required to update.",
+  inputSchema: {type:"object",properties:{
+    eventId:{type:"string"},
+    currentStart:{type:"string",description:"Original start ISO8601 with offset, from calendar.events.list"},
+    proposedStart:{type:"string",description:"New start ISO8601 with offset"},
+    durationMinutes:{type:"integer",minimum:1,maximum:10080},
+    attendees:{type:"array",items:{type:"string",format:"email"},maxItems:50},
+    sendSchedulingMessages:{type:"boolean"},
+  },required:["eventId","currentStart","proposedStart","durationMinutes","attendees","sendSchedulingMessages"],additionalProperties:false},
+  requiredScopes:["calendar.read"],risk:"read",
+  async execute(ctx,rawInput,toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = z.object({
+        eventId:z.string().min(1).max(500),
+        currentStart:z.string().datetime({offset:true}),
+        proposedStart:z.string().datetime({offset:true}),
+        durationMinutes:z.number().int().min(1).max(10080),
+        attendees:z.array(z.string().email()).max(50),
+        sendSchedulingMessages:z.boolean(),
+      }).parse(rawInput);
+      const engine = await calendarEngine(ctx);
+      const original = Date.parse(input.currentStart);
+      const start = Date.parse(input.proposedStart);
+      const end = new Date(start+input.durationMinutes*60000).toISOString();
+      const currentEvents = await engine.listCalendarEvents(ctx.accountId,new Date(original-86400000).toISOString(),new Date(original+86400000).toISOString());
+      const existing = currentEvents.find(event=>event.engineId===input.eventId);
+      if (!existing) return {ok:false,toolCallId,error:{code:"event_not_found",message:"The event must be found before it can be changed.",retryable:false},audit:audit(ctx,startedAt)};
+      const targetEvents = await engine.listCalendarEvents(ctx.accountId,new Date(start-7*86400000).toISOString(),end);
+      const conflicts = computeCalendarConflicts(targetEvents,input.proposedStart,end,input.eventId);
+      const oldAddresses = new Set(existing.attendees.map(x=>x.toLowerCase()));
+      const nextAddresses = new Set(input.attendees.map(x=>x.toLowerCase()));
+      return success(ctx,toolCallId,startedAt,{
+        eventId:input.eventId,currentStart:existing.start,proposedStart:input.proposedStart,proposedEnd:end,
+        addedAttendees:[...nextAddresses].filter(x=>!oldAddresses.has(x)),
+        removedAttendees:[...oldAddresses].filter(x=>!nextAddresses.has(x)),
+        conflicts,conflictCount:conflicts.length,
+        sendSchedulingMessages:input.sendSchedulingMessages,
+        attendeeAvailabilityChecked:false,
+        changesSaved:false,invitationsSent:false,
+      });
+    } catch(error) { return failed(ctx,toolCallId,startedAt,error); }
+  },
+};
+export const calendarTools: AgentToolDefinition[] = [calendarListTool, calendarEventsTool, calendarAvailabilityTool, calendarRsvpStatusTool, calendarEventPreviewChangeTool, calendarEventCreateTool, calendarEventUpdateTool, calendarEventDeleteTool];
