@@ -54,7 +54,7 @@ export default async function productRoutes(app: FastifyInstance) {
       ai: {
         ...(settings?.ai ?? {}),
         enabled: settings?.ai?.enabled !== false,
-        modelProvider: settings?.ai?.modelProvider === "openai" || settings?.ai?.modelProvider === "claude" || settings?.ai?.modelProvider === "qwen" || settings?.ai?.modelProvider === "gpt-oss-120b"
+        modelProvider: settings?.ai?.modelProvider === "openai" || settings?.ai?.modelProvider === "claude" || settings?.ai?.modelProvider === "qwen" || settings?.ai?.modelProvider === "gpt-oss-120b" || settings?.ai?.modelProvider === "deepseek-v4.1-flash"
           ? settings.ai.modelProvider
           : "gpt-oss-120b",
         mailRead: settings?.ai?.mailRead !== false,
@@ -73,14 +73,17 @@ export default async function productRoutes(app: FastifyInstance) {
     const input = settingsSchema.parse(req.body);
     const requestedModelProvider = input.ai?.modelProvider;
     if (requestedModelProvider !== undefined) {
-      if (requestedModelProvider !== "qwen" && requestedModelProvider !== "openai" && requestedModelProvider !== "claude" && requestedModelProvider !== "gpt-oss-120b") {
-        throw badRequest("AI model must be Qwen, GPT-OSS 120B, OpenAI, or Claude.");
+      if (requestedModelProvider !== "qwen" && requestedModelProvider !== "openai" && requestedModelProvider !== "claude" && requestedModelProvider !== "gpt-oss-120b" && requestedModelProvider !== "deepseek-v4.1-flash") {
+        throw badRequest("AI model must be Qwen, GPT-OSS 120B, DeepSeek, OpenAI, or Claude.");
       }
       if (requestedModelProvider === "qwen" && !config.ai.hetznerApiKey) {
         throw badRequest("Qwen is not configured for this GSW Mail deployment.");
       }
-      if (requestedModelProvider === "gpt-oss-120b" && !config.ai.huggingFaceApiToken) {
-        throw badRequest("GPT-OSS 120B is not configured. Add HF_TOKEN or HUGGINGFACE_API_TOKEN to the API service.");
+      if (requestedModelProvider === "gpt-oss-120b" && (!config.ai.modalProxyToken || !config.ai.gptOssVllmBaseUrl)) {
+        throw badRequest("GPT-OSS 120B is not configured on Modal.");
+      }
+      if (requestedModelProvider === "deepseek-v4.1-flash" && (!config.ai.modalProxyToken || !process.env.DEEPSEEK_BASE_URL)) {
+        throw badRequest("DeepSeek is not configured on Modal.");
       }
       if (requestedModelProvider === "openai" && (!config.ai.openaiApiKey || !config.ai.openaiModel)) {
         throw badRequest("OpenAI is not configured for this GSW Mail deployment.");
