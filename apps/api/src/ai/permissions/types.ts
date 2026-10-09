@@ -14,6 +14,7 @@ export const aiScopes = [
   "files.read",
   "files.write",
   "images.generate",
+  "videos.generate",
   "campaign.read",
   "campaign.write",
   "campaign.send",
