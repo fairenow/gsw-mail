@@ -133,7 +133,8 @@ export function createMailService(context: MailServiceContext) {
     },
 
     async activity(accountId: string, startIso: string, endIso: string, requestedMailboxes?: string[]) {
-      await requireAccountPermission(context.userId, accountId, "read");
+      const account = await requireAccountPermission(context.userId, accountId, "read");
+      const mailboxAddress = account.address.toLowerCase();
       const engine = await engineFor(accountId);
       const start = new Date(startIso);
       const end = new Date(endIso);
@@ -143,6 +144,7 @@ export function createMailService(context: MailServiceContext) {
 
       const available = await engine.listMailboxes(accountId);
       const defaults = ["inbox", "sent", "drafts", "outbox", "trash"];
+      const explicitMailboxes = Boolean(requestedMailboxes?.length);
       const requested = (requestedMailboxes?.length ? requestedMailboxes : defaults).map((value) => value.trim().toLowerCase());
       const targets = available.filter((mailbox) => {
         const role = mailbox.role?.toLowerCase() ?? "";
@@ -152,6 +154,7 @@ export function createMailService(context: MailServiceContext) {
 
       const folders = [];
       for (const mailbox of targets) {
+        const folderRole = (mailbox.role || mailbox.engineName).toLowerCase();
         // Page across the folder before applying the date filter. A single
         // 250-message page could silently undercount busy outreach mailboxes.
         const pageSize = 250;
@@ -182,17 +185,46 @@ export function createMailService(context: MailServiceContext) {
             snippet: message.snippet,
             read: message.read,
             hasAttachments: message.hasAttachments,
+            // Direction is based on sender versus selected mailbox, not folder alone.
+            // A self-sent Inbox copy could be BCC, forwarding, or another delivery.
+            direction: folderRole === "sent" ? "outbound" : folderRole === "drafts" || folderRole === "draft" ? "draft" : folderRole === "outbox" ? "queued" : folderRole === "trash" ? "deleted_folder" : JSON.stringify(message.from ?? "").toLowerCase().includes(mailboxAddress) ? "outbound_copy" : "inbound",
           })),
         });
+      }
+
+      const missing = requested.filter((needle) => !targets.some((mailbox) => mailbox.role?.toLowerCase() === needle || mailbox.engineName.toLowerCase() === needle));
+      const missingOptionalMailboxes = explicitMailboxes ? [] : missing.filter((name) => name === "outbox");
+      const missingRequiredMailboxes = missing.filter((name) => !missingOptionalMailboxes.some((optional: string) => optional === name));
+
+      const directionCounts = {
+        inbound: 0, outbound: 0, outboundCopy: 0, draft: 0, queued: 0, deletedFolder: 0,
+      };
+      for (const folder of folders) {
+        for (const message of folder.messages) {
+          if (message.direction === "inbound") directionCounts.inbound += 1;
+          else if (message.direction === "outbound") directionCounts.outbound += 1;
+          else if (message.direction === "outbound_copy") directionCounts.outboundCopy += 1;
+          else if (message.direction === "draft") directionCounts.draft += 1;
+          else if (message.direction === "queued") directionCounts.queued += 1;
+          else if (message.direction === "deleted_folder") directionCounts.deletedFolder += 1;
+        }
       }
 
       return {
         start: start.toISOString(),
         end: end.toISOString(),
         total: folders.reduce((sum, folder) => sum + folder.count, 0),
-        complete: folders.every((folder) => folder.complete) && requested.every((needle) => targets.some((mailbox) => mailbox.role?.toLowerCase() === needle || mailbox.engineName.toLowerCase() === needle)),
+        complete: folders.every((folder) => folder.complete) && missingRequiredMailboxes.length === 0,
+        folderCountsAreDistinctFromMessageDirection: true,
+        directionCounts,
+        directionCountsMayIncludeDuplicateCopies: true,
+        // This endpoint does not establish that Inbox copies were BCC, nor can
+        // it prove actual outbound delivery without transport/provider evidence.
+        outboundDeliveryVerified: false,
         folders,
-        missingRequestedMailboxes: requested.filter((needle) => !targets.some((mailbox) => mailbox.role?.toLowerCase() === needle || mailbox.engineName.toLowerCase() === needle)),
+        missingRequestedMailboxes: missing,
+        missingOptionalMailboxes,
+        missingRequiredMailboxes,
       };
     },
 
