@@ -194,7 +194,7 @@ export function createMailService(context: MailServiceContext) {
 
       const missing = requested.filter((needle) => !targets.some((mailbox) => mailbox.role?.toLowerCase() === needle || mailbox.engineName.toLowerCase() === needle));
       const missingOptionalMailboxes = explicitMailboxes ? [] : missing.filter((name) => name === "outbox");
-      const missingRequiredMailboxes = missing.filter((name) => !missingOptionalMailboxes.includes(name));
+      const missingRequiredMailboxes = missing.filter((name) => !missingOptionalMailboxes.some((optional: string) => optional === name));
 
       const directionCounts = {
         inbound: 0, outbound: 0, outboundCopy: 0, draft: 0, queued: 0, deletedFolder: 0,
