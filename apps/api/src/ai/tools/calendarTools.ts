@@ -118,7 +118,7 @@ export const calendarEventCreateTool: AgentToolDefinition = {
       const calendars = await engine.listCalendars(ctx.accountId);
       if (!calendars.some(calendar => calendar.engineId === input.calendarId)) throw new Error("Calendar not found");
       const conflictEnd = new Date(Date.parse(input.start) + input.durationMinutes * 60_000).toISOString();
-      const existing = await engine.listCalendarEvents(ctx.accountId, input.start, conflictEnd);
+      const existing = await engine.listCalendarEvents(ctx.accountId, new Date(Date.parse(input.start) - 7 * 86_400_000).toISOString(), conflictEnd);
       const conflicts = computeCalendarConflicts(existing, input.start, conflictEnd);
       if (conflicts.length) return { ok:false, toolCallId, error:{code:"calendar_conflict",message:"This time overlaps an existing event. Review the schedule before creating it.",retryable:false},audit:audit(ctx,startedAt) };
       const event = await engine.createCalendarEvent(ctx.accountId, input);
@@ -144,7 +144,7 @@ export const calendarEventUpdateTool: AgentToolDefinition = {
       const { eventId, ...patch } = input;
       const engine = await writableEngine(ctx);
       const conflictEnd = new Date(Date.parse(patch.start) + patch.durationMinutes * 60_000).toISOString();
-      const existing = await engine.listCalendarEvents(ctx.accountId, patch.start, conflictEnd);
+      const existing = await engine.listCalendarEvents(ctx.accountId, new Date(Date.parse(patch.start) - 7 * 86_400_000).toISOString(), conflictEnd);
       const conflicts = computeCalendarConflicts(existing, patch.start, conflictEnd, eventId);
       if (conflicts.length) return { ok:false, toolCallId, error:{code:"calendar_conflict",message:"This time overlaps an existing event. Review the schedule before changing it.",retryable:false},audit:audit(ctx,startedAt) };
       const event = await engine.updateCalendarEvent(ctx.accountId, eventId, patch);
