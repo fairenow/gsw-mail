@@ -114,6 +114,8 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [failedTurn, setFailedTurn] = useState<AiChatMessage | null>(null);
+  const [retryResume, setRetryResume] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<AiChatAttachment[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [dropActive, setDropActive] = useState(false);
@@ -191,7 +193,7 @@ export function ChatPanel() {
       activityCounterRef.current += 1;
       return [...settled.slice(-39), {
         id: activityCounterRef.current,
-        label: event.label,
+        label: event.phase === "thinking" ? "Preparing response" : "Working on your request",
         toolName: event.toolName,
         status: "running" as const,
       }];
@@ -366,7 +368,7 @@ export function ChatPanel() {
       const response = await api.chatConversations();
       setConversations(response.conversations);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError("Couldn’t complete the action. Please try again.");
     } finally {
       setHistoryLoading(false);
     }
@@ -392,7 +394,7 @@ export function ChatPanel() {
       localStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`, id);
       setHistoryOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError("Couldn’t complete the action. Please try again.");
     } finally {
       setConversationLoading(false);
     }
@@ -409,7 +411,7 @@ export function ChatPanel() {
       }
       await refreshConversations();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError("Couldn’t complete the action. Please try again.");
     }
   };
 
@@ -425,7 +427,7 @@ export function ChatPanel() {
       }
       await refreshConversations();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError("Couldn’t complete the action. Please try again.");
     }
   };
 
@@ -456,7 +458,7 @@ export function ChatPanel() {
       }
       setPendingAttachments((current) => [...current, ...uploaded].slice(0, 10));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError("Couldn’t complete the action. Please try again.");
     } finally {
       setUploadingFiles(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -475,7 +477,7 @@ export function ChatPanel() {
       const result = await api.fileDownload(attachment.assetId);
       window.open(result.url, "_blank", "noopener,noreferrer");
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError("Couldn’t complete the action. Please try again.");
     }
   };
 
@@ -486,15 +488,18 @@ export function ChatPanel() {
       return;
     }
     const typedContent = (override ?? input).trim();
-    const attachmentsForTurn = pendingAttachments;
+    if (override && failedTurn && executionActivities.some((item) => item.status === "done" && item.toolName && /^(?:mail\\.|campaign\\.|calendar\\.|contacts\\.|automations\\.|files\\.)/.test(item.toolName)) && !window.confirm("Some operations may already have completed. Check the results before retrying to avoid duplicates. Retry anyway?")) return;
+    const attachmentsForTurn = override && failedTurn ? failedTurn.attachments ?? [] : pendingAttachments;
     const content = typedContent || (attachmentsForTurn.length > 1 ? "Please review the attached files." : "Please review the attached file.");
     if ((!typedContent && attachmentsForTurn.length === 0) || sending || uploadingFiles) return;
     const userMessage: AiChatMessage = { role: "user", content, attachments: attachmentsForTurn };
-    const next = [...messages, userMessage].slice(-23);
+    const next = [...(override && failedTurn ? messages.slice(0, -1) : messages), userMessage].slice(-23);
     setMessages(next);
     setInput("");
     setPendingAttachments([]);
     setError("");
+    setFailedTurn(null);
+    setRetryResume(false);
     setSending(true);
     scrollToLatestMessage("smooth");
     try {
@@ -505,7 +510,10 @@ export function ChatPanel() {
       localStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`, response.conversationId);
       setIntervention(response.intervention);
       const assistantMessage = response.message;
-      if (assistantMessage) setMessages((current) => [...current, assistantMessage].slice(-24));
+      if (assistantMessage?.content?.trim() === "Failed to respond. Please retry.") {
+        setFailedTurn(userMessage);
+        setError("Failed to respond.");
+      } else if (assistantMessage) setMessages((current) => [...current, assistantMessage].slice(-24));
       if (assistantMessage?.attachments?.some(isChatImage)) setActivityCollapsed(true);
       if (response.intervention) setActivityCollapsed(true);
       else settleAndClearActivities();
@@ -514,22 +522,40 @@ export function ChatPanel() {
       setExecutionActivities((current) => current.map((item) => item.status === "running" ? { ...item, status: "error" as const } : item));
       setActivityCollapsed(true);
       setPendingAttachments((current) => current.length ? current : attachmentsForTurn);
-      setError(err instanceof Error ? err.message : String(err));
+      console.error("[gsw-chat] Failed to respond", { errorType: err instanceof Error ? err.name : "unknown" });
+      setFailedTurn(userMessage);
+      setError("Failed to respond.");
     } finally {
       setSending(false);
     }
   }
 
   const resumeAfterIntervention = async () => {
-    if (!account || !conversationId) return;
+    if (!account || !conversationId || sending) return;
+    setSending(true);
+    setError("");
+    setRetryResume(false);
     setExecutionActivities([]);
-    const response = await api.resumeChatStream(account.id, conversationId, handleStreamEvent);
-    setIntervention(response.intervention);
-    const assistantMessage = response.message;
-    if (assistantMessage) setMessages((current) => [...current, assistantMessage].slice(-24));
-    if (response.intervention) setActivityCollapsed(true);
-    else settleAndClearActivities();
-    scrollToLatestMessage("smooth");
+    try {
+      const response = await api.resumeChatStream(account.id, conversationId, handleStreamEvent);
+      setIntervention(response.intervention);
+      const assistantMessage = response.message;
+      if (assistantMessage?.content?.trim() === "Failed to respond. Please retry.") {
+        setError("Failed to respond.");
+        setRetryResume(true);
+      } else if (assistantMessage) {
+        setMessages((current) => [...current, assistantMessage].slice(-24));
+      }
+      if (response.intervention) setActivityCollapsed(true);
+      else settleAndClearActivities();
+      scrollToLatestMessage("smooth");
+    } catch (error) {
+      console.error("[gsw-chat] Failed to resume response", { errorType: error instanceof Error ? error.name : "unknown" });
+      setError("Failed to respond.");
+      setRetryResume(true);
+    } finally {
+      setSending(false);
+    }
   };
 
   const allowPermission = async () => {
@@ -541,7 +567,7 @@ export function ChatPanel() {
       setIntervention(null);
       await resumeAfterIntervention();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError("Couldn’t complete the action. Please try again.");
     } finally {
       setInterventionBusy(false);
     }
@@ -560,7 +586,7 @@ export function ChatPanel() {
       setExecutionActivities([]);
       scrollToLatestMessage("smooth");
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError("Couldn’t complete the action. Please try again.");
     } finally {
       setInterventionBusy(false);
     }
@@ -683,7 +709,7 @@ export function ChatPanel() {
           </div>
         </div>
       </section>}
-      {error && <div className="gsw-chat-error">{error}</div>}
+      {error && <div className="gsw-chat-error" role="alert">{failedTurn || retryResume ? "Failed to respond." : error}{(failedTurn || retryResume) && <button type="button" disabled={sending} onClick={() => retryResume ? void resumeAfterIntervention() : failedTurn ? void send(failedTurn.content) : undefined}>Retry</button>}</div>}
       <div ref={bottomRef} />
     </div>
 

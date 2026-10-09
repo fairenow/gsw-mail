@@ -52,6 +52,14 @@ export const agentSkills: AgentSkillDefinition[] = [
     toolPrefixes: ["files.", "mail.attach_file"],
   },
   {
+    id: "calendar_management",
+    title: "Calendar and events",
+    description: "Find calendar events, check event schedules, and prepare confirmed changes to meetings and invitations.",
+    worker: "calendar",
+    keywords: ["calendar", "event", "meeting", "appointment", "availability", "attendees", "invite", "invitation", "rsvp", "schedule a", "reschedule"],
+    toolPrefixes: ["calendar.", "contacts."],
+  },
+  {
     id: "scheduled_work",
     title: "Scheduled work",
     description: "Create and manage durable recurring or future agent tasks.",
