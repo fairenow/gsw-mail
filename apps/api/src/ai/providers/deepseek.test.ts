@@ -9,7 +9,7 @@ test("DeepSeek is routed through Modal and returns normalized tool calls", async
   const token = config.ai.modalProxyToken;
   const endpoint = process.env.DEEPSEEK_BASE_URL;
   try {
-    (config.ai as { modalProxyToken?: string }).modalProxyToken = "local-test-token";
+    (config.ai as { modalProxyToken: string | undefined }).modalProxyToken = "local-test-token";
     process.env.DEEPSEEK_BASE_URL = "https://test.modal.run";
     globalThis.fetch = async (url, init) => {
       assert.equal(String(url), "https://test.modal.run/v1/chat/completions");
@@ -25,7 +25,7 @@ test("DeepSeek is routed through Modal and returns normalized tool calls", async
     assert.equal(output.toolCalls[0]?.function.name, "files__list");
   } finally {
     globalThis.fetch = previous;
-    (config.ai as { modalProxyToken?: string }).modalProxyToken = token;
+    (config.ai as { modalProxyToken: string | undefined }).modalProxyToken = token;
     if(endpoint === undefined) delete process.env.DEEPSEEK_BASE_URL;
     else process.env.DEEPSEEK_BASE_URL = endpoint;
   }
