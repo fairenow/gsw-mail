@@ -59,6 +59,7 @@ export const scopeConfirmationPolicy: Record<AiScope, ConfirmationPolicy> = {
   "files.read": "never",
   "files.write": "contextual",
   "images.generate": "contextual",
+  "videos.generate": "contextual",
   "campaign.read": "never",
   "campaign.write": "contextual",
   "campaign.send": "always",
