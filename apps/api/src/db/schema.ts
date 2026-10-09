@@ -1089,6 +1089,7 @@ export const aiCampaigns = pgTable(
     textBody: text("text_body"),
     htmlBody: text("html_body"),
     audienceTags: text("audience_tags").array().default(sql`ARRAY[]::text[]`).notNull(),
+    attachmentAssetIds: uuid("attachment_asset_ids").array().default(sql`ARRAY[]::uuid[]`).notNull(),
     status: text("status").default("draft").notNull(),
     recipientCount: integer("recipient_count").default(0).notNull(),
     launchedAt: timestamp("launched_at", { withTimezone: true }),
