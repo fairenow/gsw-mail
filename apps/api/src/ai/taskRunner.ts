@@ -1,3 +1,5 @@
+import { createAssetFromBuffer } from "../files/service.js";
+import { downloadModalVideo, pollModalVideo, submitModalVideo, type ModalVideoModel } from "../files/modalVideo.js";
 import { appendAiMessage } from "./agentState.js";
 import { getAiCapabilitySettings } from "./capabilities.js";
 import { getAiProvider } from "./providers/index.js";
@@ -7,6 +9,7 @@ import {
   completeClaimedTaskStep,
   failClaimedTaskStep,
   getAgentTask,
+  requeueVideoTaskStep,
   recomputeAgentTask,
   setAgentTaskWaiting,
   updateAgentTaskStep,
@@ -93,6 +96,48 @@ async function runProviderOnlyStep(userId: string, instruction: string) {
   };
 }
 
+type ClaimedTask = NonNullable<Awaited<ReturnType<typeof claimRunnableAgentTask>>>;
+type ClaimedStep = NonNullable<Awaited<ReturnType<typeof claimRunnableTaskStep>>>;
+
+async function runVideoStep(task: ClaimedTask, step: ClaimedStep) {
+  const settings = await getAiCapabilitySettings(task.userId);
+  if (!settings.enabled || !settings.imageGeneration || !settings.fileAccess) throw new Error("Video generation is not permitted.");
+  const input = step.input ?? {};
+  const model = input.model as ModalVideoModel;
+  if (!["ltx-2.5", "wan-2.2", "hunyuan-video-1.5"].includes(model)) throw new Error("Unsupported video model.");
+  const prompt = typeof input.prompt === "string" ? input.prompt : "";
+  if (!prompt || prompt.length > 4000) throw new Error("Invalid video prompt.");
+  if (Date.now() - task.createdAt.getTime() > 60 * 60_000) throw new Error("Video generation exceeded the maximum job lifetime.");
+  const previous = step.result ?? {};
+  const oldId = previous.remoteJobId;
+  const job = typeof oldId === "string"
+    ? await pollModalVideo(model, oldId)
+    : await submitModalVideo({ model, prompt, idempotencyKey: task.id });
+  if (job.status === "failed") throw new Error("The video provider could not generate the video.");
+  if (job.status !== "completed") {
+    await requeueVideoTaskStep(task.id, step.id, { remoteJobId: job.id, status: job.status, model }, 20_000);
+    return;
+  }
+  const bytes = await downloadModalVideo(model, job.id);
+  const filename = "generated-" + model + "-" + task.id.slice(0, 8) + ".mp4";
+  const asset = await createAssetFromBuffer({
+    userId: task.userId, filename, mimeType: "video/mp4", content: bytes,
+    source: "chat_generated", kind: "video", addToFiles: true,
+  });
+  await completeClaimedTaskStep(task.id, step.id, {
+    content: "Video generated and saved to GSW Files: " + filename,
+    model, assetId: asset.id, filename, mimeType: "video/mp4", sizeBytes: bytes.length,
+  });
+  if (task.conversationId) {
+    await appendAiMessage({
+      conversationId: task.conversationId, role: "assistant",
+      content: "Your video is ready in GSW Files: " + filename,
+      provider: "modal", model,
+      metadata: { kind: "video_completed", taskId: task.id, assetId: asset.id },
+    });
+  }
+}
+
 export function createAgentTaskRunner(intervalMs = 15_000): AgentTaskRunner {
   let timer: NodeJS.Timeout | undefined;
   let running = false;
@@ -115,6 +160,10 @@ export function createAgentTaskRunner(intervalMs = 15_000): AgentTaskRunner {
 
         processed += 1;
         try {
+          if (step.input?.kind === "modal_video") {
+            await runVideoStep(task, step);
+            continue;
+          }
           const instruction = stepInstruction(task, step);
           const worker = normalizeWorker(step.worker);
           const result = task.accountId

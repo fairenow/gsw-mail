@@ -319,3 +319,19 @@ export async function recomputeAgentTask(taskId: string) {
     updatedAt: now,
   }).where(eq(aiTasks.id, taskId));
 }
+
+/** Requeue a provider-owned media job without consuming failure retry attempts. */
+export async function requeueVideoTaskStep(
+  taskId: string, stepId: string, result: Record<string, unknown>, delayMs = 20_000,
+) {
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx.update(aiTaskSteps).set({
+      status: "pending", result, attempts: 0, lastError: null,
+      nextAttemptAt: new Date(now.getTime() + delayMs), updatedAt: now,
+    }).where(and(eq(aiTaskSteps.id, stepId), eq(aiTaskSteps.taskId, taskId)));
+    await tx.update(aiTasks).set({
+      status: "planned", runningAt: null, updatedAt: now,
+    }).where(eq(aiTasks.id, taskId));
+  });
+}
