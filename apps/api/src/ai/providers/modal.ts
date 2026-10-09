@@ -14,7 +14,7 @@ export const modalProvider: AiProvider = {
     if (!base || !token) throw new HttpError(503, "GPT-OSS on Modal is not configured.");
     const url = new URL(base);
     if (url.protocol !== "https:") throw new HttpError(503, "Invalid Modal inference URL.");
-    const endpoint = new URL(url.pathname.replace(/\/$/, "") + "/v1/chat/completions", url.origin);
+    const endpoint = url.pathname.endsWith("/v1/chat/completions") ? url : new URL(url.pathname.replace(/\/$/, "") + "/v1/chat/completions", url.origin);
     const messages = [{ role: "system", content: gswSystemPrompt }, ...input.messages];
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), Math.max(config.ai.timeoutMs, 90_000));
