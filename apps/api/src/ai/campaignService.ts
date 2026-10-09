@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { createHash } from "node:crypto";
 import { db } from "../db/client.js";
 import {
   aiCampaignRecipients,
@@ -176,10 +177,17 @@ export async function updateDraftCampaign(input: {
   });
 }
 
+const campaignReviewHash = (campaign: typeof aiCampaigns.$inferSelect, recipients: (typeof aiCampaignRecipients.$inferSelect)[]) =>
+  createHash("sha256").update(JSON.stringify({
+    id:campaign.id,subject:campaign.subject,textBody:campaign.textBody,
+    htmlBody:campaign.htmlBody,attachmentAssetIds:[...campaign.attachmentAssetIds].sort(),
+    recipients:recipients.map(r=>({email:r.email,contactId:r.contactId,firstName:r.firstName,displayName:r.displayName})).sort((a,b)=>a.email.localeCompare(b.email)),
+  })).digest("hex");
+
 export async function previewCampaign(input: {userId:string; accountId:string; campaignId:string}) {
   const {campaign,recipients} = await getCampaign(input.userId,input.campaignId);
   if (campaign.accountId !== input.accountId) throw notFound("campaign not found");
-  return { campaign: {id:campaign.id,title:campaign.title,subject:campaign.subject,textBody:campaign.textBody??"",htmlBody:campaign.htmlBody??"",status:campaign.status,recipientCount:recipients.length,attachmentAssetIds:campaign.attachmentAssetIds},
+  return { campaign: {id:campaign.id,title:campaign.title,subject:campaign.subject,textBody:campaign.textBody??"",htmlBody:campaign.htmlBody??"",status:campaign.status,recipientCount:recipients.length,attachmentAssetIds:campaign.attachmentAssetIds,reviewHash:campaignReviewHash(campaign,recipients)},
     recipients:recipients.slice(0,100).map(recipient=>({
       id:recipient.id, contactId:recipient.contactId,email:recipient.email,displayName:recipient.displayName,
       subject:personalize(campaign.subject,recipient),
@@ -229,7 +237,7 @@ async function runInBatches<T>(items: T[], size: number, fn: (item: T) => Promis
   }
 }
 
-export async function launchCampaign(ctx: AgentExecutionContext, campaignId: string) {
+export async function launchCampaign(ctx: AgentExecutionContext, campaignId: string, expectedReviewHash: string) {
   const { campaign, recipients: initialRecipients } = await getCampaign(ctx.userId, campaignId);
   if (campaign.accountId !== ctx.accountId) throw badRequest("campaign belongs to a different mailbox");
   if (campaign.status === "launched") return { campaign, sent: initialRecipients.filter((recipient) => recipient.status === "queued").length, failed: initialRecipients.filter((recipient) => recipient.status === "failed").length, replay: true };
@@ -244,7 +252,11 @@ export async function launchCampaign(ctx: AgentExecutionContext, campaignId: str
   // same campaign row, so in-flight selections cannot leak into an approved send.
   const recipients = await db.select().from(aiCampaignRecipients).where(eq(aiCampaignRecipients.campaignId,campaign.id));
   const [claimedCampaign] = await db.select().from(aiCampaigns).where(eq(aiCampaigns.id,campaign.id)).limit(1);
-  const attachmentAssetIds = claimedCampaign?.attachmentAssetIds ?? [];
+  if (!claimedCampaign || campaignReviewHash(claimedCampaign,recipients) !== expectedReviewHash) {
+    await db.update(aiCampaigns).set({status:"draft",updatedAt:new Date()}).where(and(eq(aiCampaigns.id,campaign.id),eq(aiCampaigns.status,"launching")));
+    throw badRequest("campaign changed since review; preview and approve again");
+  }
+  const attachmentAssetIds = claimedCampaign.attachmentAssetIds;
 
   const mail = createMailService(ctx);
   let sent = 0;
