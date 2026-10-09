@@ -188,7 +188,7 @@ async function generateWithModal(input: ImageInput, deadline: number): Promise<G
   if (!token || !base) throw new HttpError(503, "Modal image generation is not configured.");
   const url = new URL(base);
   if (url.protocol !== "https:") throw new HttpError(503, "Invalid Modal image endpoint.");
-  const endpoint = new URL(url.pathname.replace(/\\/$/, "") + "/v1/images/generations", url.origin);
+  const endpoint = new URL(url.pathname.replace(/\/$/, "") + "/v1/images/generations", url.origin);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Math.max(1, Math.min(90_000, deadline - Date.now())));
   try {
