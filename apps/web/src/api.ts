@@ -85,7 +85,7 @@ export interface ContactListResponse {
 export interface CampaignReview {
   campaign: {
     id: string; title: string; subject: string; textBody: string; htmlBody: string;
-    status: string; recipientCount: number; attachmentAssetIds: string[];
+    status: string; recipientCount: number; attachmentAssetIds: string[]; reviewHash: string;
   };
   recipients: Array<{ id: string; contactId: string | null; email: string; displayName: string | null; subject: string | undefined; textBody: string | undefined }>;
 }
