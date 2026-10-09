@@ -22,7 +22,7 @@ test("Modal video jobs submit, poll and verify downloadable MP4", async () => {
   const originalUrl = process.env.LTX_BASE_URL;
   const mp4 = Buffer.concat([Buffer.alloc(4), Buffer.from("ftyp"), Buffer.alloc(60)]);
   try {
-    (config.ai as { modalProxyToken?: string }).modalProxyToken = "video-test";
+    (config.ai as { modalProxyToken: string | undefined }).modalProxyToken = "video-test";
     process.env.LTX_BASE_URL = "https://test.modal.run/v1/videos";
     let attempts = 0;
     globalThis.fetch = async (url, options) => {
@@ -48,7 +48,7 @@ test("Modal video jobs submit, poll and verify downloadable MP4", async () => {
     assert.deepEqual(await downloadModalVideo("ltx-2.5","job_123"),mp4);
   } finally {
     globalThis.fetch = originalFetch;
-    (config.ai as { modalProxyToken?: string }).modalProxyToken = originalToken;
+    (config.ai as { modalProxyToken: string | undefined }).modalProxyToken = originalToken;
     if (originalUrl === undefined) delete process.env.LTX_BASE_URL; else process.env.LTX_BASE_URL = originalUrl;
   }
 });
