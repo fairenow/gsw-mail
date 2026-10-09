@@ -2,6 +2,7 @@ import type { AiScope } from "./permissions/types.js";
 
 const actionLabels: Record<string, string> = {
   "videos.generate": "generate a video",
+  "video.generate": "generate a video",
   "files.generate_image": "generate an image",
   "files.create_artifact": "create a document",
   "files.create_text": "create a text file",
