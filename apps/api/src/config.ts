@@ -70,6 +70,9 @@ const config = {
   },
   ai: {
     provider: env("AI_PROVIDER", "gpt-oss-120b"),
+    modalProxyToken: process.env.MODAL_PROXY_TOKEN,
+    gptOssVllmBaseUrl: process.env.GPT_OSS_VLLM_BASE_URL,
+    qwenImageBaseUrl: process.env.QWEN_IMAGE_BASE_URL,
     timeoutMs: Number(env("AI_TIMEOUT_MS", process.env.HETZNER_INFERENCE_TIMEOUT_MS ?? "45000")),
     hetznerApiKey: process.env.HETZNER_INFERENCE_KEY,
     hetznerBaseUrl: env("HETZNER_INFERENCE_BASE_URL", "https://inference.hetzner.com/api/v1"),
