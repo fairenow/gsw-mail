@@ -1,4 +1,8 @@
 import { z } from "zod";
+import { and, eq } from "drizzle-orm";
+import { db } from "../../db/client.js";
+import { calendarRsvps } from "../../db/schema.js";
+import { calculateFreeSlots, computeCalendarConflicts } from "./calendarAvailability.js";
 import { getUserEngine } from "../../engine/index.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
 
@@ -158,4 +162,55 @@ export const calendarEventDeleteTool: AgentToolDefinition = {
   },
 };
 
-export const calendarTools: AgentToolDefinition[] = [calendarListTool, calendarEventsTool, calendarEventCreateTool, calendarEventUpdateTool, calendarEventDeleteTool];
+
+const availabilitySchema = z.object({
+  after: z.string().datetime({ offset: true }),
+  before: z.string().datetime({ offset: true }),
+  durationMinutes: z.number().int().min(5).max(480).default(30),
+  excludeEventId: z.string().max(500).optional(),
+});
+const availabilityProperties = {
+  after: { type: "string", description: "UTC or offset ISO8601 start" },
+  before: { type: "string", description: "UTC or offset ISO8601 end" },
+  durationMinutes: { type: "integer", minimum: 5, maximum: 480 },
+  excludeEventId: { type: "string" },
+};
+export const calendarAvailabilityTool: AgentToolDefinition = {
+  name: "calendar.availability",
+  description: "Read-only estimated free windows and overlapping events on the selected user's calendars. All-day or events lacking end time may not be represented as busy; do not claim confirmed availability of external attendees.",
+  inputSchema: { type: "object", properties: availabilityProperties, required: ["after","before"], additionalProperties: false },
+  requiredScopes: ["calendar.read"], risk: "read",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = availabilitySchema.parse(rawInput);
+      const after = new Date(input.after), before = new Date(input.before);
+      if (before <= after || before.getTime()-after.getTime()>31*86400000) throw new Error("Range exceeds 31 days");
+      const engine = await calendarEngine(ctx);
+      const events = await engine.listCalendarEvents(ctx.accountId, after.toISOString(), before.toISOString());
+      const free = calculateFreeSlots(events, after.toISOString(), before.toISOString(), input.durationMinutes);
+      const conflicts = computeCalendarConflicts(events, after.toISOString(), before.toISOString(), input.excludeEventId);
+      const unknownDurationCount = events.filter(event => !event.end || !Number.isFinite(Date.parse(event.end))).length;
+      return success(ctx, toolCallId, startedAt, { free: free.slice(0,50), conflicts: conflicts.slice(0,50), conflictCount: conflicts.length, unknownDurationCount, externalAttendeeAvailabilityChecked: false, estimated: true });
+    } catch (error) { return failed(ctx, toolCallId, startedAt, error); }
+  },
+};
+export const calendarRsvpStatusTool: AgentToolDefinition = {
+  name: "calendar.rsvp.status",
+  description: "Check RSVP responses for a calendar event belonging to the selected authorized mailbox, without exposing RSVP tokens.",
+  inputSchema: { type: "object", properties: { eventId: { type: "string" } }, required: ["eventId"], additionalProperties: false },
+  requiredScopes: ["calendar.read"], risk: "read",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const { eventId } = z.object({ eventId: z.string().min(1).max(1000) }).parse(rawInput);
+      const engine = await calendarEngine(ctx);
+      const events = await engine.listCalendarEvents(ctx.accountId, new Date(Date.now()-365*86400000).toISOString(), new Date(Date.now()+730*86400000).toISOString());
+      if (!events.some(event => event.engineId === eventId)) throw new Error("Event not accessible");
+      const rows = await db.select({ attendeeEmail: calendarRsvps.attendeeEmail, response: calendarRsvps.response, respondedAt: calendarRsvps.respondedAt }).from(calendarRsvps).where(and(eq(calendarRsvps.accountId, ctx.accountId), eq(calendarRsvps.eventId, eventId)));
+      return success(ctx, toolCallId, startedAt, { eventId, responses: rows, counts: { accepted: rows.filter(x=>x.response==="accepted").length, declined: rows.filter(x=>x.response==="declined").length, tentative: rows.filter(x=>x.response==="tentative").length, pending: rows.filter(x=>!x.response).length } });
+    } catch(error) { return failed(ctx, toolCallId, startedAt, error); }
+  },
+};
+
+export const calendarTools: AgentToolDefinition[] = [calendarListTool, calendarEventsTool, calendarAvailabilityTool, calendarRsvpStatusTool, calendarEventCreateTool, calendarEventUpdateTool, calendarEventDeleteTool];
