@@ -221,7 +221,7 @@ export async function generateImage(input: ImageInput, options: ImageGenerationO
   if (config.ai.modalProxyToken && config.ai.qwenImageBaseUrl && input.model !== "openai-image") {
     attempts.push({ provider: "modal", model: "qwen-image-2512", run: () => generateWithModal(input, deadline) });
   }
-  if (input.model === "auto" || !input.model ? !config.ai.modalProxyToken : false) {
+  if (input.model !== "qwen-image-2512" && input.model !== "openai-image" && !config.ai.qwenImageBaseUrl) {
     if (config.ai.huggingFaceImageEndpointUrl) attempts.push({
       provider: "huggingface", model: config.ai.huggingFaceImageModel,
       run: () => generateWithDedicatedHuggingFaceEndpoint(input, Math.min(deadline, Date.now() + 30_000)),
@@ -230,7 +230,7 @@ export async function generateImage(input: ImageInput, options: ImageGenerationO
       attempts.push({ provider: "huggingface", model, run: () => generateWithHuggingFaceModel(model, input, Math.min(deadline, Date.now() + 30_000)) });
     }
   }
-  if (config.ai.openaiApiKey) attempts.push({
+  if (config.ai.openaiApiKey && input.model !== "qwen-image-2512") attempts.push({
     provider: "openai", model: config.ai.openaiImageModel, run: () => generateWithOpenAi(input, deadline),
   });
   if (!attempts.length) throw new HttpError(503, "Image generation is not configured.");
