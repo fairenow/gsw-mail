@@ -7,6 +7,14 @@ function invalid(reason: string): never { throw new Error(`Invalid generated ima
 function dimensions(width: number, height: number) {
   if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width * height > MAX_PIXELS) invalid("dimensions out of range");
 }
+function crc32(bytes: Buffer): number {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
 const pngSignature = Buffer.from([137,80,78,71,13,10,26,10]);
 function verifyPng(bytes: Buffer): { width: number; height: number } {
   if (bytes.length < 57 || !bytes.subarray(0,8).equals(pngSignature)) invalid("PNG signature");
@@ -17,6 +25,7 @@ function verifyPng(bytes: Buffer): { width: number; height: number } {
     if (length > MAX_BYTES || offset + length + 12 > bytes.length) invalid("truncated PNG chunk");
     const type = bytes.toString("ascii", offset+4, offset+8);
     const payload = bytes.subarray(offset+8, offset+8+length);
+    if (crc32(bytes.subarray(offset+4,offset+8+length)) !== bytes.readUInt32BE(offset+8+length)) invalid("PNG checksum");
     if (!seenIHDR && (type !== "IHDR" || length !== 13)) invalid("missing PNG header");
     if (type === "IHDR") {
       if (seenIHDR || length !== 13) invalid("duplicate PNG header");
