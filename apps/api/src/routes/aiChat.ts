@@ -688,10 +688,16 @@ async function runConversationTurn(input: {
           ok: outcome.result.ok,
         });
 
+        const providerResult = outcome.result.ok
+          ? outcome.result
+          : { ...outcome.result, error: reportChatError(outcome.result.error, {
+            operation: semanticName, category: semanticName.startsWith("mail.") ? "mail" : semanticName.startsWith("files.") ? "files" : "action",
+            correlationId: run.id,
+          }) };
         input.providerMessages.push({
           role: "tool",
           tool_call_id: call.id,
-          content: JSON.stringify(outcome.result),
+          content: JSON.stringify(providerResult),
         });
       }
     }
@@ -1099,7 +1105,6 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       });
       stream.send({ type: "result", response });
     } catch (error) {
-      req.log.error(error);
       stream.send({ type: "error", message: chatErrorText(reportChatError(error, { operation: "chat.stream", category: "chat" })) });
     } finally {
       stream.close();
@@ -1156,7 +1161,6 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       });
       stream.send({ type: "result", response });
     } catch (error) {
-      req.log.error(error);
       stream.send({ type: "error", message: chatErrorText(reportChatError(error, { operation: "chat.stream", category: "chat" })) });
     } finally {
       stream.close();
