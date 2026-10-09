@@ -88,7 +88,7 @@ export const modalDeepseekProvider: AiProvider = {
       if (calls.some((call) => !call.function.name || !isObjectJson(call.function.arguments)))
         throw new HttpError(502, "DeepSeek returned an invalid tool call.");
       const content = choice?.message?.content?.trim() || null;
-      if (content && /<\\|(?:im_start|im_end|channel_sep|fim_prefix)|(?:^|\\n)assistant\\s+(?:analysis|commentary)\\b/i.test(content))
+      if (content && /<\|(?:im_start|im_end|channel_sep|fim_prefix)|(?:^|\n)assistant\s+(?:analysis|commentary)\b/i.test(content))
         throw new HttpError(502, "DeepSeek returned unparsed model output.");
       if (!content && !calls.length) throw new HttpError(502, "DeepSeek returned an empty response.");
       return { content, toolCalls: calls, model: "deepseek-ai/DeepSeek-V4.1-Flash" };
