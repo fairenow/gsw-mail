@@ -305,7 +305,7 @@ async function generateLocalPdf(input: { filename: string; content: string; inst
       const image = await readFile("/app/apps/api/assets/brand-logo.png").catch(() => null);
       if (image) {
         const img = `<img class="gsw-brand-logo" alt="GSW Mail" src="data:image/png;base64,${image.toString("base64")}">`;
-        const hero = /(<(?:header|section|div)\\b[^>]*class=["'][^"']*gsw-report-hero[^"']*["'][^>]*>)/i;
+        const hero = /(<(?:header|section|div)\b[^>]*class=["'][^"']*gsw-report-hero[^"']*["'][^>]*>)/i;
         html = hero.test(html) ? html.replace(hero, `$1${img}`) : html.replace(/<body([^>]*)>/i, `<body$1>${img}`);
       }
     }
