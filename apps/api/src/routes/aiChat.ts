@@ -689,12 +689,18 @@ async function runConversationTurn(input: {
           ok: outcome.result.ok,
         });
 
+        if (!outcome.result.ok) {
+          reportChatError(outcome.result.error, {
+            operation: semanticName,
+            category: semanticName.startsWith("mail.") ? "mail" : semanticName.startsWith("files.") ? "files" : "action",
+            correlationId: run.id,
+          });
+        }
+        // Do not send incident references, internal tool error codes or exception
+        // details back into an untrusted model response.
         const providerResult = outcome.result.ok
           ? outcome.result
-          : { ...outcome.result, error: reportChatError(outcome.result.error, {
-            operation: semanticName, category: semanticName.startsWith("mail.") ? "mail" : semanticName.startsWith("files.") ? "files" : "action",
-            correlationId: run.id,
-          }) };
+          : { ok: false, error: { message: "The operation failed. Do not claim it succeeded." } };
         input.providerMessages.push({
           role: "tool",
           tool_call_id: call.id,
