@@ -22,7 +22,7 @@ export function videoCollectionUrl(model: ModalVideoModel): URL {
     throw new HttpError(503, "The configured video endpoint is invalid.");
   }
   const path = url.pathname.replace(/\/$/, "");
-  url.pathname = path.endsWith("/v1/videos") ? path : path + "/v1/videos";
+  url.pathname = path.endsWith("/v1/videos") ? path : path.endsWith("/v1") ? path + "/videos" : path + "/v1/videos";
   return url;
 }
 
