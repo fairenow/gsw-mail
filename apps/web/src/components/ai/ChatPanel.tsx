@@ -4,6 +4,7 @@ import { api, type AiChatAttachment, type AiChatMessage, type AiChatStreamEvent,
 import { useAppShell } from "../AppShell";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatImageAttachment, isChatImage } from "./ChatImageAttachment";
+import { ChatVideoAttachment, ChatVideoTaskCard, MediaPreviewModal, extractVideoTaskId } from "./ChatMedia";
 
 const starterPrompts = [
   "Summarize yesterday's email activity",
@@ -101,6 +102,7 @@ const formatAttachmentSize = (size: number) =>
 export function ChatPanel() {
   const { account } = useAppShell();
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
+  const [mediaPreview, setMediaPreview] = useState<AiChatAttachment | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -659,7 +661,7 @@ export function ChatPanel() {
         const segments = message.role === "assistant" ? parseAssistantSegments(message.content) : null;
         return <article className={`gsw-chat-message ${message.role}`} key={`${message.role}-${index}`}>
           <div className="gsw-chat-message-label">{message.role === "user" ? "You" : "GSW"}</div>
-          {message.role === "assistant" ? <div className="gsw-chat-assistant-content">
+          {message.role === "assistant" && extractVideoTaskId(message.content) ? <ChatVideoTaskCard taskId={extractVideoTaskId(message.content)!} onPreview={setMediaPreview}/> : message.role === "assistant" ? <div className="gsw-chat-assistant-content">
             {segments?.map((segment, segmentIndex) => segment.type === "email_draft"
               ? <section className="gsw-chat-email-draft" key={`draft-${segmentIndex}`}>
                   <div className="gsw-chat-email-draft-head">
@@ -672,7 +674,8 @@ export function ChatPanel() {
           </div> : <div className="gsw-chat-message-body">{message.content}</div>}
           {message.attachments && message.attachments.length > 0 && <div className="gsw-chat-message-files">
             {message.attachments.map((attachment) => isChatImage(attachment)
-              ? <ChatImageAttachment key={attachment.assetId} attachment={attachment} onUseInEmail={useImageInEmail} onError={setError} />
+              ? <ChatImageAttachment key={attachment.assetId} attachment={attachment} onUseInEmail={useImageInEmail} onError={setError} onPreview={() => setMediaPreview(attachment)} />
+              : attachment.mimeType.toLowerCase() === "video/mp4" ? <ChatVideoAttachment key={attachment.assetId} attachment={attachment} onPreview={setMediaPreview} />
               : <button type="button" className="gsw-chat-file-chip" key={attachment.assetId} onClick={() => void openAttachedFile(attachment)}>
                 <File size={15} />
                 <span><strong>{attachment.filename}</strong><small>{attachment.mimeType || "File"} · {formatAttachmentSize(attachment.sizeBytes)}</small></span>
@@ -774,5 +777,6 @@ export function ChatPanel() {
       </div>
       <p>{recording ? "Listening… tap stop to review your words, or send when you're done." : uploadingFiles ? "Uploading file to your private GSW Files storage…" : "Attach files or drag them here. GSW Chat can use stored files in drafts; sending still requires explicit confirmation."}</p>
     </footer>
+  {mediaPreview && <MediaPreviewModal attachment={mediaPreview} onClose={() => setMediaPreview(null)} />}
   </div>;
 }
