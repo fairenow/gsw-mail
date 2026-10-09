@@ -196,12 +196,28 @@ export function createMailService(context: MailServiceContext) {
       const missingOptionalMailboxes = explicitMailboxes ? [] : missing.filter((name) => name === "outbox");
       const missingRequiredMailboxes = missing.filter((name) => !missingOptionalMailboxes.includes(name));
 
+      const directionCounts = {
+        inbound: 0, outbound: 0, outboundCopy: 0, draft: 0, queued: 0, deletedFolder: 0,
+      };
+      for (const folder of folders) {
+        for (const message of folder.messages) {
+          if (message.direction === "inbound") directionCounts.inbound += 1;
+          else if (message.direction === "outbound") directionCounts.outbound += 1;
+          else if (message.direction === "outbound_copy") directionCounts.outboundCopy += 1;
+          else if (message.direction === "draft") directionCounts.draft += 1;
+          else if (message.direction === "queued") directionCounts.queued += 1;
+          else if (message.direction === "deleted_folder") directionCounts.deletedFolder += 1;
+        }
+      }
+
       return {
         start: start.toISOString(),
         end: end.toISOString(),
         total: folders.reduce((sum, folder) => sum + folder.count, 0),
         complete: folders.every((folder) => folder.complete) && missingRequiredMailboxes.length === 0,
         folderCountsAreDistinctFromMessageDirection: true,
+        directionCounts,
+        directionCountsMayIncludeDuplicateCopies: true,
         // This endpoint does not establish that Inbox copies were BCC, nor can
         // it prove actual outbound delivery without transport/provider evidence.
         outboundDeliveryVerified: false,
