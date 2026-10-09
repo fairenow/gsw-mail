@@ -47,14 +47,14 @@ const parseProviderError = async (response: Response) => {
     : body.error?.message?.trim() || body.message?.trim() || "";
 };
 
-async function generateWithDedicatedHuggingFaceEndpoint(input: ImageInput): Promise<GeneratedImage> {
+async function generateWithDedicatedHuggingFaceEndpoint(input: ImageInput, deadline: number): Promise<GeneratedImage> {
   if (!config.ai.huggingFaceApiToken || !config.ai.huggingFaceImageEndpointUrl) {
     throw new HttpError(503, "A dedicated Hugging Face image endpoint is not configured.");
   }
 
   const { width, height } = dimensionsFor(input.size);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Math.max(config.ai.timeoutMs, 240_000));
+  const timeout = setTimeout(() => controller.abort(), Math.max(1, Math.min(90_000, deadline - Date.now())));
   try {
     const response = await fetch(config.ai.huggingFaceImageEndpointUrl, {
       method: "POST",
@@ -98,7 +98,7 @@ async function generateWithHuggingFaceModel(model: string, input: ImageInput): P
   const { width, height } = dimensionsFor(input.size);
   const endpoint = `${config.ai.huggingFaceImageBaseUrl.replace(/\/$/, "")}/${model}`;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Math.max(config.ai.timeoutMs, 180_000));
+  const timeout = setTimeout(() => controller.abort(), Math.max(1, Math.min(90_000, deadline - Date.now())));
   try {
     const response = await fetch(endpoint, {
       method: "POST",
@@ -146,7 +146,7 @@ async function generateWithHuggingFaceModel(model: string, input: ImageInput): P
 async function generateWithOpenAi(input: ImageInput): Promise<GeneratedImage> {
   if (!config.ai.openaiApiKey) throw new HttpError(503, "No image generation provider is configured.");
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Math.max(config.ai.timeoutMs, 120_000));
+  const timeout = setTimeout(() => controller.abort(), Math.max(1, Math.min(90_000, deadline - Date.now())));
   try {
     const response = await fetch(`${config.ai.openaiBaseUrl.replace(/\/$/, "")}/images/generations`, {
       method: "POST",
@@ -185,18 +185,19 @@ export async function generateImage(input: ImageInput, options: ImageGenerationO
   const started = Date.now();
   const budget = Math.max(5_000, Math.min(options.maxDurationMs ?? 90_000, 180_000));
   const correlationId = options.correlationId ?? "untracked";
+  const deadline = started + budget;
   const attempts: Array<{ provider: "huggingface" | "openai"; model: string; run: () => Promise<GeneratedImage> }> = [];
   if (config.ai.huggingFaceApiToken) {
     if (config.ai.huggingFaceImageEndpointUrl) attempts.push({
       provider: "huggingface", model: config.ai.huggingFaceImageModel,
-      run: () => generateWithDedicatedHuggingFaceEndpoint(input),
+      run: () => generateWithDedicatedHuggingFaceEndpoint(input, deadline),
     });
     for (const model of (config.ai.huggingFaceImageModels.length ? config.ai.huggingFaceImageModels : [config.ai.huggingFaceImageModel]).slice(0, 2)) {
-      attempts.push({ provider: "huggingface", model, run: () => generateWithHuggingFaceModel(model, input) });
+      attempts.push({ provider: "huggingface", model, run: () => generateWithHuggingFaceModel(model, input, deadline) });
     }
   }
   if (config.ai.openaiApiKey) attempts.push({
-    provider: "openai", model: config.ai.openaiImageModel, run: () => generateWithOpenAi(input),
+    provider: "openai", model: config.ai.openaiImageModel, run: () => generateWithOpenAi(input, deadline),
   });
   if (!attempts.length) throw new HttpError(503, "Image generation is not configured.");
   let lastStatus = 502;
@@ -205,14 +206,7 @@ export async function generateImage(input: ImageInput, options: ImageGenerationO
     if (remaining < 1_000) break;
     const began = Date.now();
     try {
-      const result = await Promise.race([
-        attempt.run(),
-        new Promise<never>((_, reject) => {
-          const timer = setTimeout(() => reject(new HttpError(504, "Image generation deadline reached.")), remaining);
-          // Timer is cleared by the settled race below at the orchestration level via finally.
-          timer.unref?.();
-        }),
-      ]);
+      const result = await attempt.run();
       console.info("[gsw-image] attempt", { correlationId, provider: attempt.provider, model: attempt.model, attempt: index + 1, durationMs: Date.now()-began, outcome: "success", width: result.width, height: result.height, mimeType: result.mimeType, bytes: result.bytes.length });
       return result;
     } catch (error) {
