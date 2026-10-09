@@ -1,4 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
+import { z } from "zod";
+import { createContact, getContact, getContactEngineContext, listContacts, updateContact } from "../../lib/contacts.js";
 import { db } from "../../db/client.js";
 import { contactTags, contacts } from "../../db/schema.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
@@ -39,4 +41,136 @@ export const contactTagTool: AgentToolDefinition = {
   },
 };
 
-export const contactTools: AgentToolDefinition[] = [contactTagTool];
+
+const audit = (ctx: AgentExecutionContext, startedAt: string) => ({ userId: ctx.userId, accountId: ctx.accountId, startedAt, completedAt: new Date().toISOString() });
+const errorResult = (ctx: AgentExecutionContext, toolCallId: string, startedAt: string) => ({
+  ok: false, toolCallId, error: { code: "tool_failed", message: "The contact operation could not be completed.", retryable: false }, audit: audit(ctx, startedAt),
+});
+
+export const contactSearchTool: AgentToolDefinition = {
+  name: "contacts.search",
+  description: "Search the authenticated user's existing contacts by name, organization, or contact details. Returns a bounded preview; do not invent contacts.",
+  inputSchema: { type: "object", properties: { query: { type: "string" }, limit: { type: "number", minimum: 1, maximum: 50 } }, required: ["query"], additionalProperties: false },
+  requiredScopes: ["contacts.read"],
+  risk: "read",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const { query, limit } = z.object({ query: z.string().trim().min(1).max(200), limit: z.number().int().min(1).max(50).default(20) }).parse(rawInput);
+      const result = await listContacts(ctx.userId, query, limit);
+      return { ok: true, toolCallId, data: result, audit: audit(ctx, startedAt) };
+    } catch { return errorResult(ctx, toolCallId, startedAt); }
+  },
+};
+
+export const contactAudiencePreviewTool: AgentToolDefinition = {
+  name: "contacts.audience.preview",
+  description: "Preview the user's contacts matching ALL supplied tags, including a count and bounded contact sample. Read-only; use before creating or launching a campaign.",
+  inputSchema: { type: "object", properties: { tags: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 20 }, limit: { type: "number", minimum: 1, maximum: 50 } }, required: ["tags"], additionalProperties: false },
+  requiredScopes: ["contacts.read"],
+  risk: "read",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const { tags, limit } = z.object({ tags: z.array(z.string().trim().min(1).max(100)).min(1).max(20), limit: z.number().int().min(1).max(50).default(25) }).parse(rawInput);
+      const normalized = [...new Set(tags.map(t => t.toLocaleLowerCase()))];
+      const rows = await db.select({ id: contacts.id, displayName: contacts.displayName, tag: contactTags.normalizedTag })
+        .from(contactTags).innerJoin(contacts, eq(contactTags.contactId, contacts.id))
+        .where(and(eq(contacts.ownerUserId, ctx.userId), inArray(contactTags.normalizedTag, normalized)));
+      const matches = new Map<string, { displayName: string | null; tags: Set<string> }>();
+      for (const row of rows) {
+        const item = matches.get(row.id) ?? { displayName: row.displayName, tags: new Set<string>() };
+        item.tags.add(row.tag);
+        matches.set(row.id, item);
+      }
+      const candidates = [...matches].filter(([, item]) => normalized.every(tag => item.tags.has(tag)));
+      return { ok: true, toolCallId, data: { tags: normalized, recipientCount: candidates.length, contacts: candidates.slice(0, limit).map(([id,item])=>({ id, displayName: item.displayName })), truncated: candidates.length > limit, sendsEmail: false }, audit: audit(ctx, startedAt) };
+    } catch { return errorResult(ctx, toolCallId, startedAt); }
+  },
+};
+
+export const contactTagAssignTool: AgentToolDefinition = {
+  name: "contacts.tags.assign",
+  description: "Create a tag by assigning it to explicitly selected, owned contact IDs. Existing matching assignments are skipped. This never sends email.",
+  inputSchema: { type: "object", properties: { tag: { type: "string" }, contactIds: { type: "array", items: { type: "string", format: "uuid" }, minItems: 1, maxItems: 50 } }, required: ["tag", "contactIds"], additionalProperties: false },
+  requiredScopes: ["contacts.write"],
+  risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const { tag, contactIds } = z.object({ tag: z.string().trim().min(1).max(100), contactIds: z.array(z.string().uuid()).min(1).max(50) }).parse(rawInput);
+      const ids = [...new Set(contactIds)];
+      const owned = await db.select({ id: contacts.id }).from(contacts).where(and(eq(contacts.ownerUserId, ctx.userId), inArray(contacts.id, ids)));
+      if (owned.length !== ids.length) return { ok: false, toolCallId, error: { code: "not_authorized", message: "Some selected contacts are unavailable.", retryable: false }, audit: audit(ctx, startedAt) };
+      const normalizedTag = tag.toLocaleLowerCase();
+      const inserted = await db.insert(contactTags).values(ids.map(contactId=>({ contactId, tag, normalizedTag }))).onConflictDoNothing().returning({ id: contactTags.id });
+      return { ok: true, toolCallId, data: { tag, assigned: inserted.length, alreadyAssigned: ids.length-inserted.length, contactCount: ids.length, sendsEmail: false }, audit: audit(ctx, startedAt) };
+    } catch { return errorResult(ctx, toolCallId, startedAt); }
+  },
+};
+
+
+const contactInputSchema = z.object({
+  firstName: z.string().max(160).optional(), lastName: z.string().max(160).optional(),
+  displayName: z.string().trim().min(1).max(300).optional(),
+  organization: z.string().max(300).optional(), jobTitle: z.string().max(200).optional(),
+  notes: z.string().max(10000).optional(),
+  emails: z.array(z.object({ email: z.string().email(), label: z.string().max(80).optional(), isPrimary: z.boolean().optional() })).max(20).optional(),
+  tags: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
+});
+const contactProperties = {
+  firstName: { type: "string" }, lastName: { type: "string" }, displayName: { type: "string" },
+  organization: { type: "string" }, jobTitle: { type: "string" }, notes: { type: "string" },
+  emails: { type: "array", items: { type: "object", properties: { email: { type: "string" }, label: { type: "string" }, isPrimary: { type: "boolean" } }, required: ["email"], additionalProperties: false } },
+  tags: { type: "array", items: { type: "string" } },
+};
+export const contactCreateTool: AgentToolDefinition = {
+  name: "contacts.create",
+  description: "Create a contact from explicitly provided details; do not invent an address or assume intent to contact them.",
+  inputSchema: { type: "object", properties: contactProperties, additionalProperties: false },
+  requiredScopes: ["contacts.write"], risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = contactInputSchema.refine(v=>Boolean(v.displayName || v.firstName || v.emails?.length)).parse(rawInput);
+      const engine = await getContactEngineContext(ctx.userId, ctx.accessToken, ctx.authUserId, ctx.headers);
+      const contact = await createContact(ctx.userId, input, undefined, engine);
+      return { ok: true, toolCallId, data: { contact }, audit: audit(ctx, startedAt) };
+    } catch { return errorResult(ctx, toolCallId, startedAt); }
+  },
+};
+export const contactUpdateTool: AgentToolDefinition = {
+  name: "contacts.update",
+  description: "Update a selected owned contact with supplied fields. The supplied arrays of tags and emails replace existing values; read the contact first to preserve data.",
+  inputSchema: { type: "object", properties: { contactId: { type: "string" }, ...contactProperties }, required: ["contactId"], additionalProperties: false },
+  requiredScopes: ["contacts.write"], risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = contactInputSchema.extend({ contactId: z.string().uuid() }).parse(rawInput);
+      const { contactId, ...fields } = input;
+      const existing = await getContact(ctx.userId, contactId);
+      if (!existing) return { ok: false, toolCallId, error: { code: "not_found", message: "Contact not found.", retryable: false }, audit: audit(ctx, startedAt) };
+      // updateContact replaces all child collections: supply existing fields so a
+      // partial AI request never accidentally erases addresses, tags, or notes.
+      const present = existing as Record<string, unknown>;
+      const currentEmails = Array.isArray(present.emails) ? present.emails as Array<{ email: string; label?: string; isPrimary?: boolean }> : [];
+      const currentTags = Array.isArray(present.tags) ? present.tags as string[] : [];
+      const merged = {
+        firstName: fields.firstName ?? (typeof present.firstName === "string" ? present.firstName : undefined),
+        lastName: fields.lastName ?? (typeof present.lastName === "string" ? present.lastName : undefined),
+        displayName: fields.displayName ?? (typeof present.displayName === "string" ? present.displayName : undefined),
+        organization: fields.organization ?? (typeof present.organization === "string" ? present.organization : undefined),
+        jobTitle: fields.jobTitle ?? (typeof present.jobTitle === "string" ? present.jobTitle : undefined),
+        notes: fields.notes ?? (typeof present.notes === "string" ? present.notes : undefined),
+        emails: fields.emails ?? currentEmails,
+        tags: fields.tags ?? currentTags,
+      };
+      const engine = await getContactEngineContext(ctx.userId, ctx.accessToken, ctx.authUserId, ctx.headers);
+      const contact = await updateContact(ctx.userId, contactId, merged, engine);
+      return { ok: true, toolCallId, data: { contact }, audit: audit(ctx, startedAt) };
+    } catch { return errorResult(ctx, toolCallId, startedAt); }
+  },
+};
+
+export const contactTools: AgentToolDefinition[] = [contactTagTool, contactSearchTool, contactAudiencePreviewTool, contactTagAssignTool, contactCreateTool, contactUpdateTool];

@@ -152,7 +152,38 @@ export const campaignLaunchTool: AgentToolDefinition = {
   },
 };
 
+
+export const campaignReportTool: AgentToolDefinition = {
+  name: "campaign.report",
+  description: "Summarize persisted recipient queue results for an owned campaign, highlight failed recipients and provide suggested follow-up next steps. Queued does NOT mean delivered, opened or read.",
+  inputSchema: { type: "object", properties: { campaignId: { type: "string" } }, required: ["campaignId"], additionalProperties: false },
+  requiredScopes: ["campaign.read"], risk: "read",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const { campaignId } = z.object({ campaignId: z.string().uuid() }).parse(rawInput);
+      const { campaign, recipients } = await getCampaign(ctx.userId, campaignId);
+      if (campaign.accountId !== ctx.accountId) throw new Error("Campaign belongs to another mailbox");
+      const statuses: Record<string, number> = {};
+      for (const recipient of recipients) statuses[recipient.status] = (statuses[recipient.status] ?? 0) + 1;
+      return success(ctx, toolCallId, startedAt, {
+        campaign: { id: campaign.id, title: campaign.title, status: campaign.status, subject: campaign.subject, recipientCount: campaign.recipientCount },
+        counts: statuses,
+        // Deliberately do not infer delivery or engagement from queued send state.
+        deliveryConfirmed: false, openTrackingAvailable: false,
+        failedRecipients: recipients.filter(r=>r.status==="failed").slice(0,50).map(r=>({ email: r.email, status: r.status })),
+        suggestedNextSteps: [
+          "Review failed recipient addresses before considering a targeted retry.",
+          "Check mail delivery status independently; queued is not proof of delivery.",
+          "Prepare follow-up drafts only after reviewing outcomes and timing.",
+        ],
+      });
+    } catch(error) { return failure(ctx, toolCallId, startedAt, error); }
+  },
+};
+
 export const campaignTools: AgentToolDefinition[] = [
+  campaignReportTool,
   campaignCreateTool,
   campaignListTool,
   campaignReadTool,
