@@ -6,6 +6,7 @@ import {
   contactEmails,
   contactTags,
   contacts,
+  outboundMessages,
 } from "../db/schema.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { createMailService } from "../services/mailService.js";
@@ -170,6 +171,29 @@ export async function previewCampaign(input: {userId:string; accountId:string; c
       // Do not render untrusted HTML previews without sanitization.
     }))
   };
+}
+
+export async function getCampaignDeliveryStates(input: {userId:string;accountId:string;campaignId:string}) {
+  const {campaign,recipients}=await getCampaign(input.userId,input.campaignId);
+  if(campaign.accountId!==input.accountId) throw notFound("campaign not found");
+  const ids=recipients.map(r=>r.sendId).filter((id): id is string=>Boolean(id));
+  const records=ids.length?await db.select({
+    id:outboundMessages.id,deliveryStatus:outboundMessages.deliveryStatus,
+    transportStatus:outboundMessages.transportStatus,deliveredAt:outboundMessages.deliveredAt,
+    acceptedAt:outboundMessages.acceptedAt, failureCode:outboundMessages.failureCode,
+  }).from(outboundMessages).where(and(eq(outboundMessages.accountId,input.accountId),inArray(outboundMessages.id,ids))):[];
+  const byId=new Map(records.map(record=>[record.id,record]));
+  const rows=recipients.map(recipient=>{
+    const outbound=recipient.sendId?byId.get(recipient.sendId):undefined;
+    return {email:recipient.email,queueStatus:recipient.status,
+      deliveryStatus:outbound?.deliveryStatus??null,transportStatus:outbound?.transportStatus??null,
+      acceptedAt:outbound?.acceptedAt?.toISOString()??null,deliveredAt:outbound?.deliveredAt?.toISOString()??null,
+      failureCode:outbound?.failureCode??null};
+  });
+  const counts:Record<string,number>={};
+  for(const row of rows){const state=row.deliveryStatus??row.queueStatus;counts[state]=(counts[state]??0)+1;}
+  return {campaign:{id:campaign.id,title:campaign.title,status:campaign.status,recipientCount:recipients.length},counts,
+    recipients:rows.slice(0,100),deliveryTrackingSource:"outbound_messages",openTrackingAvailable:false};
 }
 
 const personalize = (value: string | null, recipient: { firstName: string | null; displayName: string | null; email: string }) => {
