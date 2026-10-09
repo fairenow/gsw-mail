@@ -43,3 +43,17 @@ test("branded service overviews override a model-authored fixed-height cover", (
   assert.match(output, /break-after: auto !important; page-break-after: auto !important/);
   assert.ok(output.lastIndexOf("page-break-after: auto !important") > output.indexOf("page-break-after:always"));
 });
+
+test("uses adaptive report pagination rather than keeping a whole section together", () => {
+  const html = '<!doctype html><html><head></head><body class="gsw-tc"><section class="gsw-page-section"><h2>Overview</h2><p>Content</p></section></body></html>';
+  const output = composePdfHtml(html);
+  assert.match(output, /gsw-layout-report/);
+  assert.match(output, /section:not\(\.gsw-report-hero\):not\(\.gsw-feature-card\)/);
+  assert.match(output, /break-inside: auto !important/);
+});
+test("preserves an explicitly selected brochure layout", () => {
+  const html = '<!doctype html><html><head></head><body class="gsw-tc gsw-layout-brochure"><section class="cover">Hero</section></body></html>';
+  const output = composePdfHtml(html);
+  assert.match(output, /gsw-layout-brochure/);
+  assert.equal((output.match(/gsw-layout-report"/g) ?? []).length, 0);
+});
