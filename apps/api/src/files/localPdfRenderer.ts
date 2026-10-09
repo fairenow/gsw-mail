@@ -30,6 +30,9 @@ export async function renderLocalPdf(html: string): Promise<Buffer> {
     try {
       await execute("chromium", [
         "--headless", "--disable-dev-shm-usage",
+        // Railway container sandbox disallows Chromium namespace sandbox setup.
+        // Container-level isolation remains in place; renderer HTML cannot load network resources.
+        "--no-sandbox", "--disable-setuid-sandbox",
         "--disable-background-networking", "--disable-extensions",
         "--no-first-run", "--disable-default-apps",
         "--user-data-dir=" + join(dir, "chromium-profile"),
@@ -37,8 +40,8 @@ export async function renderLocalPdf(html: string): Promise<Buffer> {
         "file://" + source,
       ], { timeout: 45000, killSignal: "SIGKILL", maxBuffer: 2 * 1024 * 1024 });
     } catch (error) {
-      const cause = error instanceof Error ? error.message.slice(0, 450) : String(error).slice(0, 450);
-      console.error("[pdf.render] chromium execution failed", { cause });
+      const errorType = error instanceof Error ? error.name : "UnknownError";
+      console.error("[pdf.render] chromium execution failed", { errorType, renderer: "chromium" });
       throw new Error("Designed PDF could not be rendered with Chromium. Please retry or contact support.");
     }
     const pdf = await readFile(output);
