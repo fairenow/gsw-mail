@@ -62,7 +62,7 @@ export const modalDeepseekProvider: AiProvider = {
     const url = new URL(base);
     if (url.protocol !== "https:") throw new HttpError(503, "Invalid Modal inference URL.");
     const endpoint = url.pathname.endsWith("/v1/chat/completions")
-      ? url : new URL(url.pathname.replace(/\\/$/, "") + "/v1/chat/completions", url.origin);
+      ? url : new URL(url.pathname.replace(/\/$/, "") + "/v1/chat/completions", url.origin);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), Math.max(config.ai.timeoutMs, 90_000));
     try {
