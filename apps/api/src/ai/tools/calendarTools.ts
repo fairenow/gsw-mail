@@ -145,6 +145,19 @@ export const calendarEventUpdateTool: AgentToolDefinition = {
       const engine = await writableEngine(ctx);
       const conflictEnd = new Date(Date.parse(patch.start) + patch.durationMinutes * 60_000).toISOString();
       const existing = await engine.listCalendarEvents(ctx.accountId, new Date(Date.parse(patch.start) - 7 * 86_400_000).toISOString(), conflictEnd);
+      // A repeated update with identical data is a no-op; do not reissue
+      // scheduling messages or attendee invitations on a retry.
+      const current = existing.find(event=>event.engineId===eventId);
+      if (current &&
+        current.title === patch.title &&
+        Date.parse(current.start) === Date.parse(patch.start) &&
+        (current.end ? Date.parse(current.end) : NaN) === Date.parse(conflictEnd) &&
+        (current.description??"") === (patch.description??"") &&
+        (current.location??"") === (patch.location??"") &&
+        (current.meetingLink??"") === (patch.meetingLink??"") &&
+        current.allDay === patch.allDay &&
+        JSON.stringify([...current.attendees].map(x=>x.toLowerCase()).sort()) === JSON.stringify([...patch.attendees].map(x=>x.toLowerCase()).sort())
+      ) return success(ctx,toolCallId,startedAt,{event:current,unchanged:true,invitationsResent:false});
       const conflicts = computeCalendarConflicts(existing, patch.start, conflictEnd, eventId);
       if (conflicts.length) return { ok:false, toolCallId, error:{code:"calendar_conflict",message:"This time overlaps an existing event. Review the schedule before changing it.",retryable:false},audit:audit(ctx,startedAt) };
       const event = await engine.updateCalendarEvent(ctx.accountId, eventId, patch);
