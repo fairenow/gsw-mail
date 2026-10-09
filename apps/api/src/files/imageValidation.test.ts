@@ -27,7 +27,7 @@ test("rejects truncated and corrupt PNG data", () => {
   const source=png();
   assert.throws(()=>verifyGeneratedImage(source.subarray(0,-6)),/truncated PNG|incomplete PNG/);
   const invalid=Buffer.from(source); invalid.fill(0,invalid.indexOf(Buffer.from("IDAT"))+4,invalid.indexOf(Buffer.from("IEND"))-8);
-  assert.throws(()=>verifyGeneratedImage(invalid),/undecodable PNG/);
+  assert.throws(()=>verifyGeneratedImage(invalid),/PNG checksum|undecodable PNG/);
 });
 test("rejects a PNG with impossible dimensions", () => {
   const source=png();const altered=Buffer.from(source);altered.writeUInt32BE(50000,16);
