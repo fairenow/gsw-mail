@@ -57,6 +57,7 @@ const transformArtifactInput = z.object({
   instruction: z.string().trim().min(1).max(20_000),
 });
 const generateImageInput = z.object({
+  model: z.enum(["auto", "qwen-image-2512", "openai-image"]).optional(),
   filename: z.string().trim().min(1).max(255).optional(),
   prompt: z.string().trim().min(1).max(32_000),
   size: z.enum(["1024x1024", "1536x1024", "1024x1536", "auto"]).optional(),
@@ -504,6 +505,7 @@ export const filesGenerateImageTool: AgentToolDefinition = {
     properties: {
       filename: { type: "string", description: "Optional filename. The correct extension is added if missing." },
       prompt: { type: "string", description: "Detailed image-generation prompt." },
+      model: { type: "string", enum: ["auto", "qwen-image-2512", "openai-image"], description: "Image-generation model; auto prefers Modal Qwen Image." },
       size: { type: "string", enum: ["1024x1024", "1536x1024", "1024x1536", "auto"] },
       quality: { type: "string", enum: ["low", "medium", "high", "auto"] },
       background: { type: "string", enum: ["transparent", "opaque", "auto"] },
