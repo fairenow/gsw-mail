@@ -234,12 +234,12 @@ const simpleMarkdownToHtml = (source: string) => {
 };
 
 const pdfBaseStyles = `
-  @page { size: Letter; margin: 0; }
+  @page { size: Letter; margin: 14mm 15mm; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   html, body { margin: 0; min-height: 100%; }
   body { background: #fffdf9; color: #252c39; font-family: Arial, Helvetica, sans-serif; font-size: 10pt; line-height: 1.5; }
-  .gsw-page { padding: 44px 48px; }
-  .gsw-report-hero { background: #152f50; color: #fff; padding: 36px 42px; margin: -44px -48px 25px; }
+  .gsw-page { padding: 14px 10px; }
+  .gsw-report-hero { background: #152f50; color: #fff; padding: 28px 30px; margin: 0 0 22px; break-inside: avoid; }
   .gsw-report-hero h1 { color: #fff; margin: 0 0 7px; font-size: 28pt; line-height: 1.13; }
   .gsw-report-hero p { margin: 0; color: #e1edf8; }
   .gsw-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 20px 0 25px; }
@@ -272,7 +272,7 @@ const pdfBaseStyles = `
   .gsw-page-section { break-inside: avoid; page-break-inside: avoid; }
   .gsw-report-hero, .gsw-metric, .gsw-feature-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .gsw-tc .gsw-report-footer { border-color: var(--gsw-stroke); color: var(--gsw-ink); }
-    .gsw-report-footer { margin-top: 23px; border-top: 1px solid #dce3ea; padding-top: 10px; color: #697687; font-size: 8.5pt; }
+  .gsw-report-footer { margin: 16px 0 0; border-top: 1px solid #dce3ea; padding: 10px 0 0; color: #697687; font-size: 8.5pt; break-inside: avoid; page-break-inside: avoid; break-before: avoid; }
 `;
 
 export function composePdfHtml(content: string): string {
@@ -282,7 +282,7 @@ export function composePdfHtml(content: string): string {
   if (hasDocument) {
     // Preserve the model's full page composition, including its head/CSS.
     // Append print-safe defaults rather than putting a second HTML document inside it.
-    return body.replace(/<head([^>]*)>/i, `<head$1><style>${pdfBaseStyles}</style>`);
+    return body.replace(/<\\/head>/i, `<style>${pdfBaseStyles}${printGuard}</style></head>`);
   }
   return `<!doctype html><html><head><meta charset="utf-8"><style>${pdfBaseStyles}</style></head><body><main class="gsw-page">${body}</main></body></html>`;
 }
