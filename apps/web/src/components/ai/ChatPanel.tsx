@@ -109,7 +109,7 @@ export function ChatPanel() {
   const [interventionBusy, setInterventionBusy] = useState(false);
   const [executionActivities, setExecutionActivities] = useState<ExecutionActivity[]>([]);
   const activityCounterRef = useRef(0);
-  const activityClearTimerRef = useRef<number | null>(null);
+  const [activityCollapsed, setActivityCollapsed] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -164,10 +164,7 @@ export function ChatPanel() {
 
   const handleStreamEvent = (event: AiChatStreamEvent) => {
     if (event.type !== "status") return;
-    if (activityClearTimerRef.current !== null) {
-      window.clearTimeout(activityClearTimerRef.current);
-      activityClearTimerRef.current = null;
-    }
+
 
     if (event.phase === "tool_completed") {
       if (event.toolName?.startsWith("tasks.")) window.dispatchEvent(new Event("gsw-agent-task-changed"));
@@ -185,6 +182,7 @@ export function ChatPanel() {
       return;
     }
 
+    setActivityCollapsed(false);
     setExecutionActivities((current) => {
       const settled = current.map((item) => item.status === "running" && !item.toolName ? { ...item, status: "done" as const } : item);
       const last = settled[settled.length - 1];
@@ -201,7 +199,7 @@ export function ChatPanel() {
 
   const settleAndClearActivities = () => {
     setExecutionActivities((current) => current.map((item) => item.status === "running" ? { ...item, status: "done" as const } : item));
-    activityClearTimerRef.current = window.setTimeout(() => setExecutionActivities([]), 2400);
+    setActivityCollapsed(true);
   };
 
 
@@ -357,10 +355,7 @@ export function ChatPanel() {
       speechRef.current?.abort();
       speechRef.current = null;
       stopVoiceVisualizer();
-      if (activityClearTimerRef.current !== null) {
-        window.clearTimeout(activityClearTimerRef.current);
-        activityClearTimerRef.current = null;
-      }
+  
     };
   }, [account?.id]);
 
@@ -496,17 +491,19 @@ export function ChatPanel() {
     scrollToLatestMessage("smooth");
     try {
       setExecutionActivities([]);
+      setActivityCollapsed(false);
       const response = await api.streamChat(account?.id ?? null, next, conversationId, handleStreamEvent, attachmentsForTurn.map((item) => item.assetId));
       setConversationId(response.conversationId);
       localStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`, response.conversationId);
       setIntervention(response.intervention);
       const assistantMessage = response.message;
       if (assistantMessage) setMessages((current) => [...current, assistantMessage].slice(-24));
-      if (response.intervention) setExecutionActivities([]);
+      if (response.intervention) setActivityCollapsed(true);
       else settleAndClearActivities();
       scrollToLatestMessage("smooth");
     } catch (err) {
       setExecutionActivities((current) => current.map((item) => item.status === "running" ? { ...item, status: "error" as const } : item));
+      setActivityCollapsed(true);
       setPendingAttachments((current) => current.length ? current : attachmentsForTurn);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -521,7 +518,7 @@ export function ChatPanel() {
     setIntervention(response.intervention);
     const assistantMessage = response.message;
     if (assistantMessage) setMessages((current) => [...current, assistantMessage].slice(-24));
-    if (response.intervention) setExecutionActivities([]);
+    if (response.intervention) setActivityCollapsed(true);
     else settleAndClearActivities();
     scrollToLatestMessage("smooth");
   };
@@ -648,11 +645,15 @@ export function ChatPanel() {
         </article>;
       })}
       {executionActivities.length > 0 && <section className="gsw-chat-execution" aria-live="polite">
-        <div className="gsw-chat-execution-title">GSW is working</div>
-        <div className="gsw-chat-execution-list">{executionActivities.map((activity) => <div className={`gsw-chat-execution-item ${activity.status}`} key={activity.id}>
+        <button type="button" className="gsw-chat-execution-toggle" aria-expanded={!activityCollapsed}
+          onClick={() => setActivityCollapsed((collapsed) => !collapsed)}>
+          <span className="gsw-chat-execution-title">{sending ? "GSW is working" : executionActivities.some((activity) => activity.status === "error") ? "Work completed with issues" : "Work history"}</span>
+          <span className="gsw-chat-execution-toggle-hint">{activityCollapsed ? "Show details ▾" : "Hide details ▴"}</span>
+        </button>
+        {!activityCollapsed && <div className="gsw-chat-execution-list">{executionActivities.map((activity) => <div className={`gsw-chat-execution-item ${activity.status}`} key={activity.id}>
           {activity.status === "running" ? <LoaderCircle size={14} className="gsw-chat-spin" /> : activity.status === "done" ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
           <span>{activity.label}</span>
-        </div>)}</div>
+        </div>)}</div>}
       </section>}
       {sending && executionActivities.length === 0 && <article className="gsw-chat-message assistant gsw-chat-thinking"><div className="gsw-chat-message-label">GSW</div><div className="gsw-chat-thinking-dots" aria-label="Thinking"><span /><span /><span /></div></article>}
       {intervention && <section className="gsw-chat-intervention">
