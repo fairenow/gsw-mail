@@ -35,3 +35,11 @@ test("inserts safe printable margins after model styling and avoids a footer-onl
   assert.ok(output.indexOf("14mm 15mm !important") > output.indexOf("@page{margin:0}"), "safe print CSS must follow authored styles");
   assert.equal((output.match(/<style>/g) ?? []).length, 2);
 });
+
+test("branded service overviews override a model-authored fixed-height cover", () => {
+  const html = '<!doctype html><html><head><style>.cover{height:100vh;page-break-after:always}</style></head><body class="gsw-tc"><section class="cover"><header class="gsw-report-hero">Hero</header><div class="gsw-metrics">Metrics</div></section><section>Platform overview</section></body></html>';
+  const output = composePdfHtml(html);
+  assert.match(output, /\.gsw-tc \.cover, \.gsw-tc \.cover-page/);
+  assert.match(output, /break-after: auto !important; page-break-after: auto !important/);
+  assert.ok(output.lastIndexOf("page-break-after: auto !important") > output.indexOf("page-break-after:always"));
+});

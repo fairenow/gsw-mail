@@ -282,6 +282,19 @@ const pdfPrintSafetyStyles = `
   .gsw-tc .gsw-brand-logo { margin-left: 8px !important; margin-top: 8px !important; }
   .gsw-tc .gsw-report-footer, .gsw-tc footer { break-inside: avoid !important; page-break-inside: avoid !important; break-before: avoid !important; page-break-before: avoid !important; height: auto !important; min-height: 0 !important; padding: 12px 16px !important; margin: 16px 0 0 !important; }
   .gsw-tc .gsw-feature-card, .gsw-tc .gsw-metric { break-inside: avoid; }
+  /* Branded overviews are flowing reports, not fixed-height slide decks.
+     A model-authored cover height/page break can strand half of page one. */
+  .gsw-tc .cover, .gsw-tc .cover-page, .gsw-tc .title-page,
+  .gsw-tc .hero-section, .gsw-tc > .page:first-child {
+    height: auto !important; min-height: 0 !important;
+    max-height: none !important;
+    break-after: auto !important; page-break-after: auto !important;
+  }
+  .gsw-tc .gsw-report-hero, .gsw-tc .gsw-metrics {
+    height: auto !important; min-height: 0 !important;
+    break-after: auto !important; page-break-after: auto !important;
+  }
+
 `;
 
 export function composePdfHtml(content: string): string {
