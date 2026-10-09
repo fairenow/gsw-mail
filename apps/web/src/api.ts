@@ -82,6 +82,14 @@ export interface ContactListResponse {
   offset: number;
 }
 
+export interface CampaignReview {
+  campaign: {
+    id: string; title: string; subject: string; textBody: string; htmlBody: string;
+    status: string; recipientCount: number; attachmentAssetIds: string[];
+  };
+  recipients: Array<{ id: string; contactId: string | null; email: string; displayName: string | null; subject: string | undefined; textBody: string | undefined }>;
+}
+
 export interface CalendarSummary {
   engineId: string;
   name: string;
@@ -631,6 +639,9 @@ export const api = {
   updateTemplate: (id: string, body: Partial<EmailTemplateInput>) => patch<{ template: EmailTemplateOption }>(`/product/templates/${encodeURIComponent(id)}`, body, interactiveTimeout),
   deleteTemplate: (id: string) => request(`/product/templates/${encodeURIComponent(id)}`, { method: "DELETE" }).then((res) => json<{ deleted: { id: string; key: string } }>(res)),
   selectTemplate: async (templateKey: string) => { const result = await post<{ templateKey: string }>("/product/templates/select", { templateKey }); readCache.delete("/product/settings"); return result; },
+  campaignReview: (id: string, accountId: string) => get<CampaignReview>(`/product/campaigns/${encodeURIComponent(id)}/review?accountId=${encodeURIComponent(accountId)}`),
+  campaignAudienceEdit: (id: string, accountId: string, contactIds: string[]) => request(`/product/campaigns/${encodeURIComponent(id)}/audience`, { method: "PUT", headers: headers(true), body: JSON.stringify({ accountId, contactIds }) }).then(res=>json<{recipientCount:number}>(res)),
+  campaignDraftEdit: (id: string, body: {accountId:string;subject?:string;textBody?:string;htmlBody?:string;attachmentAssetIds?:string[]}) => patch<{id:string;status:string;recipientCount:number;attachmentAssetIds:string[]}>(`/product/campaigns/${encodeURIComponent(id)}/draft`,body),
   contacts: (q = "") => cachedGet<ContactListResponse>(`/product/contacts?q=${encodeURIComponent(q)}`, 30_000, 5 * 60_000).then((r) => r.contacts),
   contactsPage: (q = "", limit = 100, offset = 0) => cachedGet<ContactListResponse>(`/product/contacts?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`, 30_000, 5 * 60_000),
   prefetchContactsPage: () => { void cachedGet<ContactListResponse>("/product/contacts?q=&limit=100&offset=0", 30_000, 5 * 60_000).catch(() => undefined); },
