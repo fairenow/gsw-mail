@@ -3,7 +3,7 @@ import { HttpError } from "../../lib/errors.js";
 import { anthropicProvider } from "./anthropic.js";
 import { hetznerProvider } from "./hetzner.js";
 import { huggingFaceProvider } from "./huggingface.js";
-import { modalProvider } from "./modal.js";
+import { modalProvider, modalDeepseekProvider } from "./modal.js";
 import { openAiProvider } from "./openai.js";
 import type { AiProvider, AiProviderId } from "./types.js";
 
