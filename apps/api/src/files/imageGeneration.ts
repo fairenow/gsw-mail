@@ -1,6 +1,7 @@
 import { config } from "../config.js";
 import { HttpError } from "../lib/errors.js";
 import { verifyGeneratedImage } from "./imageValidation.js";
+import { classifyImageAttempt } from "./imageReliability.js";
 
 type ImageResponse = {
   data?: Array<{ b64_json?: string }>;
@@ -212,7 +213,7 @@ export async function generateImage(input: ImageInput, options: ImageGenerationO
     } catch (error) {
       const status = error instanceof HttpError ? error.status : 502;
       lastStatus = status;
-      const category = [400,401,403,404,422].includes(status) ? "permanent" : status === 429 ? "rate_limit" : status === 504 ? "timeout" : "provider_error";
+      const category = classifyImageAttempt(status);
       console.warn("[gsw-image] attempt", { correlationId, provider: attempt.provider, model: attempt.model, attempt: index + 1, durationMs: Date.now()-began, outcome: "failure", status, category });
       if (category === "permanent") break;
     }
