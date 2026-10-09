@@ -133,7 +133,7 @@ async function runVideoStep(task: ClaimedTask, step: ClaimedStep) {
       conversationId: task.conversationId, role: "assistant",
       content: "Your video is ready in GSW Files: " + filename,
       provider: "modal", model,
-      metadata: { kind: "video_completed", taskId: task.id, assetId: asset.id },
+      metadata: { kind: "video_completed", taskId: task.id, assetId: asset.id, attachments: [{ assetId: asset.id, filename, mimeType: "video/mp4", sizeBytes: bytes.length, kind: "video" }] },
     });
   }
 }
