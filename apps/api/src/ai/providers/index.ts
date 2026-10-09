@@ -3,7 +3,7 @@ import { HttpError } from "../../lib/errors.js";
 import { anthropicProvider } from "./anthropic.js";
 import { hetznerProvider } from "./hetzner.js";
 import { huggingFaceProvider } from "./huggingface.js";
-import { modalProvider } from "./modal.js";
+import { modalProvider, modalDeepseekProvider } from "./modal.js";
 import { openAiProvider } from "./openai.js";
 import type { AiProvider, AiProviderId } from "./types.js";
 
@@ -13,15 +13,17 @@ const providers: Record<AiProviderId, AiProvider> = {
   anthropic: anthropicProvider,
   huggingface: huggingFaceProvider,
   modal: modalProvider,
+  "modal-deepseek": modalDeepseekProvider,
 };
 
-export type UserAiModelProvider = "qwen" | "openai" | "claude" | "gpt-oss-120b";
+export type UserAiModelProvider = "qwen" | "openai" | "claude" | "gpt-oss-120b" | "deepseek-v4.1-flash";
 
 const providerAliases: Record<UserAiModelProvider, AiProviderId> = {
   qwen: "hetzner",
   openai: "openai",
   claude: "anthropic",
   "gpt-oss-120b": "modal",
+  "deepseek-v4.1-flash": "modal-deepseek",
 };
 
 export const getAiProvider = (providerId?: string): AiProvider => {
