@@ -367,7 +367,7 @@ export function ChatPanel() {
       const response = await api.chatConversations();
       setConversations(response.conversations);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError("Couldn’t complete the action. Please try again.");
     } finally {
       setHistoryLoading(false);
     }
@@ -393,7 +393,7 @@ export function ChatPanel() {
       localStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`, id);
       setHistoryOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError("Couldn’t complete the action. Please try again.");
     } finally {
       setConversationLoading(false);
     }
@@ -410,7 +410,7 @@ export function ChatPanel() {
       }
       await refreshConversations();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError("Couldn’t complete the action. Please try again.");
     }
   };
 
@@ -426,7 +426,7 @@ export function ChatPanel() {
       }
       await refreshConversations();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError("Couldn’t complete the action. Please try again.");
     }
   };
 
@@ -457,7 +457,7 @@ export function ChatPanel() {
       }
       setPendingAttachments((current) => [...current, ...uploaded].slice(0, 10));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError("Couldn’t complete the action. Please try again.");
     } finally {
       setUploadingFiles(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -476,7 +476,7 @@ export function ChatPanel() {
       const result = await api.fileDownload(attachment.assetId);
       window.open(result.url, "_blank", "noopener,noreferrer");
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError("Couldn’t complete the action. Please try again.");
     }
   };
 
@@ -549,7 +549,7 @@ export function ChatPanel() {
       setIntervention(null);
       await resumeAfterIntervention();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError("Couldn’t complete the action. Please try again.");
     } finally {
       setInterventionBusy(false);
     }
@@ -568,7 +568,7 @@ export function ChatPanel() {
       setExecutionActivities([]);
       scrollToLatestMessage("smooth");
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError("Couldn’t complete the action. Please try again.");
     } finally {
       setInterventionBusy(false);
     }
