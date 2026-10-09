@@ -219,7 +219,11 @@ export async function launchCampaign(ctx: AgentExecutionContext, campaignId: str
   if (campaign.status === "launched") return { campaign, sent: recipients.filter((recipient) => recipient.status === "queued").length, failed: recipients.filter((recipient) => recipient.status === "failed").length, replay: true };
   if (campaign.status === "launching") throw badRequest("campaign is already launching");
 
-  await db.update(aiCampaigns).set({ status: "launching", lastError: null, updatedAt: new Date() }).where(eq(aiCampaigns.id, campaign.id));
+  // Atomically claim the draft before external sends. A concurrent edit or launch
+  // must not race with recipient snapshot execution.
+  const [claimed] = await db.update(aiCampaigns).set({ status: "launching", lastError: null, updatedAt: new Date() })
+    .where(and(eq(aiCampaigns.id, campaign.id), eq(aiCampaigns.userId, ctx.userId), eq(aiCampaigns.accountId, ctx.accountId), eq(aiCampaigns.status, "draft"))).returning({ id: aiCampaigns.id });
+  if (!claimed) throw badRequest("campaign is no longer a draft; refresh its status before retrying");
 
   const mail = createMailService(ctx);
   let sent = 0;
