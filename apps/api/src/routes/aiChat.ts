@@ -188,6 +188,7 @@ const toolLabel = (toolName: string): string => {
     case "files.create_artifact": return "Rendering and saving your document";
     case "files.transform": return "Transforming your file";
     case "files.generate_image": return "Generating your image";
+    case "videos.generate": return "Queuing your video generation";
     case "mail.attach_file": return "Attaching the file to your draft";
     case "capabilities.search": return "Finding the right GSW tools";
     case "tasks.create": return "Creating a work task";
