@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createCampaign, getCampaign, launchCampaign, listCampaigns, previewCampaign, replaceCampaignAudience, updateDraftCampaign } from "../campaignService.js";
+import { createCampaign, getCampaign, launchCampaign, listCampaigns, previewCampaign, replaceCampaignAudience, updateDraftCampaign, getCampaignDeliveryStates } from "../campaignService.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
 
 const success = <T>(ctx: AgentExecutionContext, toolCallId: string, startedAt: string, data: T): AgentToolResult<T> => ({
@@ -162,16 +162,18 @@ export const campaignReportTool: AgentToolDefinition = {
     const startedAt = new Date().toISOString();
     try {
       const { campaignId } = z.object({ campaignId: z.string().uuid() }).parse(rawInput);
-      const { campaign, recipients } = await getCampaign(ctx.userId, campaignId);
-      if (campaign.accountId !== ctx.accountId) throw new Error("Campaign belongs to another mailbox");
-      const statuses: Record<string, number> = {};
-      for (const recipient of recipients) statuses[recipient.status] = (statuses[recipient.status] ?? 0) + 1;
+      const details = await getCampaignDeliveryStates({userId:ctx.userId,accountId:ctx.accountId,campaignId});
+      const {campaign}=details;
+      const recipients=details.recipients;
+      const statuses=details.counts;
       return success(ctx, toolCallId, startedAt, {
         campaign: { id: campaign.id, title: campaign.title, status: campaign.status, subject: campaign.subject, recipientCount: campaign.recipientCount },
         counts: statuses,
         // Deliberately do not infer delivery or engagement from queued send state.
-        deliveryConfirmed: false, openTrackingAvailable: false,
-        failedRecipients: recipients.filter(r=>r.status==="failed").slice(0,50).map(r=>({ email: r.email, status: r.status })),
+        deliveryConfirmed: recipients.some(r=>r.deliveredAt!==null), openTrackingAvailable: false,
+        deliveryTrackingSource: details.deliveryTrackingSource,
+        recipientStatuses: recipients,
+        failedRecipients: recipients.filter(r=>r.queueStatus==="failed" || r.deliveryStatus==="failed").slice(0,50).map(r=>({ email: r.email, status: r.deliveryStatus??r.queueStatus })),
         suggestedNextSteps: [
           "Review failed recipient addresses before considering a targeted retry.",
           "Check mail delivery status independently; queued is not proof of delivery.",
