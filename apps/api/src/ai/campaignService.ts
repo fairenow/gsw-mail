@@ -10,6 +10,8 @@ import {
 } from "../db/schema.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { createMailService } from "../services/mailService.js";
+import { getAssetForUser } from "../files/service.js";
+import { attachExistingAssetToDraft } from "../mail/draftAttachmentStore.js";
 import type { AgentExecutionContext } from "./tools/types.js";
 
 const normalizeTags = (tags: string[]) => [...new Set(tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean))];
@@ -145,7 +147,20 @@ export async function replaceCampaignAudience(input: {
 export async function updateDraftCampaign(input: {
   userId: string; accountId: string; campaignId: string;
   subject?: string | undefined; textBody?: string | undefined; htmlBody?: string | undefined;
+  attachmentAssetIds?: string[] | undefined;
 }) {
+  const attachmentAssetIds = input.attachmentAssetIds ? [...new Set(input.attachmentAssetIds)] : undefined;
+  if (attachmentAssetIds) {
+    if (attachmentAssetIds.length > 5) throw badRequest("campaigns support up to 5 attachments");
+    let totalBytes = 0;
+    for (const id of attachmentAssetIds) {
+      const asset = await getAssetForUser(input.userId,id);
+      const bytes = Number(asset.sizeBytes);
+      if (bytes > 10 * 1024 * 1024) throw badRequest("an attachment exceeds 10 MB");
+      totalBytes += bytes;
+    }
+    if (totalBytes > 20 * 1024 * 1024) throw badRequest("campaign attachments exceed 20 MB");
+  }
   return db.transaction(async tx=>{
     const [campaign] = await tx.select().from(aiCampaigns).where(and(eq(aiCampaigns.id,input.campaignId),eq(aiCampaigns.userId,input.userId),eq(aiCampaigns.accountId,input.accountId))).for("update");
     if (!campaign) throw notFound("campaign not found");
@@ -154,6 +169,7 @@ export async function updateDraftCampaign(input: {
       ...(input.subject !== undefined ? { subject:input.subject } : {}),
       ...(input.textBody !== undefined ? { textBody:input.textBody } : {}),
       ...(input.htmlBody !== undefined ? { htmlBody:input.htmlBody } : {}),
+      ...(attachmentAssetIds !== undefined ? { attachmentAssetIds } : {}),
       updatedAt:new Date(),
     }).where(eq(aiCampaigns.id,input.campaignId)).returning();
     return saved!;
@@ -163,7 +179,7 @@ export async function updateDraftCampaign(input: {
 export async function previewCampaign(input: {userId:string; accountId:string; campaignId:string}) {
   const {campaign,recipients} = await getCampaign(input.userId,input.campaignId);
   if (campaign.accountId !== input.accountId) throw notFound("campaign not found");
-  return { campaign: {id:campaign.id,title:campaign.title,subject:campaign.subject,status:campaign.status,recipientCount:recipients.length},
+  return { campaign: {id:campaign.id,title:campaign.title,subject:campaign.subject,status:campaign.status,recipientCount:recipients.length,attachmentAssetIds:campaign.attachmentAssetIds},
     recipients:recipients.slice(0,100).map(recipient=>({
       id:recipient.id, contactId:recipient.contactId,email:recipient.email,displayName:recipient.displayName,
       subject:personalize(campaign.subject,recipient),
@@ -227,6 +243,8 @@ export async function launchCampaign(ctx: AgentExecutionContext, campaignId: str
   // Reload the snapshot only after the draft is claimed. Audience edits lock the
   // same campaign row, so in-flight selections cannot leak into an approved send.
   const recipients = await db.select().from(aiCampaignRecipients).where(eq(aiCampaignRecipients.campaignId,campaign.id));
+  const [claimedCampaign] = await db.select().from(aiCampaigns).where(eq(aiCampaigns.id,campaign.id)).limit(1);
+  const attachmentAssetIds = claimedCampaign?.attachmentAssetIds ?? [];
 
   const mail = createMailService(ctx);
   let sent = 0;
@@ -241,6 +259,9 @@ export async function launchCampaign(ctx: AgentExecutionContext, campaignId: str
         htmlBody: personalize(campaign.htmlBody, recipient),
         mode: "new",
       });
+      for (const assetId of attachmentAssetIds) {
+        await attachExistingAssetToDraft({ accountId:ctx.accountId,draftEngineId:draft.engineId,userId:ctx.userId,assetId });
+      }
       const result = await mail.sendDraft(ctx.accountId, draft.engineId, `campaign:${campaign.id}:${recipient.id}`);
       await db.update(aiCampaignRecipients).set({
         status: "queued",
