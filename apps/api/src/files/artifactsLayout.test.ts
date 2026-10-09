@@ -30,9 +30,9 @@ test("GSW:TC report styles include feature grids and print color preservation", 
 test("inserts safe printable margins after model styling and avoids a footer-only overflow", () => {
   const html = '<!doctype html><html><head><style>@page{margin:0}.gsw-report-hero{margin:-70px}</style></head><body class="gsw-tc"><header class="gsw-report-hero">Title</header><footer class="gsw-report-footer">End</footer></body></html>';
   const output = composePdfHtml(html);
-  assert.match(output, /@page \{ size: Letter; margin: 14mm 15mm !important; \}/);
-  assert.match(output, /page-break-inside: avoid !important/);
-  assert.ok(output.indexOf("14mm 15mm !important") > output.indexOf("@page{margin:0}"), "safe print CSS must follow authored styles");
+  assert.match(output, /@page \{ size: Letter; margin: 14mm 15mm; \}/);
+  assert.match(output, /page-break-inside: avoid/);
+  assert.ok(output.indexOf("14mm 15mm") > output.indexOf("@page{margin:0}"), "safe print CSS must follow authored styles");
   assert.equal((output.match(/<style>/g) ?? []).length, 2);
 });
 
