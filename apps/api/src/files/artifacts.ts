@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { config } from "../config.js";
 import { renderLocalPdf } from "./localPdfRenderer.js";
 import { HttpError } from "../lib/errors.js";
@@ -258,7 +259,7 @@ const pdfBaseStyles = `
   th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid #dce3ea; }
   th { background: #e8eef5; }
   /* GSW:TC branded print components */
-  .gsw-tc { --gsw-brand: #41865b; --gsw-cream: #f4e8cd; --gsw-ink: #484640; --gsw-stroke: #e8e1d4; color: var(--gsw-ink); background: #fffdf8; }
+  .gsw-brand-logo { width: 62px; height: auto; max-height: 58px; object-fit: contain; display: block; margin-bottom: 12px; }\n  .gsw-tc { --gsw-brand: #41865b; --gsw-cream: #f4e8cd; --gsw-ink: #484640; --gsw-stroke: #e8e1d4; color: var(--gsw-ink); background: #fffdf8; }
   .gsw-tc .gsw-report-hero { background: var(--gsw-brand); color: #fff; }
   .gsw-tc .gsw-report-hero h1, .gsw-tc .gsw-report-hero p { color: #fff; }
   .gsw-tc h2 { color: var(--gsw-brand); }
@@ -288,7 +289,17 @@ export function composePdfHtml(content: string): string {
 
 async function generateLocalPdf(input: { filename: string; content: string; instruction: string }) {
   try {
-    const html = composePdfHtml(input.content);
+    let html = composePdfHtml(input.content);
+    // Only inject the real GSW logo into explicitly branded documents.
+    // Keep the asset local and inline; renderer network access remains blocked.
+    if (/class=["'][^"']*gsw-tc/i.test(html) && !/class=["'][^"']*gsw-brand-logo/i.test(html)) {
+      const image = await readFile("/app/apps/api/assets/brand-logo.png").catch(() => null);
+      if (image) {
+        const img = `<img class="gsw-brand-logo" alt="GSW Mail" src="data:image/png;base64,${image.toString("base64")}">`;
+        const hero = /(<(?:header|section|div)\\b[^>]*class=["'][^"']*gsw-report-hero[^"']*["'][^>]*>)/i;
+        html = hero.test(html) ? html.replace(hero, `$1${img}`) : html.replace(/<body([^>]*)>/i, `<body$1>${img}`);
+      }
+    }
     const rendered = await renderLocalPdf(html);
     return { filename: input.filename, bytes: rendered, mimeType: "application/pdf", model: "gsw-local-pdf" };
   } catch (error) {
