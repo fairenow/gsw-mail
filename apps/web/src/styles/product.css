@@ -904,3 +904,8 @@
 .gsw-chat-drop-card svg { color: var(--gsw-accent, #ee9a00); }
 .gsw-chat-drop-card strong { font-size: 18px; }
 .gsw-chat-drop-card span { font-size: 13px; line-height: 1.5; }
+
+.gsw-chat-execution-toggle { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; text-align: left; color: inherit; background: transparent; border: 0; padding: 0; }
+.gsw-chat-execution-toggle:focus-visible { outline: 2px solid var(--gsw-accent, #ee9a00); outline-offset: 5px; border-radius: 3px; }
+.gsw-chat-execution-toggle-hint { font-size: 12px; color: var(--gsw-text-muted, #777); white-space: nowrap; }
+.gsw-chat-execution-toggle + .gsw-chat-execution-list { margin-top: 12px; }
