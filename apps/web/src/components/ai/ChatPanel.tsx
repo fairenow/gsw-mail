@@ -115,6 +115,7 @@ export function ChatPanel() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [failedTurn, setFailedTurn] = useState<AiChatMessage | null>(null);
+  const [retryResume, setRetryResume] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<AiChatAttachment[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [dropActive, setDropActive] = useState(false);
@@ -498,6 +499,7 @@ export function ChatPanel() {
     setPendingAttachments([]);
     setError("");
     setFailedTurn(null);
+    setRetryResume(false);
     setSending(true);
     scrollToLatestMessage("smooth");
     try {
@@ -529,15 +531,31 @@ export function ChatPanel() {
   }
 
   const resumeAfterIntervention = async () => {
-    if (!account || !conversationId) return;
+    if (!account || !conversationId || sending) return;
+    setSending(true);
+    setError("");
+    setRetryResume(false);
     setExecutionActivities([]);
-    const response = await api.resumeChatStream(account.id, conversationId, handleStreamEvent);
-    setIntervention(response.intervention);
-    const assistantMessage = response.message;
-    if (assistantMessage) setMessages((current) => [...current, assistantMessage].slice(-24));
-    if (response.intervention) setActivityCollapsed(true);
-    else settleAndClearActivities();
-    scrollToLatestMessage("smooth");
+    try {
+      const response = await api.resumeChatStream(account.id, conversationId, handleStreamEvent);
+      setIntervention(response.intervention);
+      const assistantMessage = response.message;
+      if (assistantMessage?.content?.trim() === "Failed to respond. Please retry.") {
+        setError("Failed to respond.");
+        setRetryResume(true);
+      } else if (assistantMessage) {
+        setMessages((current) => [...current, assistantMessage].slice(-24));
+      }
+      if (response.intervention) setActivityCollapsed(true);
+      else settleAndClearActivities();
+      scrollToLatestMessage("smooth");
+    } catch (error) {
+      console.error("[gsw-chat] Failed to resume response", { errorType: error instanceof Error ? error.name : "unknown" });
+      setError("Failed to respond.");
+      setRetryResume(true);
+    } finally {
+      setSending(false);
+    }
   };
 
   const allowPermission = async () => {
@@ -691,7 +709,7 @@ export function ChatPanel() {
           </div>
         </div>
       </section>}
-      {error && <div className="gsw-chat-error" role="alert">{failedTurn ? "Failed to respond." : error}{failedTurn && <button type="button" disabled={sending} onClick={() => void send(failedTurn.content)}>Retry</button>}</div>}
+      {error && <div className="gsw-chat-error" role="alert">{failedTurn || retryResume ? "Failed to respond." : error}{(failedTurn || retryResume) && <button type="button" disabled={sending} onClick={() => retryResume ? void resumeAfterIntervention() : failedTurn ? void send(failedTurn.content) : undefined}>Retry</button>}</div>}
       <div ref={bottomRef} />
     </div>
 
