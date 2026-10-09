@@ -17,3 +17,12 @@ test("supports the reusable report component styles", () => {
   assert.match(output, /gsw-two-col/);
   assert.match(output, /<h1>Outreach report<\/h1>/);
 });
+
+test("GSW:TC report styles include feature grids and print color preservation", () => {
+  const output = composePdfHtml('<!doctype html><html><head></head><body class="gsw-tc"><section class="gsw-feature-grid"><article class="gsw-feature-card"><h3>Mailbox</h3></article></section></body></html>');
+  assert.match(output, /#41865b/);
+  assert.match(output, /#f4e8cd/);
+  assert.match(output, /gsw-feature-grid/);
+  assert.match(output, /break-inside: avoid/);
+  assert.equal((output.match(/<html/gi) ?? []).length, 1);
+});
