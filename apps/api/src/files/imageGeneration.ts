@@ -191,10 +191,10 @@ export async function generateImage(input: ImageInput, options: ImageGenerationO
   if (config.ai.huggingFaceApiToken) {
     if (config.ai.huggingFaceImageEndpointUrl) attempts.push({
       provider: "huggingface", model: config.ai.huggingFaceImageModel,
-      run: () => generateWithDedicatedHuggingFaceEndpoint(input, deadline),
+      run: () => generateWithDedicatedHuggingFaceEndpoint(input, Math.min(deadline, Date.now() + 30_000)),
     });
-    for (const model of (config.ai.huggingFaceImageModels.length ? config.ai.huggingFaceImageModels : [config.ai.huggingFaceImageModel]).slice(0, 2)) {
-      attempts.push({ provider: "huggingface", model, run: () => generateWithHuggingFaceModel(model, input, deadline) });
+    for (const model of (config.ai.huggingFaceImageModels.length ? config.ai.huggingFaceImageModels : [config.ai.huggingFaceImageModel]).slice(0, config.ai.openaiApiKey ? 1 : 2)) {
+      attempts.push({ provider: "huggingface", model, run: () => generateWithHuggingFaceModel(model, input, Math.min(deadline, Date.now() + 30_000)) });
     }
   }
   if (config.ai.openaiApiKey) attempts.push({
