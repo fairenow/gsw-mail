@@ -4,6 +4,7 @@ import { automationTools } from "./automationTools.js";
 import { searchTools } from "./searchTools.js";
 import { campaignTools } from "./campaignTools.js";
 import { contactTools } from "./contactTools.js";
+import { calendarTools } from "./calendarTools.js";
 import { templateTools } from "./templateTools.js";
 import { domainTools } from "./domainTools.js";
 import { fileTools } from "./fileTools.js";
@@ -80,7 +81,7 @@ export class AgentToolRegistry {
   }
 }
 
-const baseAgentTools: AgentToolDefinition[] = [...agentMailTools, ...automationTools, ...taskTools, ...workerTools, ...integrationTools, ...browserTools, ...searchTools, ...contactTools, ...campaignTools, ...templateTools, ...domainTools, ...fileTools];
+const baseAgentTools: AgentToolDefinition[] = [...agentMailTools, ...automationTools, ...taskTools, ...workerTools, ...integrationTools, ...browserTools, ...searchTools, ...contactTools, ...calendarTools, ...campaignTools, ...templateTools, ...domainTools, ...fileTools];
 const baseAgentRegistry = new AgentToolRegistry(baseAgentTools);
 
 const capabilitySearchTool: AgentToolDefinition = {
