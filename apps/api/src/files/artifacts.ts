@@ -275,6 +275,15 @@ const pdfBaseStyles = `
   .gsw-report-footer { margin: 16px 0 0; border-top: 1px solid #dce3ea; padding: 10px 0 0; color: #697687; font-size: 8.5pt; break-inside: avoid; page-break-inside: avoid; break-before: avoid; }
 `;
 
+const pdfPrintSafetyStyles = `
+  @page { size: Letter; margin: 14mm 15mm !important; }
+  html, body { max-width: 100%; }
+  .gsw-tc .gsw-report-hero { margin-left: 0 !important; margin-right: 0 !important; padding: 24px 28px !important; }
+  .gsw-tc .gsw-brand-logo { margin-left: 8px !important; margin-top: 8px !important; }
+  .gsw-tc .gsw-report-footer { break-inside: avoid !important; page-break-inside: avoid !important; break-before: avoid !important; margin-bottom: 0 !important; }
+  .gsw-tc .gsw-feature-card, .gsw-tc .gsw-metric { break-inside: avoid; }
+`;
+
 export function composePdfHtml(content: string): string {
   const isHtml = /<\/?(?:html|body|section|div|header|main|article|h[1-6]|p|table|ul|ol|li)\b/i.test(content);
   const body = isHtml ? content : simpleMarkdownToHtml(content);
@@ -282,7 +291,7 @@ export function composePdfHtml(content: string): string {
   if (hasDocument) {
     // Preserve the model's full page composition, including its head/CSS.
     // Append print-safe defaults rather than putting a second HTML document inside it.
-    return body.replace(/<\\/head>/i, `<style>${pdfBaseStyles}${printGuard}</style></head>`);
+    return body.replace(/<\/head>/i, `<style>${pdfBaseStyles}${pdfPrintSafetyStyles}</style></head>`);
   }
   return `<!doctype html><html><head><meta charset="utf-8"><style>${pdfBaseStyles}</style></head><body><main class="gsw-page">${body}</main></body></html>`;
 }
