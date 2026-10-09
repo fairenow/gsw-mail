@@ -12,6 +12,7 @@ import { taskTools } from "./taskTools.js";
 import { workerTools } from "./workerTools.js";
 import { integrationTools } from "./integrationTools.js";
 import { browserTools } from "./browserTools.js";
+import { videoTools } from "./videoTools.js";
 
 export class AgentToolRegistry {
   private readonly tools = new Map<string, AgentToolDefinition>();
