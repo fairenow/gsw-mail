@@ -30,7 +30,7 @@ function verifyPng(bytes: Buffer): { width: number; height: number } {
     if (type === "IHDR") {
       if (seenIHDR || length !== 13) invalid("duplicate PNG header");
       seenIHDR = true; width = payload.readUInt32BE(0); height = payload.readUInt32BE(4); dimensions(width, height);
-      if (payload[10] !== 0 || payload[11] !== 0 || payload[12] > 1) invalid("unsupported PNG header");
+      if (payload[10] !== 0 || payload[11] !== 0 || (payload[12] ?? 255) > 1) invalid("unsupported PNG header");
     } else if (type === "IDAT") { seenIDAT = true; idat.push(payload); }
     else if (type === "IEND") { if (length !== 0) invalid("PNG trailer"); ended = true; offset += length+12; break; }
     offset += length + 12;
@@ -48,7 +48,7 @@ function verifyJpeg(bytes: Buffer): {width:number;height:number} {
   while (offset + 4 <= bytes.length-2) {
     if (bytes[offset] !== 255) invalid("JPEG segment boundary");
     while (bytes[offset] === 255) offset++;
-    const marker=bytes[offset++];
+    const marker=bytes[offset++]!;
     if (marker === 0xda) { foundSOS=true; break; }
     if (marker === 0xd8 || marker === 0xd9 || marker === 0x00) invalid("unexpected JPEG marker");
     if (marker >= 0xd0 && marker <= 0xd7) continue;
