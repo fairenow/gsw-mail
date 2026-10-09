@@ -11,7 +11,7 @@ test("video permission uses product language instead of scope identifiers", () =
 
 test("unknown scope names display as readable words", () => {
   const copy = permissionCopyForScope("calendar.write");
-  assert.match(copy.title, /calendar write/);
+  assert.match(copy.title, /manage calendar events/);
   assert.doesNotMatch(copy.title, /calendar\.write/);
 });
 
