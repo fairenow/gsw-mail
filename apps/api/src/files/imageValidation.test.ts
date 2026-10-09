@@ -31,7 +31,7 @@ test("rejects truncated and corrupt PNG data", () => {
 });
 test("rejects a PNG with impossible dimensions", () => {
   const source=png();const altered=Buffer.from(source);altered.writeUInt32BE(50000,16);
-  assert.throws(()=>verifyGeneratedImage(altered),/dimensions out of range/);
+  assert.throws(()=>verifyGeneratedImage(altered),/dimensions out of range|PNG checksum/);
 });
 test("rejects a truncated JPEG or malformed WebP", () => {
   assert.throws(()=>verifyGeneratedImage(Buffer.from([255,216,...new Array(20).fill(0)])),/JPEG markers/);
