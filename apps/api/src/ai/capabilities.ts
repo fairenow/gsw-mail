@@ -51,7 +51,7 @@ export async function getAiCapabilitySettings(userId: string): Promise<AiCapabil
 export function isAiScopeGloballyEnabled(settings: AiCapabilitySettings, scope: string): boolean {
   if (!settings.enabled) return false;
   if (scope === "mail.read" || scope === "contacts.read" || scope === "calendar.read" || scope === "workspace.read" || scope === "research.use") return settings.mailRead;
-  if (scope === "mail.write" || scope === "mail.bulk_write") return settings.draftMutation;
+  if (scope === "contacts.write" || scope === "mail.write" || scope === "mail.bulk_write") return settings.draftMutation;
   if (scope === "mail.send") return settings.emailSend;
   if (scope === "automations.read" || scope === "automations.write" || scope === "tasks.read" || scope === "tasks.write") return settings.scheduledWork;
   if (scope === "campaign.read" || scope === "campaign.write" || scope === "campaign.send") return settings.campaignLaunch;
