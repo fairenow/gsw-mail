@@ -8,7 +8,8 @@ import { analyzeStoredFile } from "../../files/intelligence.js";
 import { detectFileType, isTextLikeFile } from "../../files/fileTypes.js";
 import { generateArtifactFile, transformArtifactFile } from "../../files/artifacts.js";
 import { generateImage } from "../../files/imageGeneration.js";
-import { createAssetFromBuffer } from "../../files/service.js";
+import { imageAssetIsReady } from "../../files/imageReliability.js";
+import { createAssetFromBuffer, getAssetForUser } from "../../files/service.js";
 import { getOrCreateFileWorkspace } from "../../files/workspaces.js";
 import { attachExistingAssetToDraft } from "../../mail/draftAttachmentStore.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
@@ -523,7 +524,7 @@ export const filesGenerateImageTool: AgentToolDefinition = {
           : input.filename?.toLowerCase().endsWith(".webp")
             ? "webp"
             : "png");
-      const generated = await generateImage({ ...input, format: requestedFormat });
+      const generated = await generateImage({ ...input, format: requestedFormat }, { correlationId: toolCallId });
       const base = (input.filename?.trim() || "generated-image").replace(/\.(png|jpe?g|webp)$/i, "");
       const filename = `${base}.${generated.extension}`;
       const asset = await createAssetFromBuffer({
@@ -535,6 +536,12 @@ export const filesGenerateImageTool: AgentToolDefinition = {
         kind: "image",
         addToFiles: true,
       });
+      const persisted = await getAssetForUser(ctx.userId, asset.id);
+      if (!imageAssetIsReady(persisted, { userId: ctx.userId, mimeType: generated.mimeType, sizeBytes: generated.bytes.length })) {
+        console.error("[gsw-image] persistence verification failed", { correlationId: toolCallId, assetId: asset.id });
+        throw new Error("Generated image storage verification failed.");
+      }
+      console.info("[gsw-image] persisted", { correlationId: toolCallId, assetId: asset.id, bytes: generated.bytes.length, mimeType: generated.mimeType, width: generated.width, height: generated.height });
       return success(ctx, toolCallId, startedAt, {
         assetId: asset.id,
         filename: asset.displayName || asset.filename,
@@ -543,7 +550,8 @@ export const filesGenerateImageTool: AgentToolDefinition = {
         model: generated.model,
       });
     } catch (error) {
-      return failure(ctx, toolCallId, startedAt, error);
+      console.error("[gsw-image] operation failed", { correlationId: toolCallId, category: error instanceof Error ? error.name : "unknown" });
+      return failure(ctx, toolCallId, startedAt, new Error("Image generation failed or could not be saved. Please try again."));
     }
   },
 };
