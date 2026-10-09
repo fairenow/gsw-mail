@@ -114,6 +114,7 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [failedTurn, setFailedTurn] = useState<AiChatMessage | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<AiChatAttachment[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [dropActive, setDropActive] = useState(false);
@@ -486,15 +487,16 @@ export function ChatPanel() {
       return;
     }
     const typedContent = (override ?? input).trim();
-    const attachmentsForTurn = pendingAttachments;
+    const attachmentsForTurn = override && failedTurn ? failedTurn.attachments ?? [] : pendingAttachments;
     const content = typedContent || (attachmentsForTurn.length > 1 ? "Please review the attached files." : "Please review the attached file.");
     if ((!typedContent && attachmentsForTurn.length === 0) || sending || uploadingFiles) return;
     const userMessage: AiChatMessage = { role: "user", content, attachments: attachmentsForTurn };
-    const next = [...messages, userMessage].slice(-23);
+    const next = [...(override && failedTurn ? messages.slice(0, -1) : messages), userMessage].slice(-23);
     setMessages(next);
     setInput("");
     setPendingAttachments([]);
     setError("");
+    setFailedTurn(null);
     setSending(true);
     scrollToLatestMessage("smooth");
     try {
@@ -514,7 +516,9 @@ export function ChatPanel() {
       setExecutionActivities((current) => current.map((item) => item.status === "running" ? { ...item, status: "error" as const } : item));
       setActivityCollapsed(true);
       setPendingAttachments((current) => current.length ? current : attachmentsForTurn);
-      setError(err instanceof Error ? err.message : String(err));
+      console.error("[gsw-chat] Failed to respond", { errorType: err instanceof Error ? err.name : "unknown" });
+      setFailedTurn(userMessage);
+      setError("Failed to respond.");
     } finally {
       setSending(false);
     }
@@ -683,7 +687,7 @@ export function ChatPanel() {
           </div>
         </div>
       </section>}
-      {error && <div className="gsw-chat-error">{error}</div>}
+      {error && <div className="gsw-chat-error" role="alert">{failedTurn ? "Failed to respond." : error}{failedTurn && <button type="button" disabled={sending} onClick={() => void send(failedTurn.content)}>Retry</button>}</div>}
       <div ref={bottomRef} />
     </div>
 
