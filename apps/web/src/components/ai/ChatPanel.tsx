@@ -115,6 +115,8 @@ export function ChatPanel() {
   const [error, setError] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<AiChatAttachment[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [dropActive, setDropActive] = useState(false);
+  const dragDepthRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const [recording, setRecording] = useState(false);
@@ -432,7 +434,15 @@ export function ChatPanel() {
   };
 
   const uploadChatFiles = async (files: FileList | File[]) => {
-    const selected = Array.from(files).slice(0, Math.max(0, 10 - pendingAttachments.length));
+    const incoming = Array.from(files);
+    const remaining = Math.max(0, 10 - pendingAttachments.length);
+    if (incoming.length > remaining) { setError("A chat can have up to 10 attachments. Remove a file before adding more."); return; }
+    const supported = /\.(pdf|doc|docx|txt|md|csv|json|png|jpe?g|gif|webp|xlsx|xls|pptx|ppt)$/i;
+    const unsupported = incoming.find((file) => !supported.test(file.name));
+    if (unsupported) { setError(unsupported.name + " is not a supported attachment type."); return; }
+    const oversized = incoming.find((file) => file.size > 25 * 1024 * 1024);
+    if (oversized) { setError(oversized.name + " exceeds the 25 MB attachment limit."); return; }
+    const selected = incoming;
     if (!selected.length) return;
     setUploadingFiles(true);
     setError("");
@@ -550,7 +560,31 @@ export function ChatPanel() {
     }
   };
 
-  return <div className="gsw-chat-panel">
+  const containsFiles = (event: React.DragEvent) => Array.from(event.dataTransfer.types).includes("Files");
+  const onChatDragEnter = (event: React.DragEvent) => {
+    if (!containsFiles(event)) return;
+    event.preventDefault();
+    dragDepthRef.current += 1;
+    if (!sending && !uploadingFiles) setDropActive(true);
+  };
+  const onChatDragLeave = (event: React.DragEvent) => {
+    if (!containsFiles(event)) return;
+    event.preventDefault();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (!dragDepthRef.current) setDropActive(false);
+  };
+  const onChatDrop = (event: React.DragEvent) => {
+    if (!containsFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current = 0;
+    setDropActive(false);
+    if (!sending && !uploadingFiles && event.dataTransfer.files.length) void uploadChatFiles(event.dataTransfer.files);
+  };
+
+  return <div className="gsw-chat-panel" onDragEnter={onChatDragEnter}
+    onDragOver={(event) => { if (containsFiles(event)) { event.preventDefault(); event.dataTransfer.dropEffect = sending || uploadingFiles ? "none" : "copy"; } }}
+    onDragLeave={onChatDragLeave} onDrop={onChatDrop}>
     <header className="gsw-chat-header">
       <div className="gsw-chat-heading">
         <span className="gsw-chat-mark" aria-hidden="true"><img className="gsw-chat-brand-logo" src="/logo.png" alt="" /></span>
@@ -607,7 +641,7 @@ export function ChatPanel() {
           {message.attachments && message.attachments.length > 0 && <div className="gsw-chat-message-files">
             {message.attachments.map((attachment) => <button type="button" className="gsw-chat-file-chip" key={attachment.assetId} onClick={() => void openAttachedFile(attachment)}>
               <File size={15} />
-              <span><strong>{attachment.filename}</strong><small>{formatAttachmentSize(attachment.sizeBytes)}</small></span>
+              <span><strong>{attachment.filename}</strong><small>{attachment.mimeType || "File"} · {formatAttachmentSize(attachment.sizeBytes)}</small></span>
             </button>)}
           </div>}
           <button className="gsw-chat-copy" type="button" aria-label={message.role === "user" ? "Copy prompt" : "Copy full response"} title={message.role === "user" ? "Copy prompt" : "Copy full response"} onClick={() => void navigator.clipboard.writeText(message.role === "assistant" ? cleanAssistantText(message.content) : message.content)}><Copy size={14} strokeWidth={1.8} /></button>
@@ -641,11 +675,13 @@ export function ChatPanel() {
       <div ref={bottomRef} />
     </div>
 
+    {dropActive && <div className="gsw-chat-drop-overlay" role="status" aria-live="polite">
+      <div className="gsw-chat-drop-card"><Paperclip size={30} /><strong>Drop files to attach</strong>
+      <span>Release files anywhere in GSW Chat. Nothing will be sent until you choose Send.</span></div>
+    </div>}
     <footer className="gsw-chat-composer">
       <div
         className={`gsw-chat-composer-box ${recording ? "voice-active" : ""}`}
-        onDragOver={(event) => { event.preventDefault(); if (!sending) event.dataTransfer.dropEffect = "copy"; }}
-        onDrop={(event) => { event.preventDefault(); if (!sending && event.dataTransfer.files.length) void uploadChatFiles(event.dataTransfer.files); }}
       >
         <input ref={fileInputRef} className="gsw-hidden-input" type="file" multiple onChange={(event) => event.target.files && void uploadChatFiles(event.target.files)} />
         {pendingAttachments.length > 0 && <div className="gsw-chat-pending-files">
