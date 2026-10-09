@@ -51,3 +51,50 @@ export const modalProvider: AiProvider = {
 function isObjectJson(value: string) {
   try { const parsed: unknown = JSON.parse(value); return !!parsed && typeof parsed === "object" && !Array.isArray(parsed); } catch { return false; }
 }
+
+/** DeepSeek uses the same GSW-owned tool runtime and OpenAI-compatible transport. */
+export const modalDeepseekProvider: AiProvider = {
+  id: "modal-deepseek",
+  async run(input: AiProviderRunInput) {
+    const base = process.env.DEEPSEEK_BASE_URL;
+    const token = config.ai.modalProxyToken;
+    if (!base || !token) throw new HttpError(503, "DeepSeek on Modal is not configured.");
+    const url = new URL(base);
+    if (url.protocol !== "https:") throw new HttpError(503, "Invalid Modal inference URL.");
+    const endpoint = url.pathname.endsWith("/v1/chat/completions")
+      ? url : new URL(url.pathname.replace(/\\/$/, "") + "/v1/chat/completions", url.origin);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.max(config.ai.timeoutMs, 90_000));
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "deepseek-ai/DeepSeek-V4.1-Flash",
+          messages: [{ role: "system", content: gswSystemPrompt }, ...input.messages],
+          ...(input.tools?.length ? { tools: input.tools, tool_choice: "auto", parallel_tool_calls: false } : {}),
+          max_tokens: 4096, stream: false,
+        }),
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new HttpError(response.status === 429 ? 429 : 502, "DeepSeek inference is unavailable.");
+      const body = await response.json() as ModalResponse;
+      const choice = body.choices?.[0];
+      if (choice?.finish_reason === "length") throw new HttpError(502, "Model output was incomplete.");
+      const calls: AiToolCall[] = (choice?.message?.tool_calls ?? []).map((call) => ({
+        id: call.id ?? crypto.randomUUID(), type: "function",
+        function: { name: call.function?.name ?? "", arguments: call.function?.arguments ?? "{}" },
+      }));
+      if (calls.some((call) => !call.function.name || !isObjectJson(call.function.arguments)))
+        throw new HttpError(502, "DeepSeek returned an invalid tool call.");
+      const content = choice?.message?.content?.trim() || null;
+      if (content && /<\\|(?:im_start|im_end|channel_sep|fim_prefix)|(?:^|\\n)assistant\\s+(?:analysis|commentary)\\b/i.test(content))
+        throw new HttpError(502, "DeepSeek returned unparsed model output.");
+      if (!content && !calls.length) throw new HttpError(502, "DeepSeek returned an empty response.");
+      return { content, toolCalls: calls, model: "deepseek-ai/DeepSeek-V4.1-Flash" };
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      throw new HttpError(error instanceof Error && error.name === "AbortError" ? 504 : 502, "DeepSeek inference is unavailable.");
+    } finally { clearTimeout(timer); }
+  },
+};
