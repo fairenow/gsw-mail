@@ -25,23 +25,21 @@ export async function renderLocalPdf(html: string): Promise<Buffer> {
     const source = join(dir, "page.html");
     const output = join(dir, "page.pdf");
     await writeFile(source, html, "utf8");
+    // Designed PDFs require the CSS layout engine; silently falling back to
+    // LibreOffice destroys grids and print backgrounds while appearing successful.
     try {
       await execute("chromium", [
         "--headless", "--disable-dev-shm-usage",
         "--disable-background-networking", "--disable-extensions",
-        "--user-data-dir=" + join(dir, "chromium-profile"), "--print-to-pdf-no-header",
-        "--print-to-pdf=" + output, "file://" + source,
-      ], { timeout: 45000, killSignal: "SIGKILL" });
-    } catch (chromiumError) {
-      try {
-        await execute("libreoffice", [
-        "-env:UserInstallation=file://" + join(dir, "profile"),
-        "--headless", "--convert-to", "pdf", "--outdir", dir, source,
-        ], { timeout: 45000, killSignal: "SIGKILL" });
-      } catch (libreOfficeError) {
-        const shortMessage = (error: unknown) => error instanceof Error ? error.message.slice(0, 900) : String(error).slice(0, 900);
-        throw new Error("Both local PDF renderers failed. Chromium: " + shortMessage(chromiumError) + "; LibreOffice: " + shortMessage(libreOfficeError));
-      }
+        "--no-first-run", "--disable-default-apps",
+        "--user-data-dir=" + join(dir, "chromium-profile"),
+        "--print-to-pdf-no-header", "--print-to-pdf=" + output,
+        "file://" + source,
+      ], { timeout: 45000, killSignal: "SIGKILL", maxBuffer: 2 * 1024 * 1024 });
+    } catch (error) {
+      const cause = error instanceof Error ? error.message.slice(0, 450) : String(error).slice(0, 450);
+      console.error("[pdf.render] chromium execution failed", { cause });
+      throw new Error("Designed PDF could not be rendered with Chromium. Please retry or contact support.");
     }
     const pdf = await readFile(output);
     if (pdf.length < 500 || pdf.toString("ascii", 0, 5) !== "%PDF-") {
@@ -53,6 +51,7 @@ export async function renderLocalPdf(html: string): Promise<Buffer> {
     if (!Number.isInteger(pages) || pages < 1 || pages > 30) {
       throw new Error("PDF failed pagination preflight: " + pages + " pages");
     }
+    console.info("[pdf.render] completed", { renderer: "chromium", pages, bytes: pdf.length });
     return pdf;
   } finally {
     await rm(dir, { recursive: true, force: true });

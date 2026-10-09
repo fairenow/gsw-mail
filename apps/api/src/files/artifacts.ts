@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { config } from "../config.js";
 import { renderLocalPdf } from "./localPdfRenderer.js";
 import { HttpError } from "../lib/errors.js";
@@ -257,7 +258,21 @@ const pdfBaseStyles = `
   table { width: 100%; border-collapse: collapse; margin: 12px 0; }
   th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid #dce3ea; }
   th { background: #e8eef5; }
-  .gsw-report-footer { margin-top: 23px; border-top: 1px solid #dce3ea; padding-top: 10px; color: #697687; font-size: 8.5pt; }
+  /* GSW:TC branded print components */
+  .gsw-brand-logo { width: 62px; height: auto; max-height: 58px; object-fit: contain; display: block; margin-bottom: 12px; }\n  .gsw-tc { --gsw-brand: #41865b; --gsw-cream: #f4e8cd; --gsw-ink: #484640; --gsw-stroke: #e8e1d4; color: var(--gsw-ink); background: #fffdf8; }
+  .gsw-tc .gsw-report-hero { background: var(--gsw-brand); color: #fff; }
+  .gsw-tc .gsw-report-hero h1, .gsw-tc .gsw-report-hero p { color: #fff; }
+  .gsw-tc h2 { color: var(--gsw-brand); }
+  .gsw-tc .gsw-metric { background: var(--gsw-cream); border-color: var(--gsw-stroke); }
+  .gsw-tc .gsw-metric-value { color: var(--gsw-brand); }
+  .gsw-tc .gsw-metric-label { color: var(--gsw-ink); }
+  .gsw-feature-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+  .gsw-feature-card { padding: 15px; background: #fff; border: 1px solid #e8e1d4; border-radius: 9px; break-inside: avoid; page-break-inside: avoid; }
+  .gsw-feature-card h3 { margin-top: 0; color: #41865b; }
+  .gsw-page-section { break-inside: avoid; page-break-inside: avoid; }
+  .gsw-report-hero, .gsw-metric, .gsw-feature-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .gsw-tc .gsw-report-footer { border-color: var(--gsw-stroke); color: var(--gsw-ink); }
+    .gsw-report-footer { margin-top: 23px; border-top: 1px solid #dce3ea; padding-top: 10px; color: #697687; font-size: 8.5pt; }
 `;
 
 export function composePdfHtml(content: string): string {
@@ -274,7 +289,17 @@ export function composePdfHtml(content: string): string {
 
 async function generateLocalPdf(input: { filename: string; content: string; instruction: string }) {
   try {
-    const html = composePdfHtml(input.content);
+    let html = composePdfHtml(input.content);
+    // Only inject the real GSW logo into explicitly branded documents.
+    // Keep the asset local and inline; renderer network access remains blocked.
+    if (/class=["'][^"']*gsw-tc/i.test(html) && !/class=["'][^"']*gsw-brand-logo/i.test(html)) {
+      const image = await readFile("/app/apps/api/assets/brand-logo.png").catch(() => null);
+      if (image) {
+        const img = `<img class="gsw-brand-logo" alt="GSW Mail" src="data:image/png;base64,${image.toString("base64")}">`;
+        const hero = /(<(?:header|section|div)\\b[^>]*class=["'][^"']*gsw-report-hero[^"']*["'][^>]*>)/i;
+        html = hero.test(html) ? html.replace(hero, `$1${img}`) : html.replace(/<body([^>]*)>/i, `<body$1>${img}`);
+      }
+    }
     const rendered = await renderLocalPdf(html);
     return { filename: input.filename, bytes: rendered, mimeType: "application/pdf", model: "gsw-local-pdf" };
   } catch (error) {
