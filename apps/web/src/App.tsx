@@ -6,6 +6,7 @@ import { AppShell } from "./components/AppShell";
 import { SetupPage } from "./pages/SetupPage";
 import { ControlCenterPage } from "./pages/ControlCenterPage";
 import { CalendarPage } from "./pages/CalendarPage";
+import { CampaignReviewPage } from "./pages/CampaignReviewPage";
 import { CalendarRsvpPage } from "./pages/CalendarRsvpPage";
 import { AccountDeletedPage, LegalPage } from "./pages/LegalPage";
 import { LandingPage } from "./pages/LandingPage";
@@ -75,7 +76,7 @@ export function App() {
   if (path === "/oauth/connect" || path === "/oauth/test" || path === "/oauth/test/callback") return <OAuthTestPage />;
   if (path === "/setup") return <SetupPage />;
   if (path === "/control-center") return <ControlCenterPage />;
-  const page = path === "/settings" ? <SettingsPage /> : path === "/contacts" ? <ContactsPage /> : path === "/calendar" ? <CalendarPage /> : path === "/files" ? <MailPage initialSection="files" /> : <MailPage />;
+  const page = /^\\/campaigns\\/[0-9a-f-]{36}$/i.test(path) ? <CampaignReviewPage /> : path === "/settings" ? <SettingsPage /> : path === "/contacts" ? <ContactsPage /> : path === "/calendar" ? <CalendarPage /> : path === "/files" ? <MailPage initialSection="files" /> : <MailPage />;
   return <AppShell>{page}</AppShell>;
 }
 
