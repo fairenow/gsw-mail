@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createCampaign, getCampaign, launchCampaign, listCampaigns } from "../campaignService.js";
+import { createCampaign, getCampaign, launchCampaign, listCampaigns, previewCampaign, replaceCampaignAudience, updateDraftCampaign } from "../campaignService.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
 
 const success = <T>(ctx: AgentExecutionContext, toolCallId: string, startedAt: string, data: T): AgentToolResult<T> => ({
@@ -182,7 +182,50 @@ export const campaignReportTool: AgentToolDefinition = {
   },
 };
 
-export const campaignTools: AgentToolDefinition[] = [
+export const campaignAudienceEditTool: AgentToolDefinition = {
+  name: "campaign.audience.edit",
+  description: "Replace the draft campaign audience with a reviewed list of owned contact IDs. This does not send mail. Use campaign.preview before launch.",
+  inputSchema: { type:"object", properties:{campaignId:{type:"string"},contactIds:{type:"array",items:{type:"string"},minItems:1,maxItems:100}},required:["campaignId","contactIds"],additionalProperties:false },
+  requiredScopes:["contacts.read","campaign.write"],risk:"reversible_write",
+  async execute(ctx,rawInput,toolCallId){
+    const startedAt=new Date().toISOString();
+    try{
+      const input=z.object({campaignId:z.string().uuid(),contactIds:z.array(z.string().uuid()).min(1).max(100)}).parse(rawInput);
+      return success(ctx,toolCallId,startedAt,await replaceCampaignAudience({userId:ctx.userId,accountId:ctx.accountId,...input}));
+    } catch(error){return failure(ctx,toolCallId,startedAt,error);}
+  },
+};
+export const campaignDraftEditTool: AgentToolDefinition = {
+  name:"campaign.draft.edit",
+  description:"Edit subject and text content of a draft campaign; never launches it. Review campaign.preview before sending.",
+  inputSchema:{type:"object",properties:{campaignId:{type:"string"},subject:{type:"string"},textBody:{type:"string"},htmlBody:{type:"string"}},required:["campaignId"],additionalProperties:false},
+  requiredScopes:["campaign.write"],risk:"reversible_write",
+  async execute(ctx,rawInput,toolCallId){
+    const startedAt=new Date().toISOString();
+    try{
+      const input=z.object({campaignId:z.string().uuid(),subject:z.string().trim().min(1).max(998).optional(),textBody:z.string().max(200000).optional(),htmlBody:z.string().max(500000).optional()}).refine(x=>x.subject!==undefined||x.textBody!==undefined||x.htmlBody!==undefined).parse(rawInput);
+      const result=await updateDraftCampaign({userId:ctx.userId,accountId:ctx.accountId,...input});
+      return success(ctx,toolCallId,startedAt,{id:result.id,status:result.status,subject:result.subject,recipientCount:result.recipientCount});
+    }catch(error){return failure(ctx,toolCallId,startedAt,error);}
+  },
+};
+export const campaignPreviewTool: AgentToolDefinition = {
+  name:"campaign.preview",
+  description:"Read the exact saved recipient snapshot and personalized subject/text for a draft campaign prior to approval. Read-only. Does not imply delivery.",
+  inputSchema:{type:"object",properties:{campaignId:{type:"string"}},required:["campaignId"],additionalProperties:false},
+  requiredScopes:["campaign.read"],risk:"read",
+  async execute(ctx,rawInput,toolCallId){
+    const startedAt=new Date().toISOString();
+    try{
+      const {campaignId}=z.object({campaignId:z.string().uuid()}).parse(rawInput);
+      return success(ctx,toolCallId,startedAt,await previewCampaign({userId:ctx.userId,accountId:ctx.accountId,campaignId}));
+    }catch(error){return failure(ctx,toolCallId,startedAt,error);}
+  },
+};
+export const campaignTools: AgentToolDefinition[
+  campaignAudienceEditTool,
+  campaignDraftEditTool,
+  campaignPreviewTool,] = [
   campaignReportTool,
   campaignCreateTool,
   campaignListTool,
