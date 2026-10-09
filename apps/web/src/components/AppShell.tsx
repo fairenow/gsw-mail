@@ -160,7 +160,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <AppShellContext.Provider value={value}>
       <div className="gsw-app-shell">
-        <AppTopBar account={account} accounts={accounts} profileImageUrl={profileImageUrl} agentTask={activeAgentTask} {...topBar} onSelectAccount={topBar.onSelectAccount ?? value.selectAccount} />
+        <AppTopBar account={account} accounts={accounts} profileImageUrl={profileImageUrl} {...topBar} onSelectAccount={topBar.onSelectAccount ?? value.selectAccount} />
         {children}
       </div>
     </AppShellContext.Provider>
