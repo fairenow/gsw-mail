@@ -1,3 +1,4 @@
+import { confirmationSummaryForAction, permissionCopyForScope } from "./actionDisplay.js";
 import { requireAccountPermission } from "../auth/authorize.js";
 import {
   completeAiIdempotency,
@@ -90,10 +91,7 @@ const permissionCopy = (scope: AiScope) => {
       description: "This lets GSW Chat prepare a campaign launch. Every launch still requires a separate confirmation before messages are queued.",
     };
   }
-  return {
-    title: `Allow ${scope}?`,
-    description: "GSW Chat needs this permission before it can continue with the requested capability.",
-  };
+  return permissionCopyForScope(scope);
 };
 
 export function requiredMailboxPermission(scopes: readonly string[]): "read" | "send" {
@@ -197,17 +195,7 @@ export async function executeAgentTool(input: {
       toolCallId: input.ledgerToolCallId,
       userId: input.ctx.userId,
       action: definition.name,
-      summary: definition.name === "mail.send_draft"
-        ? "Send this prepared draft now? This will deliver the email to its recipients."
-        : definition.name === "automations.create"
-          ? "Create this scheduled GSW Chat task? It can run in the background at the configured times."
-          : definition.name === "automations.update"
-            ? "Apply these changes to the scheduled GSW Chat task?"
-            : definition.name === "automations.delete"
-              ? "Delete this scheduled GSW Chat task permanently?"
-              : definition.name === "campaign.launch"
-                ? "Launch this campaign now? GSW Mail will queue an individual message to each tagged contact in the campaign audience."
-                : `Approve ${definition.name} for the selected mailbox.`,
+      summary: confirmationSummaryForAction(definition.name),
       expiresAt: new Date(Date.now() + 30 * 60_000),
       metadata: { risk: definition.risk, scopes: definition.requiredScopes },
     });
