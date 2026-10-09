@@ -211,6 +211,20 @@ export const campaignDraftEditTool: AgentToolDefinition = {
     }catch(error){return failure(ctx,toolCallId,startedAt,error);}
   },
 };
+export const campaignAttachmentsTool: AgentToolDefinition = {
+  name:"campaign.attachments.set",
+  description:"Select up to five existing owned GSW Files assets for a draft campaign. An empty list removes attachments. Changes require draft status; review the campaign preview before launch.",
+  inputSchema:{type:"object",properties:{campaignId:{type:"string"},assetIds:{type:"array",items:{type:"string"},maxItems:5}},required:["campaignId","assetIds"],additionalProperties:false},
+  requiredScopes:["campaign.write","files.read"],risk:"reversible_write",
+  async execute(ctx,rawInput,toolCallId){
+    const startedAt=new Date().toISOString();
+    try{
+      const {campaignId,assetIds}=z.object({campaignId:z.string().uuid(),assetIds:z.array(z.string().uuid()).max(5)}).parse(rawInput);
+      const campaign=await updateDraftCampaign({userId:ctx.userId,accountId:ctx.accountId,campaignId,attachmentAssetIds:assetIds});
+      return success(ctx,toolCallId,startedAt,{campaignId:campaign.id,attachmentAssetIds:campaign.attachmentAssetIds,recipientCount:campaign.recipientCount});
+    }catch(error){return failure(ctx,toolCallId,startedAt,error);}
+  },
+};
 export const campaignPreviewTool: AgentToolDefinition = {
   name:"campaign.preview",
   description:"Read the exact saved recipient snapshot and personalized subject/text for a draft campaign prior to approval. Read-only. Does not imply delivery.",
@@ -227,6 +241,7 @@ export const campaignPreviewTool: AgentToolDefinition = {
 export const campaignTools: AgentToolDefinition[] = [
   campaignAudienceEditTool,
   campaignDraftEditTool,
+  campaignAttachmentsTool,
   campaignPreviewTool,
   campaignReportTool,
   campaignCreateTool,
