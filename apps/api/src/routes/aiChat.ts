@@ -659,7 +659,7 @@ async function runConversationTurn(input: {
               names.has(tool.name)
               && tool.requiredScopes.every((scope) => isAiScopeGloballyEnabled(capabilitySettings, scope))
               && (Boolean(config.ai.openaiApiKey) || tool.name !== "files.transform")
-              && (tool.name !== "files.generate_image" || Boolean(config.ai.huggingFaceApiToken || config.ai.openaiApiKey))
+              && (tool.name !== "files.generate_image" || Boolean((config.ai.modalProxyToken && config.ai.qwenImageBaseUrl) || config.ai.huggingFaceApiToken || config.ai.openaiApiKey))
               && (!tool.name.startsWith("browser.") || Boolean(config.browser.baseUrl && config.browser.token)),
             );
             const existing = new Set((tools ?? []).map((tool) => tool.function.name));
@@ -703,10 +703,8 @@ async function runConversationTurn(input: {
       }
     }
 
-    const failedTools = toolActivity.filter((item) => !item.ok).map((item) => item.name);
-    const content = failedTools.length
-      ? `I couldn't complete this request after several tool attempts. The last failing tool(s) were: ${[...new Set(failedTools)].join(", ")}. Please retry; if it fails again, the server logs will contain the underlying tool error.`
-      : "I reached the tool-execution limit for this request before a final response was produced. Please retry the request.";
+    console.warn("[gsw-chat] tool attempts exhausted", { runId: run.id, failedTools: toolActivity.filter((item) => !item.ok).map((item) => item.name) });
+    const content = "Failed to respond. Please retry.";
     await appendAiMessage({
       conversationId: input.conversationId,
       role: "assistant",
