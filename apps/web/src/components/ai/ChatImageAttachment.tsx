@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
-import { Download, Image as ImageIcon, MailPlus, RefreshCw } from "lucide-react";
+import { Download, Expand, Image as ImageIcon, MailPlus, RefreshCw } from "lucide-react";
 import { api, type AiChatAttachment } from "../../api";
 
 export const isChatImage = (attachment: AiChatAttachment) =>
   ["image/png", "image/jpeg", "image/webp"].includes(attachment.mimeType.toLowerCase());
 
-export function ChatImageAttachment({ attachment, onUseInEmail, onError }: {
+export function ChatImageAttachment({ attachment, onUseInEmail, onError, onPreview }: {
   attachment: AiChatAttachment;
   onUseInEmail: (attachment: AiChatAttachment) => void;
   onError: (message: string) => void;
+  onPreview: () => void;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -48,6 +49,7 @@ export function ChatImageAttachment({ attachment, onUseInEmail, onError }: {
     </div>
     <div className="gsw-chat-image-meta"><strong>{attachment.filename}</strong><small>{attachment.mimeType} · {Math.round(attachment.sizeBytes / 1024)} KB</small></div>
     <div className="gsw-chat-image-actions">
+      <button type="button" onClick={onPreview}><Expand size={14} /> Preview</button>
       <button type="button" onClick={() => void download()}><Download size={14} /> Download</button>
       <button type="button" onClick={() => onUseInEmail(attachment)}><MailPlus size={14} /> Use in email</button>
     </div>
