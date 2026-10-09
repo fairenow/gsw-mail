@@ -118,7 +118,7 @@ export function CampaignReviewPage() {
       <section className="gsw-campaign-card">
         <h2>4. Approval and launch</h2>
         <p>Returning to GSW Chat does not send the campaign. GSW must still request your explicit confirmation before launch.</p>
-        <button onClick={()=>void navigator.clipboard.writeText(`Review and launch campaign ${id} for mailbox ${account.id}, only after showing me the saved recipient count, attachments and final confirmation.`)}>Copy launch request</button>
+        <button onClick={()=>void navigator.clipboard.writeText(`Review and launch campaign ${id} for mailbox ${account.id} with reviewed snapshot hash ${review.campaign.reviewHash}. Show the saved recipient count and attachments, then ask for my explicit confirmation before sending.`)}>Copy launch request</button>
         <a className="gsw-campaign-link" href="/chat">Return to GSW Chat</a>
       </section>
     </>}
