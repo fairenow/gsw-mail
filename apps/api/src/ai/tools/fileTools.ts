@@ -2,7 +2,7 @@ import { and, desc, eq, ilike, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { config } from "../../config.js";
 import { db } from "../../db/client.js";
-import { assets } from "../../db/schema.js";
+import { assets, userSettings } from "../../db/schema.js";
 import { getR2Object } from "../../files/r2.js";
 import { analyzeStoredFile } from "../../files/intelligence.js";
 import { detectFileType, isTextLikeFile } from "../../files/fileTypes.js";
@@ -57,6 +57,7 @@ const transformArtifactInput = z.object({
   instruction: z.string().trim().min(1).max(20_000),
 });
 const generateImageInput = z.object({
+  model: z.enum(["auto", "qwen-image-2512", "openai-image"]).optional(),
   filename: z.string().trim().min(1).max(255).optional(),
   prompt: z.string().trim().min(1).max(32_000),
   size: z.enum(["1024x1024", "1536x1024", "1024x1536", "auto"]).optional(),
@@ -504,6 +505,7 @@ export const filesGenerateImageTool: AgentToolDefinition = {
     properties: {
       filename: { type: "string", description: "Optional filename. The correct extension is added if missing." },
       prompt: { type: "string", description: "Detailed image-generation prompt." },
+      model: { type: "string", enum: ["auto", "qwen-image-2512", "openai-image"], description: "Image-generation model; auto prefers Modal Qwen Image." },
       size: { type: "string", enum: ["1024x1024", "1536x1024", "1024x1536", "auto"] },
       quality: { type: "string", enum: ["low", "medium", "high", "auto"] },
       background: { type: "string", enum: ["transparent", "opaque", "auto"] },
@@ -524,7 +526,10 @@ export const filesGenerateImageTool: AgentToolDefinition = {
           : input.filename?.toLowerCase().endsWith(".webp")
             ? "webp"
             : "png");
-      const generated = await generateImage({ ...input, format: requestedFormat }, { correlationId: toolCallId });
+      const [prefs] = await db.select({ ai: userSettings.ai }).from(userSettings).where(eq(userSettings.userId, ctx.userId)).limit(1);
+      const selected = input.model && input.model !== "auto" ? input.model : prefs?.ai?.imageModel;
+      const model = selected === "qwen-image-2512" || selected === "openai-image" ? selected : "auto";
+      const generated = await generateImage({ ...input, model, format: requestedFormat }, { correlationId: toolCallId });
       const base = (input.filename?.trim() || "generated-image").replace(/\.(png|jpe?g|webp)$/i, "");
       const filename = `${base}.${generated.extension}`;
       const asset = await createAssetFromBuffer({

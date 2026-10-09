@@ -10,6 +10,7 @@ type ImageResponse = {
 
 type ImageInput = {
   prompt: string;
+  model?: "auto" | "qwen-image-2512" | "openai-image" | undefined;
   size?: "1024x1024" | "1536x1024" | "1024x1536" | "auto" | undefined;
   quality?: "low" | "medium" | "high" | "auto" | undefined;
   background?: "transparent" | "opaque" | "auto" | undefined;
@@ -181,14 +182,46 @@ async function generateWithOpenAi(input: ImageInput, deadline: number): Promise<
   }
 }
 
+async function generateWithModal(input: ImageInput, deadline: number): Promise<GeneratedImage> {
+  const token = config.ai.modalProxyToken;
+  const base = config.ai.qwenImageBaseUrl;
+  if (!token || !base) throw new HttpError(503, "Modal image generation is not configured.");
+  const url = new URL(base);
+  if (url.protocol !== "https:") throw new HttpError(503, "Invalid Modal image endpoint.");
+  const endpoint = new URL(url.pathname.replace(/\/$/, "") + "/v1/images/generations", url.origin);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(1, Math.min(90_000, deadline - Date.now())));
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ model: "Qwen/Qwen-Image-2512", prompt: input.prompt, size: input.size === "auto" ? "1024x1024" : input.size ?? "1024x1024", response_format: "b64_json" }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new HttpError([400,401,403,422,429].includes(response.status) ? response.status : 502, "Modal image generation failed.");
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.startsWith("image/")) return validate(Buffer.from(await response.arrayBuffer()), "qwen-image-2512");
+    const body = await response.json() as { data?: Array<{ b64_json?: string; url?: string }> };
+    const encoded = body.data?.[0]?.b64_json;
+    if (!encoded) throw new HttpError(502, "Modal returned no inline image.");
+    return validate(Buffer.from(encoded, "base64"), "qwen-image-2512");
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    throw new HttpError(error instanceof Error && error.name === "AbortError" ? 504 : 502, "Modal image generation is temporarily unavailable.");
+  } finally { clearTimeout(timer); }
+}
+
 export type ImageGenerationOptions = { correlationId?: string; maxDurationMs?: number };
 export async function generateImage(input: ImageInput, options: ImageGenerationOptions = {}) {
   const started = Date.now();
   const budget = Math.max(5_000, Math.min(options.maxDurationMs ?? 90_000, 180_000));
   const correlationId = options.correlationId ?? "untracked";
   const deadline = started + budget;
-  const attempts: Array<{ provider: "huggingface" | "openai"; model: string; run: () => Promise<GeneratedImage> }> = [];
-  if (config.ai.huggingFaceApiToken) {
+  const attempts: Array<{ provider: "modal" | "huggingface" | "openai"; model: string; run: () => Promise<GeneratedImage> }> = [];
+  if (config.ai.modalProxyToken && config.ai.qwenImageBaseUrl && input.model !== "openai-image") {
+    attempts.push({ provider: "modal", model: "qwen-image-2512", run: () => generateWithModal(input, deadline) });
+  }
+  if (input.model !== "qwen-image-2512" && input.model !== "openai-image" && !config.ai.qwenImageBaseUrl) {
     if (config.ai.huggingFaceImageEndpointUrl) attempts.push({
       provider: "huggingface", model: config.ai.huggingFaceImageModel,
       run: () => generateWithDedicatedHuggingFaceEndpoint(input, Math.min(deadline, Date.now() + 30_000)),
@@ -197,7 +230,7 @@ export async function generateImage(input: ImageInput, options: ImageGenerationO
       attempts.push({ provider: "huggingface", model, run: () => generateWithHuggingFaceModel(model, input, Math.min(deadline, Date.now() + 30_000)) });
     }
   }
-  if (config.ai.openaiApiKey) attempts.push({
+  if (config.ai.openaiApiKey && input.model !== "qwen-image-2512") attempts.push({
     provider: "openai", model: config.ai.openaiImageModel, run: () => generateWithOpenAi(input, deadline),
   });
   if (!attempts.length) throw new HttpError(503, "Image generation is not configured.");

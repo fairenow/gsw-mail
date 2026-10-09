@@ -1,6 +1,6 @@
 import type { ProviderToolDefinition } from "../tools/types.js";
 
-export type AiProviderId = "hetzner" | "openai" | "anthropic" | "huggingface";
+export type AiProviderId = "hetzner" | "openai" | "anthropic" | "huggingface" | "modal";
 export type AiChatRole = "user" | "assistant";
 
 export interface AiToolCall {
