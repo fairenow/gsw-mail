@@ -76,7 +76,7 @@ export function App() {
   if (path === "/oauth/connect" || path === "/oauth/test" || path === "/oauth/test/callback") return <OAuthTestPage />;
   if (path === "/setup") return <SetupPage />;
   if (path === "/control-center") return <ControlCenterPage />;
-  const page = /^\\/campaigns\\/[0-9a-f-]{36}$/i.test(path) ? <CampaignReviewPage /> : path === "/settings" ? <SettingsPage /> : path === "/contacts" ? <ContactsPage /> : path === "/calendar" ? <CalendarPage /> : path === "/files" ? <MailPage initialSection="files" /> : <MailPage />;
+  const page = /^\/campaigns\/[0-9a-f-]{36}$/i.test(path) ? <CampaignReviewPage /> : path === "/settings" ? <SettingsPage /> : path === "/contacts" ? <ContactsPage /> : path === "/calendar" ? <CalendarPage /> : path === "/files" ? <MailPage initialSection="files" /> : <MailPage />;
   return <AppShell>{page}</AppShell>;
 }
 
