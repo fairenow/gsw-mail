@@ -1,0 +1,23 @@
+name: PDF Worker QA
+on:
+  pull_request:
+    paths:
+      - 'apps/pdf-worker/**'
+      - '.github/workflows/pdf-worker-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/pdf-worker/**'
+      - '.github/workflows/pdf-worker-ci.yml'
+jobs:
+  quality-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test page quality preflight
+        run: node --test apps/pdf-worker/quality.test.mjs
+      - name: Validate worker syntax
+        run: node --check apps/pdf-worker/server.mjs

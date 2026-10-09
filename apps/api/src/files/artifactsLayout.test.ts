@@ -30,16 +30,30 @@ test("GSW:TC report styles include feature grids and print color preservation", 
 test("inserts safe printable margins after model styling and avoids a footer-only overflow", () => {
   const html = '<!doctype html><html><head><style>@page{margin:0}.gsw-report-hero{margin:-70px}</style></head><body class="gsw-tc"><header class="gsw-report-hero">Title</header><footer class="gsw-report-footer">End</footer></body></html>';
   const output = composePdfHtml(html);
-  assert.match(output, /@page \{ size: Letter; margin: 14mm 15mm !important; \}/);
-  assert.match(output, /page-break-inside: avoid !important/);
-  assert.ok(output.indexOf("14mm 15mm !important") > output.indexOf("@page{margin:0}"), "safe print CSS must follow authored styles");
+  assert.match(output, /@page \{ size: Letter; margin: 14mm 15mm; \}/);
+  assert.match(output, /page-break-inside: avoid/);
+  assert.ok(output.indexOf("14mm 15mm") > output.indexOf("@page{margin:0}"), "safe print CSS must follow authored styles");
   assert.equal((output.match(/<style>/g) ?? []).length, 2);
 });
 
 test("branded service overviews override a model-authored fixed-height cover", () => {
   const html = '<!doctype html><html><head><style>.cover{height:100vh;page-break-after:always}</style></head><body class="gsw-tc"><section class="cover"><header class="gsw-report-hero">Hero</header><div class="gsw-metrics">Metrics</div></section><section>Platform overview</section></body></html>';
   const output = composePdfHtml(html);
-  assert.match(output, /\.gsw-tc \.cover, \.gsw-tc \.cover-page/);
+  assert.match(output, /\.gsw-tc:not\(\.gsw-layout-presentation\):not\(\.gsw-layout-brochure\) \.cover/);
   assert.match(output, /break-after: auto !important; page-break-after: auto !important/);
   assert.ok(output.lastIndexOf("page-break-after: auto !important") > output.indexOf("page-break-after:always"));
+});
+
+test("uses adaptive report pagination rather than keeping a whole section together", () => {
+  const html = '<!doctype html><html><head></head><body class="gsw-tc"><section class="gsw-page-section"><h2>Overview</h2><p>Content</p></section></body></html>';
+  const output = composePdfHtml(html);
+  assert.match(output, /gsw-layout-report/);
+  assert.match(output, /section:not\(\.gsw-report-hero\):not\(\.gsw-feature-card\)/);
+  assert.match(output, /break-inside: auto !important/);
+});
+test("preserves an explicitly selected brochure layout", () => {
+  const html = '<!doctype html><html><head></head><body class="gsw-tc gsw-layout-brochure"><section class="cover">Hero</section></body></html>';
+  const output = composePdfHtml(html);
+  assert.match(output, /gsw-layout-brochure/);
+  assert.equal((output.match(/gsw-layout-report"/g) ?? []).length, 0);
 });
