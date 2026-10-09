@@ -10,7 +10,7 @@ const videoInput = z.object({
 
 export const videoGenerateTool: AgentToolDefinition = {
   name: "videos.generate",
-  description: "Queue a video-generation job through Modal. The job continues asynchronously in GSW Tasks, and the completed MP4 is saved in GSW Files. This tool returns a task ID, not a finished video. Use tasks.get to check progress.",
+  description: "Generate a new video from a text prompt through Modal (LTX, Wan or Hunyuan). Runs asynchronously in GSW Tasks and saves an MP4 in GSW Files. IMPORTANT: Source-image-to-video animation is not supported by this tool yet: it cannot accept an image asset ID or preserve the exact characters in an existing image. For requests to animate an existing image, explain that limitation; do not silently substitute an unrelated text-to-video result. Use tasks.get to check progress.",
   inputSchema: {
     type: "object",
     properties: {
