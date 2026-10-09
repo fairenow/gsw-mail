@@ -185,7 +185,7 @@ const toolLabel = (toolName: string): string => {
     case "files.read": return "Reading the file";
     case "files.analyze": return "Analyzing the file";
     case "files.create_text": return "Creating the file";
-    case "files.create_artifact": return "Building your file";
+    case "files.create_artifact": return "Rendering and saving your document";
     case "files.transform": return "Transforming your file";
     case "files.generate_image": return "Generating your image";
     case "mail.attach_file": return "Attaching the file to your draft";
