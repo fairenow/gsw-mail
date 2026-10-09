@@ -269,32 +269,36 @@ const pdfBaseStyles = `
   .gsw-feature-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
   .gsw-feature-card { padding: 15px; background: #fff; border: 1px solid #e8e1d4; border-radius: 9px; break-inside: avoid; page-break-inside: avoid; }
   .gsw-feature-card h3 { margin-top: 0; color: #41865b; }
-  .gsw-page-section { break-inside: avoid; page-break-inside: avoid; }
+  .gsw-page-section { break-inside: auto; page-break-inside: auto; }
   .gsw-report-hero, .gsw-metric, .gsw-feature-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .gsw-tc .gsw-report-footer { border-color: var(--gsw-stroke); color: var(--gsw-ink); }
   .gsw-report-footer { margin: 16px 0 0; border-top: 1px solid #dce3ea; padding: 10px 0 0; color: #697687; font-size: 8.5pt; break-inside: avoid; page-break-inside: avoid; break-before: avoid; }
 `;
 
 const pdfPrintSafetyStyles = `
-  @page { size: Letter; margin: 14mm 15mm !important; }
+  /* Trust the document's layout; constrain only safe paper dimensions and known components. */
+  @page { size: Letter; margin: 14mm 15mm; }
   html, body { max-width: 100%; }
   .gsw-tc .gsw-report-hero { margin-left: 0 !important; margin-right: 0 !important; padding: 24px 28px !important; }
   .gsw-tc .gsw-brand-logo { margin-left: 8px !important; margin-top: 8px !important; }
-  .gsw-tc .gsw-report-footer, .gsw-tc footer { break-inside: avoid !important; page-break-inside: avoid !important; break-before: avoid !important; page-break-before: avoid !important; height: auto !important; min-height: 0 !important; padding: 12px 16px !important; margin: 16px 0 0 !important; }
-  .gsw-tc .gsw-feature-card, .gsw-tc .gsw-metric { break-inside: avoid; }
-  /* Branded overviews are flowing reports, not fixed-height slide decks.
-     A model-authored cover height/page break can strand half of page one. */
-  .gsw-tc .cover, .gsw-tc .cover-page, .gsw-tc .title-page,
-  .gsw-tc .hero-section, .gsw-tc > .page:first-child {
-    height: auto !important; min-height: 0 !important;
-    max-height: none !important;
+  .gsw-tc .gsw-feature-card, .gsw-tc .gsw-metric {
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  .gsw-tc .gsw-report-footer, .gsw-tc footer {
+    break-inside: avoid; margin: 12px 0 0;
+  }
+  /* A normal report flows beyond its cover; a brochure may intentionally keep a cover. */
+  .gsw-tc:not(.gsw-layout-presentation):not(.gsw-layout-brochure) .cover,
+  .gsw-tc:not(.gsw-layout-presentation):not(.gsw-layout-brochure) .cover-page,
+  .gsw-tc:not(.gsw-layout-presentation):not(.gsw-layout-brochure) .title-page {
+    height: auto !important; min-height: 0 !important; max-height: none !important;
     break-after: auto !important; page-break-after: auto !important;
   }
-  .gsw-tc .gsw-report-hero, .gsw-tc .gsw-metrics {
-    height: auto !important; min-height: 0 !important;
-    break-after: auto !important; page-break-after: auto !important;
+  /* Large content sections must be allowed to fragment; individual cards remain intact. */
+  .gsw-tc.gsw-layout-report .gsw-page-section,
+  .gsw-tc.gsw-layout-report section:not(.gsw-report-hero):not(.gsw-feature-card) {
+    break-inside: auto !important; page-break-inside: auto !important;
   }
-
 `;
 
 export function composePdfHtml(content: string): string {
@@ -304,7 +308,8 @@ export function composePdfHtml(content: string): string {
   if (hasDocument) {
     // Preserve the model's full page composition, including its head/CSS.
     // Append print-safe defaults rather than putting a second HTML document inside it.
-    return body.replace(/<\/head>/i, `<style>${pdfBaseStyles}${pdfPrintSafetyStyles}</style></head>`);
+    const styled = body.replace(/<\/head>/i, `<style>${pdfBaseStyles}${pdfPrintSafetyStyles}</style></head>`);
+    return styled.replace(/<body(\b[^>]*)>/i, (match, attrs: string) => /class=["\x27][^"\x27]*gsw-tc/.test(attrs) && !/gsw-layout-(?:brochure|proposal|presentation|report)/.test(attrs) ? match.replace(/class=(["\x27])([^"\x27]*)\1/, "class=$1$2 gsw-layout-report$1") : match);
   }
   return `<!doctype html><html><head><meta charset="utf-8"><style>${pdfBaseStyles}</style></head><body><main class="gsw-page">${body}</main></body></html>`;
 }
