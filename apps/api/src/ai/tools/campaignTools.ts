@@ -167,13 +167,13 @@ export const campaignReportTool: AgentToolDefinition = {
       const recipients=details.recipients;
       const statuses=details.counts;
       return success(ctx, toolCallId, startedAt, {
-        campaign: { id: campaign.id, title: campaign.title, status: campaign.status, subject: campaign.subject, recipientCount: campaign.recipientCount },
+        campaign: { id: campaign.id, title: campaign.title, status: campaign.status, recipientCount: campaign.recipientCount },
         counts: statuses,
         // Deliberately do not infer delivery or engagement from queued send state.
         deliveryConfirmed: recipients.some(r=>r.deliveredAt!==null), openTrackingAvailable: false,
         deliveryTrackingSource: details.deliveryTrackingSource,
         recipientStatuses: recipients,
-        failedRecipients: recipients.filter(r=>r.queueStatus==="failed" || r.deliveryStatus==="failed").slice(0,50).map(r=>({ email: r.email, status: r.deliveryStatus??r.queueStatus })),
+        failedRecipients: recipients.filter(r=>r.queueStatus==="failed" || r.deliveryStatus==="bounced" || r.deliveryStatus==="complained" || r.deliveryStatus==="partial_failure").slice(0,50).map(r=>({ email: r.email, status: r.deliveryStatus??r.queueStatus })),
         suggestedNextSteps: [
           "Review failed recipient addresses before considering a targeted retry.",
           "Check mail delivery status independently; queued is not proof of delivery.",
