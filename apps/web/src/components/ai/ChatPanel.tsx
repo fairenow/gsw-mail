@@ -186,9 +186,9 @@ export function ChatPanel() {
     setExecutionActivities((current) => {
       const settled = current.map((item) => item.status === "running" && !item.toolName ? { ...item, status: "done" as const } : item);
       const last = settled[settled.length - 1];
-      if (event.phase === "thinking" && last?.label === event.label && last.status === "running") return settled;
+      if (last?.label === event.label && last.status === "running" && last.toolName === event.toolName) return settled;
       activityCounterRef.current += 1;
-      return [...settled.slice(-4), {
+      return [...settled.slice(-39), {
         id: activityCounterRef.current,
         label: event.label,
         toolName: event.toolName,
