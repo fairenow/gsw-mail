@@ -81,7 +81,7 @@ export async function pollModalVideo(model: ModalVideoModel, jobId: string): Pro
 
 export async function downloadModalVideo(model: ModalVideoModel, jobId: string): Promise<Buffer> {
   const response = await request(jobUrl(model, jobId, "/content"), { method: "GET" });
-  const mime = response.headers.get("content-type")?.split(";")[0].trim().toLowerCase();
+  const mime = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
   if (mime !== "video/mp4" && mime !== "application/octet-stream") throw new HttpError(502, "Video provider returned an unexpected format.");
   const sizeHeader = Number(response.headers.get("content-length") ?? 0);
   if (sizeHeader > config.files.maxUploadBytes) throw new HttpError(413, "Generated video exceeds the GSW Files upload limit.");
