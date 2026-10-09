@@ -4,6 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends chromium popple
 RUN groupadd -g 10001 pdfworker && useradd --uid 10001 --gid 10001 --create-home pdfworker
 WORKDIR /worker
 COPY apps/pdf-worker/server.mjs /worker/server.mjs
+COPY apps/pdf-worker/quality.mjs /worker/quality.mjs
 USER pdfworker
 ENV NODE_ENV=production PORT=4001
 EXPOSE 4001
