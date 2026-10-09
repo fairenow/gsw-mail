@@ -192,7 +192,7 @@ export function ChatPanel() {
       activityCounterRef.current += 1;
       return [...settled.slice(-39), {
         id: activityCounterRef.current,
-        label: event.label,
+        label: event.phase === "thinking" ? "Preparing response" : "Working on your request",
         toolName: event.toolName,
         status: "running" as const,
       }];
@@ -487,6 +487,7 @@ export function ChatPanel() {
       return;
     }
     const typedContent = (override ?? input).trim();
+    if (override && failedTurn && executionActivities.some((item) => item.status === "done" && item.toolName && /^(?:mail\\.|campaign\\.|calendar\\.|contacts\\.|automations\\.|files\\.)/.test(item.toolName)) && !window.confirm("Some operations may already have completed. Check the results before retrying to avoid duplicates. Retry anyway?")) return;
     const attachmentsForTurn = override && failedTurn ? failedTurn.attachments ?? [] : pendingAttachments;
     const content = typedContent || (attachmentsForTurn.length > 1 ? "Please review the attached files." : "Please review the attached file.");
     if ((!typedContent && attachmentsForTurn.length === 0) || sending || uploadingFiles) return;
@@ -507,7 +508,10 @@ export function ChatPanel() {
       localStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`, response.conversationId);
       setIntervention(response.intervention);
       const assistantMessage = response.message;
-      if (assistantMessage) setMessages((current) => [...current, assistantMessage].slice(-24));
+      if (assistantMessage?.content?.trim() === "Failed to respond. Please retry.") {
+        setFailedTurn(userMessage);
+        setError("Failed to respond.");
+      } else if (assistantMessage) setMessages((current) => [...current, assistantMessage].slice(-24));
       if (assistantMessage?.attachments?.some(isChatImage)) setActivityCollapsed(true);
       if (response.intervention) setActivityCollapsed(true);
       else settleAndClearActivities();
