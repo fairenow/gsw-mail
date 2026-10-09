@@ -3,6 +3,7 @@ import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, Clock3, Copy, File,
 import { api, type AiChatAttachment, type AiChatMessage, type AiChatStreamEvent, type AiConversationRecord, type AiIntervention } from "../../api";
 import { useAppShell } from "../AppShell";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { ChatImageAttachment, isChatImage } from "./ChatImageAttachment";
 
 const starterPrompts = [
   "Summarize yesterday's email activity",
@@ -462,6 +463,13 @@ export function ChatPanel() {
     }
   };
 
+  const useImageInEmail = (attachment: AiChatAttachment) => {
+    setPendingAttachments((current) => current.some((item) => item.assetId === attachment.assetId) ? current : [...current, attachment].slice(0, 10));
+    setInput((current) => current.trim() || `Please create an email draft using the attached image "${attachment.filename}". Ask me for recipients, subject, and any missing details. Do not send the email.`);
+    composerInputRef.current?.focus();
+    scrollToLatestMessage("smooth");
+  };
+
   const openAttachedFile = async (attachment: AiChatAttachment) => {
     try {
       const result = await api.fileDownload(attachment.assetId);
@@ -498,6 +506,7 @@ export function ChatPanel() {
       setIntervention(response.intervention);
       const assistantMessage = response.message;
       if (assistantMessage) setMessages((current) => [...current, assistantMessage].slice(-24));
+      if (assistantMessage?.attachments?.some(isChatImage)) setActivityCollapsed(true);
       if (response.intervention) setActivityCollapsed(true);
       else settleAndClearActivities();
       scrollToLatestMessage("smooth");
@@ -636,10 +645,12 @@ export function ChatPanel() {
               : <div className="gsw-chat-message-body" key={`text-${segmentIndex}`}><ChatMarkdown content={segment.content} /></div>)}
           </div> : <div className="gsw-chat-message-body">{message.content}</div>}
           {message.attachments && message.attachments.length > 0 && <div className="gsw-chat-message-files">
-            {message.attachments.map((attachment) => <button type="button" className="gsw-chat-file-chip" key={attachment.assetId} onClick={() => void openAttachedFile(attachment)}>
-              <File size={15} />
-              <span><strong>{attachment.filename}</strong><small>{attachment.mimeType || "File"} · {formatAttachmentSize(attachment.sizeBytes)}</small></span>
-            </button>)}
+            {message.attachments.map((attachment) => isChatImage(attachment)
+              ? <ChatImageAttachment key={attachment.assetId} attachment={attachment} onUseInEmail={useImageInEmail} onError={setError} />
+              : <button type="button" className="gsw-chat-file-chip" key={attachment.assetId} onClick={() => void openAttachedFile(attachment)}>
+                <File size={15} />
+                <span><strong>{attachment.filename}</strong><small>{attachment.mimeType || "File"} · {formatAttachmentSize(attachment.sizeBytes)}</small></span>
+              </button>)}
           </div>}
           <button className="gsw-chat-copy" type="button" aria-label={message.role === "user" ? "Copy prompt" : "Copy full response"} title={message.role === "user" ? "Copy prompt" : "Copy full response"} onClick={() => void navigator.clipboard.writeText(message.role === "assistant" ? cleanAssistantText(message.content) : message.content)}><Copy size={14} strokeWidth={1.8} /></button>
         </article>;
