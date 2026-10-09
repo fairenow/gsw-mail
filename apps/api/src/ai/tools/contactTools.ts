@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { listContacts } from "../../lib/contacts.js";
+import { createContact, getContact, getContactEngineContext, listContacts, updateContact } from "../../lib/contacts.js";
 import { db } from "../../db/client.js";
 import { contactTags, contacts } from "../../db/schema.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
@@ -109,4 +109,53 @@ export const contactTagAssignTool: AgentToolDefinition = {
   },
 };
 
-export const contactTools: AgentToolDefinition[] = [contactTagTool, contactSearchTool, contactAudiencePreviewTool, contactTagAssignTool];
+
+const contactInputSchema = z.object({
+  firstName: z.string().max(160).optional(), lastName: z.string().max(160).optional(),
+  displayName: z.string().trim().min(1).max(300).optional(),
+  organization: z.string().max(300).optional(), jobTitle: z.string().max(200).optional(),
+  notes: z.string().max(10000).optional(),
+  emails: z.array(z.object({ email: z.string().email(), label: z.string().max(80).optional(), isPrimary: z.boolean().optional() })).max(20).optional(),
+  tags: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
+});
+const contactProperties = {
+  firstName: { type: "string" }, lastName: { type: "string" }, displayName: { type: "string" },
+  organization: { type: "string" }, jobTitle: { type: "string" }, notes: { type: "string" },
+  emails: { type: "array", items: { type: "object", properties: { email: { type: "string" }, label: { type: "string" }, isPrimary: { type: "boolean" } }, required: ["email"], additionalProperties: false } },
+  tags: { type: "array", items: { type: "string" } },
+};
+export const contactCreateTool: AgentToolDefinition = {
+  name: "contacts.create",
+  description: "Create a contact from explicitly provided details; do not invent an address or assume intent to contact them.",
+  inputSchema: { type: "object", properties: contactProperties, additionalProperties: false },
+  requiredScopes: ["contacts.write"], risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = contactInputSchema.refine(v=>Boolean(v.displayName || v.firstName || v.emails?.length)).parse(rawInput);
+      const engine = await getContactEngineContext(ctx.userId, ctx.accessToken, ctx.authUserId, ctx.headers);
+      const contact = await createContact(ctx.userId, input, undefined, engine);
+      return { ok: true, toolCallId, data: { contact }, audit: audit(ctx, startedAt) };
+    } catch { return errorResult(ctx, toolCallId, startedAt); }
+  },
+};
+export const contactUpdateTool: AgentToolDefinition = {
+  name: "contacts.update",
+  description: "Update a selected owned contact with supplied fields. The supplied arrays of tags and emails replace existing values; read the contact first to preserve data.",
+  inputSchema: { type: "object", properties: { contactId: { type: "string" }, ...contactProperties }, required: ["contactId"], additionalProperties: false },
+  requiredScopes: ["contacts.write"], risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = contactInputSchema.extend({ contactId: z.string().uuid() }).parse(rawInput);
+      const { contactId, ...fields } = input;
+      const existing = await getContact(ctx.userId, contactId);
+      if (!existing) return { ok: false, toolCallId, error: { code: "not_found", message: "Contact not found.", retryable: false }, audit: audit(ctx, startedAt) };
+      const engine = await getContactEngineContext(ctx.userId, ctx.accessToken, ctx.authUserId, ctx.headers);
+      const contact = await updateContact(ctx.userId, contactId, fields, engine);
+      return { ok: true, toolCallId, data: { contact }, audit: audit(ctx, startedAt) };
+    } catch { return errorResult(ctx, toolCallId, startedAt); }
+  },
+};
+
+export const contactTools: AgentToolDefinition[] = [contactTagTool, contactSearchTool, contactAudiencePreviewTool, contactTagAssignTool, contactCreateTool, contactUpdateTool];
