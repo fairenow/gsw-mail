@@ -1,3 +1,4 @@
+import { inspectPdfPages, extractWordBoxPages } from "./quality.mjs";
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -58,6 +59,10 @@ const server = createServer(async (req, res) => {
     const { stdout } = await exec("pdfinfo", [output], { timeout: 5000 });
     const pages = Number(stdout.match(/^Pages:\s+(\d+)/m)?.[1] ?? 0);
     if (!Number.isInteger(pages) || pages < 1 || pages > 30) throw new Error("invalid_pages");
+    const { stdout: boxes } = await exec("pdftotext", ["-bbox", output, "-"], { timeout: 8_000, maxBuffer: 4_000_000 });
+    const quality = inspectPdfPages(extractWordBoxPages(boxes));
+    console.info(JSON.stringify({ event: "pdf.worker.quality", pages, issues: quality.issues }));
+    if (quality.reject) throw new Error("quality_rejected");
     console.info(JSON.stringify({ event: "pdf.worker.rendered", pages, bytes: pdf.length }));
     res.writeHead(200, { "Content-Type": "application/pdf", "Cache-Control": "no-store" });
     res.end(pdf);
