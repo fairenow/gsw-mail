@@ -57,7 +57,7 @@ export async function renderLocalPdf(html: string): Promise<Buffer> {
         "--disable-background-networking", "--disable-extensions",
         "--no-first-run", "--disable-default-apps",
         "--user-data-dir=" + join(dir, "chromium-profile"),
-        "--print-to-pdf-no-header", "--print-to-pdf=" + output,
+        "--no-pdf-header-footer", "--print-to-pdf=" + output,
         "file://" + source,
       ], { timeout: 45000, killSignal: "SIGKILL", maxBuffer: 2 * 1024 * 1024 });
     } catch (error) {
