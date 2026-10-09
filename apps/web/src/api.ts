@@ -234,7 +234,7 @@ export interface ProductSettings {
   contacts: Record<string, unknown>;
   ai: {
     enabled: boolean;
-    modelProvider: "qwen" | "gpt-oss-120b" | "openai" | "claude";
+    modelProvider: "qwen" | "gpt-oss-120b" | "deepseek-v4.1-flash" | "openai" | "claude";
     mailRead: boolean;
     draftMutation: boolean;
     emailSend: boolean;
