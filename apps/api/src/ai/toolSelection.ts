@@ -40,6 +40,7 @@ export function selectAgentTools(input: {
     toolAvailable(tool, input.capabilitySettings, input.hasOpenAi, input.hasImageProvider, input.hasBrowserProvider),
   );
   const skills = selectAgentSkills(input.userMessage);
+  const videoRequested = /\b(?:video|animate|animation|moving clip|motion clip)\b/i.test(input.userMessage);
 
   if (skills.length === 0) {
     return {
@@ -51,7 +52,7 @@ export function selectAgentTools(input: {
   }
 
   const selected = available.filter((tool) =>
-    coreToolNames.has(tool.name) || tool.name === "capabilities.search" || tool.name.startsWith("workers.") || tool.name === "integrations.list" || tool.name.startsWith("tasks.") || skills.some((skill) => skillToolMatch(skill, tool.name)),
+    coreToolNames.has(tool.name) || (videoRequested && tool.name === "videos.generate") || tool.name === "capabilities.search" || tool.name.startsWith("workers.") || tool.name === "integrations.list" || tool.name.startsWith("tasks.") || skills.some((skill) => skillToolMatch(skill, tool.name)),
   );
 
   const minimum = selected.length >= 3 ? selected : available;
