@@ -10,7 +10,7 @@ type ImageResponse = {
 
 type ImageInput = {
   prompt: string;
-  model?: "auto" | "qwen-image-2512" | "openai-image";
+  model?: "auto" | "qwen-image-2512" | "openai-image" | undefined;
   size?: "1024x1024" | "1536x1024" | "1024x1536" | "auto" | undefined;
   quality?: "low" | "medium" | "high" | "auto" | undefined;
   background?: "transparent" | "opaque" | "auto" | undefined;
