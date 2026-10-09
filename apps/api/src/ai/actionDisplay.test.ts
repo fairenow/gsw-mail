@@ -22,5 +22,6 @@ test("all action confirmations avoid developer tool syntax", () => {
     assert.ok(summary.endsWith("?"));
   }
   assert.equal(confirmationSummaryForAction("videos.generate"), "Allow GSW Chat to generate a video?");
+  assert.equal(confirmationSummaryForAction("video.generate"), "Allow GSW Chat to generate a video?");
   assert.equal(actionDisplayLabel("files__create_artifact"), "create a document");
 });
