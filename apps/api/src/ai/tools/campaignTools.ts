@@ -224,10 +224,10 @@ export const campaignPreviewTool: AgentToolDefinition = {
     }catch(error){return failure(ctx,toolCallId,startedAt,error);}
   },
 };
-export const campaignTools: AgentToolDefinition[
+export const campaignTools: AgentToolDefinition[] = [
   campaignAudienceEditTool,
   campaignDraftEditTool,
-  campaignPreviewTool,] = [
+  campaignPreviewTool,
   campaignReportTool,
   campaignCreateTool,
   campaignListTool,
