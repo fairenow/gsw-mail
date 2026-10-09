@@ -151,8 +151,23 @@ export const contactUpdateTool: AgentToolDefinition = {
       const { contactId, ...fields } = input;
       const existing = await getContact(ctx.userId, contactId);
       if (!existing) return { ok: false, toolCallId, error: { code: "not_found", message: "Contact not found.", retryable: false }, audit: audit(ctx, startedAt) };
+      // updateContact replaces all child collections: supply existing fields so a
+      // partial AI request never accidentally erases addresses, tags, or notes.
+      const present = existing as Record<string, unknown>;
+      const currentEmails = Array.isArray(present.emails) ? present.emails as Array<{ email: string; label?: string; isPrimary?: boolean }> : [];
+      const currentTags = Array.isArray(present.tags) ? present.tags as string[] : [];
+      const merged = {
+        firstName: fields.firstName ?? (typeof present.firstName === "string" ? present.firstName : undefined),
+        lastName: fields.lastName ?? (typeof present.lastName === "string" ? present.lastName : undefined),
+        displayName: fields.displayName ?? (typeof present.displayName === "string" ? present.displayName : undefined),
+        organization: fields.organization ?? (typeof present.organization === "string" ? present.organization : undefined),
+        jobTitle: fields.jobTitle ?? (typeof present.jobTitle === "string" ? present.jobTitle : undefined),
+        notes: fields.notes ?? (typeof present.notes === "string" ? present.notes : undefined),
+        emails: fields.emails ?? currentEmails,
+        tags: fields.tags ?? currentTags,
+      };
       const engine = await getContactEngineContext(ctx.userId, ctx.accessToken, ctx.authUserId, ctx.headers);
-      const contact = await updateContact(ctx.userId, contactId, fields, engine);
+      const contact = await updateContact(ctx.userId, contactId, merged, engine);
       return { ok: true, toolCallId, data: { contact }, audit: audit(ctx, startedAt) };
     } catch { return errorResult(ctx, toolCallId, startedAt); }
   },
