@@ -96,6 +96,10 @@ const permissionCopy = (scope: AiScope) => {
   };
 };
 
+export function requiredMailboxPermission(scopes: readonly string[]): "read" | "send" {
+  return scopes.some((scope) => scope === "mail.send" || scope === "mail.write") ? "send" : "read";
+}
+
 export async function executeAgentTool(input: {
   registry: AgentToolRegistry;
   providerToolName: string;
@@ -123,8 +127,7 @@ export async function executeAgentTool(input: {
   // The model's accountId and AI scope grant are not mailbox authorization.
   // Independently re-check membership at the executor boundary for every tool.
   if (input.ctx.accountId) {
-    const permission = definition.requiredScopes.some((scope) => scope === "mail.send" || scope === "mail.write")
-      ? "send" as const : "read" as const;
+    const permission = requiredMailboxPermission(definition.requiredScopes);
     try {
       await requireAccountPermission(input.ctx.userId, input.ctx.accountId, permission);
     } catch {
