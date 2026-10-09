@@ -27,6 +27,8 @@ COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
 RUN npm ci --omit=dev --workspace apps/api --ignore-scripts && npm cache clean --force
 COPY --from=build --chown=node:node /app/apps/api/dist apps/api/dist
+COPY apps/web/public/logo.png /app/apps/api/assets/brand-original.png
+RUN convert /app/apps/api/assets/brand-original.png -resize 128x128 -strip /app/apps/api/assets/brand-logo.png
 USER node
 EXPOSE 4000
 CMD ["node", "apps/api/dist/index.js"]
