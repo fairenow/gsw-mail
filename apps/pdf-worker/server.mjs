@@ -50,7 +50,7 @@ const server = createServer(async (req, res) => {
       "--disable-extensions", "--disable-default-apps", "--no-first-run",
       "--no-proxy-server", "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost",
       "--user-data-dir=" + join(dir, "profile"),
-      "--print-to-pdf-no-header", "--print-to-pdf=" + output,
+      "--no-pdf-header-footer", "--print-to-pdf=" + output,
       "file://" + join(dir, "page.html"),
     ], { timeout: 45_000, killSignal: "SIGKILL", maxBuffer: 100_000 });
     const pdf = await readFile(output);
