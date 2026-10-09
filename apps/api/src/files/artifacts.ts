@@ -280,7 +280,7 @@ const pdfPrintSafetyStyles = `
   html, body { max-width: 100%; }
   .gsw-tc .gsw-report-hero { margin-left: 0 !important; margin-right: 0 !important; padding: 24px 28px !important; }
   .gsw-tc .gsw-brand-logo { margin-left: 8px !important; margin-top: 8px !important; }
-  .gsw-tc .gsw-report-footer { break-inside: avoid !important; page-break-inside: avoid !important; break-before: avoid !important; margin-bottom: 0 !important; }
+  .gsw-tc .gsw-report-footer, .gsw-tc footer { break-inside: avoid !important; page-break-inside: avoid !important; break-before: avoid !important; page-break-before: avoid !important; height: auto !important; min-height: 0 !important; padding: 12px 16px !important; margin: 16px 0 0 !important; }
   .gsw-tc .gsw-feature-card, .gsw-tc .gsw-metric { break-inside: avoid; }
 `;
 
