@@ -144,7 +144,7 @@ export async function replaceCampaignAudience(input: {
 
 export async function updateDraftCampaign(input: {
   userId: string; accountId: string; campaignId: string;
-  subject?: string; textBody?: string; htmlBody?: string;
+  subject?: string | undefined; textBody?: string | undefined; htmlBody?: string | undefined;
 }) {
   return db.transaction(async tx=>{
     const [campaign] = await tx.select().from(aiCampaigns).where(and(eq(aiCampaigns.id,input.campaignId),eq(aiCampaigns.userId,input.userId),eq(aiCampaigns.accountId,input.accountId))).for("update");
