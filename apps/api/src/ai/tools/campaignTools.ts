@@ -54,6 +54,7 @@ export const campaignCreateTool: AgentToolDefinition = {
       });
       return success(ctx, toolCallId, startedAt, {
         id: campaign.id,
+        reviewUrl: `/campaigns/${campaign.id}`,
         title: campaign.title,
         subject: campaign.subject,
         audienceTags: campaign.audienceTags,
