@@ -29,6 +29,7 @@ export const modalProvider: AiProvider = {
       const body = await response.json() as ModalResponse;
       const choice = body.choices?.[0];
       const message = choice?.message;
+      if (choice?.finish_reason === "length") throw new HttpError(502, "Model output was incomplete.");
       const toolCalls: AiToolCall[] = (message?.tool_calls ?? []).map(call => ({
         id: call.id || crypto.randomUUID(), type: "function" as const,
         function: { name: call.function?.name ?? "", arguments: call.function?.arguments ?? "{}" },
