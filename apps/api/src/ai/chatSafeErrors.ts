@@ -45,5 +45,5 @@ export function reportChatError(
 }
 
 export function chatErrorText(error: SafeChatError): string {
-  return error.message + " Reference: " + error.incidentId;
+  return "Failed to respond. Please retry.";
 }
