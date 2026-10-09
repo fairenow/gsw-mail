@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, Expand, Film, LoaderCircle, RefreshCw, X } from "lucide-react";
+import { Download, Expand, Film, LoaderCircle, X } from "lucide-react";
 import { api, type AiChatAttachment } from "../../api";
 
 const safeUrl = (raw: string) => {
