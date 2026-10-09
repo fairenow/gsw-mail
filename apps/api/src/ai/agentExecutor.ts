@@ -1,3 +1,4 @@
+import { requireAccountPermission } from "../auth/authorize.js";
 import {
   completeAiIdempotency,
   failAiIdempotency,
@@ -116,6 +117,36 @@ export async function executeAgentTool(input: {
         input.ctx,
         input.providerToolCallId,
       ),
+    };
+  }
+
+  // The model's accountId and AI scope grant are not mailbox authorization.
+  // Independently re-check membership at the executor boundary for every tool.
+  if (input.ctx.accountId) {
+    const permission = definition.requiredScopes.some((scope) => scope === "mail.send" || scope === "mail.write")
+      ? "send" as const : "read" as const;
+    try {
+      await requireAccountPermission(input.ctx.userId, input.ctx.accountId, permission);
+    } catch {
+      return {
+        kind: "result",
+        result: {
+          ok: false,
+          toolCallId: input.providerToolCallId,
+          error: { code: "account_access_denied", message: "You do not have access to the selected mailbox.", retryable: false },
+          audit: { userId: input.ctx.userId, accountId: input.ctx.accountId, startedAt: new Date().toISOString(), completedAt: new Date().toISOString() },
+        },
+      };
+    }
+  } else if (definition.requiredScopes.some((scope) => scope.startsWith("mail."))) {
+    return {
+      kind: "result",
+      result: {
+        ok: false,
+        toolCallId: input.providerToolCallId,
+        error: { code: "mailbox_required", message: "Select an authorized mailbox to use this action.", retryable: false },
+        audit: { userId: input.ctx.userId, accountId: input.ctx.accountId, startedAt: new Date().toISOString(), completedAt: new Date().toISOString() },
+      },
     };
   }
 
