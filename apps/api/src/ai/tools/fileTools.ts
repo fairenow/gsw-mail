@@ -8,6 +8,7 @@ import { analyzeStoredFile } from "../../files/intelligence.js";
 import { detectFileType, isTextLikeFile } from "../../files/fileTypes.js";
 import { generateArtifactFile, transformArtifactFile } from "../../files/artifacts.js";
 import { generateImage } from "../../files/imageGeneration.js";
+import { imageAssetIsReady } from "../../files/imageReliability.js";
 import { createAssetFromBuffer, getAssetForUser } from "../../files/service.js";
 import { getOrCreateFileWorkspace } from "../../files/workspaces.js";
 import { attachExistingAssetToDraft } from "../../mail/draftAttachmentStore.js";
@@ -536,7 +537,7 @@ export const filesGenerateImageTool: AgentToolDefinition = {
         addToFiles: true,
       });
       const persisted = await getAssetForUser(ctx.userId, asset.id);
-      if (persisted.status !== "ready" || persisted.userId !== ctx.userId || persisted.mimeType !== generated.mimeType || Number(persisted.sizeBytes) !== generated.bytes.length) {
+      if (!imageAssetIsReady(persisted, { userId: ctx.userId, mimeType: generated.mimeType, sizeBytes: generated.bytes.length })) {
         console.error("[gsw-image] persistence verification failed", { correlationId: toolCallId, assetId: asset.id });
         throw new Error("Generated image storage verification failed.");
       }
