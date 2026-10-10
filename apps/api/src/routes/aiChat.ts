@@ -764,7 +764,9 @@ async function runConversationTurn(input: {
       toolActivity,
     };
   } catch (error) {
-    await failAiRun(run.id, error);
+    console.error(JSON.stringify({event:"gsw.chat.stage",stage:"run.failed",runId:run.id,provider:provider.id,errorType:error instanceof Error?error.name:"Unknown"}));
+    try { await failAiRun(run.id, error); } catch (persistenceError) { reportChatError(persistenceError,{operation:"run.fail_persist",category:"chat",correlationId:run.id}); }
+    if(error && typeof error === "object") Object.assign(error,{gswRunId:run.id});
     throw error;
   }
 }
@@ -1032,6 +1034,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
     const resultData = outcome.result.data && typeof outcome.result.data === "object"
       ? outcome.result.data as Record<string, unknown>
       : {};
+    console.info(JSON.stringify({event:"gsw.chat.stage",stage:"confirmation.tool.complete",runId:execution.run.id,toolName:execution.toolCall.toolName,ok:outcome.result.ok,confirmationId:params.id}));
     const content = outcome.result.ok
       ? execution.toolCall.toolName === "mail.send_draft"
         ? "Sent. The email was queued for delivery through GSW Mail."
@@ -1041,8 +1044,8 @@ export default async function aiChatRoutes(app: FastifyInstance) {
             ? `Campaign launch queued ${String(resultData.sent ?? 0)} message(s)${Number(resultData.failed ?? 0) > 0 ? ` with ${String(resultData.failed)} failure(s)` : ""}.`
             : "Approved action completed."
       : execution.toolCall.toolName === "mail.send_draft"
-        ? chatErrorText(reportChatError(outcome.result.error, { operation: "mail.send_draft", category: "action" }))
-        : chatErrorText(reportChatError(outcome.result.error, { operation: execution.toolCall.toolName, category: "action" }));
+        ? chatErrorText(reportChatError(outcome.result.error, { operation: "mail.send_draft", category: "action", correlationId: execution.run.id }))
+        : chatErrorText(reportChatError(outcome.result.error, { operation: execution.toolCall.toolName, category: "action", correlationId: execution.run.id }));
 
     await appendAiMessage({
       conversationId: execution.toolCall.conversationId,
@@ -1145,7 +1148,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       });
       stream.send({ type: "result", response });
     } catch (error) {
-      stream.send({ type: "error", message: chatErrorText(reportChatError(error, { operation: "chat.stream", category: "chat" })) });
+      stream.send({ type: "error", message: chatErrorText(reportChatError(error, { operation: "chat.stream", category: "chat", correlationId: error && typeof error === "object" && "gswRunId" in error && typeof error.gswRunId === "string" ? error.gswRunId : req.id })) });
     } finally {
       stream.close();
     }
@@ -1201,7 +1204,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       });
       stream.send({ type: "result", response });
     } catch (error) {
-      stream.send({ type: "error", message: chatErrorText(reportChatError(error, { operation: "chat.stream", category: "chat" })) });
+      stream.send({ type: "error", message: chatErrorText(reportChatError(error, { operation: "chat.stream", category: "chat", correlationId: error && typeof error === "object" && "gswRunId" in error && typeof error.gswRunId === "string" ? error.gswRunId : req.id })) });
     } finally {
       stream.close();
     }
