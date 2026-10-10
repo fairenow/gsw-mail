@@ -87,7 +87,7 @@ const baseAgentRegistry = new AgentToolRegistry(baseAgentTools);
 
 const capabilitySearchTool: AgentToolDefinition = {
   name: "capabilities.search",
-  description: "Search GSW's available agent capabilities when the current toolset is missing something needed for the user's request. Use concise capability words such as calendar, campaign, files, domain, contacts, research, or email.",
+  description: "Discover available GSW agent tools for a user request. ALWAYS use this when you need calendar events, appointments, or reminders and no calendar tool is currently exposed; search for calendar. Also use for campaign, files, contacts, research, or email capabilities.",
   inputSchema: {
     type: "object",
     properties: {
