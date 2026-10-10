@@ -1,0 +1,25 @@
+.gsw-work-page{height:100%;overflow:auto;padding:24px 28px 56px;color:var(--gsw-text-body,#34302a);background:var(--gsw-surface,#fff);box-sizing:border-box}
+.gsw-work-header{display:flex;gap:18px;align-items:flex-start;justify-content:space-between;padding:25px 24px 18px;background:var(--gsw-bg,#f7f3ea);border-radius:14px 14px 0 0}
+.gsw-work-eyebrow{color:var(--gsw-accent-dark,#a96c00)!important;font-size:11px!important;font-weight:800;letter-spacing:.15em;margin:0 0 12px!important}
+.gsw-work-header h2{font-family:Georgia,serif;font-size:clamp(25px,3vw,34px);font-weight:600;line-height:1.15;margin:0;color:var(--gsw-text-heading,#292722)}
+.gsw-work-header p:not(.gsw-work-eyebrow){font-size:14px;line-height:1.5;color:var(--gsw-text-muted,#756f66);margin:10px 0 0;max-width:440px}
+.gsw-work-header-actions{display:flex;align-items:center;gap:9px;flex-shrink:0}
+.gsw-work-primary-btn,.gsw-work-icon-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:39px;cursor:pointer}
+.gsw-work-primary-btn{background:var(--gsw-accent,#eb9700);color:#fff;border:0;border-radius:999px;padding:8px 15px;font-weight:700}
+.gsw-work-icon-btn{border:1px solid var(--gsw-border,#e7ddcb);border-radius:50%;background:var(--gsw-surface,#fff);width:39px;color:inherit}
+.gsw-work-summary{display:flex;flex-wrap:wrap;gap:18px;background:var(--gsw-bg,#f7f3ea);padding:0 24px 22px;border-radius:0 0 14px 14px;color:var(--gsw-text-muted,#756f66);font-size:12px}
+.gsw-work-summary span{display:flex;align-items:center;gap:6px}.gsw-work-summary strong{font-size:17px;color:var(--gsw-text-heading,#292722)}
+.gsw-work-list{display:grid;gap:13px;margin-top:18px}
+.gsw-work-card{padding:20px;border:1px solid var(--gsw-border,#e6d9c8);border-radius:15px;background:var(--gsw-surface,#fff);box-shadow:0 2px 10px rgba(39,30,20,.025)}
+.gsw-work-card-heading{display:flex;align-items:center;gap:12px}.gsw-work-card-icon{display:grid;place-items:center;flex-shrink:0;width:38px;height:38px;border-radius:12px;background:var(--gsw-accent-soft,#fff2d6);color:var(--gsw-accent-dark,#b5790c)}
+.gsw-work-card-title{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:1;min-width:0;flex-wrap:wrap}.gsw-work-card-title h3{font-size:16px;margin:0;color:var(--gsw-text-heading,#292722);overflow-wrap:anywhere}
+.gsw-work-status{font-size:11px;text-transform:capitalize;padding:5px 9px;border-radius:999px;background:var(--gsw-bg,#f5f1e9);color:var(--gsw-text-muted,#756f66);font-weight:700}.gsw-work-status-active{background:#e9f4e8;color:#35623c}.gsw-work-status-paused{background:#fff1d9;color:#966300}
+.gsw-work-instruction{white-space:pre-wrap;line-height:1.55;font-size:13px;margin:15px 0;color:var(--gsw-text-body,#4b4741);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.gsw-work-meta{display:grid;gap:7px;color:var(--gsw-text-muted,#756f66);font-size:12px;padding:12px 0;border-top:1px solid var(--gsw-border-soft,#eee7dc)}
+.gsw-work-meta span{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.gsw-work-card-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:13px}
+.gsw-work-card-actions button{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--gsw-border,#e5dccc);border-radius:9px;background:var(--gsw-surface,#fff);padding:8px 10px;font-size:12px;color:var(--gsw-text-body,#4b4741);cursor:pointer}
+.gsw-work-card-actions button:hover{background:var(--gsw-accent-soft,#fff2dc)}.gsw-work-card-actions .gsw-work-delete{margin-left:auto;color:#a44037}
+.gsw-work-editor{display:grid;gap:12px;padding:18px;border:1px solid var(--gsw-border,#e5dccc);border-radius:14px;margin:18px 0;background:var(--gsw-bg,#f7f3ea)}
+.gsw-work-editor input,.gsw-work-editor textarea,.gsw-work-editor select{max-width:100%;box-sizing:border-box;border-radius:8px;border:1px solid var(--gsw-border,#e5dccc);background:var(--gsw-surface,#fff);color:var(--gsw-text-body,#34302a)}
+@media(max-width:700px){.gsw-work-page{padding:14px}.gsw-work-header{flex-wrap:wrap;padding:20px 16px}.gsw-work-summary{padding:0 16px 18px}.gsw-work-card{padding:15px}.gsw-work-header-actions{width:100%;justify-content:flex-end}}

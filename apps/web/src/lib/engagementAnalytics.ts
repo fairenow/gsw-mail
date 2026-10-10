@@ -24,7 +24,7 @@ export function startEngagementAnalytics(): () => void {
   if (typeof window==="undefined" || navigator.doNotTrack==="1" || (navigator as Navigator & {globalPrivacyControl?:boolean}).globalPrivacyControl) return () => {};
   const visitorId=getId(localStorage,VISITOR_KEY),sessionId=getId(sessionStorage,SESSION_KEY);
   let pending:Event[]=[];let previousPath=path();let enteredAt=Date.now();let maxScroll=0;let lastActive=Date.now();
-  const milestones=new Set<number>();let timer:number|undefined;let observer:PerformanceObserver|undefined;
+  const milestones=new Set<number>();let timer:number|undefined;
   const queue=(type:EventType,metadata?:Record<string,string|number|boolean>)=>{
     if (pending.length>=100) pending.shift();
     pending.push({id:UUID(),type,path:previousPath,occurredAt:new Date().toISOString(),sessionId,visitorId,...(metadata?{metadata}:{})});
@@ -70,14 +70,10 @@ export function startEngagementAnalytics(): () => void {
   history.replaceState=function(...args){const result=replaceState.apply(this,args);route();return result;};
   timer=window.setInterval(()=>{route();if(pending.length)flush();if(document.visibilityState==="visible"&&Date.now()-lastActive<30000)queue("visibility",{state:"active"});},10000);
   queue("page_view");scroll();
-  // Native browser performance observer; avoids third-party transmission.
-  if("PerformanceObserver" in window)try{
-    observer=new PerformanceObserver(list=>{
-      for(const entry of list.getEntries()){
-        if(entry.entryType==="largest-contentful-paint")queue("web_vital",{metric:"LCP",value:Math.round(entry.startTime)});
-        if(entry.entryType==="layout-shift"&&!(entry as PerformanceEntry & {hadRecentInput?:boolean}).hadRecentInput)queue("web_vital",{metric:"CLS_shift",value:Math.round(((entry as PerformanceEntry & {value?:number}).value??0)*10000)/10000});
-      }
-    }); observer.observe({entryTypes:["largest-contentful-paint","layout-shift"]});
-  }catch{ /* unsupported performance entry type */ }
-  return ()=>{if(timer)clearInterval(timer);observer?.disconnect();document.removeEventListener("click",click,true);document.removeEventListener("scroll",scroll,true);document.removeEventListener("visibilitychange",visibility);window.removeEventListener("popstate",route);window.removeEventListener("pagehide",pagehide);history.pushState=pushState;history.replaceState=replaceState;flush(true);};
+  // Official Google web-vitals package measures finalized CWV values.
+  void import("web-vitals").then(({onCLS,onINP,onLCP,onFCP,onTTFB})=>{
+    const report=(metric:{name:string;value:number})=>queue("web_vital",{metric:metric.name,value:Math.round(metric.value*1000)/1000});
+    onCLS(report);onINP(report);onLCP(report);onFCP(report);onTTFB(report);
+  }).catch(()=>{});
+  return ()=>{if(timer)clearInterval(timer);document.removeEventListener("click",click,true);document.removeEventListener("scroll",scroll,true);document.removeEventListener("visibilitychange",visibility);window.removeEventListener("popstate",route);window.removeEventListener("pagehide",pagehide);history.pushState=pushState;history.replaceState=replaceState;flush(true);};
 }
