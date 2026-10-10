@@ -139,7 +139,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <button className="gsw-btn gsw-btn-quiet gsw-btn-block" onClick={() => { setResetMode(false); setResetRequested(false); setError(""); }}>Back to sign in</button>
     </> : !otpRequested ? <>
       <p className="gsw-setup-kicker">GSW Account</p>
-      <h1 className="gsw-login-title">{mode === "sign-up" ? "Create your GSW Account" : forceAccountSignIn && email ? `Sign in as ${email}` : "Welcome back"}</h1>
+      <h1 className="gsw-login-title">{mode === "sign-up" ? "Create your GSW Account" : forceAccountSignIn && email ? <>Sign in as <span className="gsw-login-account-email">{email}</span></> : "Welcome back"}</h1>
       <p className="gsw-login-sub">{mode === "sign-up" ? "Your backup email manages your workspace and recovery. It will not become a mailbox on your domain." : forceAccountSignIn ? "Authenticate this GSW Account to continue the application request. Your other signed-in GSW Accounts stay available on this device." : "Sign in to manage your workspace or open your mailbox."}</p>
       {mode === "sign-up" && <label className="gsw-auth-field">Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Ramon Williams" /></label>}
       <label className="gsw-auth-field">Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>
