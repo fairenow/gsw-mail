@@ -21,3 +21,11 @@ test("only allowlisted reversible writes can run unattended", () => {
 test("mixed-scope tools require every scope", () => {
   assert.equal(mayRunScheduledTool(tool("read", ["mail.read", "contacts.read"]), ["mail.read"], ["mail.read", "contacts.read"]), false);
 });
+
+test("scheduled sending requires explicit approval and live mail.send grant", () => {
+  const send = { ...tool("external", ["mail.send"]), name: "mail.send_draft" };
+  assert.equal(mayRunScheduledTool(send, ["mail.send"], ["mail.send"], false), false);
+  assert.equal(mayRunScheduledTool(send, ["mail.send"], [], true), false);
+  assert.equal(mayRunScheduledTool(send, ["mail.send"], ["mail.send"], true), true);
+  assert.equal(mayRunScheduledTool({ ...send, name: "campaign.launch" }, ["mail.send"], ["mail.send"], true), false);
+});
