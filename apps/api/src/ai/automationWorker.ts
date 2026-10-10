@@ -164,7 +164,7 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
                       headers: {},
                     });
                     const draft = await mail.readMessage(automation.accountId, args.draftId, false);
-                    const recipients = [...draft.to, ...draft.cc, ...draft.bcc].map(address => address.email);
+                    const recipients = [...(draft.to ?? []), ...(draft.cc ?? []), ...(draft.bcc ?? [])].map(address => address.email);
                     if (!scheduledSendRecipientsAllowed(latest.sendPolicy, recipients)) {
                       throw new Error("draft contains a recipient outside the user-approved scheduled sending policy");
                     }
