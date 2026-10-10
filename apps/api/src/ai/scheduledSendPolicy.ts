@@ -17,8 +17,9 @@ export function scheduledSendRecipientsAllowed(
   return recipients.every(value => allowed.has(value.trim().toLowerCase()));
 }
 
-/** A draft may be sent at most once by an automation, including across retries. */
+/** A mailbox draft may be sent once across all automations, including retries. */
 export function scheduledSendKey(automationId: string, accountId: string, draftId: string): string {
-  const digest = createHash("sha256").update(JSON.stringify([automationId, accountId, draftId])).digest("hex");
+  void automationId;
+  const digest = createHash("sha256").update(JSON.stringify([accountId, draftId])).digest("hex");
   return `scheduled-send:v1:${digest}`;
 }
