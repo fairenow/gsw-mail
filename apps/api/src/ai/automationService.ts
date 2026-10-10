@@ -96,7 +96,7 @@ export async function updateAutomation(userId: string, id: string, input: {
 
   const [updated] = await db.update(aiAutomations).set({
     ...(input.title !== undefined ? { title: input.title.trim().slice(0, 120) } : {}),
-    ...(input.instruction !== undefined ? { instruction: input.instruction.trim() } : {}),
+    ...(input.instruction !== undefined ? { instruction: input.instruction.trim(), sendPolicy: null } : {}),
     ...(input.status !== undefined ? { status: input.status } : {}),
     ...(input.timeZone !== undefined ? { timeZone: input.timeZone } : {}),
     ...(input.schedule !== undefined ? { schedule: input.schedule } : {}),
