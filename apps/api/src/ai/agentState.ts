@@ -186,6 +186,8 @@ const parseArguments = (raw: string): Record<string, unknown> => {
 
 const sanitizeToolArguments = (toolName: string, raw: string): Record<string, unknown> => {
   const parsed = parseArguments(raw);
+  // Confirmed automation creation must replay the validated schedule and instructions, not audit-only argument keys.
+  if (toolName === "automations.create") return parsed;
   if (toolName === "mail.search") {
     return {
       mailbox: typeof parsed.mailbox === "string" ? parsed.mailbox : undefined,
