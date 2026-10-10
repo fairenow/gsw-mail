@@ -222,3 +222,39 @@ export async function failAutomationRun(input: {
     }).where(eq(aiAutomations.id, input.automationId));
   });
 }
+
+export async function approveAutomationSending(input: {
+  userId: string;
+  automationId: string;
+  allowedRecipients: string[];
+}) {
+  const existing = await getAutomation(input.userId, input.automationId);
+  if (!existing.accountId) throw badRequest("a mailbox is required for scheduled sending");
+  const recipients = [...new Set(input.allowedRecipients.map(value => value.trim().toLowerCase()))];
+  if (recipients.length === 0 || recipients.length > 100 ||
+      recipients.some(value => !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value))) {
+    throw badRequest("approve between 1 and 100 valid exact recipient addresses");
+  }
+  const [updated] = await db.update(aiAutomations).set({
+    sendPolicy: {
+      enabled: true,
+      approvedAt: new Date().toISOString(),
+      approvedBy: input.userId,
+      allowedRecipients: recipients,
+      version: (existing.sendPolicy?.version ?? 0) + 1,
+    },
+    updatedAt: new Date(),
+  }).where(and(eq(aiAutomations.id, existing.id), eq(aiAutomations.userId, input.userId))).returning();
+  if (!updated) throw notFound("automation not found");
+  return updated;
+}
+
+export async function revokeAutomationSending(userId: string, automationId: string) {
+  const existing = await getAutomation(userId, automationId);
+  const [updated] = await db.update(aiAutomations).set({
+    sendPolicy: null,
+    updatedAt: new Date(),
+  }).where(and(eq(aiAutomations.id, existing.id), eq(aiAutomations.userId, userId))).returning();
+  if (!updated) throw notFound("automation not found");
+  return updated;
+}
