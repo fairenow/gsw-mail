@@ -99,7 +99,7 @@ export const modalDeepseekProvider: AiProvider = {
   },
 };
 
-/** DeepSeek uses the same GSW-owned tool runtime and OpenAI-compatible transport. */
+/** Qwen uses the GSW-owned tool runtime and OpenAI-compatible Modal transport. */
 export const modalQwenProvider: AiProvider = {
   id: "modal-qwen",
   async run(input: AiProviderRunInput) {
