@@ -1,3 +1,4 @@
+import { ensureAutomationSummaryEmailSchema } from "./ai/automationSummaryEmail.js";
 import { ensureCalendarEmailReminderSchema, deliverDueCalendarEmailReminders } from "./calendar/emailReminders.js";
 import { buildApp } from "./app.js";
 import { config } from "./config.js";
@@ -21,6 +22,7 @@ async function main() {
   await ensureScheduledSendSchema();
   await ensureCalendarRsvpSchema();
   await ensureCalendarEmailReminderSchema();
+  await ensureAutomationSummaryEmailSchema();
   await ensureAiAgentSchema();
   await ensureEmailTemplateSchema();
   await ensureFilesSchema();
