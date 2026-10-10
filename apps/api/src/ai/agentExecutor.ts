@@ -200,7 +200,7 @@ export async function executeAgentTool(input: {
             try {
               const args = JSON.parse(input.rawArguments) as { automationId?: string; allowedRecipients?: string[] };
               return `Approve unattended sending for automation ${args.automationId ?? "(unknown)"} to exactly: ${Array.isArray(args.allowedRecipients) ? args.allowedRecipients.join(", ") : "(none)"}. This authorization has no daily volume limit. You may revoke it later.`;
-            } catch { return "Approve scheduled sending policy?"; }
+            } catch { return "Cannot approve sending: invalid recipient policy arguments."; }
           })()
         : confirmationSummaryForAction(definition.name),
       expiresAt: new Date(Date.now() + 30 * 60_000),
