@@ -1143,6 +1143,7 @@ export const aiAutomations = pgTable(
       endDate?: string | undefined;
     }>().notNull(),
     allowedScopes: text("allowed_scopes").array().default(sql`ARRAY[]::text[]`).notNull(),
+    sendPolicy: jsonb("send_policy").$type<{ enabled: boolean; approvedAt: string; allowedRecipients: string[]; approvedBy: string; version: number }>(),
     nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
     lastRunAt: timestamp("last_run_at", { withTimezone: true }),
     runningAt: timestamp("running_at", { withTimezone: true }),
