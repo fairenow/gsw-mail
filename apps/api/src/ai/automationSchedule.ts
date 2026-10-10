@@ -1,4 +1,4 @@
-export type AutomationFrequency = "once" | "daily" | "weekdays" | "weekends" | "weekly" | "monthly";
+export type AutomationFrequency = "once" | "hourly" | "daily" | "weekdays" | "weekends" | "weekly" | "monthly";
 
 export interface AutomationSchedule {
   frequency: AutomationFrequency;
@@ -139,6 +139,7 @@ export function computeNextAutomationRun(
 ): Date | null {
   if (!Number.isInteger(schedule.hour) || schedule.hour < 0 || schedule.hour > 23) return null;
   if (!Number.isInteger(schedule.minute) || schedule.minute < 0 || schedule.minute > 59) return null;
+  if (schedule.frequency === "hourly" && (!Number.isInteger(schedule.interval ?? 1) || (schedule.interval ?? 1) < 1 || (schedule.interval ?? 1) > 24)) return null;
 
   const current = localParts(from, timeZone);
   const base = new Date(Date.UTC(current.year, current.month - 1, current.day));
@@ -153,6 +154,19 @@ export function computeNextAutomationRun(
       weekday: d.getUTCDay(),
     };
     if (!dateMatches(schedule, localDate)) continue;
+    if (schedule.frequency === "hourly") {
+      const interval = schedule.interval ?? 1;
+      const candidates: Date[] = [];
+      for (let hourOffset = 0; hourOffset < 24; hourOffset += interval) {
+        const targetHour = (schedule.hour + hourOffset) % 24;
+        const candidate = zonedDateTimeToUtc(timeZone, localDate.year, localDate.month, localDate.day, targetHour, schedule.minute);
+        const verified = localParts(candidate, timeZone);
+        if (verified.year !== localDate.year || verified.month !== localDate.month || verified.day !== localDate.day || verified.hour !== targetHour || verified.minute !== schedule.minute) continue;
+        if (candidate.getTime() >= minFuture) candidates.push(candidate);
+      }
+      if (candidates.length) return new Date(Math.min(...candidates.map((candidate) => candidate.getTime())));
+      continue;
+    }
     const candidate = zonedDateTimeToUtc(timeZone, localDate.year, localDate.month, localDate.day, schedule.hour, schedule.minute);
     if (candidate.getTime() >= minFuture) return candidate;
     if (schedule.frequency === "once" && schedule.startDate) return null;
