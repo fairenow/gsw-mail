@@ -236,6 +236,7 @@ export async function approveAutomationSending(input: {
     throw badRequest("approve between 1 and 100 valid exact recipient addresses");
   }
   const [updated] = await db.update(aiAutomations).set({
+    allowedScopes: [...new Set([...existing.allowedScopes, "mail.send"])],
     sendPolicy: {
       enabled: true,
       approvedAt: new Date().toISOString(),
