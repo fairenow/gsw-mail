@@ -161,11 +161,15 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
                     const mail = createMailService({
                       userId: automation.userId,
                       authUserId: automation.userId,
-                      accountId: automation.accountId,
                       headers: {},
                     });
                     const draft = await mail.readMessage(automation.accountId, args.draftId, false);
-                    const recipients = [...(draft.to ?? []), ...(draft.cc ?? []), ...(draft.bcc ?? [])].map(address => address.email);
+                    // FullMessage exposes To/Cc but not Bcc. Fail closed when a draft's
+                    // raw headers contain Bcc rather than bypassing the send policy.
+                    if (Object.entries(draft.headers ?? {}).some(([name]) => name.toLowerCase() === "bcc")) {
+                      throw new Error("scheduled sending cannot validate Bcc recipients for this draft");
+                    }
+                    const recipients = [...(draft.to ?? []), ...(draft.cc ?? [])].map(address => address.email);
                     if (!scheduledSendRecipientsAllowed(latest.sendPolicy, recipients)) {
                       throw new Error("draft contains a recipient outside the user-approved scheduled sending policy");
                     }
