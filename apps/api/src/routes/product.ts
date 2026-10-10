@@ -2,6 +2,8 @@ import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/middleware.js";
+import { requireAccountPermission } from "../auth/authorize.js";
+import { previewCampaign,replaceCampaignAudience,updateDraftCampaign } from "../ai/campaignService.js";
 import { db } from "../db/client.js";
 import { contactEmails, contactImportBatches, contactImportRows, contacts, emailSignatures, userSettings } from "../db/schema.js";
 import { createContact, getContact, getContactEngineContext, listContacts, normalizeEmail, type ContactInput, updateContact } from "../lib/contacts.js";
@@ -254,6 +256,37 @@ export default async function productRoutes(app: FastifyInstance) {
     reply.code(201);
     return updatedBatch;
   });
+  // Campaign review is available to the authenticated owner; only an explicit
+  // Chat confirmation may launch a campaign. These routes never send email.
+  app.get("/product/campaigns/:id/review", async req => {
+    const { id } = z.object({ id:z.string().uuid() }).parse(req.params);
+    const { accountId } = z.object({ accountId:z.string().uuid() }).parse(req.query);
+    await requireAccountPermission(req.user!.id,accountId,"read");
+    return previewCampaign({userId:req.user!.id,accountId,campaignId:id});
+  });
+
+  app.put("/product/campaigns/:id/audience", async req => {
+    const { id } = z.object({ id:z.string().uuid() }).parse(req.params);
+    const { accountId, contactIds } = z.object({
+      accountId:z.string().uuid(),contactIds:z.array(z.string().uuid()).min(1).max(100),
+    }).parse(req.body);
+    await requireAccountPermission(req.user!.id,accountId,"send");
+    return replaceCampaignAudience({userId:req.user!.id,accountId,campaignId:id,contactIds});
+  });
+
+  app.patch("/product/campaigns/:id/draft", async req => {
+    const { id } = z.object({ id:z.string().uuid() }).parse(req.params);
+    const { accountId, ...changes } = z.object({
+      accountId:z.string().uuid(),subject:z.string().trim().min(1).max(998).optional(),
+      textBody:z.string().max(200000).optional(),htmlBody:z.string().max(500000).optional(),
+      attachmentAssetIds:z.array(z.string().uuid()).max(5).optional(),
+    }).refine(input=>input.subject!==undefined||input.textBody!==undefined||input.htmlBody!==undefined||input.attachmentAssetIds!==undefined).parse(req.body);
+    await requireAccountPermission(req.user!.id,accountId,"send");
+    const saved=await updateDraftCampaign({userId:req.user!.id,accountId,campaignId:id,...changes});
+    return { id:saved.id,status:saved.status,recipientCount:saved.recipientCount,attachmentAssetIds:saved.attachmentAssetIds };
+  });
+
+
 }
 
 async function getCalendarEngineContext(userId: string | undefined, authUserId: string | undefined, headers: Record<string, string>, query: unknown) {
@@ -328,4 +361,5 @@ function uniqueBy<T>(items: T[], key: (item: T) => string): T[] {
     seen.add(value);
     return true;
   });
+
 }

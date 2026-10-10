@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { createHash } from "node:crypto";
 import { db } from "../db/client.js";
 import {
   aiCampaignRecipients,
@@ -6,9 +7,12 @@ import {
   contactEmails,
   contactTags,
   contacts,
+  outboundMessages,
 } from "../db/schema.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { createMailService } from "../services/mailService.js";
+import { getAssetForUser } from "../files/service.js";
+import { attachExistingAssetToDraft } from "../mail/draftAttachmentStore.js";
 import type { AgentExecutionContext } from "./tools/types.js";
 
 const normalizeTags = (tags: string[]) => [...new Set(tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean))];
@@ -105,6 +109,117 @@ export async function getCampaign(userId: string, id: string) {
   return { campaign, recipients };
 }
 
+/**
+ * Atomically replace a draft campaign's audience using owned contact IDs.
+ * The saved recipient snapshot is the reviewed audience; tag membership cannot
+ * silently change it after approval. Never mutate launched campaigns.
+ */
+export async function replaceCampaignAudience(input: {
+  userId: string; accountId: string; campaignId: string; contactIds: string[];
+}) {
+  const unique = [...new Set(input.contactIds)];
+  if (!unique.length || unique.length > 100) throw badRequest("select between 1 and 100 contacts");
+  return db.transaction(async (tx) => {
+    const [campaign] = await tx.select().from(aiCampaigns).where(and(eq(aiCampaigns.id,input.campaignId), eq(aiCampaigns.userId,input.userId), eq(aiCampaigns.accountId,input.accountId))).for("update");
+    if (!campaign) throw notFound("campaign not found");
+    if (campaign.status !== "draft") throw badRequest("only draft campaign audiences can be edited");
+    const selected = await tx.select({ id: contacts.id, displayName: contacts.displayName, firstName: contacts.firstName }).from(contacts)
+      .where(and(eq(contacts.ownerUserId,input.userId),inArray(contacts.id,unique)));
+    if (selected.length !== unique.length) throw badRequest("some contacts are not available");
+    const emails = await tx.select().from(contactEmails).where(inArray(contactEmails.contactId,unique));
+    const recipients = selected.map(contact=>{
+      const options = emails.filter(email=>email.contactId===contact.id);
+      const preferred = options.find(email=>email.isPrimary) ?? options[0];
+      if (!preferred) throw badRequest("every selected contact needs an email");
+      return {
+        campaignId: input.campaignId, contactId: contact.id,
+        email: preferred.normalizedEmail || preferred.email.toLowerCase(),
+        displayName: contact.displayName, firstName: contact.firstName,
+      };
+    });
+    if (new Set(recipients.map(r=>r.email)).size !== recipients.length) throw badRequest("selected contacts have duplicate email addresses");
+    await tx.delete(aiCampaignRecipients).where(eq(aiCampaignRecipients.campaignId,input.campaignId));
+    await tx.insert(aiCampaignRecipients).values(recipients);
+    await tx.update(aiCampaigns).set({ recipientCount: recipients.length, updatedAt: new Date() }).where(eq(aiCampaigns.id,input.campaignId));
+    return { campaignId: input.campaignId, recipientCount: recipients.length, recipients: recipients.map(r=>({ contactId:r.contactId,email:r.email,displayName:r.displayName })) };
+  });
+}
+
+export async function updateDraftCampaign(input: {
+  userId: string; accountId: string; campaignId: string;
+  subject?: string | undefined; textBody?: string | undefined; htmlBody?: string | undefined;
+  attachmentAssetIds?: string[] | undefined;
+}) {
+  const attachmentAssetIds = input.attachmentAssetIds ? [...new Set(input.attachmentAssetIds)] : undefined;
+  if (attachmentAssetIds) {
+    if (attachmentAssetIds.length > 5) throw badRequest("campaigns support up to 5 attachments");
+    let totalBytes = 0;
+    for (const id of attachmentAssetIds) {
+      const asset = await getAssetForUser(input.userId,id);
+      const bytes = Number(asset.sizeBytes);
+      if (bytes > 10 * 1024 * 1024) throw badRequest("an attachment exceeds 10 MB");
+      totalBytes += bytes;
+    }
+    if (totalBytes > 20 * 1024 * 1024) throw badRequest("campaign attachments exceed 20 MB");
+  }
+  return db.transaction(async tx=>{
+    const [campaign] = await tx.select().from(aiCampaigns).where(and(eq(aiCampaigns.id,input.campaignId),eq(aiCampaigns.userId,input.userId),eq(aiCampaigns.accountId,input.accountId))).for("update");
+    if (!campaign) throw notFound("campaign not found");
+    if (campaign.status !== "draft") throw badRequest("only draft campaigns can be edited");
+    const [saved] = await tx.update(aiCampaigns).set({
+      ...(input.subject !== undefined ? { subject:input.subject } : {}),
+      ...(input.textBody !== undefined ? { textBody:input.textBody } : {}),
+      ...(input.htmlBody !== undefined ? { htmlBody:input.htmlBody } : {}),
+      ...(attachmentAssetIds !== undefined ? { attachmentAssetIds } : {}),
+      updatedAt:new Date(),
+    }).where(eq(aiCampaigns.id,input.campaignId)).returning();
+    return saved!;
+  });
+}
+
+const campaignReviewHash = (campaign: typeof aiCampaigns.$inferSelect, recipients: (typeof aiCampaignRecipients.$inferSelect)[]) =>
+  createHash("sha256").update(JSON.stringify({
+    id:campaign.id,subject:campaign.subject,textBody:campaign.textBody,
+    htmlBody:campaign.htmlBody,attachmentAssetIds:[...campaign.attachmentAssetIds].sort(),
+    recipients:recipients.map(r=>({email:r.email,contactId:r.contactId,firstName:r.firstName,displayName:r.displayName})).sort((a,b)=>a.email.localeCompare(b.email)),
+  })).digest("hex");
+
+export async function previewCampaign(input: {userId:string; accountId:string; campaignId:string}) {
+  const {campaign,recipients} = await getCampaign(input.userId,input.campaignId);
+  if (campaign.accountId !== input.accountId) throw notFound("campaign not found");
+  return { campaign: {id:campaign.id,title:campaign.title,subject:campaign.subject,textBody:campaign.textBody??"",htmlBody:campaign.htmlBody??"",status:campaign.status,recipientCount:recipients.length,attachmentAssetIds:campaign.attachmentAssetIds,reviewHash:campaignReviewHash(campaign,recipients)},
+    recipients:recipients.slice(0,100).map(recipient=>({
+      id:recipient.id, contactId:recipient.contactId,email:recipient.email,displayName:recipient.displayName,
+      subject:personalize(campaign.subject,recipient),
+      textBody:personalize(campaign.textBody,recipient),
+      // Do not render untrusted HTML previews without sanitization.
+    }))
+  };
+}
+
+export async function getCampaignDeliveryStates(input: {userId:string;accountId:string;campaignId:string}) {
+  const {campaign,recipients}=await getCampaign(input.userId,input.campaignId);
+  if(campaign.accountId!==input.accountId) throw notFound("campaign not found");
+  const ids=recipients.map(r=>r.sendId).filter((id): id is string=>Boolean(id));
+  const records=ids.length?await db.select({
+    id:outboundMessages.id,deliveryStatus:outboundMessages.deliveryStatus,
+    transportStatus:outboundMessages.transportStatus,deliveredAt:outboundMessages.deliveredAt,
+    acceptedAt:outboundMessages.acceptedAt, failureCode:outboundMessages.failureCode,
+  }).from(outboundMessages).where(and(eq(outboundMessages.accountId,input.accountId),inArray(outboundMessages.id,ids))):[];
+  const byId=new Map(records.map(record=>[record.id,record]));
+  const rows=recipients.map(recipient=>{
+    const outbound=recipient.sendId?byId.get(recipient.sendId):undefined;
+    return {email:recipient.email,queueStatus:recipient.status,
+      deliveryStatus:outbound?.deliveryStatus??null,transportStatus:outbound?.transportStatus??null,
+      acceptedAt:outbound?.acceptedAt?.toISOString()??null,deliveredAt:outbound?.deliveredAt?.toISOString()??null,
+      failureCode:outbound?.failureCode??null};
+  });
+  const counts:Record<string,number>={};
+  for(const row of rows){const state=row.deliveryStatus??row.queueStatus;counts[state]=(counts[state]??0)+1;}
+  return {campaign:{id:campaign.id,title:campaign.title,status:campaign.status,recipientCount:recipients.length},counts,
+    recipients:rows.slice(0,100),deliveryTrackingSource:"outbound_messages",openTrackingAvailable:false};
+}
+
 const personalize = (value: string | null, recipient: { firstName: string | null; displayName: string | null; email: string }) => {
   if (!value) return undefined;
   const firstName = recipient.firstName?.trim()
@@ -122,13 +237,26 @@ async function runInBatches<T>(items: T[], size: number, fn: (item: T) => Promis
   }
 }
 
-export async function launchCampaign(ctx: AgentExecutionContext, campaignId: string) {
-  const { campaign, recipients } = await getCampaign(ctx.userId, campaignId);
+export async function launchCampaign(ctx: AgentExecutionContext, campaignId: string, expectedReviewHash: string) {
+  const { campaign, recipients: initialRecipients } = await getCampaign(ctx.userId, campaignId);
   if (campaign.accountId !== ctx.accountId) throw badRequest("campaign belongs to a different mailbox");
-  if (campaign.status === "launched") return { campaign, sent: recipients.filter((recipient) => recipient.status === "queued").length, failed: recipients.filter((recipient) => recipient.status === "failed").length, replay: true };
+  if (campaign.status === "launched") return { campaign, sent: initialRecipients.filter((recipient) => recipient.status === "queued").length, failed: initialRecipients.filter((recipient) => recipient.status === "failed").length, replay: true };
   if (campaign.status === "launching") throw badRequest("campaign is already launching");
 
-  await db.update(aiCampaigns).set({ status: "launching", lastError: null, updatedAt: new Date() }).where(eq(aiCampaigns.id, campaign.id));
+  // Atomically claim the draft before external sends. A concurrent edit or launch
+  // must not race with recipient snapshot execution.
+  const [claimed] = await db.update(aiCampaigns).set({ status: "launching", lastError: null, updatedAt: new Date() })
+    .where(and(eq(aiCampaigns.id, campaign.id), eq(aiCampaigns.userId, ctx.userId), eq(aiCampaigns.accountId, ctx.accountId), eq(aiCampaigns.status, "draft"))).returning({ id: aiCampaigns.id });
+  if (!claimed) throw badRequest("campaign is no longer a draft; refresh its status before retrying");
+  // Reload the snapshot only after the draft is claimed. Audience edits lock the
+  // same campaign row, so in-flight selections cannot leak into an approved send.
+  const recipients = await db.select().from(aiCampaignRecipients).where(eq(aiCampaignRecipients.campaignId,campaign.id));
+  const [claimedCampaign] = await db.select().from(aiCampaigns).where(eq(aiCampaigns.id,campaign.id)).limit(1);
+  if (!claimedCampaign || campaignReviewHash(claimedCampaign,recipients) !== expectedReviewHash) {
+    await db.update(aiCampaigns).set({status:"draft",updatedAt:new Date()}).where(and(eq(aiCampaigns.id,campaign.id),eq(aiCampaigns.status,"launching")));
+    throw badRequest("campaign changed since review; preview and approve again");
+  }
+  const attachmentAssetIds = claimedCampaign.attachmentAssetIds;
 
   const mail = createMailService(ctx);
   let sent = 0;
@@ -143,6 +271,9 @@ export async function launchCampaign(ctx: AgentExecutionContext, campaignId: str
         htmlBody: personalize(campaign.htmlBody, recipient),
         mode: "new",
       });
+      for (const assetId of attachmentAssetIds) {
+        await attachExistingAssetToDraft({ accountId:ctx.accountId,draftEngineId:draft.engineId,userId:ctx.userId,assetId });
+      }
       const result = await mail.sendDraft(ctx.accountId, draft.engineId, `campaign:${campaign.id}:${recipient.id}`);
       await db.update(aiCampaignRecipients).set({
         status: "queued",
