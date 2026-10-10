@@ -4,6 +4,12 @@ import { getRelay } from "../outbound/relay.js";
 
 export const DEFAULT_EMAIL_REMINDERS = [1440, 30] as const;
 
+export function reminderDueAt(eventStart: string, minutesBefore: number): Date {
+  const start = new Date(eventStart);
+  if (!Number.isFinite(start.getTime()) || !Number.isInteger(minutesBefore) || minutesBefore < 1 || minutesBefore > 10080) throw new Error("Invalid reminder schedule");
+  return new Date(start.getTime() - minutesBefore * 60_000);
+}
+
 export async function ensureCalendarEmailReminderSchema(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS calendar_email_reminders (
@@ -37,7 +43,7 @@ export async function replaceEventEmailReminders(input: {
     await client.query("BEGIN");
     await client.query("DELETE FROM calendar_email_reminders WHERE account_id=$1 AND event_id=$2 AND status IN ('pending','failed')", [input.accountId,input.eventId]);
     for (const m of minutes) {
-      const due = new Date(start.getTime() - m*60000);
+      const due = reminderDueAt(input.start, m);
       if (due.getTime() <= Date.now()) continue;
       await client.query(`INSERT INTO calendar_email_reminders(account_id,event_id,event_title,event_start,minutes_before,due_at)
         VALUES($1,$2,$3,$4,$5,$6)
