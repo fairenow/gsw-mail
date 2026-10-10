@@ -27,11 +27,14 @@ export function reportChatError(
   const code = safeCode(category + "_failed");
   // Metadata only: raw exception messages, stacks, arguments, URLs and content
   // may contain user data or secrets and are intentionally not logged here.
+  const errorDetails = error && typeof error === "object" ? error as Record<string, unknown> : {};
+  const safeErrorCode = typeof errorDetails.code === "string" && /^[A-Z0-9_]{2,48}$/i.test(errorDetails.code) ? errorDetails.code : undefined;
   console.error(JSON.stringify({
     event: "gsw.chat.error",
     incidentId,
     category,
     code,
+    ...(safeErrorCode ? { upstreamCode: safeErrorCode } : {}),
     operation: context.operation.replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 80),
     errorType: error instanceof Error ? error.name.replace(/[^a-zA-Z0-9]/g, "").slice(0, 60) : "Unknown",
     ...(error && typeof error === "object" && "status" in error && typeof error.status === "number" ? { httpStatus: error.status } : {}),
