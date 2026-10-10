@@ -1,3 +1,4 @@
+import { setAutomationSummaryEmailPreference } from "../automationSummaryEmail.js";
 import { z } from "zod";
 import { grantAiScope } from "../agentState.js";
 import { createAutomation, deleteAutomation, listAutomations, updateAutomation, approveAutomationSending, revokeAutomationSending } from "../automationService.js";
@@ -19,6 +20,7 @@ const createInput = z.object({
   instruction: z.string().trim().min(1).max(20_000),
   timeZone: z.string().trim().min(1).max(100),
   schedule: scheduleSchema,
+  emailSummaryToOwner: z.boolean().default(false),
   allowedScopes: z.array(z.enum(["mail.read", "mail.write", "calendar.read", "contacts.read", "templates.read", "signatures.read", "files.read", "files.write", "campaign.read", "campaign.write", "research.use", "browser.read", "tasks.read", "settings.read", "workspace.read", "domain.read", "alias.read"])).default(["mail.read"]),
 });
 
@@ -79,6 +81,7 @@ export const automationCreateTool: AgentToolDefinition = {
         required: ["frequency", "hour", "minute"],
         additionalProperties: false,
       },
+      emailSummaryToOwner: { type: "boolean", description: "Explicitly opt in to emailing each completed scheduled report only to the attached mailbox owner. Never emails other recipients." },
       allowedScopes: {
         type: "array",
         items: { type: "string", enum: ["mail.read", "mail.write", "calendar.read", "contacts.read", "templates.read", "signatures.read", "files.read", "files.write", "campaign.read", "campaign.write", "research.use", "browser.read", "tasks.read", "settings.read", "workspace.read", "domain.read", "alias.read"] },
@@ -104,6 +107,10 @@ export const automationCreateTool: AgentToolDefinition = {
         schedule: input.schedule,
         allowedScopes: input.allowedScopes,
       });
+      if (input.emailSummaryToOwner) {
+        if (!ctx.accountId) throw new Error("An attached mailbox is required for owner email summaries");
+        await setAutomationSummaryEmailPreference(automation.id, ctx.accountId, true);
+      }
       return success(ctx, toolCallId, startedAt, {
         id: automation.id,
         title: automation.title,
