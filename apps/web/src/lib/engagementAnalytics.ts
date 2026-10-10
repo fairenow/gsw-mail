@@ -23,7 +23,9 @@ function safeTarget(element: Element): string {
 export function startEngagementAnalytics(): () => void {
   if (typeof window==="undefined" || navigator.doNotTrack==="1" || (navigator as Navigator & {globalPrivacyControl?:boolean}).globalPrivacyControl) return () => {};
   const visitorId=getId(localStorage,VISITOR_KEY),sessionId=getId(sessionStorage,SESSION_KEY);
-  let pending:Event[]=[];let previousPath=path();let enteredAt=Date.now();let maxScroll=0;let lastActive=Date.now();
+  let currentScreen="";
+  const resolvedPath=()=>path()==="/mail"&&currentScreen?"/mail/"+currentScreen:path();
+  let pending:Event[]=[];let previousPath=resolvedPath();let enteredAt=Date.now();let maxScroll=0;let lastActive=Date.now();
   const milestones=new Set<number>();let timer:number|undefined;
   const queue=(type:EventType,metadata?:Record<string,string|number|boolean>)=>{
     if (pending.length>=100) pending.shift();
@@ -41,10 +43,11 @@ export function startEngagementAnalytics(): () => void {
   };
   const exit=()=>{queue("page_exit",{durationMs:Math.max(0,Date.now()-enteredAt),scrollPercent:maxScroll});};
   const route=()=>{
-    const next=path();
+    const next=resolvedPath();
     if(next===previousPath) return;
     exit();previousPath=next;enteredAt=Date.now();maxScroll=0;milestones.clear();queue("page_view");
   };
+  const screen=(e:Event)=>{const name=(e as CustomEvent<{screen?:string}>).detail?.screen;if(typeof name==="string"&&/^[a-zA-Z0-9/_-]{1,64}$/.test(name)){currentScreen=name;route();}};
   const click=(e:MouseEvent)=>{
     if(!(e.target instanceof Element))return;
     const target=safeTarget(e.target);
@@ -60,6 +63,7 @@ export function startEngagementAnalytics(): () => void {
   };
   const visibility=()=>{if(document.visibilityState==="hidden"){queue("visibility",{state:"hidden"});flush(true);}else{queue("visibility",{state:"visible"});lastActive=Date.now();}};
   const pagehide=()=>{exit();flush(true);};
+  window.addEventListener("gsw-analytics-screen",screen);
   document.addEventListener("click",click,{capture:true});
   document.addEventListener("scroll",scroll,{passive:true,capture:true});
   document.addEventListener("visibilitychange",visibility);
@@ -75,5 +79,5 @@ export function startEngagementAnalytics(): () => void {
     const report=(metric:{name:string;value:number})=>queue("web_vital",{metric:metric.name,value:Math.round(metric.value*1000)/1000});
     onCLS(report);onINP(report);onLCP(report);onFCP(report);onTTFB(report);
   }).catch(()=>{});
-  return ()=>{if(timer)clearInterval(timer);document.removeEventListener("click",click,true);document.removeEventListener("scroll",scroll,true);document.removeEventListener("visibilitychange",visibility);window.removeEventListener("popstate",route);window.removeEventListener("pagehide",pagehide);history.pushState=pushState;history.replaceState=replaceState;flush(true);};
+  return ()=>{if(timer)clearInterval(timer);window.removeEventListener("gsw-analytics-screen",screen);document.removeEventListener("click",click,true);document.removeEventListener("scroll",scroll,true);document.removeEventListener("visibilitychange",visibility);window.removeEventListener("popstate",route);window.removeEventListener("pagehide",pagehide);history.pushState=pushState;history.replaceState=replaceState;flush(true);};
 }
