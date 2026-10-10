@@ -2341,3 +2341,12 @@
 .gsw-chat-image-meta small { color:var(--gsw-text-muted,var(--gsw-text-body)); }
 .gsw-chat-image-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .gsw-chat-image-actions button:focus-visible,.gsw-chat-image-frame button:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
+
+/* Scheduled work confirmation within GSW Chat */
+.gsw-chat-schedule-success { border: 1px solid var(--gsw-border, #d9d3c8); border-radius: 14px; padding: 16px; background: var(--gsw-surface, transparent); display: grid; gap: 10px; }
+.gsw-chat-schedule-success-header { display: flex; align-items: center; gap: 8px; color: var(--gsw-text, inherit); font-size: 13px; }
+.gsw-chat-schedule-success h3 { margin: 0; font-size: 17px; line-height: 1.35; }
+.gsw-chat-schedule-success p { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; opacity: .82; flex-wrap: wrap; }
+.gsw-chat-schedule-success button { justify-self: start; border: 1px solid var(--gsw-border, #d9d3c8); border-radius: 9px; background: transparent; color: inherit; padding: 9px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.gsw-chat-schedule-success button:hover:not(:disabled) { background: var(--gsw-hover, rgba(127,127,127,.12)); }
+.gsw-chat-schedule-success button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

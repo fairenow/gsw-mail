@@ -99,7 +99,14 @@ const formatAttachmentSize = (size: number) =>
     : size < 1024 * 1024 ? `${(size / 1024).toFixed(size < 10 * 1024 ? 1 : 0)} KB`
       : `${(size / (1024 * 1024)).toFixed(size < 10 * 1024 * 1024 ? 1 : 0)} MB`;
 
-export function ChatPanel() {
+const scheduledConfirmation = (content: string) => {
+  const match = content.match(/^Scheduled\.\s+(.+?)\s+will run next at\s+(\d{4}-\d{2}-\d{2}T[^\s.]+(?:\.\d+)?Z)\.?\s*$/i);
+  if (!match) return null;
+  const date = new Date(match[2]);
+  return Number.isNaN(date.getTime()) ? null : { title: match[1], date };
+};
+
+export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () => void } = {}) {
   const { account } = useAppShell();
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [mediaPreview, setMediaPreview] = useState<AiChatAttachment | null>(null);
@@ -661,7 +668,12 @@ export function ChatPanel() {
         const segments = message.role === "assistant" ? parseAssistantSegments(message.content) : null;
         return <article className={`gsw-chat-message ${message.role}`} key={`${message.role}-${index}`}>
           <div className="gsw-chat-message-label">{message.role === "user" ? "You" : "GSW"}</div>
-          {message.role === "assistant" && extractVideoTaskId(message.content) ? <ChatVideoTaskCard taskId={extractVideoTaskId(message.content)!} onPreview={setMediaPreview}/> : message.role === "assistant" ? <div className="gsw-chat-assistant-content">
+          {message.role === "assistant" && scheduledConfirmation(message.content) ? <section className="gsw-chat-schedule-success" aria-label="Scheduled task created">
+            <div className="gsw-chat-schedule-success-header"><CheckCircle2 size={19} aria-hidden="true" /><strong>Task scheduled</strong></div>
+            <h3>{scheduledConfirmation(message.content)!.title}</h3>
+            <p><Clock3 size={15} aria-hidden="true" /> Next run: <time dateTime={scheduledConfirmation(message.content)!.date.toISOString()}>{scheduledConfirmation(message.content)!.date.toLocaleString(undefined, {dateStyle:"medium",timeStyle:"short"})}</time></p>
+            <button type="button" onClick={onOpenScheduledWork} disabled={!onOpenScheduledWork}>View Scheduled Work →</button>
+          </section> : message.role === "assistant" && extractVideoTaskId(message.content) ? <ChatVideoTaskCard taskId={extractVideoTaskId(message.content)!} onPreview={setMediaPreview}/> : message.role === "assistant" ? <div className="gsw-chat-assistant-content">
             {segments?.map((segment, segmentIndex) => segment.type === "email_draft"
               ? <section className="gsw-chat-email-draft" key={`draft-${segmentIndex}`}>
                   <div className="gsw-chat-email-draft-head">

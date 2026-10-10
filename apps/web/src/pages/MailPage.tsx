@@ -422,7 +422,7 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
         <div className="gsw-operational-surface" hidden={workspaceSection !== "calendar"}><CalendarPage embedded active={workspaceSection === "calendar"} /></div>
         <div className="gsw-operational-surface" hidden={workspaceSection !== "settings"}><SettingsPage embedded /></div>
         <div className="gsw-operational-surface" hidden={workspaceSection !== "files"}><FilesPage embedded /></div>
-        <div className="gsw-operational-surface" hidden={workspaceSection !== "chat"}><ChatPanel /></div>
+        <div className="gsw-operational-surface" hidden={workspaceSection !== "chat"}><ChatPanel onOpenScheduledWork={() => openWorkspaceSection("scheduled")} /></div>
         <div className="gsw-operational-surface" hidden={workspaceSection !== "scheduled"}><ScheduledWorkPanel accountId={account?.id} active={workspaceSection === "scheduled"} /></div>
       </section>
     </main>
