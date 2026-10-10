@@ -1035,9 +1035,6 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       ? outcome.result.data as Record<string, unknown>
       : {};
     console.info(JSON.stringify({event:"gsw.chat.stage",stage:"confirmation.tool.complete",runId:execution.run.id,toolName:execution.toolCall.toolName,ok:outcome.result.ok,confirmationId:params.id}));
-    if (!outcome.result.ok) {
-      reportChatError(outcome.result.error,{operation:execution.toolCall.toolName,category:"action",correlationId:execution.run.id});
-    }
     const content = outcome.result.ok
       ? execution.toolCall.toolName === "mail.send_draft"
         ? "Sent. The email was queued for delivery through GSW Mail."
