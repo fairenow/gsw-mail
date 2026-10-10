@@ -14,7 +14,7 @@ export function AccountResolutionLoader({ state }: { state: ResolutionState }) {
     <div className="gsw-resolution-art" aria-hidden="true">
       <picture>
         <source media="(prefers-reduced-motion: reduce)" srcSet="/logo-2.png" />
-        <img src={state === "resolved" ? "/logo-2.png" : "/loading-animation-1.gif"} alt="" />
+        <img src={state === "resolved" ? "/logo-2.png" : "/download%20(3).gif"} alt="" />
       </picture>
       <span className="gsw-resolution-check">✓</span>
     </div>
