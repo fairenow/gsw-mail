@@ -695,7 +695,7 @@ export function ChatPanel() {
           <span>{activity.label}</span>
         </div>)}</div>}
       </section>}
-      {sending && executionActivities.length === 0 && <article className="gsw-chat-message assistant gsw-chat-thinking"><div className="gsw-chat-message-label">GSW</div><div className="gsw-chat-thinking-dots" aria-label="Thinking"><span /><span /><span /></div></article>}
+      {sending && executionActivities.length === 0 && <article className="gsw-chat-message assistant gsw-chat-thinking"><div className="gsw-chat-message-label">GSW</div><img src="/download%20(3).gif" alt="GSW is thinking" className="gsw-chat-thinking-animation" width={72} height={72} /></article>}
       {intervention && <section className="gsw-chat-intervention">
         <div className="gsw-chat-intervention-icon"><ShieldCheck size={19} strokeWidth={1.8} /></div>
         <div className="gsw-chat-intervention-copy">
