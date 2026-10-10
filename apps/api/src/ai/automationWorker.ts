@@ -15,7 +15,7 @@ import {
   failAutomationRun,
 } from "./automationService.js";
 import { getAiProvider, type AiProviderMessage } from "./providers/index.js";
-import { getAiCapabilitySettings } from "./capabilities.js";
+import { getAiCapabilitySettings, isAiScopeGloballyEnabled } from "./capabilities.js";
 
 export interface AutomationWorker {
   start(): void;
@@ -88,7 +88,7 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
           aiRunId = aiRun.id;
 
           const activeGrants = await listActiveAiScopes(automation.userId, automation.accountId ?? undefined);
-          const activeScopes = activeGrants.map(grant => grant.scope);
+          const activeScopes = activeGrants.map(grant => grant.scope).filter(scope => isAiScopeGloballyEnabled(aiSettings, scope));
           if (automation.accountId) {
             await requireAccountPermission(automation.userId, automation.accountId, "read");
           }
@@ -141,7 +141,8 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
               } else {
                 // Recheck mutable grants and membership immediately before each tool.
                 const current = await listActiveAiScopes(automation.userId, automation.accountId ?? undefined);
-                const grantedNow = current.map(grant => grant.scope);
+                const freshSettings = await getAiCapabilitySettings(automation.userId);
+                const grantedNow = current.map(grant => grant.scope).filter(scope => freshSettings.enabled && isAiScopeGloballyEnabled(freshSettings, scope));
                 if (definition.risk !== "read" && definition.name !== "mail.send_draft" && writeCount >= 5) {
                   output = { ok: false, error: "Scheduled write limit (5 actions per run) reached." };
                 } else if (!scheduledToolDefinitions([definition], automation.allowedScopes, grantedNow, automation.sendPolicy?.enabled === true).length) {
