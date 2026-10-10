@@ -18,7 +18,7 @@ const createInput = z.object({
   instruction: z.string().trim().min(1).max(20_000),
   timeZone: z.string().trim().min(1).max(100),
   schedule: scheduleSchema,
-  allowedScopes: z.array(z.enum(["mail.read"])).default(["mail.read"]),
+  allowedScopes: z.array(z.enum(["mail.read", "calendar.read", "contacts.read", "templates.read", "signatures.read", "files.read", "campaign.read", "research.use", "browser.read", "tasks.read", "settings.read", "workspace.read", "domain.read", "alias.read"])).default(["mail.read"]),
 });
 
 const success = <T>(ctx: AgentExecutionContext, toolCallId: string, startedAt: string, data: T): AgentToolResult<T> => ({
@@ -55,7 +55,7 @@ export const automationCreateTool: AgentToolDefinition = {
     "Create a durable scheduled GSW Chat task that runs even when the browser is closed.",
     "Use it for recurring or one-time briefings such as daily inbox debriefs.",
     "Schedules support once, hourly, daily, weekdays, weekends, weekly, and monthly recurrence in an IANA timezone.",
-    "Background execution currently supports read-only mailbox briefing context. Do not promise automatic email sending or campaign launch from a scheduled task yet.",
+    "Background execution supports explicitly approved read-only GSW tools, including browser research, files, contacts, calendar and mail. Writes and sends still require an interactive approval.",
   ].join(" "),
   inputSchema: {
     type: "object",
@@ -80,8 +80,8 @@ export const automationCreateTool: AgentToolDefinition = {
       },
       allowedScopes: {
         type: "array",
-        items: { type: "string", enum: ["mail.read"] },
-        description: "Background capabilities currently limited to mail.read.",
+        items: { type: "string", enum: ["mail.read", "calendar.read", "contacts.read", "templates.read", "signatures.read", "files.read", "campaign.read", "research.use", "browser.read", "tasks.read", "settings.read", "workspace.read", "domain.read", "alias.read"] },
+        description: "Explicit read-only scopes authorized for unattended scheduled execution.",
       },
     },
     required: ["title", "instruction", "timeZone", "schedule"],
