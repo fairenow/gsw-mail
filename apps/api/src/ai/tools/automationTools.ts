@@ -3,7 +3,7 @@ import { createAutomation, deleteAutomation, listAutomations, updateAutomation }
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
 
 const scheduleSchema = z.object({
-  frequency: z.enum(["once", "daily", "weekdays", "weekends", "weekly", "monthly"]),
+  frequency: z.enum(["once", "hourly", "daily", "weekdays", "weekends", "weekly", "monthly"]),
   hour: z.number().int().min(0).max(23),
   minute: z.number().int().min(0).max(59),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
@@ -54,7 +54,7 @@ export const automationCreateTool: AgentToolDefinition = {
   description: [
     "Create a durable scheduled GSW Chat task that runs even when the browser is closed.",
     "Use it for recurring or one-time briefings such as daily inbox debriefs.",
-    "Schedules support once, daily, weekdays, weekends, weekly, and monthly recurrence in an IANA timezone.",
+    "Schedules support once, hourly, daily, weekdays, weekends, weekly, and monthly recurrence in an IANA timezone.",
     "Background execution currently supports read-only mailbox briefing context. Do not promise automatic email sending or campaign launch from a scheduled task yet.",
   ].join(" "),
   inputSchema: {
@@ -66,7 +66,7 @@ export const automationCreateTool: AgentToolDefinition = {
       schedule: {
         type: "object",
         properties: {
-          frequency: { type: "string", enum: ["once", "daily", "weekdays", "weekends", "weekly", "monthly"] },
+          frequency: { type: "string", enum: ["once", "hourly", "daily", "weekdays", "weekends", "weekly", "monthly"] },
           hour: { type: "integer", minimum: 0, maximum: 23 },
           minute: { type: "integer", minimum: 0, maximum: 59 },
           daysOfWeek: { type: "array", items: { type: "integer", minimum: 0, maximum: 6 }, description: "0 Sunday through 6 Saturday." },
@@ -164,7 +164,7 @@ export const automationUpdateTool: AgentToolDefinition = {
       schedule: {
         type: "object",
         properties: {
-          frequency: { type: "string", enum: ["once", "daily", "weekdays", "weekends", "weekly", "monthly"] },
+          frequency: { type: "string", enum: ["once", "hourly", "daily", "weekdays", "weekends", "weekly", "monthly"] },
           hour: { type: "integer", minimum: 0, maximum: 23 },
           minute: { type: "integer", minimum: 0, maximum: 59 },
           daysOfWeek: { type: "array", items: { type: "integer", minimum: 0, maximum: 6 } },

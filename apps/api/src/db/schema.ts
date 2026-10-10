@@ -1133,7 +1133,7 @@ export const aiAutomations = pgTable(
     status: text("status").default("active").notNull(),
     timeZone: text("time_zone").notNull(),
     schedule: jsonb("schedule").$type<{
-      frequency: "once" | "daily" | "weekdays" | "weekends" | "weekly" | "monthly";
+      frequency: "once" | "hourly" | "daily" | "weekdays" | "weekends" | "weekly" | "monthly";
       hour: number;
       minute: number;
       daysOfWeek?: number[] | undefined;
