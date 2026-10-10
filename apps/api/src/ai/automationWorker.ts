@@ -84,15 +84,14 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
           });
           aiRunId = aiRun.id;
 
-          const mailboxSnapshot = automation.allowedScopes.includes("mail.read")
-            ? await buildMailboxSnapshot(automation.accountId)
-            : "Mailbox reading is not authorized for this scheduled task.";
-
           const activeGrants = await listActiveAiScopes(automation.userId, automation.accountId ?? undefined);
           const activeScopes = activeGrants.map(grant => grant.scope);
           if (automation.accountId) {
             await requireAccountPermission(automation.userId, automation.accountId, "read");
           }
+          const mailboxSnapshot = automation.allowedScopes.includes("mail.read") && activeScopes.includes("mail.read")
+            ? await buildMailboxSnapshot(automation.accountId)
+            : "Mailbox reading is not authorized for this scheduled task.";
           const authorizedTools = scheduledToolDefinitions(
             agentMailRegistry.definitions(),
             automation.allowedScopes,
@@ -111,7 +110,7 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
               "If the task requires sending, external browser interaction or other unavailable actions, explain that interactive confirmation is required.",
               "Indexed inbox snapshot (if authorized):",
               mailboxSnapshot,
-            ].join("\\n"),
+            ].join("\n"),
           }];
           let content = "";
           let model = "";
@@ -141,7 +140,7 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
                 if (!scheduledToolDefinitions([definition], automation.allowedScopes, grantedNow).length) {
                   output = { ok: false, error: "Scheduled permission has been revoked." };
                 } else {
-                  if (automation.accountId) await requireAccountPermission(automation.userId, automation.accountId, "read");
+                  if (automation.accountId) await requireAccountPermission(automation.userId, automation.accountId, definition.requiredScopes.some(scope => scope === "mail.write" || scope === "mail.send") ? "send" : "read");
                   const ledger = await recordAiToolCall({
                     runId: aiRun.id,
                     conversationId: automation.conversationId,
@@ -151,7 +150,7 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
                     requiredScopes: definition.requiredScopes,
                     argumentsJson: call.function.arguments,
                   });
-                  const key = `scheduled:${automationRun.id}:${ledger.id}`;
+                  const key = `scheduled:${automation.id}:${automation.nextRunAt.toISOString()}:${call.id}`;
                   let execute = true;
                   if (definition.risk !== "read") {
                     const reservation = await reserveAiIdempotency({
