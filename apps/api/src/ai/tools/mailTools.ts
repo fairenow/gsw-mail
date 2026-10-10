@@ -306,7 +306,7 @@ export const mailSendDraftTool: AgentToolDefinition = {
     try {
       const input = sendDraftInput.parse(rawInput);
       const mail = createMailService(ctx);
-      const result = await mail.sendDraft(ctx.accountId, input.draftId, `agent:${toolCallId}`);
+      const result = await mail.sendDraft(ctx.accountId, input.draftId, ctx.scheduledIdempotencyKey ?? `agent:${toolCallId}`);
       return success(ctx, toolCallId, startedAt, result);
     } catch (error) {
       return failure(ctx, toolCallId, startedAt, error);

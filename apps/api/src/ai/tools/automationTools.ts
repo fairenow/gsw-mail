@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { createAutomation, deleteAutomation, listAutomations, updateAutomation } from "../automationService.js";
+import { grantAiScope } from "../agentState.js";
+import { createAutomation, deleteAutomation, listAutomations, updateAutomation, approveAutomationSending, revokeAutomationSending } from "../automationService.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
 
 const scheduleSchema = z.object({
@@ -18,7 +19,7 @@ const createInput = z.object({
   instruction: z.string().trim().min(1).max(20_000),
   timeZone: z.string().trim().min(1).max(100),
   schedule: scheduleSchema,
-  allowedScopes: z.array(z.enum(["mail.read"])).default(["mail.read"]),
+  allowedScopes: z.array(z.enum(["mail.read", "mail.write", "calendar.read", "contacts.read", "templates.read", "signatures.read", "files.read", "files.write", "campaign.read", "campaign.write", "research.use", "browser.read", "tasks.read", "settings.read", "workspace.read", "domain.read", "alias.read"])).default(["mail.read"]),
 });
 
 const success = <T>(ctx: AgentExecutionContext, toolCallId: string, startedAt: string, data: T): AgentToolResult<T> => ({
@@ -55,7 +56,7 @@ export const automationCreateTool: AgentToolDefinition = {
     "Create a durable scheduled GSW Chat task that runs even when the browser is closed.",
     "Use it for recurring or one-time briefings such as daily inbox debriefs.",
     "Schedules support once, hourly, daily, weekdays, weekends, weekly, and monthly recurrence in an IANA timezone.",
-    "Background execution currently supports read-only mailbox briefing context. Do not promise automatic email sending or campaign launch from a scheduled task yet.",
+    "Background execution supports explicitly authorized research and safe draft preparation. Scheduled email sending and campaign launch are not enabled.",
   ].join(" "),
   inputSchema: {
     type: "object",
@@ -80,8 +81,8 @@ export const automationCreateTool: AgentToolDefinition = {
       },
       allowedScopes: {
         type: "array",
-        items: { type: "string", enum: ["mail.read"] },
-        description: "Background capabilities currently limited to mail.read.",
+        items: { type: "string", enum: ["mail.read", "mail.write", "calendar.read", "contacts.read", "templates.read", "signatures.read", "files.read", "files.write", "campaign.read", "campaign.write", "research.use", "browser.read", "tasks.read", "settings.read", "workspace.read", "domain.read", "alias.read"] },
+        description: "Scopes authorized for unattended research and non-sending draft preparation.",
       },
     },
     required: ["title", "instruction", "timeZone", "schedule"],
@@ -234,9 +235,64 @@ export const automationDeleteTool: AgentToolDefinition = {
   },
 };
 
+export const automationApproveSendingTool: AgentToolDefinition = {
+  name: "automations.approve_sending",
+  description: "Request explicit user confirmation to authorize an existing scheduled task to send only to the exact approved email addresses. This requires an interactive confirmation; never assume approval from the task instruction. No daily volume limit is imposed.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      automationId: { type: "string", description: "Existing automation UUID" },
+      allowedRecipients: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 100, description: "Exact email addresses allowed for unattended sends, including CC/BCC." },
+    },
+    required: ["automationId", "allowedRecipients"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["automations.write", "mail.send"],
+  risk: "external",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = z.object({
+        automationId: z.string().uuid(),
+        allowedRecipients: z.array(z.string().email()).min(1).max(100),
+      }).parse(rawInput);
+      const automation = await approveAutomationSending({
+        userId: ctx.userId,
+        automationId: input.automationId,
+        allowedRecipients: input.allowedRecipients,
+      });
+      await grantAiScope({ userId: ctx.userId, accountId: automation.accountId ?? undefined, scope: "mail.send", source: "scheduled_send_user_approval" });
+      return success(ctx, toolCallId, startedAt, { id: automation.id, sendPolicy: automation.sendPolicy });
+    } catch (error) { return failure(ctx, toolCallId, startedAt, error); }
+  },
+};
+
+export const automationRevokeSendingTool: AgentToolDefinition = {
+  name: "automations.revoke_sending",
+  description: "Immediately revoke unattended email sending for an existing scheduled task.",
+  inputSchema: {
+    type: "object",
+    properties: { automationId: { type: "string" } },
+    required: ["automationId"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["automations.write"],
+  risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = z.object({ automationId: z.string().uuid() }).parse(rawInput);
+      const automation = await revokeAutomationSending(ctx.userId, input.automationId);
+      return success(ctx, toolCallId, startedAt, { id: automation.id, sendPolicy: null });
+    } catch (error) { return failure(ctx, toolCallId, startedAt, error); }
+  },
+};
+
 export const automationTools: AgentToolDefinition[] = [
   automationCreateTool,
   automationListTool,
   automationUpdateTool,
   automationDeleteTool,
+  automationApproveSendingTool,
+  automationRevokeSendingTool,
 ];

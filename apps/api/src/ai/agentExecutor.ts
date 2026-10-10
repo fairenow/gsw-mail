@@ -195,7 +195,14 @@ export async function executeAgentTool(input: {
       toolCallId: input.ledgerToolCallId,
       userId: input.ctx.userId,
       action: definition.name,
-      summary: confirmationSummaryForAction(definition.name),
+      summary: definition.name === "automations.approve_sending"
+        ? (() => {
+            try {
+              const args = JSON.parse(input.rawArguments) as { automationId?: string; allowedRecipients?: string[] };
+              return `Approve unattended sending for automation ${args.automationId ?? "(unknown)"} to exactly: ${Array.isArray(args.allowedRecipients) ? args.allowedRecipients.join(", ") : "(none)"}. This authorization has no daily volume limit. You may revoke it later.`;
+            } catch { return "Cannot approve sending: invalid recipient policy arguments."; }
+          })()
+        : confirmationSummaryForAction(definition.name),
       expiresAt: new Date(Date.now() + 30 * 60_000),
       metadata: { risk: definition.risk, scopes: definition.requiredScopes },
     });

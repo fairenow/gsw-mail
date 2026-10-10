@@ -8,6 +8,7 @@ export interface AgentExecutionContext {
   accessToken?: string | undefined;
   conversationId?: string | undefined;
   timeZone?: string | undefined;
+  scheduledIdempotencyKey?: string | undefined;
 }
 
 export interface AgentToolResult<T = unknown> {
