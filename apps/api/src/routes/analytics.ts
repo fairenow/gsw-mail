@@ -14,6 +14,8 @@ export default async function analyticsRoutes(app:FastifyInstance){
  app.post("/product/analytics/events",{config:{rateLimit:{max:90,timeWindow:"1 minute"}}},async(req,reply)=>{
    if(req.headers.origin && new URL(req.headers.origin).host!==req.headers.host)return reply.code(403).send({error:"invalid origin"});
    const events=requestSchema.parse(req.body).events;
+   const keys:Record<string,string[]>={page_view:[],click:["target"],scroll_depth:["percent"],page_exit:["durationMs","scrollPercent"],visibility:["state"],web_vital:["metric","value"]};
+   for(const event of events){if(Object.keys(event.metadata??{}).some(key=>!keys[event.type]!.includes(key)))return reply.code(400).send({error:"unsupported analytics metadata"});}
    const client=await pool.connect();
    try{
      await client.query("BEGIN");
@@ -30,10 +32,10 @@ export default async function analyticsRoutes(app:FastifyInstance){
  // Owner-controlled reporting only, never a public read API.
  app.register(async secured=>{
    await requireUser(secured,{optional:false});
-   secured.get("/product/analytics/summary",async(req)=>{
+   secured.get("/product/analytics/summary",async(req,reply)=>{
      // Explicit gate: access to this route is server-owner only, not every signed-in mailbox user.
      if(!process.env.ANALYTICS_ADMIN_USER_ID || req.authUserId!==process.env.ANALYTICS_ADMIN_USER_ID)
-       return {error:"forbidden"};
+       return reply.code(403).send({error:"forbidden"});
      const [stats,paths]=await Promise.all([
        pool.query(`SELECT COUNT(*)::int AS events,COUNT(DISTINCT visitor_id)::int AS visitors,COUNT(DISTINCT session_id)::int AS sessions FROM engagement_events WHERE occurred_at>=NOW()-INTERVAL '30 days'`),
        pool.query(`SELECT path,COUNT(*)::int AS views FROM engagement_events WHERE event_type='page_view' AND occurred_at>=NOW()-INTERVAL '30 days' GROUP BY path ORDER BY views DESC LIMIT 25`)
