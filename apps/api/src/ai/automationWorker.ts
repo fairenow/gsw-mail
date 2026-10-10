@@ -112,6 +112,7 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
               mailboxSnapshot,
             ].join("\n"),
           }];
+          let writeCount = 0;
           let content = "";
           let model = "";
           const toolDefinitions = agentMailRegistry.providerDefinitions(tool => toolNames.has(tool.name));
@@ -137,7 +138,9 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
                 // Recheck mutable grants and membership immediately before each tool.
                 const current = await listActiveAiScopes(automation.userId, automation.accountId ?? undefined);
                 const grantedNow = current.map(grant => grant.scope);
-                if (!scheduledToolDefinitions([definition], automation.allowedScopes, grantedNow).length) {
+                if (definition.risk !== "read" && writeCount >= 5) {
+                  output = { ok: false, error: "Scheduled write limit (5 actions per run) reached." };
+                } else if (!scheduledToolDefinitions([definition], automation.allowedScopes, grantedNow).length) {
                   output = { ok: false, error: "Scheduled permission has been revoked." };
                 } else {
                   if (automation.accountId) await requireAccountPermission(automation.userId, automation.accountId, definition.requiredScopes.some(scope => scope === "mail.write" || scope === "mail.send") ? "send" : "read");
@@ -167,6 +170,7 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
                     }
                   }
                   if (execute) {
+                    if (definition.risk !== "read") writeCount += 1;
                     try {
                       output = await agentMailRegistry.execute(call.function.name, call.function.arguments, {
                         userId: automation.userId,
