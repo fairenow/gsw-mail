@@ -24,7 +24,8 @@ export async function createAutomation(input: CreateAutomationInput) {
   const nextRunAt = computeNextAutomationRun(input.schedule, input.timeZone);
   if (!nextRunAt) throw badRequest("automation schedule has no future run");
 
-  const [conversation] = await db.insert(aiConversations).values({
+  return db.transaction(async (tx) => {
+  const [conversation] = await tx.insert(aiConversations).values({
     userId: input.userId,
     accountId: input.accountId ?? null,
     title: `Scheduled: ${input.title.trim().slice(0, 100)}`,
@@ -33,7 +34,7 @@ export async function createAutomation(input: CreateAutomationInput) {
   }).returning();
   if (!conversation) throw new Error("failed to create automation conversation");
 
-  await db.insert(aiMessages).values({
+  await tx.insert(aiMessages).values({
     conversationId: conversation.id,
     role: "user",
     content: `Scheduled task: ${input.instruction.trim()}`,
@@ -45,7 +46,7 @@ export async function createAutomation(input: CreateAutomationInput) {
     },
   });
 
-  const [automation] = await db.insert(aiAutomations).values({
+  const [automation] = await tx.insert(aiAutomations).values({
     userId: input.userId,
     accountId: input.accountId ?? null,
     conversationId: conversation.id,
@@ -59,6 +60,7 @@ export async function createAutomation(input: CreateAutomationInput) {
   }).returning();
   if (!automation) throw new Error("failed to create automation");
   return automation;
+  });
 }
 
 export async function listAutomations(userId: string) {
