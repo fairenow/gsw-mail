@@ -68,6 +68,10 @@ export async function cancelEventEmailReminders(accountId:string,eventId:string)
 }
 
 export async function deliverDueCalendarEmailReminders(): Promise<number> {
+  const relay = getRelay();
+  if (relay.name === "null") throw new Error("Calendar reminder delivery requires a configured outbound relay");
+  // Uncertain deliveries must not be automatically resent: surface them for review.
+  await pool.query("UPDATE calendar_email_reminders SET status='failed',last_error='Delivery interrupted; manual review required' WHERE status='sending' AND claimed_at < now() - interval '10 minutes'");
   const client=await pool.connect();
   let rows: Array<{id:string;account_id:string;address:string;event_title:string;event_start:Date;minutes_before:number}>=[];
   try {
@@ -83,7 +87,7 @@ export async function deliverDueCalendarEmailReminders(): Promise<number> {
   } catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}
   for(const row of rows) {
     try {
-      const result=await getRelay().send({
+      const result=await relay.send({
         id:randomUUID(),accountId:row.account_id,fromAddress:row.address,to:[row.address],
         subject:`Calendar reminder: ${row.event_title}`,
         textBody:`Reminder: ${row.event_title}\nStarts: ${row.event_start.toISOString()}\nThis reminder was scheduled ${row.minutes_before} minutes before the event.`
