@@ -20,7 +20,7 @@ import { FilesPage } from "./FilesPage";
 import { ChatPanel } from "../components/ai/ChatPanel";
 
 type MobileView = "messages" | "reader";
-type WorkspaceSection = "mail" | "contacts" | "calendar" | "settings" | "files" | "chat" | "scheduled" | "scheduled";
+type WorkspaceSection = "mail" | "contacts" | "calendar" | "settings" | "files" | "chat" | "scheduled";
 const pageSize = 50;
 const fallbackTemplateKey = "none";
 const parseRecipients = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
@@ -92,6 +92,7 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
   const [sendError, setSendError] = useState<string | null>(null);
   const [sendRequestId, setSendRequestId] = useState<string | null>(null);
   const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>(initialSection);
+  useEffect(() => { window.dispatchEvent(new CustomEvent("gsw-analytics-screen", { detail: { screen: workspaceSection === "mail" ? "mail/" + folder.toLowerCase() : workspaceSection } })); }, [workspaceSection, folder]);
 
   const loadFolder = useCallback(async (accountId: string, name: Folder, nextPage = 0) => {
     const request = ++listRequest.current;
