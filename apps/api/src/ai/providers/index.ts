@@ -14,7 +14,20 @@ const providers: Record<AiProviderId, AiProvider> = {
   huggingface: huggingFaceProvider,
   modal: modalProvider,
   "modal-deepseek": modalDeepseekProvider,
-  "modal-qwen": modalQwenProvider,
+  "modal-qwen": {
+    id: "modal-qwen",
+    async run(input) {
+      try {
+        return await modalQwenProvider.run(input);
+      } catch (error) {
+        // Provider inference only: agent tools execute separately after a valid response.
+        // Never fail over on unexpected application errors or authorization failures.
+        if (!(error instanceof HttpError) || ![429, 502, 503, 504].includes(error.statusCode)) throw error;
+        console.warn("[gsw-ai] Modal Qwen unavailable; attempting Hetzner Qwen fallback", { status: error.statusCode });
+        return hetznerProvider.run(input);
+      }
+    },
+  },
 };
 
 export type UserAiModelProvider = "qwen" | "openai" | "claude" | "gpt-oss-120b" | "deepseek-v4.1-flash" | "qwen-modal";
