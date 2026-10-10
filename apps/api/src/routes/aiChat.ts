@@ -506,7 +506,15 @@ async function runConversationTurn(input: {
         label: turn === 0 ? "Thinking" : "Reviewing what I found",
       });
 
-      const result = await provider.run({ messages: input.providerMessages, tools });
+      console.info(JSON.stringify({event:"gsw.chat.stage",stage:"provider.start",runId:run.id,turn,provider:provider.id,toolCount:tools.length}));
+      let result: Awaited<ReturnType<typeof provider.run>>;
+      try {
+        result = await provider.run({ messages: input.providerMessages, tools });
+      } catch (error) {
+        reportChatError(error,{operation:"provider.run",category:"chat",correlationId:run.id});
+        throw error;
+      }
+      console.info(JSON.stringify({event:"gsw.chat.stage",stage:"provider.complete",runId:run.id,turn,provider:provider.id,toolCallCount:result.toolCalls.length}));
       model = result.model;
 
       if (result.toolCalls.length === 0) {
@@ -557,6 +565,7 @@ async function runConversationTurn(input: {
       });
 
       for (const call of result.toolCalls.slice(0, 4)) {
+        console.info(JSON.stringify({event:"gsw.chat.stage",stage:"tool.selected",runId:run.id,turn,tool:call.function.name.replaceAll("__","."),toolCallId:call.id}));
         const definition = agentMailRegistry.definition(call.function.name);
         const semanticName = call.function.name.replaceAll("__", ".");
         const label = toolLabel(semanticName);
