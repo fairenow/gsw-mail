@@ -4,6 +4,9 @@ import type { AgentToolDefinition } from "./tools/types.js";
  * Server-side background authorization. An automation's scopes are a ceiling,
  * not a substitute for current grants or mailbox membership.
  */
+// Only non-sending, reversible, user-scoped operations may run unattended.
+const SCHEDULED_WRITES = new Set(["mail.create_draft", "files.create_text", "campaign.create"]);
+
 const NEVER_UNATTENDED = new Set([
   "mail.send", "campaign.send", "browser.write", "workspace.admin",
   "domain.write", "alias.write", "mailbox_admin.write",
@@ -15,7 +18,8 @@ export function mayRunScheduledTool(
   allowedScopes: readonly string[],
   activeScopes: readonly string[],
 ): boolean {
-  if (tool.risk !== "read") return false;
+  if (tool.risk === "external") return false;
+  if (tool.risk === "reversible_write" && !SCHEDULED_WRITES.has(tool.name)) return false;
   if (tool.requiredScopes.some(scope => NEVER_UNATTENDED.has(scope))) return false;
   return tool.requiredScopes.every(scope =>
     allowedScopes.includes(scope) && activeScopes.includes(scope));
