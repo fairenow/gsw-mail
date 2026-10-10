@@ -1,3 +1,4 @@
+import { replaceEventEmailReminders, cancelEventEmailReminders } from "../../calendar/emailReminders.js";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db/client.js";
@@ -78,6 +79,7 @@ const eventInput = z.object({
   sendSchedulingMessages: z.boolean().default(false),
   timeZone: z.string().max(100).optional(),
   allDay: z.boolean().default(false),
+  emailReminderMinutes: z.array(z.number().int().min(1).max(10080)).max(8).optional(),
 });
 
 const writableEngine = (ctx: AgentExecutionContext) => getUserEngine({
@@ -99,6 +101,7 @@ const calendarWriteSchema: Record<string, unknown> = {
     sendSchedulingMessages: { type: "boolean", description: "Whether to notify attendees; explicit approval is required" },
     timeZone: { type: "string" },
     allDay: { type: "boolean" },
+    emailReminderMinutes: { type: "array", items: { type: "integer", minimum: 1, maximum: 10080 }, maxItems: 8, description: "Owner-only email reminders, minutes before the event. Defaults to 1440 and 30; empty array disables reminders." },
   },
   required: ["calendarId","title","start","durationMinutes"],
   additionalProperties: false,
@@ -122,6 +125,7 @@ export const calendarEventCreateTool: AgentToolDefinition = {
       const conflicts = computeCalendarConflicts(existing, input.start, conflictEnd);
       if (conflicts.length) return { ok:false, toolCallId, error:{code:"calendar_conflict",message:"This time overlaps an existing event. Review the schedule before creating it.",retryable:false},audit:audit(ctx,startedAt) };
       const event = await engine.createCalendarEvent(ctx.accountId, input);
+      await replaceEventEmailReminders({ accountId: ctx.accountId, eventId: event.engineId, title: event.title, start: event.start, minutes: input.emailReminderMinutes });
       return success(ctx, toolCallId, startedAt, { event, invitedAttendees: input.sendSchedulingMessages, requiresReview: false });
     } catch (error) { return failed(ctx, toolCallId, startedAt, error); }
   },
@@ -161,6 +165,7 @@ export const calendarEventUpdateTool: AgentToolDefinition = {
       const conflicts = computeCalendarConflicts(existing, patch.start, conflictEnd, eventId);
       if (conflicts.length) return { ok:false, toolCallId, error:{code:"calendar_conflict",message:"This time overlaps an existing event. Review the schedule before changing it.",retryable:false},audit:audit(ctx,startedAt) };
       const event = await engine.updateCalendarEvent(ctx.accountId, eventId, patch);
+      await replaceEventEmailReminders({ accountId: ctx.accountId, eventId, title: event.title, start: event.start, minutes: input.emailReminderMinutes });
       return success(ctx, toolCallId, startedAt, { event });
     } catch (error) { return failed(ctx, toolCallId, startedAt, error); }
   },
@@ -178,6 +183,7 @@ export const calendarEventDeleteTool: AgentToolDefinition = {
       const { eventId } = z.object({ eventId: z.string().min(1).max(500) }).parse(rawInput);
       const engine = await writableEngine(ctx);
       await engine.destroyCalendarEvent(ctx.accountId, eventId);
+      await cancelEventEmailReminders(ctx.accountId, eventId);
       return success(ctx, toolCallId, startedAt, { deleted: true, eventId });
     } catch (error) { return failed(ctx, toolCallId, startedAt, error); }
   },

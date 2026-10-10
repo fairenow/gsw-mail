@@ -1,3 +1,4 @@
+import { ensureCalendarEmailReminderSchema, deliverDueCalendarEmailReminders } from "./calendar/emailReminders.js";
 import { buildApp } from "./app.js";
 import { config } from "./config.js";
 import { pool } from "./db/client.js";
@@ -19,11 +20,15 @@ const agentTaskRunner = getAgentTaskRunner();
 async function main() {
   await ensureScheduledSendSchema();
   await ensureCalendarRsvpSchema();
+  await ensureCalendarEmailReminderSchema();
   await ensureAiAgentSchema();
   await ensureEmailTemplateSchema();
   await ensureFilesSchema();
   await ensureWebOAuthTestClient();
   worker.start();
+  const reminderTimer = setInterval(() => { void deliverDueCalendarEmailReminders().catch(error => app.log.error(error, "calendar reminder worker failed")); }, 60_000);
+  reminderTimer.unref();
+  void deliverDueCalendarEmailReminders().catch(error => app.log.error(error, "calendar reminder worker failed"));
   automationWorker.start();
   agentTaskRunner.start();
   await app.listen({ port: config.port, host: "0.0.0.0" });
