@@ -15,7 +15,7 @@ export function mayRunScheduledTool(
   allowedScopes: readonly string[],
   activeScopes: readonly string[],
 ): boolean {
-  if (tool.risk === "external") return false;
+  if (tool.risk !== "read") return false;
   if (tool.requiredScopes.some(scope => NEVER_UNATTENDED.has(scope))) return false;
   return tool.requiredScopes.every(scope =>
     allowedScopes.includes(scope) && activeScopes.includes(scope));
