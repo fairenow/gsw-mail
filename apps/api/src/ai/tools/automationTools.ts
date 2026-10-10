@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { grantAiScope } from "../agentState.js";
 import { createAutomation, deleteAutomation, listAutomations, updateAutomation, approveAutomationSending, revokeAutomationSending } from "../automationService.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
 
@@ -260,6 +261,7 @@ export const automationApproveSendingTool: AgentToolDefinition = {
         automationId: input.automationId,
         allowedRecipients: input.allowedRecipients,
       });
+      await grantAiScope({ userId: ctx.userId, accountId: automation.accountId ?? undefined, scope: "mail.send", source: "scheduled_send_user_approval" });
       return success(ctx, toolCallId, startedAt, { id: automation.id, sendPolicy: automation.sendPolicy });
     } catch (error) { return failure(ctx, toolCallId, startedAt, error); }
   },
