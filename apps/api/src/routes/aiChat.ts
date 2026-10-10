@@ -607,6 +607,7 @@ async function runConversationTurn(input: {
           argumentsJson: call.function.arguments,
         });
 
+        console.info(JSON.stringify({event:"gsw.chat.stage",stage:"tool.start",runId:run.id,tool:semanticName,toolCallId:ledgerCall.id}));
         const outcome = await executeAgentTool({
           registry: agentMailRegistry,
           providerToolName: call.function.name,
@@ -618,6 +619,7 @@ async function runConversationTurn(input: {
           runId: run.id,
         });
 
+        console.info(JSON.stringify({event:"gsw.chat.stage",stage:"tool.complete",runId:run.id,tool:semanticName,toolCallId:ledgerCall.id,outcome:outcome.kind,ok:outcome.kind==="result"?outcome.result.ok:null}));
         if (outcome.kind === "intervention") {
           const status = outcome.intervention.type === "permission" ? "awaiting_permission" : "awaiting_confirmation";
           await markAiToolCallStatus(ledgerCall.id, status);
