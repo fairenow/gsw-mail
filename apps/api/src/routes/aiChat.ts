@@ -506,7 +506,7 @@ async function runConversationTurn(input: {
         label: turn === 0 ? "Thinking" : "Reviewing what I found",
       });
 
-      console.info(JSON.stringify({event:"gsw.chat.stage",stage:"provider.start",runId:run.id,turn,provider:provider.id,toolCount:tools.length}));
+      console.info(JSON.stringify({event:"gsw.chat.stage",stage:"provider.start",runId:run.id,turn,provider:provider.id,toolCount:tools?.length ?? 0}));
       let result: Awaited<ReturnType<typeof provider.run>>;
       try {
         result = await provider.run({ messages: input.providerMessages, tools });
