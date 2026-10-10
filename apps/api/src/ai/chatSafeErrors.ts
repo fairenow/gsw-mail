@@ -34,6 +34,7 @@ export function reportChatError(
     code,
     operation: context.operation.replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 80),
     errorType: error instanceof Error ? error.name.replace(/[^a-zA-Z0-9]/g, "").slice(0, 60) : "Unknown",
+    ...(error && typeof error === "object" && "status" in error && typeof error.status === "number" ? { httpStatus: error.status } : {}),
     ...(context.correlationId ? { correlationId: context.correlationId.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 80) } : {}),
   }));
   return {
