@@ -279,7 +279,13 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
   return {
     start() {
       if (timer) return;
-      const tick = () => {\n        void runOnce().catch(error => {\n          console.error("[ai:automation] worker tick failed; API remains available", error);\n        });\n      };\n      timer = setInterval(tick, intervalMs);\n      tick();
+      const tick = () => {
+        void runOnce().catch(error => {
+          console.error("[ai:automation] worker tick failed; API remains available", error);
+        });
+      };
+      timer = setInterval(tick, intervalMs);
+      tick();
     },
     stop() {
       if (timer) clearInterval(timer);
