@@ -32,7 +32,7 @@ export async function ensureCalendarEmailReminderSchema(): Promise<void> {
 }
 
 export async function replaceEventEmailReminders(input: {
-  accountId: string; eventId: string; title: string; start: string; minutes?: number[];
+  accountId: string; eventId: string; title: string; start: string; minutes?: number[] | undefined;
 }): Promise<void> {
   const start = new Date(input.start);
   if (!Number.isFinite(start.getTime())) throw new Error("Invalid calendar event start");
