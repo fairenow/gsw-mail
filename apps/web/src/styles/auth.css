@@ -49,6 +49,17 @@
   font-size: 32px;
   margin: 20px auto 10px;
   max-width: 18ch;
+  overflow-wrap: anywhere;
+}
+
+.gsw-login-account-email {
+  display: block;
+  max-width: 100%;
+  margin-top: 4px;
+  font-size: clamp(16px, 3vw, 22px);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .gsw-login-sub {
