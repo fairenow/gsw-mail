@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
 import {
+  createAutomation,
   deleteAutomation,
   getAutomation,
   listAutomationRuns,
@@ -23,6 +24,28 @@ const scheduleSchema = z.object({
 
 export default async function aiAutomationRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
+
+  app.post("/product/automations", async (req, reply) => {
+    const input = z.object({
+      accountId: z.string().uuid(),
+      title: z.string().trim().min(1).max(120),
+      instruction: z.string().trim().min(1).max(20_000),
+      timeZone: z.string().trim().min(1).max(100),
+      schedule: scheduleSchema,
+    }).parse(req.body);
+    await requireAccountPermission(req.user!.id, input.accountId, "read");
+    const automation = await createAutomation({
+      userId: req.user!.id,
+      accountId: input.accountId,
+      title: input.title,
+      instruction: input.instruction,
+      timeZone: input.timeZone,
+      schedule: input.schedule,
+      allowedScopes: ["mail.read"],
+    });
+    reply.code(201);
+    return { automation };
+  });
 
   app.get("/product/automations", async (req) => {
     return { automations: await listAutomations(req.user!.id) };

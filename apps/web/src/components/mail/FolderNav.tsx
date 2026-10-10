@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { FOLDERS, FOLDER_ICON, type Folder } from "../folders";
 import type { MailFolder } from "../../api";
-import { CalendarDays, ContactRound, Folder as FolderIcon, HardDrive, MessageCircle, Settings } from "lucide-react";
+import { CalendarDays, ContactRound, Folder as FolderIcon, HardDrive, MessageCircle, ListTodo, Settings } from "lucide-react";
 
 const childrenOf = (folders: MailFolder[], parentId: string | null) => folders
   .filter((item) => !item.system && item.parentId === parentId)
@@ -12,12 +12,12 @@ export function FolderNav({ folder, counts, customFolders = [], collapsed, secti
   counts: Record<Folder, { total: number; unread: number }>;
   customFolders?: MailFolder[];
   collapsed: boolean;
-  section?: "mail" | "contacts" | "calendar" | "settings" | "files" | "chat";
+  section?: "mail" | "contacts" | "calendar" | "settings" | "files" | "chat" | "scheduled";
   onSelect: (folder: Folder) => void;
   onPrefetch?: (folder: Folder) => void;
   onCreateFolder?: (parentId: string | null) => void;
-  onOpenSection?: (section: "contacts" | "calendar" | "settings" | "files" | "chat") => void;
-  onPrefetchSection?: (section: "contacts" | "calendar" | "settings" | "files" | "chat") => void;
+  onOpenSection?: (section: "contacts" | "calendar" | "settings" | "files" | "chat" | "scheduled") => void;
+  onPrefetchSection?: (section: "contacts" | "calendar" | "settings" | "files" | "chat" | "scheduled") => void;
 }) {
   const renderCustom = (parentId: string | null, depth = 0): ReactNode => childrenOf(customFolders, parentId).map((item) => {
     const customName = item.name as Folder;
@@ -55,6 +55,7 @@ export function FolderNav({ folder, counts, customFolders = [], collapsed, secti
       <div className="gsw-folder-nav-divider" />
       {onOpenSection ? <>
         <button className={`gsw-folder gsw-folder-link ${section === "chat" ? "active" : ""}`} onPointerEnter={() => onPrefetchSection?.("chat")} onFocus={() => onPrefetchSection?.("chat")} onClick={() => onOpenSection("chat")} title={collapsed ? "Chat" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><MessageCircle size={18} strokeWidth={1.75} /></span><span>Chat</span></button>
+        <button className={`gsw-folder gsw-folder-link ${section === "scheduled" ? "active" : ""}`} onPointerEnter={() => onPrefetchSection?.("scheduled")} onFocus={() => onPrefetchSection?.("scheduled")} onClick={() => onOpenSection("scheduled")} title={collapsed ? "Scheduled Work" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><ListTodo size={18} strokeWidth={1.75} /></span><span>Scheduled Work</span></button>
         <button className={`gsw-folder gsw-folder-link ${section === "contacts" ? "active" : ""}`} onPointerEnter={() => onPrefetchSection?.("contacts")} onFocus={() => onPrefetchSection?.("contacts")} onClick={() => onOpenSection("contacts")} title={collapsed ? "Contacts" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><ContactRound size={18} strokeWidth={1.75} /></span><span>Contacts</span></button>
         <button className={`gsw-folder gsw-folder-link ${section === "calendar" ? "active" : ""}`} onPointerEnter={() => onPrefetchSection?.("calendar")} onFocus={() => onPrefetchSection?.("calendar")} onClick={() => onOpenSection("calendar")} title={collapsed ? "Calendar" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><CalendarDays size={18} strokeWidth={1.75} /></span><span>Calendar</span></button>
         <button className={`gsw-folder gsw-folder-link ${section === "files" ? "active" : ""}`} onPointerEnter={() => onPrefetchSection?.("files")} onFocus={() => onPrefetchSection?.("files")} onClick={() => onOpenSection("files")} title={collapsed ? "Files" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><HardDrive size={18} strokeWidth={1.75} /></span><span>Files</span></button>

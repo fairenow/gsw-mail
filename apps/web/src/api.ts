@@ -90,6 +90,37 @@ export interface CampaignReview {
   recipients: Array<{ id: string; contactId: string | null; email: string; displayName: string | null; subject: string | undefined; textBody: string | undefined }>;
 }
 
+
+export interface ScheduledWorkSchedule {
+  frequency: "once" | "daily" | "weekdays" | "weekends" | "weekly" | "monthly";
+  hour: number;
+  minute: number;
+  daysOfWeek?: number[];
+  dayOfMonth?: number;
+  startDate?: string;
+  endDate?: string;
+}
+export interface ScheduledWorkRecord {
+  id: string;
+  accountId: string | null;
+  title: string;
+  instruction: string;
+  status: string;
+  timeZone: string;
+  schedule: ScheduledWorkSchedule;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastError: string | null;
+}
+export interface ScheduledWorkRun {
+  id: string;
+  status: string;
+  result: string | null;
+  errorMessage: string | null;
+  startedAt: string;
+  completedAt: string | null;
+}
+
 export interface CalendarSummary {
   engineId: string;
   name: string;
@@ -670,6 +701,11 @@ export const api = {
   resumeChatStream: (accountId: string, conversationId: string, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/resume/stream", { ...chatRuntimeContext(), accountId, conversationId }, onEvent, "/product/chat/resume"),
   grantChatPermission: (accountId: string, scope: string) => post<{ grant: { id: string; scope: string } }>("/product/chat/permissions", { accountId, scope }),
   decideChatConfirmation: (confirmationId: string, decision: "approved" | "rejected") => post<{ confirmation: { id: string; status: string }; execution: { conversationId: string; message: AiChatMessage; toolResult?: unknown } }>(`/product/chat/confirmations/${encodeURIComponent(confirmationId)}`, { decision }),
+  scheduledWork: () => get<{automations:ScheduledWorkRecord[]}>("/product/automations"),
+  createScheduledWork: (body: {accountId:string;title:string;instruction:string;timeZone:string;schedule:ScheduledWorkSchedule}) => post<{automation:ScheduledWorkRecord}>("/product/automations",body),
+  updateScheduledWork: (id:string,body: {title?:string;instruction?:string;status?:"active"|"paused"|"archived";timeZone?:string;schedule?:ScheduledWorkSchedule}) => patch<{automation:ScheduledWorkRecord}>(`/product/automations/${encodeURIComponent(id)}`,body),
+  deleteScheduledWork: (id:string) => request(`/product/automations/${encodeURIComponent(id)}`,{method:"DELETE"}).then(res=>json<{deleted:{id:string}}>(res)),
+  scheduledWorkRuns: (id:string) => get<{runs:ScheduledWorkRun[]}>(`/product/automations/${encodeURIComponent(id)}/runs`),
   chatTasks: (limit = 20) => get<{ tasks: AiTaskRecord[] }>(`/product/chat/tasks?limit=${limit}`),
   chatTask: (id: string) => get<AiTaskDetail>(`/product/chat/tasks/${encodeURIComponent(id)}`),
   chatConversations: () => get<{ conversations: AiConversationRecord[] }>("/product/chat/conversations?limit=50"),

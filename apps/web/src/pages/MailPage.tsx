@@ -1,3 +1,4 @@
+import { ScheduledWorkPanel } from "../components/ai/ScheduledWorkPanel";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Inbox } from "lucide-react";
 import { api, type BulkMailAction, type ComposeAttachment, type FullMessage, type MessageSummary, type ProductSettings, type SendResult } from "../api";
@@ -19,7 +20,7 @@ import { FilesPage } from "./FilesPage";
 import { ChatPanel } from "../components/ai/ChatPanel";
 
 type MobileView = "messages" | "reader";
-type WorkspaceSection = "mail" | "contacts" | "calendar" | "settings" | "files" | "chat";
+type WorkspaceSection = "mail" | "contacts" | "calendar" | "settings" | "files" | "chat" | "scheduled" | "scheduled";
 const pageSize = 50;
 const fallbackTemplateKey = "none";
 const parseRecipients = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
@@ -129,7 +130,7 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
   const selectAccount = useCallback((id: string) => { const next = accounts.find((item) => item.id === id); if (!next) return; shellSelectAccount(id); setFolder("Inbox"); setSearch(""); setOpen(null); setSelectedIds(new Set()); setLastSend(null); setMobileView("messages"); setFoldersOpen(false); }, [accounts, shellSelectAccount]);
   const selectFolder = (name: Folder) => { setWorkspaceSection("mail"); setFolder(name); setSearch(""); setFoldersOpen(false); setOpen(null); setSelectedIds(new Set()); setMobileView("messages"); if (account) void loadFolder(account.id, name); };
   const refresh = useCallback(() => { if (account) { void loadFolder(account.id, folder); void loadFolderCounts(account.id); } }, [account, folder, loadFolder, loadFolderCounts]);
-  const openWorkspaceSection = useCallback((section: "contacts" | "calendar" | "settings" | "files" | "chat") => {
+  const openWorkspaceSection = useCallback((section: "contacts" | "calendar" | "settings" | "files" | "chat" | "scheduled") => {
     setFoldersOpen(false);
     setWorkspaceSection(section);
     setOpen(null);
@@ -151,14 +152,14 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
 
     const onWorkspaceOpen = (event: Event) => {
       const section = (event as CustomEvent<{ section?: WorkspaceSection }>).detail?.section;
-      if (section === "mail" || section === "contacts" || section === "calendar" || section === "settings" || section === "files" || section === "chat") {
+      if (section === "mail" || section === "contacts" || section === "calendar" || section === "settings" || section === "files" || section === "chat" || section === "scheduled") {
         openFromMenu(section);
       }
     };
     window.addEventListener("gsw-workspace-open", onWorkspaceOpen as EventListener);
     return () => window.removeEventListener("gsw-workspace-open", onWorkspaceOpen as EventListener);
   }, []);
-  const prefetchWorkspaceSection = useCallback((section: "contacts" | "calendar" | "settings" | "files" | "chat") => {
+  const prefetchWorkspaceSection = useCallback((section: "contacts" | "calendar" | "settings" | "files" | "chat" | "scheduled") => {
     if (section === "contacts") api.prefetchContactsPage();
     if (section === "settings") api.prefetchSettings();
     if (section === "calendar" && account) {
@@ -422,6 +423,7 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
         <div className="gsw-operational-surface" hidden={workspaceSection !== "settings"}><SettingsPage embedded /></div>
         <div className="gsw-operational-surface" hidden={workspaceSection !== "files"}><FilesPage embedded /></div>
         <div className="gsw-operational-surface" hidden={workspaceSection !== "chat"}><ChatPanel /></div>
+        <div className="gsw-operational-surface" hidden={workspaceSection !== "scheduled"}><ScheduledWorkPanel accountId={account?.id} active={workspaceSection === "scheduled"} /></div>
       </section>
     </main>
     {compose && <ComposeWindow mode={composeMode} minimized={composeMinimized} to={to} cc={cc} bcc={bcc} subject={subject} html={html} attachments={attachments} persistedAttachments={persistedAttachments} attachmentSyncing={attachmentSyncing} sending={sending} draftStatus={draftStatus} sendError={sendError} sendNote={lastSend ? `${lastSend.status === "scheduled" ? "Scheduled" : "Sent"} · ${lastSend.status}` : undefined} defaultTimeZone={browserTimeZone()} onToChange={(value) => { setTo(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onCcChange={(value) => { setCc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onBccChange={(value) => { setBcc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onSubjectChange={(value) => { setSubject(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onHtmlChange={(value) => { setHtml(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onAttachmentsChange={changeAttachments} onAttachStoredFiles={attachStoredFiles} onRemovePersistedAttachment={(attachment) => { void removePersisted(attachment); }} onMinimize={() => { void saveDraft(); setComposeMinimized((current) => !current); }} onClose={() => { void saveDraft(true); setCompose(false); }} onSubmit={() => void runSend()} onSchedule={(schedule) => void runSchedule(schedule)} onRetry={() => void runSend()} onUndo={lastSend ? () => void runUndo() : undefined} />}
