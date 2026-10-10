@@ -829,11 +829,28 @@ async function prepareNewConversation(input: {
     metadata: { accountId: input.accountId ?? null, attachments: attachmentSummaries },
   });
 
+  // Store absolute instants in UTC, but explicitly tell the model the user's wall-clock time.
+  // A UTC ISO timestamp must never be described as the user's local time.
+  const serverNow = new Date();
+  let localClock = "unknown";
+  if (input.timeZone) {
+    try {
+      localClock = new Intl.DateTimeFormat("en-US", {
+        timeZone: input.timeZone, year: "numeric", month: "long", day: "numeric",
+        hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true,
+        timeZoneName: "short",
+      }).format(serverNow);
+    } catch {
+      // Invalid or unsupported client timezone: don't mislabel UTC as local.
+    }
+  }
   const runtimeContext = [
     "GSW runtime context for this turn:",
     `Time zone: ${input.timeZone ?? "unknown"}`,
-    `Server current date/time (UTC): ${new Date().toISOString()}`,
-    `User local date/time: ${input.localDateTime ?? "unknown"}`,
+    `Current server instant (UTC, not local time): ${serverNow.toISOString()}`,
+    `Current local date and time in the user time zone: ${localClock}`,
+    `Client timestamp (may be UTC or include an offset; do not use as local wall time): ${input.localDateTime ?? "unknown"}`,
+    "For current time, today, tomorrow, and scheduling use the current local date/time above, never the UTC hour. If local clock is unknown, state the limitation rather than treating UTC as local.",
     "GSW file tools can extract provider-neutral document content for the selected AI model. Some advanced media/artifact operations may require an additional configured service.",
     `Local PDF generation: available. Image generation: ${config.ai.huggingFaceApiToken ? "FLUX via Hugging Face" : config.ai.openaiApiKey ? "OpenAI" : "not configured"}.`,
     "Use this context when interpreting relative dates, scheduling requests, or file capabilities. Do not mention this hidden runtime context unless it is directly relevant.",
