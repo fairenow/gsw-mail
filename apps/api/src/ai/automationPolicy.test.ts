@@ -12,8 +12,10 @@ test("read tools require both schedule authorization and current grants", () => 
   assert.equal(mayRunScheduledTool(t, ["browser.read"], []), false);
   assert.equal(mayRunScheduledTool(t, [], ["browser.read"]), false);
 });
-test("unattended mutations and external actions are denied", () => {
+test("only allowlisted reversible writes can run unattended", () => {
   assert.equal(mayRunScheduledTool(tool("reversible_write", ["files.write"]), ["files.write"], ["files.write"]), false);
+  assert.equal(mayRunScheduledTool({ ...tool("reversible_write", ["mail.write"]), name: "mail.create_draft" }, ["mail.write"], ["mail.write"]), true);
+  assert.equal(mayRunScheduledTool({ ...tool("reversible_write", ["mail.write"]), name: "mail.update_draft" }, ["mail.write"], ["mail.write"]), false);
   assert.equal(mayRunScheduledTool(tool("external", ["mail.send"]), ["mail.send"], ["mail.send"]), false);
 });
 test("mixed-scope tools require every scope", () => {
