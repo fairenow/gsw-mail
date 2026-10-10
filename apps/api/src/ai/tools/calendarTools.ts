@@ -78,6 +78,7 @@ const eventInput = z.object({
   sendSchedulingMessages: z.boolean().default(false),
   timeZone: z.string().max(100).optional(),
   allDay: z.boolean().default(false),
+  emailReminderMinutes: z.array(z.number().int().min(1).max(10080)).max(8).optional(),
 });
 
 const writableEngine = (ctx: AgentExecutionContext) => getUserEngine({
@@ -99,6 +100,7 @@ const calendarWriteSchema: Record<string, unknown> = {
     sendSchedulingMessages: { type: "boolean", description: "Whether to notify attendees; explicit approval is required" },
     timeZone: { type: "string" },
     allDay: { type: "boolean" },
+    emailReminderMinutes: { type: "array", items: { type: "integer", minimum: 1, maximum: 10080 }, maxItems: 8, description: "Owner-only email reminders, minutes before the event. Defaults to 1440 and 30; empty array disables reminders." },
   },
   required: ["calendarId","title","start","durationMinutes"],
   additionalProperties: false,
