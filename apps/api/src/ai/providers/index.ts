@@ -22,8 +22,8 @@ const providers: Record<AiProviderId, AiProvider> = {
       } catch (error) {
         // Provider inference only: agent tools execute separately after a valid response.
         // Never fail over on unexpected application errors or authorization failures.
-        if (!(error instanceof HttpError) || ![429, 502, 503, 504].includes(error.statusCode)) throw error;
-        console.warn("[gsw-ai] Modal Qwen unavailable; attempting Hetzner Qwen fallback", { status: error.statusCode });
+        if (!(error instanceof HttpError) || ![429, 502, 503, 504].includes(error.status)) throw error;
+        console.warn("[gsw-ai] Modal Qwen unavailable; attempting Hetzner Qwen fallback", { status: error.status });
         return hetznerProvider.run(input);
       }
     },
