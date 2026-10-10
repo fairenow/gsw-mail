@@ -3,7 +3,7 @@
  * No text content, URL query strings, document titles, form values or raw coordinates.
  */
 type EventType = "page_view" | "click" | "scroll_depth" | "page_exit" | "visibility" | "web_vital";
-type Event = { id: string; type: EventType; path: string; occurredAt: string; sessionId: string; visitorId: string; metadata?: Record<string,string|number|boolean> };
+type AnalyticsEvent = { id: string; type: EventType; path: string; occurredAt: string; sessionId: string; visitorId: string; metadata?: Record<string,string|number|boolean> };
 const UUID = () => crypto.randomUUID();
 const SESSION_KEY = "gsw_analytics_session";
 const VISITOR_KEY = "gsw_analytics_visitor";
@@ -25,7 +25,7 @@ export function startEngagementAnalytics(): () => void {
   const visitorId=getId(localStorage,VISITOR_KEY),sessionId=getId(sessionStorage,SESSION_KEY);
   let currentScreen="";
   const resolvedPath=()=>path()==="/mail"&&currentScreen?"/mail/"+currentScreen:path();
-  let pending:Event[]=[];let previousPath=resolvedPath();let enteredAt=Date.now();let maxScroll=0;let lastActive=Date.now();
+  let pending:AnalyticsEvent[]=[];let previousPath=resolvedPath();let enteredAt=Date.now();let maxScroll=0;let lastActive=Date.now();
   const milestones=new Set<number>();let timer:number|undefined;
   const queue=(type:EventType,metadata?:Record<string,string|number|boolean>)=>{
     if (pending.length>=100) pending.shift();
@@ -47,7 +47,7 @@ export function startEngagementAnalytics(): () => void {
     if(next===previousPath) return;
     exit();previousPath=next;enteredAt=Date.now();maxScroll=0;milestones.clear();queue("page_view");
   };
-  const screen=(e:Event)=>{const name=(e as CustomEvent<{screen?:string}>).detail?.screen;if(typeof name==="string"&&/^[a-zA-Z0-9/_-]{1,64}$/.test(name)){currentScreen=name;route();}};
+  const screen=(e:globalThis.Event)=>{const name=(e as CustomEvent<{screen?:string}>).detail?.screen;if(typeof name==="string"&&/^[a-zA-Z0-9/_-]{1,64}$/.test(name)){currentScreen=name;route();}};
   const click=(e:MouseEvent)=>{
     if(!(e.target instanceof Element))return;
     const target=safeTarget(e.target);
