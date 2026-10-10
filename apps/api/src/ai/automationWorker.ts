@@ -1,3 +1,4 @@
+import { deliverAutomationSummaryEmail } from "./automationSummaryEmail.js";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { inboundMessages } from "../db/schema.js";
@@ -255,6 +256,17 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
             result: content,
             conversationId: automation.conversationId,
           });
+          if (automation.accountId) {
+            try {
+              const delivery = await deliverAutomationSummaryEmail({
+                automationId:automation.id,runId:automationRun.id,accountId:automation.accountId,
+                title:automation.title,summary:content
+              });
+              if (delivery === "accepted") console.info("[ai:automation] owner summary accepted by relay",{automationId:automation.id,runId:automationRun.id});
+            } catch (deliveryError) {
+              console.error("[ai:automation] owner summary delivery failed",{automationId:automation.id,runId:automationRun.id,error:deliveryError});
+            }
+          }
         } catch (error) {
           if (aiRunId) await failAiRun(aiRunId, error).catch(() => undefined);
           await failAutomationRun({
