@@ -1,3 +1,4 @@
+import { replaceEventEmailReminders, cancelEventEmailReminders } from "../../calendar/emailReminders.js";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db/client.js";
@@ -124,6 +125,7 @@ export const calendarEventCreateTool: AgentToolDefinition = {
       const conflicts = computeCalendarConflicts(existing, input.start, conflictEnd);
       if (conflicts.length) return { ok:false, toolCallId, error:{code:"calendar_conflict",message:"This time overlaps an existing event. Review the schedule before creating it.",retryable:false},audit:audit(ctx,startedAt) };
       const event = await engine.createCalendarEvent(ctx.accountId, input);
+      await replaceEventEmailReminders({ accountId: ctx.accountId, eventId: event.engineId, title: event.title, start: event.start, minutes: input.emailReminderMinutes });
       return success(ctx, toolCallId, startedAt, { event, invitedAttendees: input.sendSchedulingMessages, requiresReview: false });
     } catch (error) { return failed(ctx, toolCallId, startedAt, error); }
   },
@@ -163,6 +165,7 @@ export const calendarEventUpdateTool: AgentToolDefinition = {
       const conflicts = computeCalendarConflicts(existing, patch.start, conflictEnd, eventId);
       if (conflicts.length) return { ok:false, toolCallId, error:{code:"calendar_conflict",message:"This time overlaps an existing event. Review the schedule before changing it.",retryable:false},audit:audit(ctx,startedAt) };
       const event = await engine.updateCalendarEvent(ctx.accountId, eventId, patch);
+      await replaceEventEmailReminders({ accountId: ctx.accountId, eventId, title: event.title, start: event.start, minutes: input.emailReminderMinutes });
       return success(ctx, toolCallId, startedAt, { event });
     } catch (error) { return failed(ctx, toolCallId, startedAt, error); }
   },
@@ -180,6 +183,7 @@ export const calendarEventDeleteTool: AgentToolDefinition = {
       const { eventId } = z.object({ eventId: z.string().min(1).max(500) }).parse(rawInput);
       const engine = await writableEngine(ctx);
       await engine.destroyCalendarEvent(ctx.accountId, eventId);
+      await cancelEventEmailReminders(ctx.accountId, eventId);
       return success(ctx, toolCallId, startedAt, { deleted: true, eventId });
     } catch (error) { return failed(ctx, toolCallId, startedAt, error); }
   },
