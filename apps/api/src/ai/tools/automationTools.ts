@@ -95,8 +95,11 @@ export const automationCreateTool: AgentToolDefinition = {
   risk: "external",
   async execute(ctx, rawInput, toolCallId) {
     const startedAt = new Date().toISOString();
+    let stage = "validate_input";
+    let createdAutomationId: string | null = null;
     try {
       const input = createInput.parse(rawInput);
+      stage = "persist_automation";
       const automation = await createAutomation({
         userId: ctx.userId,
         accountId: ctx.accountId,
@@ -107,10 +110,13 @@ export const automationCreateTool: AgentToolDefinition = {
         schedule: input.schedule,
         allowedScopes: input.allowedScopes,
       });
+      createdAutomationId = automation.id;
+      stage = "configure_email_summary";
       if (input.emailSummaryToOwner) {
         if (!ctx.accountId) throw new Error("An attached mailbox is required for owner email summaries");
         await setAutomationSummaryEmailPreference(automation.id, ctx.accountId, true);
       }
+      stage = "completed";
       return success(ctx, toolCallId, startedAt, {
         id: automation.id,
         title: automation.title,
@@ -120,6 +126,19 @@ export const automationCreateTool: AgentToolDefinition = {
         schedule: automation.schedule,
       });
     } catch (error) {
+      const rawCode = error && typeof error === "object" && "code" in error ? error.code : undefined;
+      const code = typeof rawCode === "string" && /^[a-zA-Z0-9_]{2,40}$/.test(rawCode) ? rawCode : undefined;
+      const cause = error && typeof error === "object" && "cause" in error ? error.cause : undefined;
+      const causeCode = cause && typeof cause === "object" && "code" in cause && typeof cause.code === "string" && /^[a-zA-Z0-9_]{2,40}$/.test(cause.code) ? cause.code : undefined;
+      console.error(JSON.stringify({
+        event: "gsw.automation.create.failed",
+        stage,
+        errorType: error instanceof Error ? error.name : "Unknown",
+        ...(code ? { dbCode: code } : {}),
+        ...(causeCode ? { causeCode } : {}),
+        ...(createdAutomationId ? { createdAutomationId } : {}),
+        toolCallId,
+      }));
       return failure(ctx, toolCallId, startedAt, error);
     }
   },
