@@ -832,6 +832,7 @@ async function prepareNewConversation(input: {
   const runtimeContext = [
     "GSW runtime context for this turn:",
     `Time zone: ${input.timeZone ?? "unknown"}`,
+    `Server current date/time (UTC): ${new Date().toISOString()}`,
     `User local date/time: ${input.localDateTime ?? "unknown"}`,
     "GSW file tools can extract provider-neutral document content for the selected AI model. Some advanced media/artifact operations may require an additional configured service.",
     `Local PDF generation: available. Image generation: ${config.ai.huggingFaceApiToken ? "FLUX via Hugging Face" : config.ai.openaiApiKey ? "OpenAI" : "not configured"}.`,
