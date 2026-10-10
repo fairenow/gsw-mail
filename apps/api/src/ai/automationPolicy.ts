@@ -17,7 +17,9 @@ export function mayRunScheduledTool(
   tool: AgentToolDefinition,
   allowedScopes: readonly string[],
   activeScopes: readonly string[],
+  sendApproved = false,
 ): boolean {
+  if (tool.name === "mail.send_draft") return sendApproved && tool.requiredScopes.every(scope => allowedScopes.includes(scope) && activeScopes.includes(scope));
   if (tool.risk === "external") return false;
   if (tool.risk === "reversible_write" && !SCHEDULED_WRITES.has(tool.name)) return false;
   if (tool.requiredScopes.some(scope => NEVER_UNATTENDED.has(scope))) return false;
@@ -29,6 +31,7 @@ export function scheduledToolDefinitions(
   tools: readonly AgentToolDefinition[],
   allowedScopes: readonly string[],
   activeScopes: readonly string[],
+  sendApproved = false,
 ): AgentToolDefinition[] {
-  return tools.filter(tool => mayRunScheduledTool(tool, allowedScopes, activeScopes));
+  return tools.filter(tool => mayRunScheduledTool(tool, allowedScopes, activeScopes, sendApproved));
 }
