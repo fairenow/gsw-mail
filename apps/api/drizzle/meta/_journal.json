@@ -99,6 +99,13 @@
       "when": 1791590000000,
       "tag": "0013_scheduled_send_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791654000000,
+      "tag": "0028_engagement_events",
+      "breakpoints": true
     }
   ]
 }

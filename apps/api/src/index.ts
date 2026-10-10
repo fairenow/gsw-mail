@@ -12,6 +12,7 @@ import { getAutomationWorker } from "./ai/automationWorker.js";
 import { getAgentTaskRunner } from "./ai/taskRunner.js";
 import { ensureEmailTemplateSchema } from "./mail/ensureTemplateSchema.js";
 import { ensureFilesSchema } from "./files/ensureFilesSchema.js";
+import { ensureEngagementAnalyticsSchema } from "./analytics/ensureSchema.js";
 
 const app = buildApp();
 const worker = getOutboundWorker();
@@ -26,6 +27,7 @@ async function main() {
   await ensureAiAgentSchema();
   await ensureEmailTemplateSchema();
   await ensureFilesSchema();
+  await ensureEngagementAnalyticsSchema();
   await ensureWebOAuthTestClient();
   worker.start();
   const reminderTimer = setInterval(() => { void deliverDueCalendarEmailReminders().catch(error => app.log.error(error, "calendar reminder worker failed")); }, 60_000);

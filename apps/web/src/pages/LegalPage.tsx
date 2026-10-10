@@ -23,6 +23,7 @@ const privacySections: LegalSection[] = [
       "Workspace and administrative data, such as domains, mailbox assignments, roles, permissions, aliases, organization membership, and configuration settings.",
       "Device and technical information, such as IP address, browser or app type, operating system, device identifiers, push-notification tokens, logs, diagnostics, and security events.",
       "Usage information, such as features used, synchronization activity, login activity, delivery events, and actions taken within the Service.",
+      "First-party, privacy-minimized engagement analytics, including visited screen paths, anonymous browser and session identifiers, broad click categories, scroll milestones, and browser performance measurements. We do not use these analytics to record the contents of messages or form fields.",
       "Information you send to us when you contact support, report a problem, or otherwise communicate with us.",
     ],
   },

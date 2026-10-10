@@ -22,6 +22,7 @@ import "./styles/legal.css";
 import "./styles/rsvp.css";
 import { AuthGate } from "./AuthGate";
 import { App } from "./App";
+import { startEngagementAnalytics } from "./lib/engagementAnalytics";
 
 const PUBLIC_PATHS = new Set(["/", "/privacy", "/terms", "/account-deleted", "/calendar/rsvp", "/oauth/connect", "/oauth/test", "/oauth/test/callback"]);
 
@@ -37,6 +38,8 @@ function Root() {
   const publicPath = PUBLIC_PATHS.has(path);
   return publicPath ? <App /> : <AuthGate key={path}><App /></AuthGate>;
 }
+
+startEngagementAnalytics();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
