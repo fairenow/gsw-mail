@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createAutomation, deleteAutomation, listAutomations, updateAutomation } from "../automationService.js";
+import { createAutomation, deleteAutomation, listAutomations, updateAutomation, approveAutomationSending, revokeAutomationSending } from "../automationService.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
 
 const scheduleSchema = z.object({
@@ -234,9 +234,63 @@ export const automationDeleteTool: AgentToolDefinition = {
   },
 };
 
+export const automationApproveSendingTool: AgentToolDefinition = {
+  name: "automations.approve_sending",
+  description: "Request explicit user confirmation to authorize an existing scheduled task to send only to the exact approved email addresses. This requires an interactive confirmation; never assume approval from the task instruction. No daily volume limit is imposed.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      automationId: { type: "string", description: "Existing automation UUID" },
+      allowedRecipients: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 100, description: "Exact email addresses allowed for unattended sends, including CC/BCC." },
+    },
+    required: ["automationId", "allowedRecipients"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["automations.write", "mail.send"],
+  risk: "external",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = z.object({
+        automationId: z.string().uuid(),
+        allowedRecipients: z.array(z.string().email()).min(1).max(100),
+      }).parse(rawInput);
+      const automation = await approveAutomationSending({
+        userId: ctx.userId,
+        automationId: input.automationId,
+        allowedRecipients: input.allowedRecipients,
+      });
+      return success(ctx, toolCallId, startedAt, { id: automation.id, sendPolicy: automation.sendPolicy });
+    } catch (error) { return failure(ctx, toolCallId, startedAt, error); }
+  },
+};
+
+export const automationRevokeSendingTool: AgentToolDefinition = {
+  name: "automations.revoke_sending",
+  description: "Immediately revoke unattended email sending for an existing scheduled task.",
+  inputSchema: {
+    type: "object",
+    properties: { automationId: { type: "string" } },
+    required: ["automationId"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["automations.write"],
+  risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = z.object({ automationId: z.string().uuid() }).parse(rawInput);
+      const automation = await revokeAutomationSending(ctx.userId, input.automationId);
+      return success(ctx, toolCallId, startedAt, { id: automation.id, sendPolicy: null });
+    } catch (error) { return failure(ctx, toolCallId, startedAt, error); }
+  },
+};
+
 export const automationTools: AgentToolDefinition[] = [
   automationCreateTool,
   automationListTool,
   automationUpdateTool,
   automationDeleteTool,
+  automationApproveSendingTool,
+  automationRevokeSendingTool,
 ];
