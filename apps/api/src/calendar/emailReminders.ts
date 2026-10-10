@@ -58,6 +58,11 @@ export async function replaceEventEmailReminders(input: {
   finally { client.release(); }
 }
 
+export async function getEventEmailReminderMinutes(accountId:string,eventId:string):Promise<number[]> {
+  const result=await pool.query<{minutes_before:number}>("SELECT minutes_before FROM calendar_email_reminders WHERE account_id=$1 AND event_id=$2 AND status IN ('pending','sending','sent') ORDER BY minutes_before DESC",[accountId,eventId]);
+  return result.rows.map(row=>row.minutes_before);
+}
+
 export async function cancelEventEmailReminders(accountId:string,eventId:string):Promise<void> {
   await pool.query("UPDATE calendar_email_reminders SET status='cancelled' WHERE account_id=$1 AND event_id=$2 AND status IN ('pending','failed')",[accountId,eventId]);
 }
