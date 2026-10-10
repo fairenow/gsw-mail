@@ -1,3 +1,4 @@
+import { replaceEventEmailReminders, cancelEventEmailReminders, getEventEmailReminderMinutes } from "../calendar/emailReminders.js";
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -41,7 +42,7 @@ const settingsSchema = z.object({ general: z.object({
 }).catchall(customValue).optional(), compose: z.record(z.string(), customValue).optional(), contacts: z.record(z.string(), customValue).optional(), ai: z.record(z.string(), customValue).optional() });
 const signatureSchema = z.object({ signatureHtml: z.string().max(100_000), enabled: z.boolean(), onNew: z.boolean(), onReply: z.boolean(), onForward: z.boolean(), position: z.enum(["beforeQuotedText", "afterQuotedText"]) });
 const importSchema = z.object({ filename: z.string().min(1).max(255), headers: z.array(z.string()).min(1), rows: z.array(z.record(z.string(), z.string())).max(10_000), mapping: z.record(z.string(), z.string()), duplicateBehavior: z.enum(["skip", "merge", "overwrite"]).default("merge") });
-const calendarEventSchema = z.object({ accountId: z.string().min(1), calendarId: z.string().min(1), title: z.string().trim().min(1).max(500), description: z.string().max(20_000).optional(), start: z.string().min(1), durationMinutes: z.number().int().min(1).max(7 * 24 * 60), location: z.string().max(1_000).optional(), meetingLink: z.string().url().max(2_000).optional(), attendees: z.array(z.string().email()).max(50).default([]), sendSchedulingMessages: z.boolean().default(false), timeZone: z.string().max(100).optional(), allDay: z.boolean().default(false) });
+const calendarEventSchema = z.object({ accountId: z.string().min(1), calendarId: z.string().min(1), title: z.string().trim().min(1).max(500), description: z.string().max(20_000).optional(), start: z.string().min(1), durationMinutes: z.number().int().min(1).max(7 * 24 * 60), location: z.string().max(1_000).optional(), meetingLink: z.string().url().max(2_000).optional(), attendees: z.array(z.string().email()).max(50).default([]), sendSchedulingMessages: z.boolean().default(false), timeZone: z.string().max(100).optional(), allDay: z.boolean().default(false), emailReminderMinutes: z.array(z.number().int().min(1).max(10080)).max(8).optional() });
 
 export default async function productRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
@@ -158,11 +159,18 @@ export default async function productRoutes(app: FastifyInstance) {
     return { events: engineContext ? await engineContext.engine.listCalendarEvents(engineContext.accountId, after, before) : [] };
   });
 
+  app.get<{ Params: { id: string }; Querystring: { accountId?: string } }>("/product/calendar-events/:id/reminders", async (req) => {
+    const context = await getCalendarEngineContext(req.user?.id, req.authUserId, req.headers as Record<string,string>, req.query);
+    if (!context) throw notFound("mail account not found");
+    return { minutes: await getEventEmailReminderMinutes(context.accountId, req.params.id) };
+  });
+
   app.post("/product/calendar-events", async (req, reply) => {
     const input = calendarEventSchema.parse(req.body);
     const engineContext = await getCalendarEngineContext(req.user?.id, req.authUserId, req.headers as Record<string, string>, input);
     if (!engineContext) throw notFound("mail account not found");
     const event = await engineContext.engine.createCalendarEvent(engineContext.accountId, input);
+    await replaceEventEmailReminders({accountId:engineContext.accountId,eventId:event.engineId,title:event.title,start:event.start,minutes:input.emailReminderMinutes});
     reply.code(201);
     return event;
   });
@@ -171,13 +179,16 @@ export default async function productRoutes(app: FastifyInstance) {
     const input = calendarEventSchema.parse(req.body);
     const engineContext = await getCalendarEngineContext(req.user?.id, req.authUserId, req.headers as Record<string, string>, input);
     if (!engineContext) throw notFound("mail account not found");
-    return engineContext.engine.updateCalendarEvent(engineContext.accountId, req.params.id, input);
+    const event = await engineContext.engine.updateCalendarEvent(engineContext.accountId, req.params.id, input);
+    await replaceEventEmailReminders({accountId:engineContext.accountId,eventId:event.engineId,title:event.title,start:event.start,minutes:input.emailReminderMinutes});
+    return event;
   });
 
   app.delete<{ Params: { id: string }; Querystring: { accountId?: string } }>("/product/calendar-events/:id", async (req) => {
     const engineContext = await getCalendarEngineContext(req.user?.id, req.authUserId, req.headers as Record<string, string>, req.query);
     if (!engineContext) throw notFound("mail account not found");
     await engineContext.engine.destroyCalendarEvent(engineContext.accountId, req.params.id);
+    await cancelEventEmailReminders(engineContext.accountId, req.params.id);
     return { deleted: true, eventId: req.params.id };
   });
 
