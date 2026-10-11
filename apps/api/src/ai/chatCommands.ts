@@ -45,8 +45,9 @@ export async function getChatCommand(userId: string, commandId: string) {
     .where(eq(aiIdempotencyKeys.key, keyFor(userId, commandId))).limit(1);
   if (!record || record.userId !== userId || record.toolName !== "chat.command") return null;
   const result = asRecord(record.result);
+  const stale = record.status === "reserved" && Date.now() - new Date(record.updatedAt).getTime() > 30 * 60 * 1000;
   return {
-    status: record.status === "completed" ? "completed" : record.status === "uncertain" ? "uncertain" : "processing",
+    status: record.status === "completed" ? "completed" : record.status === "uncertain" || stale ? "uncertain" : "processing",
     conversationId: result.conversationId ?? null,
     response: record.status === "completed" ? result.response ?? null : null,
   };
