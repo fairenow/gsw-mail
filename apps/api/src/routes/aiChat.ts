@@ -154,7 +154,8 @@ type ChatStreamStatus = {
 type ChatStreamEvent =
   | ChatStreamStatus
   | { type: "result"; response: ChatTurnResult }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "pending"; commandId: string; status: string };
 
 type ChatStreamEmitter = (event: ChatStreamStatus) => void;
 
@@ -1211,13 +1212,13 @@ export default async function aiChatRoutes(app: FastifyInstance) {
     // Reserve before appending a user message or executing any tool. A reused command
     // cannot execute twice, even if an earlier SSE response was lost.
     const reserved = input.commandId ? await reserveChatCommand({
-      userId: req.user!.id, commandId: input.commandId, accountId: input.accountId,
+      userId: req.user!.id, commandId: input.commandId, ...(input.accountId ? { accountId: input.accountId } : {}),
       payload: { accountId: input.accountId, conversationId: input.conversationId, messages: input.messages, assetIds: input.assetIds },
     }) : null;
     if (reserved && reserved.status !== "new") {
       const stream = openEventStream(reply);
       if (reserved.status === "completed" && reserved.record.response) {
-        stream.send({ type: "result", response: reserved.record.response });
+        stream.send({ type: "result", response: reserved.record.response as ChatTurnResult });
       } else {
         stream.send({ type: "pending", commandId: input.commandId, status: reserved.status });
       }
