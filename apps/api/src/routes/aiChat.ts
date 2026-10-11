@@ -272,6 +272,29 @@ async function runConversationTurn(input: {
     };
   }
 
+  // Reconstruct the currently active draft from verified tool results and the
+  // selected mailbox on every turn. The draft survives the transcript window.
+  if (input.accountId && /\\b(draft|email|send|subject|recipient|cc|bcc|revise|edit)\\b/i.test(latestUserText)) {
+    const workingDraft = await workingDraftForConversation({
+      userId: input.userId, authUserId: input.authUserId,
+      conversationId: input.conversationId, headers: input.headers,
+    }).catch(() => null);
+    if (workingDraft && workingDraft.accountId === input.accountId) {
+      input.providerMessages.splice(Math.max(1, input.providerMessages.length - 1), 0, {
+        role: "user",
+        content: [
+          "Verified ongoing working item from the selected mailbox (not a new user request):",
+          `Existing draft ID for tools: ${workingDraft.draftId}`,
+          `Subject: ${workingDraft.subject}`,
+          `Recipients: ${workingDraft.to.join(", ")}`,
+          `CC: ${workingDraft.cc.join(", ") || "none"}`,
+          `Current draft body: ${workingDraft.textBody.slice(0, 3500)}`,
+          "Revise this draft in place with mail.update_draft. Do not create another unless explicitly asked. Never include its internal ID in the visible response.",
+        ].join("\\n"),
+      });
+    }
+  }
+
   const provider = getAiProvider(capabilitySettings.modelProvider);
   const run = await startAiRun({
     conversationId: input.conversationId,
