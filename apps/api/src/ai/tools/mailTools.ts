@@ -314,6 +314,30 @@ export const mailSendDraftTool: AgentToolDefinition = {
   },
 };
 
+export const mailTrashDraftTool: AgentToolDefinition = {
+  name: "mail.trash_draft",
+  description: "Move one existing draft to Trash (recoverable). Only use for a user-requested deletion after finding the draft in Drafts. Requires explicit confirmation before execution.",
+  inputSchema: {
+    type: "object",
+    properties: { draftId: { type: "string", description: "Actual draft message ID from mail.search or mail.read, never a guessed ID." } },
+    required: ["draftId"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["mail.write"],
+  // Confirmation is mandatory for the destructive intent even though moving to Trash is reversible.
+  risk: "external",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = sendDraftInput.parse(rawInput);
+      const mail = createMailService(ctx);
+      return success(ctx, toolCallId, startedAt, await mail.trashDraft(ctx.accountId, input.draftId));
+    } catch (error) {
+      return failure(ctx, toolCallId, startedAt, error);
+    }
+  },
+};
+
 export const agentMailTools: AgentToolDefinition[] = [
   mailActivityTool,
   mailSearchTool,
@@ -321,6 +345,7 @@ export const agentMailTools: AgentToolDefinition[] = [
   mailReadThreadTool,
   mailCreateDraftTool,
   mailUpdateDraftTool,
+  mailTrashDraftTool,
   mailSendDraftTool,
 ];
 
