@@ -329,6 +329,19 @@ export function createMailService(context: MailServiceContext) {
       return { engineId };
     },
 
+    async trashDraft(accountId: string, draftId: string) {
+      await requireAccountPermission(context.userId, accountId, "send");
+      const engine = await engineFor(accountId, "send");
+      const draft = await engine.getMessage(accountId, draftId);
+      if (!draft) throw notFound("draft not found");
+      // Never let an AI draft operation accidentally trash an Inbox/Sent message.
+      if (!/draft/i.test(draft.mailbox)) {
+        throw new Error("The selected message is not in Drafts. Nothing was deleted.");
+      }
+      await engine.move(accountId, [draftId], "Trash");
+      return { movedToTrash: true, subject: draft.subject };
+    },
+
     async sendDraft(accountId: string, draftId: string, clientRequestId?: string | undefined) {
       const account = await requireAccountPermission(context.userId, accountId, "send");
       const engine = await engineFor(accountId, "send");
