@@ -37,6 +37,7 @@ import { getAssetForUser } from "../files/service.js";
 import { getR2Object } from "../files/r2.js";
 import { analyzeStoredFile } from "../files/intelligence.js";
 import { config } from "../config.js";
+import { reserveChatCommand, updateChatCommand, getChatCommand } from "../ai/chatCommands.js";
 
 const chatAttachmentSchema = z.object({
   assetId: z.string().uuid(),
@@ -52,6 +53,7 @@ const chatMessagesSchema = z.array(z.object({
 })).min(1).max(24);
 
 const bodySchema = z.object({
+  commandId: z.string().uuid().optional(),
   conversationId: z.string().uuid().optional(),
   accountId: z.string().uuid().optional(),
   timeZone: z.string().trim().min(1).max(100).optional(),
@@ -1196,32 +1198,63 @@ export default async function aiChatRoutes(app: FastifyInstance) {
     });
   });
 
+  app.get("/product/chat/commands/:commandId", async (req, reply) => {
+    const { commandId } = z.object({ commandId: z.string().uuid() }).parse(req.params);
+    const command = await getChatCommand(req.user!.id, commandId);
+    if (!command) return reply.code(404).send({ error: "Chat command not found" });
+    return command;
+  });
+
   app.post("/product/chat/stream", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req, reply) => {
     const input = bodySchema.parse(req.body);
     if (input.accountId) await requireAccountPermission(req.user!.id, input.accountId, "read");
-    const prepared = await prepareNewConversation({
-      userId: req.user!.id,
-      accountId: input.accountId,
-      conversationId: input.conversationId,
-      messages: input.messages,
-      timeZone: input.timeZone,
-      localDateTime: input.localDateTime,
-      assetIds: input.assetIds,
-    });
+    // Reserve before appending a user message or executing any tool. A reused command
+    // cannot execute twice, even if an earlier SSE response was lost.
+    const reserved = input.commandId ? await reserveChatCommand({
+      userId: req.user!.id, commandId: input.commandId, accountId: input.accountId,
+      payload: { accountId: input.accountId, conversationId: input.conversationId, messages: input.messages, assetIds: input.assetIds },
+    }) : null;
+    if (reserved && reserved.status !== "new") {
+      const stream = openEventStream(reply);
+      if (reserved.status === "completed" && reserved.record.response) {
+        stream.send({ type: "result", response: reserved.record.response });
+      } else {
+        stream.send({ type: "pending", commandId: input.commandId, status: reserved.status });
+      }
+      stream.close();
+      return;
+    }
 
     const stream = openEventStream(reply);
+    let conversationId: string | undefined;
     try {
+      const prepared = await prepareNewConversation({
+        userId: req.user!.id,
+        accountId: input.accountId,
+        conversationId: input.conversationId,
+        messages: input.messages,
+        timeZone: input.timeZone,
+        localDateTime: input.localDateTime,
+        assetIds: input.assetIds,
+      });
+      conversationId = prepared.conversation.id;
+      if (reserved) await updateChatCommand(reserved.key, "reserved", { conversationId });
       const response = await runConversationTurn({
         userId: req.user!.id,
         authUserId: req.authUserId ?? req.user!.id,
         accountId: input.accountId,
         headers: req.headers as Record<string, string>,
-        conversationId: prepared.conversation.id,
+        conversationId,
         providerMessages: prepared.providerMessages,
         emit: stream.send,
       });
+      if (reserved) await updateChatCommand(reserved.key, "completed", { conversationId, response });
       stream.send({ type: "result", response });
     } catch (error) {
+      if (reserved) {
+        try { await updateChatCommand(reserved.key, "uncertain", { ...(conversationId ? { conversationId } : {}) }); }
+        catch (trackingError) { req.log.error({ trackingError }, "Could not persist Chat command failure state"); }
+      }
       stream.send({ type: "error", message: chatErrorText(reportChatError(error, { operation: "chat.stream", category: "chat", correlationId: error && typeof error === "object" && "gswRunId" in error && typeof error.gswRunId === "string" ? error.gswRunId : req.id })) });
     } finally {
       stream.close();
