@@ -1220,7 +1220,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       if (reserved.status === "completed" && reserved.record.response) {
         stream.send({ type: "result", response: reserved.record.response as ChatTurnResult });
       } else {
-        stream.send({ type: "pending", commandId: input.commandId, status: reserved.status });
+        stream.send({ type: "pending", commandId: input.commandId!, status: reserved.status });
       }
       stream.close();
       return;
