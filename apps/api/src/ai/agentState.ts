@@ -206,6 +206,8 @@ const sanitizeToolResult = (data: unknown): Record<string, unknown> | null => {
   const summary: Record<string, unknown> = {};
   if (typeof value.count === "number") summary.count = value.count;
   if (typeof value.messageId === "string") summary.messageId = value.messageId;
+  // Keep only the draft reference needed to resume an existing working item.
+  if (typeof value.engineId === "string") summary.engineId = value.engineId;
   if (typeof value.threadId === "string") summary.threadId = value.threadId;
   if (Array.isArray(value.messages)) {
     summary.messageIds = value.messages
