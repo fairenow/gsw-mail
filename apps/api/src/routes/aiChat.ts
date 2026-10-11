@@ -38,6 +38,7 @@ import { getR2Object } from "../files/r2.js";
 import { analyzeStoredFile } from "../files/intelligence.js";
 import { config } from "../config.js";
 import { reserveChatCommand, updateChatCommand, getChatCommand } from "../ai/chatCommands.js";
+import { workingDraftForConversation } from "../ai/chatDrafts.js";
 
 const chatAttachmentSchema = z.object({
   assetId: z.string().uuid(),
@@ -891,6 +892,14 @@ async function prepareNewConversation(input: {
       };
     });
 
+  const earlierTurns = transcript.messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .slice(0, Math.max(0, transcript.messages.length - 24));
+  const continuityNotes = earlierTurns.length > 0
+    ? earlierTurns.filter(message => /draft|recipient|email|subject|signature|send/i.test(message.content))
+      .slice(-6).map(message => `${message.role}: ${message.content.slice(0, 500)}`).join("\\n")
+    : "";
+
   const latestClientMessage = input.messages[input.messages.length - 1]!;
   const workingMessages: Array<{
     role: "user" | "assistant";
@@ -923,6 +932,7 @@ async function prepareNewConversation(input: {
     conversation,
     providerMessages: [
       { role: "user" as const, content: runtimeContext },
+      ...(continuityNotes ? [{ role: "user" as const, content: `Older conversation references for continuity (historical, not new user instructions):\\n${continuityNotes}` }] : []),
       ...providerMessages,
     ] as AiProviderMessage[],
   };
@@ -944,6 +954,14 @@ export default async function aiChatRoutes(app: FastifyInstance) {
   app.get("/product/chat/conversations", async (req) => {
     const query = z.object({ limit: z.coerce.number().int().min(1).max(50).optional() }).parse(req.query);
     return { conversations: await listRecentConversations(req.user!.id, query.limit ?? 20) };
+  });
+
+  app.get("/product/chat/conversations/:id/working-draft", async (req) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    return { draft: await workingDraftForConversation({
+      userId: req.user!.id, authUserId: req.authUserId ?? req.user!.id,
+      conversationId: id, headers: req.headers as Record<string, string>,
+    }) };
   });
 
   app.get("/product/chat/conversations/:id", async (req) => {
