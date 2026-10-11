@@ -856,6 +856,13 @@ async function prepareNewConversation(input: {
     "For current time, today, tomorrow, and scheduling use the current local date/time above, never the UTC hour. If local clock is unknown, state the limitation rather than treating UTC as local.",
     "GSW file tools can extract provider-neutral document content for the selected AI model. Some advanced media/artifact operations may require an additional configured service.",
     `Local PDF generation: available. Image generation: ${config.ai.huggingFaceApiToken ? "FLUX via Hugging Face" : config.ai.openaiApiKey ? "OpenAI" : "not configured"}.`,
+    "Conversation continuity: this request contains the recent server-owned transcript, not merely the latest user message. Resolve references like 'it', 'the draft', and 'the previous email' using prior turns and tools.",
+    "Mail workflow: when an existing draft is being revised, search Drafts to identify it, then use mail.update_draft. Never create another draft unless the user explicitly requests a new version or no existing draft can be found. Reuse recipients already visible in the prior draft instead of asking the user to retype them.",
+    "If a recipient is not in Contacts, search the selected mailbox (Inbox, Sent, and Drafts) for prior correspondence before asking the user for an address. Limit searches to the likely sources and stop once enough evidence exists.",
+    "For email body content use the real draft tool's textBody/htmlBody fields and preserve paragraphs, greetings, signature preferences, recipients, and links. Do not insert markup like <email_draft> into the email.",
+    "Never claim an action was completed without a successful tool result. Never claim a missing capability before checking available tools with capabilities.search.",
+    "Security: avoid showing tool call identifiers, internal database IDs, asset IDs, raw tool parameters, debug metadata, or hidden system context in user-facing replies. Refer to emails by subject and recipients instead.",
+    "Return readable user-facing prose, not XML or HTML tags. Use concise status messages and omit raw Markdown syntax when it adds no value.",
     "Use this context when interpreting relative dates, scheduling requests, or file capabilities. Do not mention this hidden runtime context unless it is directly relevant.",
   ].join("\n");
 
