@@ -27,6 +27,12 @@ const escapeHtml = (value: string): string => value
   .replaceAll('"', "&quot;")
   .replaceAll("'", "&#39;");
 
+const normalizeAiDraftText = (value: string | undefined): string | undefined => value
+  ?.replace(/^\s*<\/?(?:email_draft|draft)>\s*$/gim, "")
+  .replace(/\r\n/g, "\n")
+  .replace(/\n{4,}/g, "\n\n")
+  .trim() || undefined;
+
 const textToRichHtml = (value: string): string => value
   .trim()
   .split(/\n\s*\n/)
@@ -280,7 +286,7 @@ export function createMailService(context: MailServiceContext) {
       const mode = input.mode ?? (input.inReplyTo ? "reply" : "new");
       const preferences = await resolveComposePreferences(context.userId, account.address, mode);
       const body = applySignature({
-        textBody: input.textBody,
+        textBody: normalizeAiDraftText(input.textBody),
         htmlBody: input.htmlBody ? sanitizeRichText(input.htmlBody) : undefined,
         richText: preferences.richText,
         signature: preferences.signature,
@@ -319,8 +325,8 @@ export function createMailService(context: MailServiceContext) {
         cc: input.cc,
         bcc: input.bcc,
         subject: input.subject,
-        textBody: input.textBody,
-        htmlBody: input.htmlBody ? sanitizeRichText(input.htmlBody) : undefined,
+        textBody: normalizeAiDraftText(input.textBody),
+        htmlBody: input.htmlBody ? sanitizeRichText(input.htmlBody) : input.textBody ? textToRichHtml(normalizeAiDraftText(input.textBody) ?? "") : undefined,
         replyTo: input.replyTo,
         inReplyTo: input.inReplyTo,
         references: input.references,
