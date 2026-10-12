@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { conflict } from "../lib/errors.js";
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
+import { auth } from "../auth/better.js";
 import { contacts, domains, emailAccounts, emailSignatures, mailAccountMemberships, organizationMemberships, organizations, userSettings, users, workspaceSetupStates } from "../db/schema.js";
 
 export default async function accountRoutes(app: FastifyInstance) {
@@ -48,6 +49,23 @@ export default async function accountRoutes(app: FastifyInstance) {
     }, "account linkage diagnostics resolved");
 
     return diagnostics;
+  });
+
+  // Roles are derived from authenticated device sessions, never names or email guesses.
+  app.get("/api/account/device-session-roles", async (req) => {
+    const sessions = await auth.api.listDeviceSessions({ headers: new Headers(req.headers as Record<string, string>) });
+    const authIds = [...new Set(sessions.map(item => item.user.id))];
+    if (!authIds.length) return { admins: [] as string[] };
+    const linkedUsers = await db.select({ authUserId: users.authUserId, userId: users.id })
+      .from(users).where(inArray(users.authUserId, authIds));
+    if (!linkedUsers.length) return { admins: [] as string[] };
+    const memberships = await db.select({ userId: organizationMemberships.userId })
+      .from(organizationMemberships)
+      .where(and(inArray(organizationMemberships.userId, linkedUsers.map(user => user.userId)),
+        inArray(organizationMemberships.role, ["owner", "admin"]),
+        eq(organizationMemberships.status, "active")));
+    const memberIds = new Set(memberships.map(item => item.userId));
+    return { admins: linkedUsers.filter(item => memberIds.has(item.userId)).map(item => item.authUserId) };
   });
 
   app.get("/api/account/context", async (req) => {
