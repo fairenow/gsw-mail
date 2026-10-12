@@ -29,6 +29,7 @@ import aiAutomations from "./routes/aiAutomations.js";
 import contactSuggestions from "./routes/contactSuggestions.js";
 import templates from "./routes/templates.js";
 import templateAssetsPublic from "./routes/templateAssetsPublic.js";
+import { avatarLookup, publicAvatars } from "./routes/publicAvatars.js";
 import setup from "./routes/setup.js";
 import account from "./routes/account.js";
 import accountPassword from "./routes/accountPassword.js";
@@ -114,6 +115,8 @@ export function buildApp() {
   app.register(stalwartWebhooks);
   app.register(product);
   app.register(templateAssetsPublic);
+  app.register(publicAvatars);
+  app.register(avatarLookup);
   app.register(calendarRsvpPublic);
   app.register(calendarRsvp);
   app.register(aiChat);
