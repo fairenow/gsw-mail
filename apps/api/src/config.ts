@@ -25,8 +25,7 @@ const config = {
     pushJmapPassword: process.env.STALWART_PUSH_JMAP_PASSWORD,
   },
   outbound: {
-    relay: env("OUTBOUND_RELAY", "null"),
-    resendApiKey: process.env.RESEND_API_KEY,
+    relay: env("OUTBOUND_RELAY", "stalwart"),
   },
   auth: {
     identityProvider: env("IDENTITY_PROVIDER", "better-auth"),
@@ -172,15 +171,8 @@ if (isProduction) {
   if (config.files.freeQuotaBytes < 1 || config.files.maxUploadBytes < 1) {
     throw new Error("[config] file storage limits must be positive");
   }
-  if (config.outbound.relay === "null") {
-    throw new Error("[config] OUTBOUND_RELAY=null is not allowed in production; configure a real relay");
-  }
-  if (config.outbound.relay !== "resend" && config.outbound.relay !== "stalwart") {
-    throw new Error(`[config] unsupported OUTBOUND_RELAY=${config.outbound.relay}; expected resend or stalwart`);
-  }
-  if (config.outbound.relay === "resend") {
-    assertExplicit("RESEND_API_KEY", explicit("RESEND_API_KEY"));
-    assertNotPlaceholder("RESEND_API_KEY", config.outbound.resendApiKey!);
+  if (config.outbound.relay !== "stalwart") {
+    throw new Error("[config] OUTBOUND_RELAY must be stalwart; Resend is no longer supported");
   }
 }
 
