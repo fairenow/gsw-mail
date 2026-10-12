@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, LogOut, Mail, Plus, Settings, Users } from "lucide-react";
-import { getSession, listDeviceSessions, logout, switchDeviceSession, type DeviceSession } from "../../auth";
+import { getSession, listDeviceSessions, logout, revokeDeviceSession, switchDeviceSession, type DeviceSession } from "../../auth";
 import type { Account } from "../../api";
 import { getRememberedIdentities, setAuthPrefillEmail } from "../../lib/rememberedIdentities";
 import { SenderAvatar } from "./SenderAvatar";
@@ -13,13 +13,16 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
   const [deviceSessions, setDeviceSessions] = useState<DeviceSession[]>([]);
   const [currentAuthUserId, setCurrentAuthUserId] = useState<string | null>(null);
   const [switching, setSwitching] = useState<string | null>(null);
+  const [admins, setAdmins] = useState<string[]>([]);
+  const [sessionError, setSessionError] = useState<string | null>(null);
   const remembered = useMemo(() => getRememberedIdentities(), [open]);
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([getSession(), listDeviceSessions()]).then(([session, sessions]) => {
+    void Promise.all([getSession(), listDeviceSessions(), fetch("/api/account/device-session-roles", { credentials: "include" }).then(async response => response.ok ? response.json() as Promise<{ admins: string[] }> : { admins: [] as string[] })]).then(([session, sessions, roles]) => {
       if (cancelled) return;
       setCurrentAuthUserId(session?.user.id ?? null);
+      setAdmins(roles.admins);
       // Multiple browser login tokens for the same user are one identity.
       const unique = new Map<string, DeviceSession>();
       for (const item of sessions) {
@@ -35,11 +38,26 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
   const switchIdentity = async (session: DeviceSession) => {
     if (session.user.id === currentAuthUserId) { setOpen(false); return; }
     setSwitching(session.user.id);
-    try { await switchDeviceSession(session.session.token); }
+    try { await switchDeviceSession(session.session.token, admins.includes(session.user.id)); }
     catch { setSwitching(null); }
   };
 
-  const liveUserIds = new Set(deviceSessions.map((session) => session.user.id));
+  const signOutIdentity = async (target: DeviceSession) => {
+    if (switching) return;
+    setSessionError(null);
+    const current = target.user.id === currentAuthUserId;
+    setSwitching(target.user.id);
+    try {
+      if (current) { await logout(); return; }
+      await revokeDeviceSession(target.session.token);
+      setDeviceSessions(items => items.filter(item => item.user.id !== target.user.id));
+    } catch (error) {
+      setSessionError(error instanceof Error ? error.message : "Unable to sign out this account");
+    } finally { setSwitching(null); }
+  };
+  const mailSessions = deviceSessions.filter(item => !admins.includes(item.user.id));
+  const adminSessions = deviceSessions.filter(item => admins.includes(item.user.id));
+    const liveUserIds = new Set(deviceSessions.map((session) => session.user.id));
   const uniqueMailboxes = [...new Map(accounts.map(item => [item.id, item])).values()];
   const signedOut = remembered.filter((identity) => !liveUserIds.has(identity.id));
   const imageForSession = (session: DeviceSession) => {
@@ -75,24 +93,40 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
           </div>
 
           <div className="gsw-account-menu-rule" />
-          {(deviceSessions.length > 0 || signedOut.length > 0) && <div style={{ padding: "4px 14px 6px", fontSize: 11, fontWeight: 700, opacity: 0.58, letterSpacing: ".06em", textTransform: "uppercase" }}>GSW accounts</div>}
-          {deviceSessions.map((session) => {
-            const current = session.user.id === currentAuthUserId;
-            return (
-              <button key={session.session.token} className={`gsw-account-menu-item ${current ? "current" : ""}`} disabled={switching !== null} onClick={() => void switchIdentity(session)}>
-                <SenderAvatar name={session.user.name} email={session.user.email} imageUrl={imageForSession(session)} />
-                <span style={identityCopyStyle}><strong>{session.user.name || session.user.email}</strong><span style={emailStyle}>{session.user.email}</span></span>
-                {current && <Check size={16} strokeWidth={2} aria-label="Current account" />}
-              </button>
-            );
-          })}
-          {signedOut.map((identity) => (
-            <button key={identity.id} className="gsw-account-menu-item" onClick={() => reauthenticate(identity.email)}>
+          {sessionError && <p role="alert" style={{ padding: "8px 14px", color: "#b42318", fontSize: 12 }}>{sessionError}</p>}
+          {([["Email accounts", mailSessions], ["Admin accounts", adminSessions]] as const).map(([group, identities]) => identities.length > 0 && (
+            <div key={group}>
+              <div style={{ padding: "10px 14px 6px", fontSize: 11, fontWeight: 700, opacity: 0.7, letterSpacing: ".06em", textTransform: "uppercase" }}>{group}</div>
+              {identities.map(identity => {
+                const current = identity.user.id === currentAuthUserId;
+                const isAdmin = admins.includes(identity.user.id);
+                return <div key={identity.user.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <button className={`gsw-account-menu-item ${current ? "current" : ""}`} style={{ flex: 1, minWidth: 0 }} disabled={switching !== null}
+                    onClick={() => isAdmin && current ? window.location.assign("/control-center") : void switchIdentity(identity)}>
+                    <SenderAvatar name={identity.user.name} email={identity.user.email} imageUrl={imageForSession(identity)} />
+                    <span style={identityCopyStyle}>
+                      <strong>{identity.user.name || identity.user.email} {isAdmin && <span style={{ color: "#b9780b", fontSize: 10, fontWeight: 700 }}>Admin</span>}</strong>
+                      <span style={emailStyle}>{identity.user.email}</span>
+                    </span>
+                    {current && <Check size={16} strokeWidth={2} aria-label="Current account" />}
+                  </button>
+                  <button type="button" title={`Sign out ${identity.user.email}`} aria-label={`Sign out ${identity.user.email}`}
+                    disabled={switching !== null} onClick={() => void signOutIdentity(identity)}
+                    style={{ border: 0, background: "transparent", padding: 9, cursor: "pointer", flexShrink: 0 }}>
+                    <LogOut size={16} />
+                  </button>
+                </div>;
+              })}
+            </div>
+          ))}
+          {signedOut.length > 0 && <details style={{ padding: "6px 14px" }}>
+            <summary style={{ fontSize: 12, cursor: "pointer", opacity: 0.75 }}>Previously used accounts ({signedOut.length})</summary>
+            {signedOut.map(identity => <button key={identity.id} className="gsw-account-menu-item" onClick={() => reauthenticate(identity.email)}>
               <SenderAvatar name={identity.name} email={identity.email} imageUrl={identity.image ?? undefined} />
               <span style={identityCopyStyle}><strong>{identity.name || identity.email}</strong><span style={emailStyle}>{identity.email}</span></span>
-              <span style={{ fontSize: 11, opacity: 0.58, whiteSpace: "nowrap" }}>Signed out</span>
-            </button>
-          ))}
+              <span style={{ fontSize: 11 }}>Sign in</span>
+            </button>)}
+          </details>}
           <a className="gsw-menu-action" href="/sign-in#use-another-account" onClick={() => setOpen(false)}><Plus size={16} strokeWidth={1.75} aria-hidden="true" />Add another account</a>
 
           <div className="gsw-account-menu-rule" />
