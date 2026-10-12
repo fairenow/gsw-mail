@@ -1,7 +1,9 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { emailAccounts, userSettings } from "../db/schema.js";
-import { sendAuthEmailWithResult } from "../auth/better.js";
+import { sendStalwartWelcomeMail } from "../outbound/scheduledStalwart.js";
+
+const ADMIN_SENDER = "admin@team.guidedstepswellness.com";
 
 const SUBJECT = "Welcome to GSW Mail — your workspace is ready";
 
@@ -58,6 +60,10 @@ export async function sendWelcomeOnFirstMailboxLogin(userId: string): Promise<vo
   // Prevent retroactive mail campaigns to long-standing accounts.
   if (Date.now() - first.createdAt.getTime() > 7 * 24 * 60 * 60 * 1000) return;
 
+  const [adminMailbox] = await db.select({ id: emailAccounts.id })
+    .from(emailAccounts).where(eq(emailAccounts.address, ADMIN_SENDER)).limit(1);
+  if (!adminMailbox) throw new Error("GSW welcome sender mailbox is not configured");
+
   await db.insert(userSettings).values({ userId }).onConflictDoNothing();
   const [claimed] = await db.update(userSettings).set({
     general: sql`jsonb_set(${userSettings.general}, '{welcomeMailState}', '"sending"'::jsonb, true)`,
@@ -67,7 +73,9 @@ export async function sendWelcomeOnFirstMailboxLogin(userId: string): Promise<vo
   if (!claimed) return;
 
   try {
-    await sendAuthEmailWithResult(first.address, SUBJECT, welcomeMessage(first.displayName));
+    const message = welcomeMessage(first.displayName);
+    await sendStalwartWelcomeMail({ productAccountId: adminMailbox.id, from: ADMIN_SENDER, to: first.address,
+      subject: SUBJECT, text: message.text, html: message.html });
     await db.update(userSettings).set({
       general: sql`jsonb_set(${userSettings.general}, '{welcomeMailState}', '"sent"'::jsonb, true)`,
     }).where(eq(userSettings.userId, userId));
