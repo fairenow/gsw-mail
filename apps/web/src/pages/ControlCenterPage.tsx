@@ -7,7 +7,7 @@ import { AuthCard } from "../components/auth/AuthCard";
 import { AuthPage } from "../components/auth/AuthPage";
 import { BrandMark } from "../components/auth/BrandMark";
 
-type ControlSection = "overview" | "domains" | "mailboxes" | "users" | "security";
+type ControlSection = "overview" | "domains" | "mailboxes" | "users" | "security" | "delivery";
 type AdminSummary = {
   organizationId: string;
   domains: { id: string; name: string; status: "pending" | "verified" | "failed"; mxStatus: string; spfStatus: string; dkimStatus: string; dmarcStatus: string; dkimSelector: string | null; updatedAt: string }[];
@@ -23,7 +23,7 @@ type AdminSummary = {
 
 const sectionFromHash = (): ControlSection => {
   const value = window.location.hash.replace(/^#/, "");
-  return value === "domains" || value === "mailboxes" || value === "users" || value === "security" ? value : "overview";
+  return value === "domains" || value === "mailboxes" || value === "users" || value === "security" || value === "delivery" ? value : "overview";
 };
 
 function humanStatus(value: string) { return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
@@ -111,6 +111,7 @@ export function ControlCenterPage() {
         {navButton("mailboxes", "Mailboxes", pendingMailboxes ? `${pendingMailboxes} to finish` : undefined)}
         {navButton("users", "Users", admin ? String(admin.users.length) : undefined)}
         {navButton("security", "Security")}
+        {navButton("delivery", "Email Delivery", "Coming soon")}
         <button className="is-disabled" disabled><span>Billing</span><small>Coming soon</small></button>
         <button className="is-disabled" disabled><span>Settings</span><small>Coming soon</small></button>
       </nav>
@@ -148,6 +149,20 @@ export function ControlCenterPage() {
       {section === "users" && <section className="gsw-control-section">
         <div className="gsw-control-section-head"><div><p className="gsw-setup-kicker">Users</p><h3>People & mailbox access</h3><p>Admins are workspace identities; mailbox identities are created separately from verified-domain addresses.</p></div></div>
         {admin ? <div className="gsw-user-grid">{admin.users.map((user) => <article className="gsw-user-card" key={user.membershipId}><div className="gsw-control-row-head"><div><h4>{user.name || user.email}</h4><p>{user.authEmail || user.email}</p></div><span className={`gsw-role-pill role-${user.role}`}>{humanStatus(user.role)}</span></div><div className="gsw-user-facts"><span><strong>Status</strong>{humanStatus(user.membershipStatus)}</span><span><strong>Verified</strong>{user.authEmailVerified || user.emailVerified ? "Yes" : "No"}</span><span><strong>Last login</strong>{formatDate(user.lastLoginAt)}</span></div><div className="gsw-access-block"><strong>Mailbox access</strong>{user.mailboxAccess.length ? user.mailboxAccess.map((access) => <div key={`${user.userId}-${access.accountId}`}><span>{access.address}</span><small>{humanStatus(access.role)}</small></div>) : <p>No mailbox access assigned.</p>}</div></article>)}</div> : <div className="gsw-control-empty">Loading workspace users…</div>}
+      </section>}
+
+      {section === "delivery" && <section className="gsw-control-section">
+        <div className="gsw-control-section-head"><div>
+          <p className="gsw-setup-kicker">Coming soon · GSW Delivery</p>
+          <h3>Email infrastructure for your applications</h3>
+          <p>We're building a developer-friendly email sending service on the same Stalwart infrastructure that powers GSW Mail.</p>
+        </div></div>
+        <div className="gsw-security-grid">
+          <article className="gsw-security-card"><div><strong>Transactional API</strong><h4>Send email from your app</h4><p>Verified sender domains, scoped API keys, templates, and idempotent submissions. Not yet available to developers.</p></div></article>
+          <article className="gsw-security-card"><div><strong>Delivery visibility</strong><h4>Track what happened</h4><p>Delivery status, event webhooks, suppression, bounce processing, and usage reporting.</p></div></article>
+          <article className="gsw-security-card"><div><strong>Marketing campaigns</strong><h4>Permission-based outreach</h4><p>Subscriber lists, consent, unsubscribes, scheduling, and campaign controls will be developed and tested before rollout.</p></div></article>
+        </div>
+        <p style={{ marginTop: 20, opacity: 0.75 }}>GSW Mail is the first internal customer. Public developer access, API keys, pricing, and service availability have not launched.</p>
       </section>}
 
       {section === "security" && <section className="gsw-control-section">
