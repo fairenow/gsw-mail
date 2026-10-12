@@ -49,8 +49,7 @@ const prodOkVars = {
   OIDC_ISSUER: "https://identity.guidedstepswellness.com",
   OIDC_CLIENT_ID: "gsw-mail-web",
   BETTER_AUTH_SECRET: "prod-better-auth-9f4a2c7e-2026",
-  OUTBOUND_RELAY: "resend",
-  RESEND_API_KEY: "re_prod_9f2k8a1cb",
+  OUTBOUND_RELAY: "stalwart",
 };
 
 test("production refuses to start without DATABASE_URL", () => {
@@ -71,15 +70,14 @@ test("a fully-specified valid configuration starts", () => {
 });
 
 test("production accepts Stalwart as the outbound relay without a Resend API key", () => {
-  const { RESEND_API_KEY: _resend, ...stalwartVars } = prodOkVars;
-  const valid = runProductionConfig({ ...stalwartVars, OUTBOUND_RELAY: "stalwart" });
+  const valid = runProductionConfig({ ...prodOkVars, OUTBOUND_RELAY: "stalwart" });
   assert.equal(valid.code, 0);
 });
 
-test("production refuses an unsupported outbound relay", () => {
+test("production rejects all non-Stalwart relays", () => {
   const { code, stderr } = runProductionConfig({ ...prodOkVars, OUTBOUND_RELAY: "other" });
   assert.notEqual(code, 0);
-  assert.match(stderr, /unsupported OUTBOUND_RELAY/);
+  assert.match(stderr, /OUTBOUND_RELAY must be stalwart/);
 });
 
 test("production refuses a placeholder admin token", () => {
@@ -103,7 +101,7 @@ test("production requires the Better Auth OAuth client", () => {
 test("production refuses the null relay", () => {
   const { code, stderr } = runProductionConfig({ ...prodOkVars, OUTBOUND_RELAY: "null" });
   assert.notEqual(code, 0);
-  assert.match(stderr, /OUTBOUND_RELAY=null is not allowed in production/);
+  assert.match(stderr, /OUTBOUND_RELAY must be stalwart/);
 });
 
 test("production refuses a placeholder delivery webhook secret", () => {
