@@ -91,11 +91,22 @@ export function setActiveDeviceSession(sessionToken: string): Promise<unknown> {
   return authRequest("/multi-session/set-active", { sessionToken });
 }
 
-export async function switchDeviceSession(sessionToken: string): Promise<void> {
+export async function switchDeviceSession(sessionToken: string, preferControlCenter = false): Promise<void> {
   await setActiveDeviceSession(sessionToken);
   // Identity changes are a hard client-state boundary. A document navigation
   // destroys cached mailbox data and in-flight requests from the prior user.
-  window.location.replace("/mail");
+  let destination = "/mail";
+  if (preferControlCenter) {
+    try {
+      const context = await getAccountContext();
+      if (context.workspaceMemberships.some(item => item.status === "active" && (item.role === "owner" || item.role === "admin"))) destination = "/control-center";
+    } catch { /* The protected route verifies authorization independently. */ }
+  }
+  window.location.replace(destination);
+}
+
+export async function revokeDeviceSession(sessionToken: string): Promise<void> {
+  await authRequest("/multi-session/revoke", { sessionToken });
 }
 
 export async function continueOAuthAfterAccountSelection(): Promise<void> {
