@@ -43,11 +43,11 @@ export function listAgentIntegrations(): AgentIntegrationDescriptor[] {
       notes: config.ai.anthropicModel ?? undefined,
     },
     {
-      id: "resend",
-      name: "Resend",
+      id: "stalwart-delivery",
+      name: "GSW Mail — Stalwart",
       category: "delivery",
-      configured: Boolean(config.outbound.resendApiKey),
-      capabilities: ["transactional-email", "campaign-delivery"],
+      configured: config.outbound.relay === "stalwart",
+      capabilities: ["transactional-email", "campaign-delivery", "scheduled-email"],
     },
     {
       id: "r2",
