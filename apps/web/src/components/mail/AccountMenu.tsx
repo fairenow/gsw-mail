@@ -20,7 +20,12 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
     void Promise.all([getSession(), listDeviceSessions()]).then(([session, sessions]) => {
       if (cancelled) return;
       setCurrentAuthUserId(session?.user.id ?? null);
-      setDeviceSessions(sessions);
+      // Multiple browser login tokens for the same user are one identity.
+      const unique = new Map<string, DeviceSession>();
+      for (const item of sessions) {
+        if (!unique.has(item.user.id) || item.user.id === session?.user.id) unique.set(item.user.id, item);
+      }
+      setDeviceSessions([...unique.values()]);
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, []);
@@ -35,6 +40,7 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
   };
 
   const liveUserIds = new Set(deviceSessions.map((session) => session.user.id));
+  const uniqueMailboxes = [...new Map(accounts.map(item => [item.id, item])).values()];
   const signedOut = remembered.filter((identity) => !liveUserIds.has(identity.id));
   const imageForSession = (session: DeviceSession) => {
     if (session.user.id === currentAuthUserId && profileImageUrl) return profileImageUrl;
@@ -94,10 +100,10 @@ export function AccountMenu({ account, accounts, profileImageUrl, onSelect }: { 
           <button className="gsw-menu-action" type="button" onClick={() => openWorkspace("contacts")}><Users size={16} strokeWidth={1.75} aria-hidden="true" />Contacts</button>
           <button className="gsw-menu-action" type="button" onClick={() => openWorkspace("settings")}><Settings size={16} strokeWidth={1.75} aria-hidden="true" />Settings</button>
 
-          {accounts.length > 1 && <>
+          {uniqueMailboxes.length > 1 && <>
             <div className="gsw-account-menu-rule" />
             <div style={{ padding: "4px 14px 6px", fontSize: 11, fontWeight: 700, opacity: 0.58, letterSpacing: ".06em", textTransform: "uppercase" }}>Mailboxes in this account</div>
-            {accounts.map((item) => (
+            {uniqueMailboxes.map((item) => (
               <button key={item.id} className={`gsw-account-menu-item ${item.id === account.id ? "current" : ""}`} onClick={() => { onSelect(item.id); setOpen(false); }}>
                 <span style={identityCopyStyle}><strong>{item.displayName || item.address}</strong><span style={emailStyle}>{item.address}</span></span>
               </button>
