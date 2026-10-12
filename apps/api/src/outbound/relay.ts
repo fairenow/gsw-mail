@@ -1,6 +1,4 @@
-import { Resend } from "resend";
 import { config } from "../config.js";
-import { formatMessageIdHeader } from "../lib/messageId.js";
 import { createMailboxTargetedStalwartRelay } from "./stalwartRelay.js";
 import type { OutboundJob, OutboundRelay, RelayAttachment, RelayResult } from "./types.js";
 
@@ -36,72 +34,11 @@ export const NullRelay: OutboundRelay = {
   },
 };
 
-export function createResendRelay(apiKey: string): OutboundRelay {
-  const client = new Resend(apiKey);
-  return {
-    name: "resend",
-    async send(job: OutboundJob, attachments?: RelayAttachment[]): Promise<RelayResult> {
-      const headers: Record<string, string> = {};
-      const messageId = sanitizeOutboundHeaderValue(job.messageId);
-      const inReplyTo = sanitizeOutboundHeaderValue(job.inReplyTo);
-      const references = sanitizeOutboundHeaderValue(job.references);
-      const replyTo = sanitizeOutboundHeaderValue(job.replyTo);
-      if (messageId) headers["Message-ID"] = formatMessageIdHeader(messageId);
-      if (inReplyTo) headers["In-Reply-To"] = inReplyTo;
-      if (references) headers["References"] = references;
-
-      const options = {
-        from: job.fromAddress,
-        to: job.to,
-        subject: sanitizeOutboundHeaderValue(job.subject) ?? "",
-        text: job.textBody ?? "",
-        ...(Object.keys(headers).length ? { headers } : {}),
-        ...(job.cc ? { cc: job.cc } : {}),
-        ...(job.bcc ? { bcc: job.bcc } : {}),
-        ...(job.htmlBody ? { html: job.htmlBody } : {}),
-        ...(replyTo ? { replyTo } : {}),
-        ...(attachments?.length
-          ? {
-              attachments: attachments.map((a) => ({
-                filename: a.filename,
-                contentType: a.contentType,
-                content: a.content,
-                ...(a.contentId ? { contentId: a.contentId } : {}),
-              })),
-            }
-          : {}),
-      };
-      try {
-        const response = await client.emails.send(options);
-        if (response.error) {
-          return {
-            accepted: false,
-            permanent: isInvalidHeaderError(response.error.message),
-            message: response.error.message,
-          };
-        }
-        return { accepted: true, deliveryId: response.data?.id };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return {
-          accepted: false,
-          permanent: isInvalidHeaderError(message),
-          message,
-        };
-      }
-    },
-  };
-}
-
 export function createStalwartRelay(): OutboundRelay {
   return createMailboxTargetedStalwartRelay();
 }
 
 export function getRelay(): OutboundRelay {
-  if (config.outbound.relay === "resend") {
-    if (!config.outbound.resendApiKey) throw new Error("OUTBOUND_RELAY=resend requires RESEND_API_KEY");
-    return createResendRelay(config.outbound.resendApiKey);
-  }
   if (config.outbound.relay === "stalwart") return createStalwartRelay();
   return NullRelay;
 }
