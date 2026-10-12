@@ -8,6 +8,7 @@ import { db } from "../db/client.js";
 import { domains, emailAccounts, mailAccountMemberships, mailboxes, organizationMemberships, users } from "../db/schema.js";
 import { getUserEngine } from "../engine/index.js";
 import { audit } from "../lib/audit.js";
+import { sendWelcomeOnFirstMailboxLogin } from "../services/welcomeEmail.js";
 import { badRequest, notFound } from "../lib/errors.js";
 
 interface Params {
@@ -56,6 +57,9 @@ export default async (app: FastifyInstance) => {
 
   app.get("/mail/accounts", async (req) => {
     const accounts = await getAccessibleAccounts(req.user!.id);
+    if (accounts.some(account => account.role === "owner" && account.status === "active")) {
+      void sendWelcomeOnFirstMailboxLogin(req.user!.id).catch(error => req.log.warn({ error }, "welcome email delivery deferred"));
+    }
     return {
       accounts: accounts.map((a) => ({
         id: a.id,
