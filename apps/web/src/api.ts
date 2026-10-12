@@ -596,6 +596,7 @@ const setupProvisioningTimeout = 30_000;
 export type BulkMailAction = "archive" | "trash" | "restore" | "destroy" | "read" | "unread" | "star" | "unstar";
 
 export const api = {
+  lookupAvatars: (emails: string[]) => post<{ avatars: Record<string, string> }>("/product/avatars/lookup", { emails }),
   setup: () => get<SetupState>("/api/setup"),
   updateWorkspace: (name: string) => patch<Pick<SetupState, "workspace" | "currentStep">>("/api/setup/workspace", { name }),
   addSetupDomain: (domain: string) => post<Pick<SetupState, "domain" | "currentStep">>("/api/setup/domain", { domain }, setupProvisioningTimeout),
