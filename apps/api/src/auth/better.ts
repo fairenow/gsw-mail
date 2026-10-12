@@ -3,7 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { jwt, multiSession } from "better-auth/plugins";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import { Resend } from "resend";
+import { sendStalwartWelcomeMail } from "../outbound/scheduledStalwart.js";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { authAccounts, authSessions, authUsers, authVerifications, domains, emailAccounts, jwks, oauthAccessToken, oauthClient, oauthConsent, oauthRefreshToken, organizationMemberships, users } from "../db/schema.js";
@@ -11,17 +11,21 @@ import { and, eq } from "drizzle-orm";
 import { renderGswAuthEmail } from "./email.js";
 import { GSW_OAUTH_CONSENT_PAGE, GSW_OIDC_SUPPORTED_SCOPES, legacyInternalUserInfoClaims, oidcClientIdFromJwt } from "./oidcContract.js";
 
-const resend = config.outbound.resendApiKey ? new Resend(config.outbound.resendApiKey) : null;
+const AUTH_SENDER = "admin@team.guidedstepswellness.com";
 
-export async function sendAuthEmailWithResult(to: string, subject: string, content: { text: string; html: string }): Promise<string | undefined> {
-  if (!resend) {
-    if (config.env === "production") throw new Error("auth email delivery is not configured");
-    console.info(`[auth email] ${to}: ${content.text}`);
-    return undefined;
-  }
-  const result = await resend.emails.send({ from: config.authEmail.from, to, subject, text: content.text, html: content.html });
-  if (result.error) throw new Error(result.error.message);
-  return result.data?.id;
+/** Transactional login and security messages use only our Stalwart mailbox. */
+export async function sendAuthEmailWithResult(to: string, subject: string, content: { text: string; html: string }): Promise<string> {
+  const [adminMailbox] = await db.select({ id: emailAccounts.id })
+    .from(emailAccounts).where(eq(emailAccounts.address, AUTH_SENDER)).limit(1);
+  if (!adminMailbox) throw new Error("Stalwart administrator sender mailbox is not configured");
+  return sendStalwartWelcomeMail({
+    productAccountId: adminMailbox.id,
+    from: AUTH_SENDER,
+    to,
+    subject,
+    text: content.text,
+    html: content.html,
+  });
 }
 
 export async function sendAuthEmail(to: string, subject: string, content: { text: string; html: string }): Promise<void> {
