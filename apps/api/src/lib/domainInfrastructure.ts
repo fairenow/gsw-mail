@@ -136,7 +136,6 @@ function absoluteRecordName(raw: string, origin: string): string {
 function recordPurpose(type: DomainDnsRecord["type"], name: string, value: string, source: DomainDnsRecord["source"]): DomainDnsRecord["purpose"] {
   const lowerName = name.toLowerCase();
   const lowerValue = value.toLowerCase();
-  if (source === "resend" && type === "MX") return "spf";
   if (type === "MX") return "mx";
   if (lowerName.includes("_domainkey") || lowerValue.startsWith("v=dkim1")) return "dkim";
   if (lowerName.startsWith("_dmarc.") || lowerValue.startsWith("v=dmarc1")) return "dmarc";
@@ -146,8 +145,7 @@ function recordPurpose(type: DomainDnsRecord["type"], name: string, value: strin
 
 function isRequired(source: DomainDnsRecord["source"], purpose: DomainDnsRecord["purpose"]): boolean {
   if (purpose === "mx" || purpose === "dmarc") return true;
-  if (source === "resend") return true;
-  if (source === "stalwart" && (purpose === "spf" || purpose === "dkim")) return config.outbound.relay !== "resend";
+  if (source === "stalwart" && (purpose === "spf" || purpose === "dkim")) return true;
   return false;
 }
 
@@ -246,45 +244,6 @@ export function parseStalwartZoneFile(zoneFile: string | null | undefined, domai
   return records;
 }
 
-type ResendRecordShape = { record?: string; type?: string; name?: string; value?: string; priority?: number | string };
-type ResendDomainShape = { id?: string; name?: string; status?: string; records?: ResendRecordShape[] };
-
-async function resendRequest(path: string, init?: RequestInit): Promise<any> {
-  if (!config.outbound.resendApiKey) throw new Error("Resend API key is not configured");
-  const response = await fetch(`https://api.resend.com${path}`, {
-    ...init,
-    headers: { authorization: `Bearer ${config.outbound.resendApiKey}`, "content-type": "application/json", ...(init?.headers ?? {}) },
-    signal: AbortSignal.timeout(12_000),
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error((result as { message?: string }).message ?? `Resend domain request failed (${response.status})`);
-  return (result as { data?: unknown }).data ?? result;
-}
-
-async function ensureResendDomain(name: string): Promise<ResendDomainShape | null> {
-  if (config.outbound.relay !== "resend") return null;
-  const listed = await resendRequest("/domains?limit=100") as { data?: ResendDomainShape[] } | ResendDomainShape[];
-  const list = Array.isArray(listed) ? listed : listed.data ?? [];
-  let domain = list.find((item) => item.name?.toLowerCase() === name.toLowerCase());
-  if (!domain?.id) domain = await resendRequest("/domains", { method: "POST", body: JSON.stringify({ name }) }) as ResendDomainShape;
-  if (!domain?.id) throw new Error("Resend did not return a domain id");
-  return await resendRequest(`/domains/${domain.id}`) as ResendDomainShape;
-}
-
-function resendRecords(domain: ResendDomainShape | null): DomainDnsRecord[] {
-  return (domain?.records ?? []).flatMap((record): DomainDnsRecord[] => {
-    const rawType = (record.type ?? record.record ?? "").toUpperCase();
-    if (rawType !== "MX" && rawType !== "TXT" && rawType !== "CNAME") return [];
-    if (!record.name || !record.value) return [];
-    const type = rawType as DomainDnsRecord["type"];
-    const name = normalizedHost(record.name);
-    const value = type === "TXT" ? normalizedValue(record.value) : normalizedHost(record.value);
-    const priority = record.priority === undefined ? undefined : Number(record.priority);
-    const purpose = recordPurpose(type, name, value, "resend");
-    return [{ source: "resend", type, name, value, ...(priority !== undefined && Number.isFinite(priority) ? { priority } : {}), purpose, required: isRequired("resend", purpose) }];
-  });
-}
-
 function uniqueRecords(records: DomainDnsRecord[]): DomainDnsRecord[] {
   const seen = new Set<string>();
   return records.filter((record) => {
@@ -328,16 +287,14 @@ export function normalizeManagedDnsRecords(
 async function syncProviders(name: string): Promise<ProviderSync> {
   const warnings: string[] = [];
   let stalwart: StalwartDomain | null = null;
-  let resend: ResendDomainShape | null = null;
   try { stalwart = await ensureStalwartDomain(name); } catch (error) { warnings.push(error instanceof Error ? error.message : "Stalwart domain sync failed"); }
-  try { resend = await ensureResendDomain(name); } catch (error) { warnings.push(error instanceof Error ? error.message : "Resend domain sync failed"); }
-  const rawRecords = [...parseStalwartZoneFile(stalwart?.dnsZoneFile, name), ...resendRecords(resend)];
+  const rawRecords = parseStalwartZoneFile(stalwart?.dnsZoneFile, name);
   const records = normalizeManagedDnsRecords(rawRecords, name);
   if (!stalwart) throw new Error(warnings.join(" · ") || "Stalwart domain sync failed");
   return {
     stalwartDomainId: stalwart.id,
     stalwartDnsZoneFile: stalwart.dnsZoneFile ?? null,
-    resendDomainId: config.outbound.relay === "resend" ? resend?.id ?? null : null,
+    resendDomainId: null,
     records,
     warnings,
   };
