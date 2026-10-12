@@ -164,3 +164,47 @@ export async function moveScheduledEmailToSent(input: { productAccountId: string
     "move-sent",
   ]]);
 }
+
+/** Sends an onboarding message directly through the configured Stalwart JMAP
+ * mailbox identity. No Resend or third-party transport involved. */
+export async function sendStalwartWelcomeMail(input: {
+  productAccountId: string; from: string; to: string; subject: string; text: string; html: string;
+}): Promise<string> {
+  const authorization = adminAuthorization();
+  const accountId = await resolveMailboxAccountId(authorization, input.productAccountId, input.from);
+  const sentMailboxId = await mailboxIdByRole(authorization, accountId, "sent");
+  const identities = await callStalwart(authorization, [[
+    "Identity/get", { accountId, ids: null }, "welcome-identity",
+  ]]);
+  const identityList = Array.isArray(identities[0]?.[1]?.list)
+    ? identities[0]![1].list as { id?: string; email?: string }[] : [];
+  const identityId = identityList.find(x => x.email?.toLowerCase() === input.from.toLowerCase())?.id;
+  if (!identityId) throw new Error("Admin mailbox is missing its authorized Stalwart sender identity");
+  const emailResult = await callStalwart(authorization, [[
+    "Email/set", {
+      accountId,
+      create: {
+        welcome: {
+          mailboxIds: { [sentMailboxId]: true },
+          from: [{ email: input.from, name: "GSW Mail Team" }],
+          to: [{ email: input.to }],
+          subject: input.subject,
+          bodyValues: {
+            text: { value: input.text, isEncodingProblem: false, isTruncated: false },
+            html: { value: input.html, isEncodingProblem: false, isTruncated: false },
+          },
+          textBody: [{ partId: "text", type: "text/plain" }],
+          htmlBody: [{ partId: "html", type: "text/html" }],
+        },
+      },
+    }, "welcome-email",
+  ]]);
+  const emailId = (emailResult[0]?.[1]?.created as Record<string, { id?: string }> | undefined)?.welcome?.id;
+  if (!emailId) throw new Error("Stalwart could not create the welcome message");
+  const submission = await callStalwart(authorization, [[
+    "EmailSubmission/set", { accountId, create: { welcome: { emailId, identityId } } }, "welcome-send",
+  ]]);
+  const submissionId = (submission[0]?.[1]?.created as Record<string, { id?: string }> | undefined)?.welcome?.id;
+  if (!submissionId) throw new Error("Stalwart did not accept the welcome email submission");
+  return submissionId;
+}
