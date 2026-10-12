@@ -39,6 +39,7 @@ const profileImageUrl = z.string().max(2_048).refine((value) => {
 const settingsSchema = z.object({ general: z.object({
   profileImageUrl: profileImageUrl.optional(),
   profileImageAssetId: z.string().uuid().nullable().optional(),
+  profileImagePublic: z.boolean().optional(),
 }).catchall(customValue).optional(), compose: z.record(z.string(), customValue).optional(), contacts: z.record(z.string(), customValue).optional(), ai: z.record(z.string(), customValue).optional() });
 const signatureSchema = z.object({ signatureHtml: z.string().max(100_000), enabled: z.boolean(), onNew: z.boolean(), onReply: z.boolean(), onForward: z.boolean(), position: z.enum(["beforeQuotedText", "afterQuotedText"]) });
 const importSchema = z.object({ filename: z.string().min(1).max(255), headers: z.array(z.string()).min(1), rows: z.array(z.record(z.string(), z.string())).max(10_000), mapping: z.record(z.string(), z.string()), duplicateBehavior: z.enum(["skip", "merge", "overwrite"]).default("merge") });
@@ -108,7 +109,7 @@ export default async function productRoutes(app: FastifyInstance) {
           profileImageUrl: `/product/files/${asset.id}/content`,
         };
       } else {
-        nextGeneral = { ...nextGeneral, profileImageAssetId: null, profileImageUrl: "" };
+        nextGeneral = { ...nextGeneral, profileImageAssetId: null, profileImageUrl: "", profileImagePublic: false };
       }
     }
     const [saved] = await db.insert(userSettings).values({
