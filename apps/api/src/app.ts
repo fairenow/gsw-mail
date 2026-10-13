@@ -39,6 +39,7 @@ import pushDevices from "./routes/pushDevices.js";
 import mailChanges from "./routes/mailChanges.js";
 import domainAdmin from "./routes/domainAdmin.js";
 import files from "./routes/files.js";
+import fileSharing from "./routes/fileSharing.js";
 import analytics from "./routes/analytics.js";
 import { auth as betterAuth } from "./auth/better.js";
 import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } from "@better-auth/oauth-provider";
@@ -109,6 +110,7 @@ export function buildApp() {
   app.register(admin);
   app.register(domainAdmin);
   app.register(files);
+  app.register(fileSharing);
   app.register(analytics);
   app.register(suppressions);
   app.register(webhooks);
