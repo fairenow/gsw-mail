@@ -771,7 +771,20 @@ async function runConversationTurn(input: {
     }
 
     console.warn("[gsw-chat] tool attempts exhausted", { runId: run.id, failedTools: toolActivity.filter((item) => !item.ok).map((item) => item.name) });
-    const content = "Failed to respond. Please retry.";
+    const createdFiles = [...new Map(generatedAttachments.map((item) => [item.assetId, item])).values()];
+    const anyFailedTools = toolActivity.some((item) => !item.ok);
+    const content = createdFiles.length
+      ? [
+          "I saved the following file(s) to GSW Files:",
+          ...createdFiles.map((file) => `- ${file.filename} (${file.mimeType}; ${file.sizeBytes} bytes)`),
+          "",
+          anyFailedTools
+            ? "Some subsequent steps did not finish. The files listed above were saved, but I cannot confirm any unfinished edits or further actions."
+            : "The file creation succeeded, but I could not finish the remaining explanation. You can open the saved file in GSW Files.",
+        ].join("\\n")
+      : anyFailedTools
+        ? "I couldn't complete this request. One or more actions failed, and I have not verified that a new file was saved. Check GSW Files before trying again."
+        : "I couldn't finish this request within the available processing steps. No newly created file was confirmed. Please narrow the task or try again.";
     await appendAiMessage({
       conversationId: input.conversationId,
       role: "assistant",
