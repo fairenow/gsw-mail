@@ -4,7 +4,7 @@ import { api, type FileNode, type StorageUsage } from "../api";
 import { MailWorkspace } from "../components/MailWorkspace";
 import { useAppShell } from "../components/AppShell";
 
-type FilesView = "folder" | "recent" | "starred" | "trash";
+type FilesView = "folder" | "recent" | "starred" | "trash" | "shared";
 
 const formatBytes = (size: number) => {
   if (size < 1024) return `${size} B`;
@@ -25,6 +25,7 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { configureTopBar } = useAppShell();
   const [view, setView] = useState<FilesView>("folder");
   const [files, setFiles] = useState<FileNode[]>([]);
+  const [sharedFiles, setSharedFiles] = useState<Array<{ shareId: string; filename: string; mimeType: string; sizeBytes: number }>>([]);
   const [usage, setUsage] = useState<StorageUsage | null>(null);
   const [path, setPath] = useState<Array<{ id: string | null; name: string }>>([{ id: null, name: "My Files" }]);
   const [loading, setLoading] = useState(true);
@@ -50,6 +51,11 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
     setLoading(true);
     setNotice("");
     try {
+      if (view === "shared") {
+        const [shared, quota] = await Promise.all([api.sharedWithMe(), api.fileUsage()]);
+        setSharedFiles(shared.files); setFiles([]); setUsage(quota);
+        return;
+      }
       const [rows, quota, recent] = await Promise.all([
         api.files(parentId, view),
         api.fileUsage(),
@@ -275,13 +281,18 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
           <button className={view === "recent" ? "active" : ""} onClick={() => setView("recent")}>Recent</button>
           <button className={view === "starred" ? "active" : ""} onClick={() => setView("starred")}>Starred</button>
           <button className={view === "trash" ? "active" : ""} onClick={() => setView("trash")}>Trash</button>
+          <button className={view === "shared" ? "active" : ""} onClick={() => setView("shared")}>Shared with me</button>
           {usage && <div className="gsw-storage-card"><strong>{formatBytes(usage.usedBytes)} of {formatBytes(usage.quotaBytes)}</strong><div><span style={{ width: `${usagePercent}%` }} /></div><small>{usage.planKey === "free" ? "Free plan" : usage.planKey} storage</small></div>}
         </aside>
 
         <section className="gsw-files-browser">
           {view === "folder" && <div className="gsw-files-breadcrumb">{path.map((part, index) => <button key={part.id ?? "root"} onClick={() => setPath((current) => current.slice(0, index + 1))}>{part.name}</button>)}</div>}
           {notice && <p className="gsw-files-notice">{notice}</p>}
-          {loading ? <div className="gsw-empty-product">Loading files…</div> : files.length === 0 ? <div className="gsw-empty-product"><strong>{view === "trash" ? "Trash is empty" : view === "starred" ? "No starred files" : view === "recent" ? "No recent files" : "This folder is empty"}</strong><p>{view === "folder" ? "Upload a file or create a folder to get started." : "Files will appear here as you use GSW."}</p></div> :
+          {view === "shared" ? (loading ? <div className="gsw-empty-product">Loading shared files…</div> : sharedFiles.length === 0 ? <div className="gsw-empty-product"><strong>No files shared with you</strong><p>Files shared with your verified GSW email address will appear here.</p></div> : <div className="gsw-files-list">{sharedFiles.map(file => <div className="gsw-file-row" key={file.shareId}>
+            <div className="gsw-file-main"><span className="gsw-file-icon"><FileText size={21}/></span><span><strong>{file.filename}</strong><small>Shared · Viewer · {formatBytes(file.sizeBytes)}</small></span></div>
+            <button className="gsw-secondary-btn" onClick={() => window.open(`/product/files/shares/${encodeURIComponent(file.shareId)}/download`, "_blank", "noopener,noreferrer")}><Download size={16}/> Download</button>
+          </div>)}</div>) :
+                    {loading ? <div className="gsw-empty-product">Loading files…</div> : files.length === 0 ? <div className="gsw-empty-product"><strong>{view === "trash" ? "Trash is empty" : view === "starred" ? "No starred files" : view === "recent" ? "No recent files" : "This folder is empty"}</strong><p>{view === "folder" ? "Upload a file or create a folder to get started." : "Files will appear here as you use GSW."}</p></div> :
             <div className="gsw-files-list">{files.map((item) => <div className="gsw-file-row" key={item.id}>
               <button className="gsw-file-main" onDoubleClick={() => item.nodeType === "folder" && openFolder(item)} onClick={() => item.nodeType === "folder" && openFolder(item)}>
                 <span className="gsw-file-icon">{iconFor(item)}</span>
