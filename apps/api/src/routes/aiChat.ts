@@ -289,7 +289,7 @@ async function runConversationTurn(input: {
           `CC: ${workingDraft.cc.join(", ") || "none"}`,
           `Current draft body: ${workingDraft.textBody.slice(0, 3500)}`,
           "Revise this draft in place with mail.update_draft. Do not create another unless explicitly asked. Never include its internal ID in the visible response.",
-        ].join("\\n"),
+        ].join("\n"),
       });
     }
   }
