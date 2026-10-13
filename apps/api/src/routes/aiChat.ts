@@ -33,7 +33,8 @@ import { getAiCapabilitySettings, isAiScopeGloballyEnabled } from "../ai/capabil
 import { selectAgentTools } from "../ai/toolSelection.js";
 import { getAgentTask, listAgentTasks } from "../ai/taskService.js";
 import { forbidden } from "../lib/errors.js";
-import { getAssetForUser } from "../files/service.js";
+import { createAssetFromBuffer, getAssetForUser } from "../files/service.js";
+import { verifyGeneratedImage } from "../files/imageValidation.js";
 import { getR2Object } from "../files/r2.js";
 import { analyzeStoredFile } from "../files/intelligence.js";
 import { shouldPreAnalyzeAttachments } from "../files/attachmentIntent.js";
@@ -977,6 +978,57 @@ async function prepareNewConversation(input: {
 
 export default async function aiChatRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
+
+  // Image editing is intentionally separate from text-to-image generation: the
+  // original pixels must reach an editing-capable model, not a prompt-only API.
+  app.post("/product/chat/images/edit", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (req) => {
+    const input = z.object({
+      assetId: z.string().uuid(),
+      instruction: z.string().trim().min(3).max(4000),
+      conversationId: z.string().uuid().optional(),
+    }).parse(req.body);
+    const endpoint = process.env.MODAL_IMAGE_EDIT_URL;
+    const token = config.ai.modalProxyToken;
+    if (!endpoint || !token) throw new Error("Image editing is not configured.");
+    const url = new URL(endpoint);
+    if (url.protocol !== "https:" || url.username || url.password) throw new Error("Invalid image editing endpoint.");
+    const source = await getAssetForUser(req.user!.id, input.assetId);
+    if (!source.mimeType.startsWith("image/") || source.status !== "ready") throw new Error("A ready image attachment is required.");
+    const original = await getR2Object(source.r2Key);
+    if (original.content.length > 12 * 1024 * 1024) throw new Error("Image exceeds editing size limit.");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90000);
+    let result: Buffer;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "image-edit",
+          prompt: input.instruction,
+          image: { mime_type: source.mimeType, b64_json: original.content.toString("base64") },
+          response_format: "b64_json",
+        }),
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`Image editing provider failed (${response.status}).`);
+      const payload = await response.json() as { data?: Array<{ b64_json?: string }> };
+      const encoded = payload.data?.[0]?.b64_json;
+      if (!encoded || encoded.length > 24 * 1024 * 1024) throw new Error("Image editing provider returned no valid image.");
+      result = Buffer.from(encoded, "base64");
+    } finally { clearTimeout(timeout); }
+    const verified = verifyGeneratedImage(result);
+    const edited = await createAssetFromBuffer({
+      userId: req.user!.id,
+      filename: `edited-${input.assetId.slice(0, 8)}.${verified.mimeType === "image/png" ? "png" : verified.mimeType === "image/webp" ? "webp" : "jpg"}`,
+      mimeType: verified.mimeType,
+      content: result,
+      source: "ai_image_edit",
+      kind: "image",
+      addToFiles: true,
+    });
+    return { assetId: edited.id, sourceAssetId: source.id, filename: edited.filename, mimeType: edited.mimeType, sizeBytes: Number(edited.sizeBytes), instruction: input.instruction, conversationId: input.conversationId ?? null };
+  });
 
   app.get("/product/chat/tasks", async (req) => {
     const query = z.object({ limit: z.coerce.number().int().min(1).max(50).optional() }).parse(req.query);
