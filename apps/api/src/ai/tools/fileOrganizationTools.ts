@@ -12,7 +12,7 @@ const params = z.object({
 });
 type Params = z.infer<typeof params>;
 type NodeRow = { id: string; parentId: string | null; name: string; nodeType: string; assetId: string | null; createdAt: Date; mimeType: string | null; assetCreatedAt: Date | null };
-type Action = { nodeId: string; name: string; from: string | null; date: string; type: string };
+export type Action = { nodeId: string; name: string; from: string | null; date: string; type: string };
 
 function typeFolder(name: string, mime: string | null): string {
   const ext = name.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
@@ -28,7 +28,7 @@ function typeFolder(name: string, mime: string | null): string {
   return "Other";
 }
 const dayUTC = (date: Date) => date.toISOString().slice(0, 10);
-async function inventory(userId: string, input: Params) {
+export async function inventory(userId: string, input: Params) {
   const rows = await db.select({
     id: fileNodes.id, parentId: fileNodes.parentId, name: fileNodes.name,
     nodeType: fileNodes.nodeType, assetId: fileNodes.assetId, createdAt: fileNodes.createdAt,
