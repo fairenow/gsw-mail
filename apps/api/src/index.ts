@@ -12,12 +12,14 @@ import { getAutomationWorker } from "./ai/automationWorker.js";
 import { getAgentTaskRunner } from "./ai/taskRunner.js";
 import { ensureEmailTemplateSchema } from "./mail/ensureTemplateSchema.js";
 import { ensureFilesSchema } from "./files/ensureFilesSchema.js";
+import { startOrganizationWorker } from "./files/organizationJobs.js";
 import { ensureEngagementAnalyticsSchema } from "./analytics/ensureSchema.js";
 
 const app = buildApp();
 const worker = getOutboundWorker();
 const automationWorker = getAutomationWorker();
 const agentTaskRunner = getAgentTaskRunner();
+let stopFileOrganizer: (() => void) | null = null;
 
 async function main() {
   await ensureScheduledSendSchema();
@@ -35,6 +37,7 @@ async function main() {
   void deliverDueCalendarEmailReminders().catch(error => app.log.error(error, "calendar reminder worker failed"));
   automationWorker.start();
   agentTaskRunner.start();
+  stopFileOrganizer = startOrganizationWorker(error => app.log.error(error, "file organization worker failed"));
   await app.listen({ port: config.port, host: "0.0.0.0" });
 }
 
@@ -43,6 +46,7 @@ const shutdown = async (signal: string) => {
   worker.stop();
   automationWorker.stop();
   agentTaskRunner.stop();
+  stopFileOrganizer?.();
   await app.close();
   await pool.end();
   process.exit(0);
