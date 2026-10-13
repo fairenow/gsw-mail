@@ -104,6 +104,23 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
     } catch (err) { if (request === listRequest.current) setError(err instanceof Error ? err.message : String(err)); }
     finally { if (request === listRequest.current) setLoading(false); }
   }, []);
+  // Passive updates must not clear selection, scroll position, page or the open reader.
+  const silentRefresh = useCallback(async (accountId: string, name: Folder) => {
+    if (document.visibilityState !== "visible") return;
+    try {
+      const [latest, stats] = await Promise.all([
+        api.messages(accountId, name, pageSize, 0),
+        api.mailboxStats(accountId),
+      ]);
+      setFolderCounts(Object.fromEntries(FOLDERS.map((key) => [key, stats[key] ?? { total: 0, unread: 0 }])) as Record<Folder, { total: number; unread: number }>);
+      // If the user is paging through older mail or searching, leave their list alone.
+      if (pageRef.current !== 0 || searchRef.current.trim()) return;
+      setMessages(current => {
+        if (current.length === latest.length && current.every((message, index) => message.id === latest[index]?.id && message.read === latest[index]?.read)) return current;
+        return latest;
+      });
+    } catch { /* Passive refresh errors must not disrupt the current mailbox. */ }
+  }, []);
   const loadFolderCounts = useCallback(async (accountId: string) => {
     try { const stats = await timedMailRequest("mailbox-stats", () => api.mailboxStats(accountId)); setFolderCounts(Object.fromEntries(FOLDERS.map((name) => [name, stats[name] ?? { total: 0, unread: 0 }])) as Record<Folder, { total: number; unread: number }>); }
     catch (err) { setError(err instanceof Error ? err.message : String(err)); }
@@ -130,6 +147,24 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
 
   const selectAccount = useCallback((id: string) => { const next = accounts.find((item) => item.id === id); if (!next) return; shellSelectAccount(id); setFolder("Inbox"); setSearch(""); setOpen(null); setSelectedIds(new Set()); setLastSend(null); setMobileView("messages"); setFoldersOpen(false); }, [accounts, shellSelectAccount]);
   const selectFolder = (name: Folder) => { setWorkspaceSection("mail"); setFolder(name); setSearch(""); setFoldersOpen(false); setOpen(null); setSelectedIds(new Set()); setMobileView("messages"); if (account) void loadFolder(account.id, name); };
+  const pageRef = useRef(page);
+  const searchRef = useRef(search);
+  useEffect(() => { pageRef.current = page; searchRef.current = search; }, [page, search]);
+  useEffect(() => {
+    if (!account || workspaceSection !== "mail") return;
+    let active = true;
+    let pending = false;
+    const update = async () => {
+      if (!active || pending || document.visibilityState !== "visible") return;
+      pending = true;
+      try { await silentRefresh(account.id, folder); } finally { pending = false; }
+    };
+    const onFocus = () => { void update(); };
+    const timer = window.setInterval(() => { void update(); }, 15000);
+    document.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("focus", onFocus);
+    return () => { active = false; window.clearInterval(timer); document.removeEventListener("visibilitychange", onFocus); window.removeEventListener("focus", onFocus); };
+  }, [account, folder, workspaceSection, silentRefresh]);
   const refresh = useCallback(() => { if (account) { void loadFolder(account.id, folder); void loadFolderCounts(account.id); } }, [account, folder, loadFolder, loadFolderCounts]);
   const openWorkspaceSection = useCallback((section: "contacts" | "calendar" | "settings" | "files" | "chat" | "scheduled") => {
     setFoldersOpen(false);
