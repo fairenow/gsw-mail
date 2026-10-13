@@ -5,7 +5,8 @@ import type { AgentToolDefinition } from "./tools/types.js";
  * not a substitute for current grants or mailbox membership.
  */
 // Only non-sending, reversible, user-scoped operations may run unattended.
-const SCHEDULED_WRITES = new Set(["mail.create_draft", "files.create_text", "campaign.create"]);
+// files.transform saves a NEW artifact and never overwrites the original; it is safe for approved scheduled CSV updates.
+const SCHEDULED_WRITES = new Set(["mail.create_draft", "files.create_text", "files.transform", "campaign.create"]);
 
 const NEVER_UNATTENDED = new Set([
   "mail.send", "campaign.send", "browser.write", "workspace.admin",
