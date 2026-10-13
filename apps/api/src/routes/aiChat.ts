@@ -36,6 +36,7 @@ import { forbidden } from "../lib/errors.js";
 import { getAssetForUser } from "../files/service.js";
 import { getR2Object } from "../files/r2.js";
 import { analyzeStoredFile } from "../files/intelligence.js";
+import { shouldPreAnalyzeAttachments } from "../files/attachmentIntent.js";
 import { config } from "../config.js";
 import { reserveChatCommand, updateChatCommand, getChatCommand } from "../ai/chatCommands.js";
 import { workingDraftForConversation } from "../ai/chatDrafts.js";
@@ -78,9 +79,6 @@ const permissionGrantSchema = z.object({
 const confirmationDecisionSchema = z.object({
   decision: z.enum(["approved", "rejected"]),
 });
-
-const shouldPreAnalyzeAttachments = (content: string) =>
-  /\b(analy[sz]e|read|review|summari[sz]e|extract|understand|inspect|what(?:'s| is) (?:in|inside)|tell me about|scope|requirements?|dates?|pricing|spreadsheet|workbook|csv|xlsx|xls|file|pdf|document|presentation|image|chart|table|clean|data)\b/i.test(content);
 
 const explicitPdfGenerationIntent = (content: string) =>
   /\b(?:generate|create|make|build|export|produce|turn|convert)\b[\s\S]{0,100}\b(?:pdf|portable document)\b/i.test(content)
