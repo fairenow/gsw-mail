@@ -44,7 +44,7 @@ const downloadHeaders = (reply: { header: (name: string, value: string) => unkno
  * bucket, owner prefix, or any other files.
  */
 export default async function fileSharingRoutes(app: FastifyInstance) {
-  app.get<{ Params: { token: string } }>("/s/:token", {
+  app.get<{ Params: { token: string } }>("/product/files/shares/public/:token", {
     config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
   }, async (req, reply) => {
     const token = z.string().regex(/^[0-9a-f]{64}$/).parse(req.params.token);
@@ -74,7 +74,7 @@ export default async function fileSharingRoutes(app: FastifyInstance) {
       if (!share) throw new Error("Could not create file share");
       reply.code(201);
       return { share: { id: share.id, scope: share.scope, recipientEmail: share.recipientEmail, permission: "viewer", expiresAt: share.expiresAt },
-        ...(token ? { path: `/s/${token}` } : {}) };
+        ...(token ? { path: `/product/files/shares/public/${token}` } : {}) };
     });
 
     protectedRoutes.get<{ Params: { assetId: string } }>("/product/files/:assetId/shares", async req => {
