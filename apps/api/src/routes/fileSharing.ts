@@ -1,10 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { and, eq, gt, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { assets, fileNodes, fileShares, users } from "../db/schema.js";
-import { createR2PresignedUrl } from "../files/r2.js";
+import { getR2Object } from "../files/r2.js";
 import { requireUser } from "../auth/middleware.js";
 import { notFound, forbidden } from "../lib/errors.js";
 
@@ -32,7 +32,13 @@ const accessibleFile = async (share: typeof fileShares.$inferSelect) => {
   if (!active(share)) throw notFound("share not found");
   return ownedFile(share.ownerUserId, share.assetId);
 };
-const signed = (key: string) => createR2PresignedUrl({ method: "GET", key, expiresSeconds: 60 });
+const deliver = async (reply: FastifyReply, file: { r2Key: string; filename: string }) => {
+  const object = await getR2Object(file.r2Key);
+  reply.header("content-type", "application/octet-stream");
+  reply.header("content-disposition", `attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`);
+  reply.header("content-length", String(object.content.length));
+  return reply.send(object.content);
+};
 const downloadHeaders = (reply: { header: (name: string, value: string) => unknown }) => {
   reply.header("cache-control", "private, no-store");
   reply.header("referrer-policy", "no-referrer");
@@ -52,7 +58,7 @@ export default async function fileSharingRoutes(app: FastifyInstance) {
     if (!share) throw notFound("share not found");
     const file = await accessibleFile(share);
     downloadHeaders(reply);
-    return reply.redirect(signed(file.r2Key));
+    return deliver(reply, file);
   });
 
   await app.register(async protectedRoutes => {
