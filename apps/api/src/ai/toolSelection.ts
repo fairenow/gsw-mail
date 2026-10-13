@@ -41,6 +41,7 @@ export function selectAgentTools(input: {
   );
   const skills = selectAgentSkills(input.userMessage);
   const videoRequested = /\b(?:video|animate|animation|moving clip|motion clip)\b/i.test(input.userMessage);
+  const schedulingRequested = /\b(?:schedul(?:e|ed|ing)|automat(?:e|ion|ically)|unattended|recurr(?:ing|ence)|every\s+(?:hour|day|week|month)|hourly|daily|weekly|monthly)\b/i.test(input.userMessage);
 
   if (skills.length === 0) {
     return {
@@ -52,7 +53,7 @@ export function selectAgentTools(input: {
   }
 
   const selected = available.filter((tool) =>
-    coreToolNames.has(tool.name) || (videoRequested && tool.name === "videos.generate") || tool.name === "capabilities.search" || tool.name.startsWith("workers.") || tool.name === "integrations.list" || tool.name.startsWith("tasks.") || skills.some((skill) => skillToolMatch(skill, tool.name)),
+    coreToolNames.has(tool.name) || (schedulingRequested && tool.name.startsWith("automations.")) || (videoRequested && tool.name === "videos.generate") || tool.name === "capabilities.search" || tool.name.startsWith("workers.") || tool.name === "integrations.list" || tool.name.startsWith("tasks.") || skills.some((skill) => skillToolMatch(skill, tool.name)),
   );
 
   const minimum = selected.length >= 3 ? selected : available;
