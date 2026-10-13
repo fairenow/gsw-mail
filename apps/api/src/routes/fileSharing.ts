@@ -71,6 +71,7 @@ export default async function fileSharingRoutes(app: FastifyInstance) {
         tokenHash: token ? hash(token) : null,
         permission: "viewer", expiresAt,
       }).returning();
+      if (!share) throw new Error("Could not create file share");
       reply.code(201);
       return { share: { id: share.id, scope: share.scope, recipientEmail: share.recipientEmail, permission: "viewer", expiresAt: share.expiresAt },
         ...(token ? { path: `/s/${token}` } : {}) };
