@@ -243,8 +243,13 @@ export async function createAssetFromBuffer(input: {
   source?: string | undefined;
   kind?: string | undefined;
   addToFiles?: boolean | undefined;
+  parentId?: string | null | undefined;
 }) {
   if (!r2Configured()) throw serviceUnavailable("File storage is not configured yet.");
+  if (input.parentId) {
+    const [parent] = await db.select({ id: fileNodes.id }).from(fileNodes).where(and(eq(fileNodes.id, input.parentId), eq(fileNodes.userId, input.userId), eq(fileNodes.nodeType, "folder"), isNull(fileNodes.trashedAt))).limit(1);
+    if (!parent) throw notFound("parent folder not found");
+  }
   const sizeBytes = input.content.byteLength;
   if (sizeBytes < 1) throw badRequest("file size must be greater than zero");
   if (sizeBytes > config.files.maxUploadBytes) throw badRequest(`file exceeds the ${config.files.maxUploadBytes} byte upload limit`);
@@ -284,7 +289,7 @@ export async function createAssetFromBuffer(input: {
       await db.insert(fileNodes).values({
         userId: input.userId,
         assetId: asset.id,
-        parentId: null,
+        parentId: input.parentId ?? null,
         name: filename,
         nodeType: "file",
       }).onConflictDoNothing();
@@ -398,6 +403,19 @@ export async function moveFileNode(userId: string, nodeId: string, parentId: str
       ))
       .limit(1);
     if (!parent) throw notFound("destination folder not found");
+  }
+  // Reject moves into descendants, including existing corrupted ancestry cycles.
+  if (node.nodeType === "folder" && parentId) {
+    const visited = new Set<string>([node.id]);
+    let ancestorId: string | null = parentId;
+    while (ancestorId) {
+      if (visited.has(ancestorId)) throw badRequest("a folder cannot be moved into itself or its descendants");
+      visited.add(ancestorId);
+      const [ancestor] = await db.select({ parentId: fileNodes.parentId }).from(fileNodes)
+        .where(and(eq(fileNodes.id, ancestorId), eq(fileNodes.userId, userId))).limit(1);
+      if (!ancestor) throw notFound("destination folder not found");
+      ancestorId = ancestor.parentId;
+    }
   }
   const [updated] = await db.update(fileNodes).set({ parentId, updatedAt: new Date() })
     .where(eq(fileNodes.id, nodeId))

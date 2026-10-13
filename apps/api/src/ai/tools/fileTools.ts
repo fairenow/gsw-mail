@@ -36,6 +36,7 @@ const analyzeInput = z.object({
   instruction: z.string().trim().min(1).max(4_000).optional(),
 });
 const createTextFileInput = z.object({
+  parentId: z.string().uuid().nullable().optional(),
   filename: z.string().trim().min(1).max(255),
   content: z.string().max(500_000),
   format: z.enum(["txt", "md", "csv", "json", "html"]).optional(),
@@ -308,6 +309,7 @@ export const filesCreateTextTool: AgentToolDefinition = {
     type: "object",
     properties: {
       filename: { type: "string" },
+      parentId: { type: ["string", "null"], description: "Destination folder UUID; omit for root." },
       content: { type: "string" },
       format: { type: "string", enum: ["txt", "md", "csv", "json", "html"] },
     },
@@ -330,6 +332,7 @@ export const filesCreateTextTool: AgentToolDefinition = {
         source: "chat_generated",
         kind: format === "csv" ? "spreadsheet" : "document",
         addToFiles: true,
+        parentId: input.parentId ?? null,
       });
       return success(ctx, toolCallId, startedAt, {
         assetId: asset.id,
