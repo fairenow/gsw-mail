@@ -80,7 +80,7 @@ const confirmationDecisionSchema = z.object({
 });
 
 const shouldPreAnalyzeAttachments = (content: string) =>
-  /\b(analy[sz]e|read|review|summari[sz]e|extract|understand|inspect|what(?:'s| is) (?:in|inside)|tell me about|scope|requirements?|dates?|pricing|spreadsheet|workbook|pdf|document|presentation|image|chart|table|clean|data)\b/i.test(content);
+  /\b(analy[sz]e|read|review|summari[sz]e|extract|understand|inspect|what(?:'s| is) (?:in|inside)|tell me about|scope|requirements?|dates?|pricing|spreadsheet|workbook|csv|xlsx|xls|file|pdf|document|presentation|image|chart|table|clean|data)\b/i.test(content);
 
 const explicitPdfGenerationIntent = (content: string) =>
   /\b(?:generate|create|make|build|export|produce|turn|convert)\b[\s\S]{0,100}\b(?:pdf|portable document)\b/i.test(content)
