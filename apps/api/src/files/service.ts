@@ -142,7 +142,7 @@ export async function completeUpload(userId: string, assetId: string) {
   const [ready] = await db.update(assets).set({
     status: "ready",
     etag: object.etag,
-    mimeType: object.contentType || asset.mimeType,
+    mimeType: object.contentType && object.contentType !== "application/octet-stream" ? object.contentType : asset.mimeType,
     updatedAt: new Date(),
   }).where(and(eq(assets.id, asset.id), eq(assets.userId, userId))).returning();
   return ready!;
