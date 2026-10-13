@@ -13,6 +13,7 @@ import { getAgentTaskRunner } from "./ai/taskRunner.js";
 import { ensureEmailTemplateSchema } from "./mail/ensureTemplateSchema.js";
 import { ensureFilesSchema } from "./files/ensureFilesSchema.js";
 import { startOrganizationWorker } from "./files/organizationJobs.js";
+import { ensureFileOrganizationSchema } from "./files/ensureOrganizationSchema.js";
 import { ensureEngagementAnalyticsSchema } from "./analytics/ensureSchema.js";
 
 const app = buildApp();
@@ -29,6 +30,7 @@ async function main() {
   await ensureAiAgentSchema();
   await ensureEmailTemplateSchema();
   await ensureFilesSchema();
+  await ensureFileOrganizationSchema();
   await ensureEngagementAnalyticsSchema();
   await ensureWebOAuthTestClient();
   worker.start();
