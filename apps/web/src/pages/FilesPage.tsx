@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, File, FileImage, FileSpreadsheet, FileText, Folder, FolderPlus, MoreHorizontal, RefreshCw, RotateCcw, Star, Trash2, Upload } from "lucide-react";
+import { Download, File, FileImage, FileSpreadsheet, FileText, Folder, FolderPlus, MoreHorizontal, Share2, Link2, RefreshCw, RotateCcw, Star, Trash2, Upload } from "lucide-react";
 import { api, type FileNode, type StorageUsage } from "../api";
 import { MailWorkspace } from "../components/MailWorkspace";
 import { useAppShell } from "../components/AppShell";
@@ -31,6 +31,13 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [shareItem, setShareItem] = useState<FileNode | null>(null);
+  const [shareEmail, setShareEmail] = useState("");
+  const [shareGrants, setShareGrants] = useState<Array<{ id: string; scope: "anyone" | "email"; recipientEmail: string | null; revokedAt: string | null }>>([]);
+  const [shareLink, setShareLink] = useState("");
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareNotice, setShareNotice] = useState("");
+
   const [allFolders, setAllFolders] = useState<FileNode[]>([]);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -122,6 +129,51 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
       if (uploadInput.current) uploadInput.current.value = "";
       setBusy(false);
     }
+  };
+
+  const loadGrants = async (assetId: string) => {
+    const result = await api.fileShares(assetId);
+    setShareGrants(result.grants);
+  };
+  const openShare = async (item: FileNode) => {
+    if (!item.assetId) return;
+    setMenuId(null);
+    setShareItem(item);
+    setShareLink("");
+    setShareEmail("");
+    setShareNotice("");
+    try { await loadGrants(item.assetId); }
+    catch (error) { setShareNotice(error instanceof Error ? error.message : "Unable to load sharing permissions."); }
+  };
+  const createLink = async () => {
+    if (!shareItem?.assetId) return;
+    setShareBusy(true); setShareNotice("");
+    try {
+      const result = await api.createFileShare(shareItem.assetId, { scope: "anyone" });
+      if (!result.path) throw new Error("No share URL was returned");
+      setShareLink(new URL(result.path, window.location.origin).toString());
+      await loadGrants(shareItem.assetId);
+      setShareNotice("Anyone with this link can view or download this file until you revoke access.");
+    } catch (error) { setShareNotice(error instanceof Error ? error.message : "Could not create share link."); }
+    finally { setShareBusy(false); }
+  };
+  const inviteEmail = async () => {
+    if (!shareItem?.assetId || !shareEmail.trim()) return;
+    setShareBusy(true); setShareNotice("");
+    try {
+      await api.createFileShare(shareItem.assetId, { scope: "email", email: shareEmail.trim().toLowerCase() });
+      await loadGrants(shareItem.assetId);
+      setShareEmail("");
+      setShareNotice("Access granted. This person can open the file after signing in with the verified matching email. An invitation email is not sent yet.");
+    } catch (error) { setShareNotice(error instanceof Error ? error.message : "Could not grant access."); }
+    finally { setShareBusy(false); }
+  };
+  const revokeShare = async (shareId: string) => {
+    if (!shareItem?.assetId) return;
+    setShareBusy(true);
+    try { await api.revokeFileShare(shareItem.assetId, shareId); await loadGrants(shareItem.assetId); setShareLink(""); setShareNotice("Access revoked. Already-issued temporary download links may remain valid for up to one minute."); }
+    catch (error) { setShareNotice(error instanceof Error ? error.message : "Could not revoke sharing."); }
+    finally { setShareBusy(false); }
   };
 
   const download = async (item: FileNode) => {
@@ -243,6 +295,7 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
                   <button className="gsw-icon-btn" aria-label={`More actions for ${item.name}`} onClick={() => setMenuId((current) => current === item.id ? null : item.id)}><MoreHorizontal size={17} /></button>
                   {menuId === item.id && <div className="gsw-file-menu">
                     <button onClick={() => void toggleStar(item)}><Star size={15} /> {item.starred ? "Unstar" : "Star"}</button>
+                    {item.assetId && <button onClick={() => void openShare(item)}><Share2 size={15}/> Share</button>}
                     <button onClick={() => void rename(item)}>Rename</button>
                     <button onClick={() => void move(item)}>Move</button>
                     <button className="danger" onClick={() => void trash(item)}><Trash2 size={15} /> Move to Trash</button>
@@ -251,6 +304,30 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
             </div>)}</div>}
         </section>
       </div>
+      {shareItem && <div role="presentation" style={{ position: "fixed", inset: 0, zIndex: 2000, background: "rgba(0,0,0,.45)", display: "grid", placeItems: "center", padding: 16 }} onClick={() => setShareItem(null)}>
+        <section role="dialog" aria-modal="true" aria-label={`Share ${shareItem.name}`} onClick={event => event.stopPropagation()} style={{ width: "min(100%, 530px)", background: "#fff", borderRadius: 22, padding: 24, display: "grid", gap: 18, boxShadow: "0 24px 70px rgba(0,0,0,.22)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}><div><h2 style={{ margin: 0 }}>Share file</h2><p style={{ margin: "6px 0 0", color: "#706c65", overflowWrap: "anywhere" }}>{shareItem.name}</p></div><button className="gsw-secondary-btn" onClick={() => setShareItem(null)}>Close</button></div>
+          <div style={{ display: "grid", gap: 8 }}>
+            <strong>Grant access by email</strong><p style={{ margin: 0, fontSize: 12, color: "#777" }}>Viewer access only. Recipient must have a verified GSW account.</p>
+            <form style={{ display: "flex", gap: 8 }} onSubmit={event => { event.preventDefault(); void inviteEmail(); }}>
+              <input type="email" required placeholder="person@example.com" aria-label="Recipient email" value={shareEmail} onChange={event => setShareEmail(event.target.value)} style={{ minWidth: 0, flex: 1, borderRadius: 9, border: "1px solid #ddd", padding: 10 }}/>
+              <button className="gsw-primary-btn" type="submit" disabled={shareBusy}>Grant access</button>
+            </form>
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            <strong>General access</strong><p style={{ margin: 0, fontSize: 12, color: "#777" }}>Restricted by default. Public links grant view/download access only.</p>
+            {shareLink ? <div style={{ display: "flex", gap: 8 }}><input readOnly value={shareLink} aria-label="Share link" style={{ flex: 1, minWidth: 0, border: "1px solid #ddd", padding: 8, borderRadius: 8 }}/><button className="gsw-secondary-btn" onClick={() => void navigator.clipboard.writeText(shareLink)}>Copy link</button></div> : <button className="gsw-secondary-btn" type="button" disabled={shareBusy} onClick={() => void createLink()}><Link2 size={16}/> Create anyone-with-link access</button>}
+          </div>
+          <div style={{ display: "grid", gap: 7 }}><strong>People and links with access</strong>
+            {shareGrants.filter(grant => !grant.revokedAt).length === 0 ? <p style={{ color: "#777", margin: 0 }}>Only you have access.</p> : shareGrants.filter(grant => !grant.revokedAt).map(grant =>
+              <div key={grant.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #eee" }}>
+                <span style={{ flex: 1, overflowWrap: "anywhere" }}>{grant.scope === "anyone" ? "Anyone with the link · Viewer" : `${grant.recipientEmail} · Viewer`}</span>
+                <button className="gsw-text-btn" disabled={shareBusy} onClick={() => void revokeShare(grant.id)}>Revoke</button>
+              </div>)}
+          </div>
+          {shareNotice && <p role="status" style={{ fontSize: 13, margin: 0, color: "#5e5140" }}>{shareNotice}</p>}
+        </section>
+      </div>}
     </main>;
 
   return embedded
