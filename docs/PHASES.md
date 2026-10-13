@@ -38,7 +38,7 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 - [x] Engine abstraction (swappable backend)
 - [x] Stalwart JMAP adapter implementation and protocol tests (live host acceptance pending)
 - [ ] Thread assembly
-- [ ] Attachments API
+- [x] Attachments API
 
 ## Phase 4 — Outbound sending
 - [x] Outbound queue model + states + delivery events
@@ -56,11 +56,11 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 
 ## Phase 5 — Basic mail application
 - [x] Web shell scaffold (folders + message list pane)
-- [ ] Inbox, Compose, Reply, Reply all, Forward
-- [ ] Sent, Drafts, Spam, Trash
-- [ ] Archive, mark read/unread, delete
-- [ ] Attachment download
-- [ ] Basic search field
+- [x] Inbox, Compose, Reply, Reply all, Forward
+- [x] Sent, Drafts, Spam, Trash
+- [x] Archive, mark read/unread, delete
+- [x] Attachment download
+- [x] Basic search field
 
 ## Phase 6 — Search
 - [ ] Indexed search (sender, recipient, subject, body, date, attachments, domain, thread)
@@ -87,11 +87,11 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 
 ## Phase 8 — AI intelligence layer
 - [x] Initial authenticated GSW Chat backed by server-side Hetzner Inference
-- [x] Initial chat is deliberately no-action: general conversation + email drafting/rewriting only; no mailbox/tool access
+- [x] Permission-scoped agent tools for mail, calendar, files, campaigns, browser, and automations
 - [x] AI never blocks delivery
 - [ ] Mail events → AI processing (classification: needs response, waiting, referral, …)
 - [ ] Referral/contact extraction example
-- [ ] Permissioned mailbox/context tools and user-confirmed actions
+- [ ] Complete audit of user-confirmed actions across all write/send tools
 
 ## Phase 9 — Product integration
 - [x] Identity integration with Guided Steps Wellness accounts (signed JWT + JWKS,
@@ -100,6 +100,16 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 
 ## Phase 10 — Organization / custom-domain hosting
 - [ ] Multi-org domains, verification flows (mx/spf/dkim/dmarc status)
+
+## Capabilities beyond the original phase plan
+
+- [x] Calendar and RSVP flows
+- [x] Scheduled send
+- [x] Files workspace backed by R2 and AI file-management tools
+- [x] Campaign and automation infrastructure
+- [x] Engagement analytics
+- [x] PDF and browser worker services
+- [ ] Live-host end-to-end acceptance for each capability
 
 ## MVP gate
 Complete when Ramon can use `ramon@guidedstepswellness.com` without Gmail as the
