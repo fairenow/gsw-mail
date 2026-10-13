@@ -41,19 +41,23 @@ gsw-mail/
 ├── infra/                 # Docker Compose (Stalwart + Postgres), env, scripts
 ├── apps/
 │   ├── api/               # GSW Mail API (TypeScript, Fastify, Postgres/Drizzle)
-│   └── web/               # Basic mail application shell (Vite + React)
+│   ├── web/               # Mail application (Vite + React)
+│   └── pdf-worker/        # PDF renderer and quality checks
+├── services/
+│   └── browser-worker/    # Isolated browser tools service
+└── scripts/               # Operational scripts
 ```
 
 ## Technology
 
 | Layer     | Choice                              | Notes                                             |
 |-----------|-------------------------------------|---------------------------------------------------|
-| Mail engine | Stalwart Mail Server (`stalwartlabs/stalwart:v0.16`) | SMTP/IMAP/JMAP, storage, DKIM, spam processing. IBM not written from scratch. |
-| Product DB | PostgreSQL 16                       | Product metadata only. Mail internal state stays in Stalwart. |
+| Mail engine | Stalwart Mail Server (`stalwartlabs/stalwart:v0.16`) | SMTP/IMAP/JMAP, storage, DKIM, spam processing. Not written from scratch. |
+| Product DB | PostgreSQL 16 (Neon in production)  | Product metadata only. Mail internal state stays in Stalwart. |
 | API        | TypeScript + Fastify                | The abstraction boundary. Swappable engine behind it. |
 | ORM        | Drizzle                             | Typed schema + SQL migrations.                    |
 | Outbound relay | Resend (placeholder)             | Infrastructure only; the queue and delivery events are GSW-owned. |
-| Web app    | Vite + React                        | Phase 5 basic mail interface.                     |
+| Web app    | Vite + React                        | Mail, contacts, calendar, files, settings, AI chat.                     |
 
 ## Quick start (local development)
 
@@ -84,18 +88,18 @@ skeleton can be exercised end to end before real Stalwart credentials exist.
 
 ## Phase status
 
-Current phase: **Phase 0/1 foundation scaffold** (see `docs/PHASES.md`).
+Implementation status and outstanding live-host acceptance are tracked in `docs/PHASES.md`. `[x]` denotes implemented, `[~]` partially implemented, and `[ ]` pending.
 
 - [ ] Phase 0 — infrastructure proof of concept
 - [ ] Phase 1 — domain and receiving infrastructure
-- [ ] Phase 2 — account and mailbox system
-- [ ] Phase 3 — Guided Steps Mail API
-- [ ] Phase 4 — outbound sending + queue
-- [ ] Phase 5 — basic mail application
-- [ ] Phase 6 — search
-- [ ] Phase 7 — spam and security hardening
-- [ ] Phase 8 — AI intelligence layer
-- [ ] Phase 9 — product integration
+- [x] Phase 2 — account and mailbox system
+- [~] Phase 3 — Guided Steps Mail API
+- [~] Phase 4 — outbound sending + queue
+- [~] Phase 5 — basic mail application
+- [~] Phase 6 — search
+- [~] Phase 7 — spam and security hardening
+- [~] Phase 8 — AI intelligence layer
+- [~] Phase 9 — product integration
 - [ ] Phase 10 — organization / custom-domain hosting
 
 ## MVP definition
