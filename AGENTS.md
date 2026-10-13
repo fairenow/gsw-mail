@@ -6,6 +6,8 @@
 - API tests: `cd apps/api && npm test` (node:test + tsx; unit tests only, no DB required)
 - API migrations: `cd apps/api && npm run db:generate && npm run db:migrate`
 - Web dev: `cd apps/web && npm run dev` (http://localhost:3000)
+- Browser worker build: `cd services/browser-worker && npm install && npm run build` (standalone service; separate CI)
+- PDF worker checks: `node --test apps/pdf-worker/quality.test.mjs && node --check apps/pdf-worker/server.mjs`
 - Infra: `docker compose -f infra/docker-compose.yml up -d` (Stalwart + Postgres)
 
 ## Conventions
@@ -18,6 +20,6 @@
 - Always run `npm run db:migrate` after generating a new migration; report clearly if the configured database is unavailable.
 
 ## Status
-Phase 0/1 foundation scaffold. Verify with `npm run typecheck` in both apps before
+See `docs/PHASES.md` for implementation and live-host acceptance status. The API, web app, AI tools, calendar, files, scheduled send, and workers have implementations. Verify with `npm run typecheck` in both apps before
 finishing work. Docker is not available on this workstation; compose is validated
 statically.
