@@ -243,8 +243,13 @@ export async function createAssetFromBuffer(input: {
   source?: string | undefined;
   kind?: string | undefined;
   addToFiles?: boolean | undefined;
+  parentId?: string | null | undefined;
 }) {
   if (!r2Configured()) throw serviceUnavailable("File storage is not configured yet.");
+  if (input.parentId) {
+    const [parent] = await db.select({ id: fileNodes.id }).from(fileNodes).where(and(eq(fileNodes.id, input.parentId), eq(fileNodes.userId, input.userId), eq(fileNodes.nodeType, "folder"), isNull(fileNodes.trashedAt))).limit(1);
+    if (!parent) throw notFound("parent folder not found");
+  }
   const sizeBytes = input.content.byteLength;
   if (sizeBytes < 1) throw badRequest("file size must be greater than zero");
   if (sizeBytes > config.files.maxUploadBytes) throw badRequest(`file exceeds the ${config.files.maxUploadBytes} byte upload limit`);
@@ -284,7 +289,7 @@ export async function createAssetFromBuffer(input: {
       await db.insert(fileNodes).values({
         userId: input.userId,
         assetId: asset.id,
-        parentId: null,
+        parentId: input.parentId ?? null,
         name: filename,
         nodeType: "file",
       }).onConflictDoNothing();
