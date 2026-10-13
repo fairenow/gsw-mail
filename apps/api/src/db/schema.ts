@@ -296,6 +296,25 @@ export const fileNodes = pgTable(
   ],
 );
 
+/** Durable, approval-bound background reorganization jobs. */
+export const fileOrganizationJobs = pgTable("file_organization_jobs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("queued"),
+  planHash: text("plan_hash").notNull(),
+  dateBasis: text("date_basis").notNull(),
+  actions: jsonb("actions").$type<Array<{ nodeId: string; name: string; from: string | null; date: string; type: string }>>().notNull(),
+  cursor: integer("cursor").notNull().default(0),
+  movedCount: integer("moved_count").notNull().default(0),
+  failedCount: integer("failed_count").notNull().default(0),
+  errors: jsonb("errors").$type<Array<{ nodeId: string; reason: string }>>().notNull().default(sql`'[]'::jsonb`),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  ...timestamps,
+}, t => [
+  index("file_organization_jobs_status_idx").on(t.status, t.leaseUntil),
+  index("file_organization_jobs_user_idx").on(t.userId, t.createdAt),
+]);
+
 /** Explicit file sharing grants; original R2 objects always remain private. */
 export const fileShares = pgTable(
   "file_shares",
