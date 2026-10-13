@@ -10,6 +10,7 @@ import { domainTools } from "./domainTools.js";
 import { fileTools } from "./fileTools.js";
 import { fileManagementTools } from "./fileManagementTools.js";
 import { fileOrganizationTools } from "./fileOrganizationTools.js";
+import { durableFileOrganizationTools } from "./durableFileOrganizationTools.js";
 import { taskTools } from "./taskTools.js";
 import { workerTools } from "./workerTools.js";
 import { integrationTools } from "./integrationTools.js";
@@ -84,7 +85,7 @@ export class AgentToolRegistry {
   }
 }
 
-const baseAgentTools: AgentToolDefinition[] = [...agentMailTools, ...automationTools, ...taskTools, ...workerTools, ...integrationTools, ...browserTools, ...searchTools, ...contactTools, ...calendarTools, ...campaignTools, ...templateTools, ...domainTools, ...fileTools, ...fileManagementTools, ...fileOrganizationTools, ...videoTools];
+const baseAgentTools: AgentToolDefinition[] = [...agentMailTools, ...automationTools, ...taskTools, ...workerTools, ...integrationTools, ...browserTools, ...searchTools, ...contactTools, ...calendarTools, ...campaignTools, ...templateTools, ...domainTools, ...fileTools, ...fileManagementTools, ...fileOrganizationTools, ...durableFileOrganizationTools, ...videoTools];
 const baseAgentRegistry = new AgentToolRegistry(baseAgentTools);
 
 const capabilitySearchTool: AgentToolDefinition = {
