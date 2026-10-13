@@ -296,6 +296,28 @@ export const fileNodes = pgTable(
   ],
 );
 
+/** Explicit file sharing grants; original R2 objects always remain private. */
+export const fileShares = pgTable(
+  "file_shares",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ownerUserId: text("owner_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    assetId: uuid("asset_id").notNull().references(() => assets.id, { onDelete: "cascade" }),
+    scope: text("scope").notNull(), // 'anyone' or 'email'
+    recipientEmail: text("recipient_email"),
+    tokenHash: text("token_hash"),
+    permission: text("permission").default("viewer").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    index("file_shares_owner_asset_idx").on(t.ownerUserId, t.assetId),
+    index("file_shares_recipient_idx").on(t.recipientEmail),
+    uniqueIndex("file_shares_token_hash_idx").on(t.tokenHash),
+  ],
+);
+
 export const assetLinks = pgTable(
   "asset_links",
   {
