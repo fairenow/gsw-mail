@@ -642,7 +642,12 @@ export const api = {
   deleteFileNode: (id: string) => request(`/product/files/nodes/${encodeURIComponent(id)}`, { method: "DELETE" }).then((res) => json<{ id: string; deleted: boolean }>(res)),
   createFileUpload: (body: { filename: string; mimeType?: string; sizeBytes: number; source?: string; kind?: string; parentId?: string | null }) => post<FileUploadIntent>("/product/files/uploads", body),
   completeFileUpload: (assetId: string) => post<{ asset: FileAsset; usage: StorageUsage }>(`/product/files/${encodeURIComponent(assetId)}/complete`),
-  fileDownload: (assetId: string) => get<{ assetId: string; filename: string; mimeType: string; sizeBytes: number; url: string; expiresInSeconds: number }>(`/product/files/${encodeURIComponent(assetId)}/download`),
+  fileShares: (assetId: string) => get<{ grants: Array<{ id: string; scope: "anyone" | "email"; recipientEmail: string | null; permission: string; expiresAt: string | null; revokedAt: string | null }> }>(`/product/files/${encodeURIComponent(assetId)}/shares`),
+  createFileShare: (assetId: string, data: { scope: "anyone" | "email"; email?: string; expiresAt?: string }) =>
+    post<{ share: { id: string; scope: string; recipientEmail: string | null }; path?: string }>(`/product/files/${encodeURIComponent(assetId)}/shares`, data),
+  revokeFileShare: (assetId: string, shareId: string) => request(`/product/files/${encodeURIComponent(assetId)}/shares/${encodeURIComponent(shareId)}`, { method: "DELETE" }).then(res => json<{ revoked: boolean }>(res)),
+  sharedWithMe: () => get<{ files: Array<{ shareId: string; filename: string; mimeType: string; sizeBytes: number }> }>("/product/files/shared-with-me"),
+    fileDownload: (assetId: string) => get<{ assetId: string; filename: string; mimeType: string; sizeBytes: number; url: string; expiresInSeconds: number }>(`/product/files/${encodeURIComponent(assetId)}/download`),
   deleteFile: (assetId: string) => request(`/product/files/${encodeURIComponent(assetId)}`, { method: "DELETE" }).then((res) => json<{ id: string; deleted: boolean }>(res)),
   uploadFile: async (file: File, options?: { source?: string; kind?: string; parentId?: string | null }) => {
     const intent = await post<FileUploadIntent>("/product/files/uploads", {
