@@ -131,7 +131,7 @@ export default async function fileSharingRoutes(app: FastifyInstance) {
       if (!share) throw notFound("share not found");
       const file = await accessibleFile(share);
       downloadHeaders(reply);
-      return reply.redirect(signed(file.r2Key));
+      return deliver(reply, file);
     });
   });
 }
