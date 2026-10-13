@@ -292,7 +292,7 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
             <div className="gsw-file-main"><span className="gsw-file-icon"><FileText size={21}/></span><span><strong>{file.filename}</strong><small>Shared · Viewer · {formatBytes(file.sizeBytes)}</small></span></div>
             <button className="gsw-secondary-btn" onClick={() => window.open(`/product/files/shares/${encodeURIComponent(file.shareId)}/download`, "_blank", "noopener,noreferrer")}><Download size={16}/> Download</button>
           </div>)}</div>) :
-                    {loading ? <div className="gsw-empty-product">Loading files…</div> : files.length === 0 ? <div className="gsw-empty-product"><strong>{view === "trash" ? "Trash is empty" : view === "starred" ? "No starred files" : view === "recent" ? "No recent files" : "This folder is empty"}</strong><p>{view === "folder" ? "Upload a file or create a folder to get started." : "Files will appear here as you use GSW."}</p></div> :
+                    (loading ? <div className="gsw-empty-product">Loading files…</div> : files.length === 0 ? <div className="gsw-empty-product"><strong>{view === "trash" ? "Trash is empty" : view === "starred" ? "No starred files" : view === "recent" ? "No recent files" : "This folder is empty"}</strong><p>{view === "folder" ? "Upload a file or create a folder to get started." : "Files will appear here as you use GSW."}</p></div> :
             <div className="gsw-files-list">{files.map((item) => <div className="gsw-file-row" key={item.id}>
               <button className="gsw-file-main" onDoubleClick={() => item.nodeType === "folder" && openFolder(item)} onClick={() => item.nodeType === "folder" && openFolder(item)}>
                 <span className="gsw-file-icon">{iconFor(item)}</span>
@@ -312,7 +312,7 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
                     <button className="danger" onClick={() => void trash(item)}><Trash2 size={15} /> Move to Trash</button>
                   </div>}
                 </div>}
-            </div>)}</div>}
+            </div>)}</div>)}
         </section>
       </div>
       {shareItem && <div role="presentation" style={{ position: "fixed", inset: 0, zIndex: 2000, background: "rgba(0,0,0,.45)", display: "grid", placeItems: "center", padding: 16 }} onClick={() => setShareItem(null)}>
