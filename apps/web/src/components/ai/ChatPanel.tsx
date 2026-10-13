@@ -198,6 +198,8 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
     setExecutionActivities((current) => {
       const settled = current.map((item) => item.status === "running" && !item.toolName ? { ...item, status: "done" as const } : item);
       const last = settled[settled.length - 1];
+      // Avoid repetitive "Preparing response" steps when the model re-enters its planning loop.
+      if (event.phase === "thinking" && last?.label === "Preparing response" && !last.toolName) return settled;
       if (last?.label === event.label && last.status === "running" && last.toolName === event.toolName) return settled;
       activityCounterRef.current += 1;
       return [...settled.slice(-39), {
