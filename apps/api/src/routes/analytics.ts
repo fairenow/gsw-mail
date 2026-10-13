@@ -6,7 +6,7 @@ const eventSchema=z.object({
  id:z.string().uuid(),type:z.enum(["page_view","click","scroll_depth","page_exit","visibility","web_vital"]),
  path:z.string().max(160).regex(/^\/[a-zA-Z0-9_:\-/]*$/),occurredAt:z.string().datetime(),
  sessionId:z.string().uuid(),visitorId:z.string().uuid(),
- metadata:z.record(z.union([z.string().max(64),z.number().finite(),z.boolean()])).optional()
+ metadata:z.record(z.string(), z.union([z.string().max(64),z.number().finite(),z.boolean()])).optional()
 }).strict();
 const requestSchema=z.object({events:z.array(eventSchema).min(1).max(50)}).strict();
 export default async function analyticsRoutes(app:FastifyInstance){
