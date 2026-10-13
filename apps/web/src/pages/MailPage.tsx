@@ -116,7 +116,7 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
       // If the user is paging through older mail or searching, leave their list alone.
       if (pageRef.current !== 0 || searchRef.current.trim()) return;
       setMessages(current => {
-        if (current.length === latest.length && current.every((message, index) => message.id === latest[index]?.id && message.read === latest[index]?.read)) return current;
+        if (current.length === latest.length && current.every((message, index) => message.engineId === latest[index]?.engineId && message.read === latest[index]?.read && message.flagged === latest[index]?.flagged)) return current;
         return latest;
       });
     } catch { /* Passive refresh errors must not disrupt the current mailbox. */ }
