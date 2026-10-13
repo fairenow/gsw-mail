@@ -399,6 +399,19 @@ export async function moveFileNode(userId: string, nodeId: string, parentId: str
       .limit(1);
     if (!parent) throw notFound("destination folder not found");
   }
+  // Reject moves into descendants, including existing corrupted ancestry cycles.
+  if (node.nodeType === "folder" && parentId) {
+    const visited = new Set<string>([node.id]);
+    let ancestorId: string | null = parentId;
+    while (ancestorId) {
+      if (visited.has(ancestorId)) throw badRequest("a folder cannot be moved into itself or its descendants");
+      visited.add(ancestorId);
+      const [ancestor] = await db.select({ parentId: fileNodes.parentId }).from(fileNodes)
+        .where(and(eq(fileNodes.id, ancestorId), eq(fileNodes.userId, userId))).limit(1);
+      if (!ancestor) throw notFound("destination folder not found");
+      ancestorId = ancestor.parentId;
+    }
+  }
   const [updated] = await db.update(fileNodes).set({ parentId, updatedAt: new Date() })
     .where(eq(fileNodes.id, nodeId))
     .returning();
