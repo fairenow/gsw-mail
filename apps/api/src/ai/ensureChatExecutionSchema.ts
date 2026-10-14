@@ -4,7 +4,7 @@ import { pool } from "../db/client.js";
 export async function ensureChatExecutionSchema() {
   await pool.query(`CREATE TABLE IF NOT EXISTS ai_chat_executions (
   id uuid PRIMARY KEY,
-  user_id uuid NOT NULL,
+  user_id text NOT NULL,
   account_id uuid,
   command_id uuid NOT NULL,
   conversation_id uuid,
