@@ -33,6 +33,8 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [notice, setNotice] = useState("");
   const [menuId, setMenuId] = useState<string | null>(null);
   const [shareItem, setShareItem] = useState<FileNode | null>(null);
+  const [preview, setPreview] = useState<{ name: string; url: string; kind: string } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [shareEmail, setShareEmail] = useState("");
   const [shareGrants, setShareGrants] = useState<Array<{ id: string; scope: "anyone" | "email"; recipientEmail: string | null; revokedAt: string | null }>>([]);
   const [shareLink, setShareLink] = useState("");
@@ -192,6 +194,18 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
     }
   };
 
+  const openPreview = async (item: FileNode) => {
+    if (!item.assetId) return;
+    setPreviewLoading(true);
+    try {
+      const result = await api.fileDownload(item.assetId);
+      const url = new URL(result.url);
+      if (url.protocol !== "https:" && !(url.protocol === "http:" && url.hostname === "localhost")) throw new Error("Invalid file preview URL");
+      setPreview({ name: item.name, url: url.href, kind: item.kind || "" });
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to preview this file."); }
+    finally { setPreviewLoading(false); }
+  };
+
   const rename = async (item: FileNode) => {
     const name = window.prompt("Rename", item.name);
     if (!name?.trim() || name.trim() === item.name) return;
@@ -289,12 +303,12 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
           {view === "folder" && <div className="gsw-files-breadcrumb">{path.map((part, index) => <button key={part.id ?? "root"} onClick={() => setPath((current) => current.slice(0, index + 1))}>{part.name}</button>)}</div>}
           {notice && <p className="gsw-files-notice">{notice}</p>}
           {view === "shared" ? (loading ? <div className="gsw-empty-product">Loading shared files…</div> : sharedFiles.length === 0 ? <div className="gsw-empty-product"><strong>No files shared with you</strong><p>Files shared with your verified GSW email address will appear here.</p></div> : <div className="gsw-files-list">{sharedFiles.map(file => <div className="gsw-file-row" key={file.shareId}>
-            <div className="gsw-file-main"><span className="gsw-file-icon"><FileText size={21}/></span><span><strong>{file.filename}</strong><small>Shared · Viewer · {formatBytes(file.sizeBytes)}</small></span></div>
+            <button type="button" className="gsw-file-main" onClick={() => setPreview({ name: file.filename, url: `/product/files/shares/${encodeURIComponent(file.shareId)}/download`, kind: file.mimeType })}><span className="gsw-file-icon"><FileText size={21}/></span><span><strong>{file.filename}</strong><small>Shared · Viewer · {formatBytes(file.sizeBytes)}</small></span></button>
             <button className="gsw-secondary-btn" onClick={() => window.open(`/product/files/shares/${encodeURIComponent(file.shareId)}/download`, "_blank", "noopener,noreferrer")}><Download size={16}/> Download</button>
           </div>)}</div>) :
                     (loading ? <div className="gsw-empty-product">Loading files…</div> : files.length === 0 ? <div className="gsw-empty-product"><strong>{view === "trash" ? "Trash is empty" : view === "starred" ? "No starred files" : view === "recent" ? "No recent files" : "This folder is empty"}</strong><p>{view === "folder" ? "Upload a file or create a folder to get started." : "Files will appear here as you use GSW."}</p></div> :
             <div className="gsw-files-list">{files.map((item) => <div className="gsw-file-row" key={item.id}>
-              <button className="gsw-file-main" onDoubleClick={() => item.nodeType === "folder" && openFolder(item)} onClick={() => item.nodeType === "folder" && openFolder(item)}>
+              <button className="gsw-file-main" onDoubleClick={() => item.nodeType === "folder" && openFolder(item)} onClick={() => item.nodeType === "folder" ? openFolder(item) : void openPreview(item)}>
                 <span className="gsw-file-icon">{iconFor(item)}</span>
                 <span><strong>{item.name}</strong><small>{item.nodeType === "folder" ? "Folder" : `${item.kind || "File"} · ${formatBytes(Number(item.sizeBytes ?? 0))}`}</small></span>
               </button>
@@ -315,6 +329,19 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
             </div>)}</div>)}
         </section>
       </div>
+      {previewLoading && <p role="status" className="gsw-files-notice">Loading preview…</p>}
+      {preview && <div role="presentation" onClick={() => setPreview(null)} style={{position:"fixed",inset:0,zIndex:2100,background:"rgba(0,0,0,.68)",display:"grid",placeItems:"center",padding:20}}>
+        <section role="dialog" aria-modal="true" aria-label={`Preview ${preview.name}`} onClick={event => event.stopPropagation()} style={{width:"min(100%, 1050px)",height:"min(90vh, 900px)",background:"#fff",borderRadius:18,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,.3)"}}>
+          <header style={{display:"flex",alignItems:"center",gap:12,padding:"14px 18px",borderBottom:"1px solid #eee"}}><strong style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{preview.name}</strong><a className="gsw-secondary-btn" href={preview.url} target="_blank" rel="noopener noreferrer"><Download size={15}/> Download</a><button className="gsw-secondary-btn" onClick={() => setPreview(null)} aria-label="Close preview">Close</button></header>
+          <div style={{flex:1,minHeight:0,display:"grid",placeItems:"center",background:"#f8f7f4",overflow:"auto"}}>
+            {(/\\.(png|jpe?g|webp|gif|svg|avif)$/i.test(preview.name) || preview.kind.startsWith("image")) ? <img src={preview.url} alt={preview.name} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain"}} />
+            : (/\\.pdf$/i.test(preview.name) || preview.kind === "pdf" || preview.kind === "application/pdf" || /\\.(txt|csv|json|html?)$/i.test(preview.name) || preview.kind.startsWith("text/")) ? <iframe src={preview.url} title={preview.name} sandbox="allow-scripts allow-same-origin" style={{width:"100%",height:"100%",border:0,background:"#fff"}} />
+            : (/\\.(mp4|webm|mov)$/i.test(preview.name) || preview.kind.startsWith("video")) ? <video controls src={preview.url} style={{maxWidth:"100%",maxHeight:"100%"}} />
+            : (/\\.(mp3|wav|ogg|m4a)$/i.test(preview.name) || preview.kind.startsWith("audio")) ? <audio controls src={preview.url} />
+            : <div style={{padding:24,textAlign:"center"}}><FileText size={38}/><p>Preview is not available for this file format.</p><a href={preview.url} target="_blank" rel="noopener noreferrer">Open or download file</a></div>}
+          </div>
+        </section>
+      </div>}
       {shareItem && <div role="presentation" style={{ position: "fixed", inset: 0, zIndex: 2000, background: "rgba(0,0,0,.45)", display: "grid", placeItems: "center", padding: 16 }} onClick={() => setShareItem(null)}>
         <section role="dialog" aria-modal="true" aria-label={`Share ${shareItem.name}`} onClick={event => event.stopPropagation()} style={{ width: "min(100%, 530px)", background: "#fff", borderRadius: 22, padding: 24, display: "grid", gap: 18, boxShadow: "0 24px 70px rgba(0,0,0,.22)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}><div><h2 style={{ margin: 0 }}>Share file</h2><p style={{ margin: "6px 0 0", color: "#706c65", overflowWrap: "anywhere" }}>{shareItem.name}</p></div><button className="gsw-secondary-btn" onClick={() => setShareItem(null)}>Close</button></div>

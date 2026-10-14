@@ -68,5 +68,5 @@ export function ChatPendingImagePreview({ attachment }: { attachment: AiChatAtta
     }).catch(() => undefined);
     return () => { active = false; };
   }, [attachment.assetId]);
-  return url ? <img src={url} alt="" style={{width:44,height:44,objectFit:"cover",borderRadius:8}} /> : <ImageIcon size={22}/>;
+  return url ? <img src={url} alt="" style={{width:76,height:76,objectFit:"cover",borderRadius:14}} /> : <ImageIcon size={22}/>;
 }

@@ -731,10 +731,9 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
       >
         <input ref={fileInputRef} className="gsw-hidden-input" type="file" multiple onChange={(event) => event.target.files && void uploadChatFiles(event.target.files)} />
         {pendingAttachments.length > 0 && <div className="gsw-chat-pending-files">
-          {pendingAttachments.map((attachment) => <span className="gsw-chat-pending-file" key={attachment.assetId}>
+          {pendingAttachments.map((attachment) => <span className={isChatImage(attachment) ? "gsw-chat-pending-file gsw-chat-pending-image-only" : "gsw-chat-pending-file"} key={attachment.assetId}>
             <button type="button" onClick={() => setMediaPreview(attachment)} aria-label={`Preview ${attachment.filename}`} style={{display:"inline-flex",alignItems:"center",gap:8,minWidth:0}}>
-              {isChatImage(attachment) ? <ChatPendingImagePreview attachment={attachment}/> : <File size={14}/>}
-              <span><strong>{attachment.filename}</strong><small>{formatAttachmentSize(attachment.sizeBytes)}</small></span>
+              {isChatImage(attachment) ? <ChatPendingImagePreview attachment={attachment}/> : <><File size={14}/><span><strong>{attachment.filename}</strong><small>{formatAttachmentSize(attachment.sizeBytes)}</small></span></>}
             </button>
             <button type="button" aria-label={`Remove ${attachment.filename}`} onClick={() => setPendingAttachments((current) => current.filter((item) => item.assetId !== attachment.assetId))}><X size={13} /></button>
           </span>)}
