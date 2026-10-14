@@ -3,7 +3,7 @@ import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, Clock3, Copy, File,
 import { api, type AiChatAttachment, type AiChatMessage, type AiChatStreamEvent, type AiConversationRecord, type AiIntervention } from "../../api";
 import { useAppShell } from "../AppShell";
 import { ChatMarkdown } from "./ChatMarkdown";
-import { ChatImageAttachment, isChatImage } from "./ChatImageAttachment";
+import { ChatImageAttachment, ChatPendingImagePreview, isChatImage } from "./ChatImageAttachment";
 import { ChatVideoAttachment, ChatVideoTaskCard, MediaPreviewModal, extractVideoTaskId } from "./ChatMedia";
 
 const starterPrompts = [
@@ -670,6 +670,15 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
         const segments = message.role === "assistant" ? parseAssistantSegments(message.content) : null;
         return <article className={`gsw-chat-message ${message.role}`} key={`${message.role}-${index}`}>
           <div className="gsw-chat-message-label">{message.role === "user" ? "You" : "GSW"}</div>
+          {message.attachments && message.attachments.length > 0 && <div className="gsw-chat-message-files">
+            {message.attachments.map((attachment) => isChatImage(attachment)
+              ? <ChatImageAttachment key={attachment.assetId} attachment={attachment} onUseInEmail={useImageInEmail} onError={setError} onPreview={() => setMediaPreview(attachment)} />
+              : attachment.mimeType.toLowerCase() === "video/mp4" ? <ChatVideoAttachment key={attachment.assetId} attachment={attachment} onPreview={setMediaPreview} />
+              : <button type="button" className="gsw-chat-file-chip" key={attachment.assetId} onClick={() => setMediaPreview(attachment)}>
+                <File size={15} />
+                <span><strong>{attachment.filename}</strong><small>{attachment.mimeType || "File"} · {formatAttachmentSize(attachment.sizeBytes)}</small></span>
+              </button>)}
+          </div>}
           {message.role === "assistant" && scheduledConfirmation(message.content) ? <section className="gsw-chat-schedule-success" aria-label="Scheduled task created">
             <div className="gsw-chat-schedule-success-header"><CheckCircle2 size={19} aria-hidden="true" /><strong>Task scheduled</strong></div>
             <h3>{scheduledConfirmation(message.content)!.title}</h3>
@@ -686,15 +695,6 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
                 </section>
               : <div className="gsw-chat-message-body" key={`text-${segmentIndex}`}><ChatMarkdown content={segment.content} /></div>)}
           </div> : <div className="gsw-chat-message-body">{message.content}</div>}
-          {message.attachments && message.attachments.length > 0 && <div className="gsw-chat-message-files">
-            {message.attachments.map((attachment) => isChatImage(attachment)
-              ? <ChatImageAttachment key={attachment.assetId} attachment={attachment} onUseInEmail={useImageInEmail} onError={setError} onPreview={() => setMediaPreview(attachment)} />
-              : attachment.mimeType.toLowerCase() === "video/mp4" ? <ChatVideoAttachment key={attachment.assetId} attachment={attachment} onPreview={setMediaPreview} />
-              : <button type="button" className="gsw-chat-file-chip" key={attachment.assetId} onClick={() => void openAttachedFile(attachment)}>
-                <File size={15} />
-                <span><strong>{attachment.filename}</strong><small>{attachment.mimeType || "File"} · {formatAttachmentSize(attachment.sizeBytes)}</small></span>
-              </button>)}
-          </div>}
           <button className="gsw-chat-copy" type="button" aria-label={message.role === "user" ? "Copy prompt" : "Copy full response"} title={message.role === "user" ? "Copy prompt" : "Copy full response"} onClick={() => void navigator.clipboard.writeText(message.role === "assistant" ? cleanAssistantText(message.content) : message.content)}><Copy size={14} strokeWidth={1.8} /></button>
         </article>;
       })}
@@ -741,8 +741,10 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
         <input ref={fileInputRef} className="gsw-hidden-input" type="file" multiple onChange={(event) => event.target.files && void uploadChatFiles(event.target.files)} />
         {pendingAttachments.length > 0 && <div className="gsw-chat-pending-files">
           {pendingAttachments.map((attachment) => <span className="gsw-chat-pending-file" key={attachment.assetId}>
-            <File size={14} />
-            <span><strong>{attachment.filename}</strong><small>{formatAttachmentSize(attachment.sizeBytes)}</small></span>
+            <button type="button" onClick={() => setMediaPreview(attachment)} aria-label={`Preview ${attachment.filename}`} style={{display:"inline-flex",alignItems:"center",gap:8,minWidth:0}}>
+              {isChatImage(attachment) ? <ChatPendingImagePreview attachment={attachment}/> : <File size={14}/>}
+              <span><strong>{attachment.filename}</strong><small>{formatAttachmentSize(attachment.sizeBytes)}</small></span>
+            </button>
             <button type="button" aria-label={`Remove ${attachment.filename}`} onClick={() => setPendingAttachments((current) => current.filter((item) => item.assetId !== attachment.assetId))}><X size={13} /></button>
           </span>)}
         </div>}
