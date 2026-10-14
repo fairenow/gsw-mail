@@ -1,5 +1,5 @@
-import { ScheduledWorkPanel } from "../components/ai/ScheduledWorkPanel";
-import { useCallback, useEffect, useRef, useState } from "react";
+
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { Inbox } from "lucide-react";
 import { api, type BulkMailAction, type ComposeAttachment, type FullMessage, type MessageSummary, type ProductSettings, type SendResult } from "../api";
 import { useAppShell } from "../components/AppShell";
@@ -13,11 +13,19 @@ import { MessageReader } from "../components/mail/MessageReader";
 import { MessageRow } from "../components/mail/MessageRow";
 import { appendDraftAttachments, attachStoredFilesToDraft, listDraftAttachments, removeDraftAttachment, type DraftAttachmentMeta } from "../lib/draftAttachments";
 import { browserTimeZone, scheduleDraft, type ScheduleDraftInput } from "../lib/scheduledSend";
-import { CalendarPage } from "./CalendarPage";
-import { ContactsPage } from "./ContactsPage";
-import { SettingsPage } from "./SettingsPage";
-import { FilesPage } from "./FilesPage";
-import { ChatPanel } from "../components/ai/ChatPanel";
+
+
+
+
+
+
+// Split heavy workspaces into separate bundles; download them only when visited.
+const ScheduledWorkPanel = lazy(() => import("../components/ai/ScheduledWorkPanel").then(m => ({ default: m.ScheduledWorkPanel })));
+const CalendarPage = lazy(() => import("./CalendarPage").then(m => ({ default: m.CalendarPage })));
+const ContactsPage = lazy(() => import("./ContactsPage").then(m => ({ default: m.ContactsPage })));
+const SettingsPage = lazy(() => import("./SettingsPage").then(m => ({ default: m.SettingsPage })));
+const FilesPage = lazy(() => import("./FilesPage").then(m => ({ default: m.FilesPage })));
+const ChatPanel = lazy(() => import("../components/ai/ChatPanel").then(m => ({ default: m.ChatPanel })));
 
 type MobileView = "messages" | "reader";
 type WorkspaceSection = "mail" | "contacts" | "calendar" | "settings" | "files" | "chat" | "scheduled";
@@ -92,6 +100,10 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
   const [sendError, setSendError] = useState<string | null>(null);
   const [sendRequestId, setSendRequestId] = useState<string | null>(null);
   const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>(initialSection);
+  // Mount each workspace on first visit, then preserve its state while hidden.
+  // This avoids mounting every expensive workspace during the initial mailbox render.
+  const [visitedSections, setVisitedSections] = useState<Set<WorkspaceSection>>(() => new Set([initialSection]));
+  useEffect(() => { setVisitedSections(current => current.has(workspaceSection) ? current : new Set([...current, workspaceSection])); }, [workspaceSection]);
   useEffect(() => { window.dispatchEvent(new CustomEvent("gsw-analytics-screen", { detail: { screen: workspaceSection === "mail" ? "mail/" + folder.toLowerCase() : workspaceSection } })); }, [workspaceSection, folder]);
 
   const loadFolder = useCallback(async (accountId: string, name: Folder, nextPage = 0) => {
@@ -155,12 +167,12 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
     let active = true;
     let pending = false;
     const update = async () => {
-      if (!active || pending || document.visibilityState !== "visible") return;
+      if (!active || pending || document.visibilityState !== "visible" || !navigator.onLine) return;
       pending = true;
       try { await silentRefresh(account.id, folder); } finally { pending = false; }
     };
     const onFocus = () => { void update(); };
-    const timer = window.setInterval(() => { void update(); }, 15000);
+    const timer = window.setInterval(() => { void update(); }, 30000);
     document.addEventListener("visibilitychange", onFocus);
     window.addEventListener("focus", onFocus);
     return () => { active = false; window.clearInterval(timer); document.removeEventListener("visibilitychange", onFocus); window.removeEventListener("focus", onFocus); };
@@ -454,12 +466,12 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
       </section>
       <section className={`gsw-reading-pane ${mobileView === "reader" ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${workspaceSection !== "mail" ? "gsw-operational-pane" : ""}`} aria-label={workspaceSection === "mail" ? "Message reader" : `${workspaceSection} workspace`}>
         <div className="gsw-mail-reader-surface" hidden={workspaceSection !== "mail"}>{open ? <MessageReader message={open} accountId={account?.id} accountAddress={account?.address} folder={folder} onBack={() => setMobileView("messages")} onReply={() => openCompose("reply", open)} onReplyAll={() => openCompose("replyAll", open)} onForward={() => openCompose("forward", open)} onArchive={() => void runAction("archive", open.engineId)} onTrash={() => void runAction("trash", open.engineId)} onToggleRead={() => void toggleRead(open)} onRestore={() => void restoreMessage(open.engineId)} onDestroy={() => void destroyMessage(open.engineId)} onComposeEmail={openComposeTo} /> : <EmptyReader />}</div>
-        <div className="gsw-operational-surface" hidden={workspaceSection !== "contacts"}><ContactsPage embedded /></div>
-        <div className="gsw-operational-surface" hidden={workspaceSection !== "calendar"}><CalendarPage embedded active={workspaceSection === "calendar"} /></div>
-        <div className="gsw-operational-surface" hidden={workspaceSection !== "settings"}><SettingsPage embedded /></div>
-        <div className="gsw-operational-surface" hidden={workspaceSection !== "files"}><FilesPage embedded /></div>
-        <div className="gsw-operational-surface" hidden={workspaceSection !== "chat"}><ChatPanel onOpenScheduledWork={() => openWorkspaceSection("scheduled")} /></div>
-        <div className="gsw-operational-surface" hidden={workspaceSection !== "scheduled"}><ScheduledWorkPanel accountId={account?.id} active={workspaceSection === "scheduled"} /></div>
+        <div className="gsw-operational-surface" hidden={workspaceSection !== "contacts"}><Suspense fallback={<div className="gsw-list-empty" role="status">Loading contacts…</div>}>{visitedSections.has("contacts") && <ContactsPage embedded /> }</Suspense></div>
+        <div className="gsw-operational-surface" hidden={workspaceSection !== "calendar"}><Suspense fallback={<div className="gsw-list-empty" role="status">Loading calendar…</div>}>{visitedSections.has("calendar") && <CalendarPage embedded active={workspaceSection === "calendar"} /> }</Suspense></div>
+        <div className="gsw-operational-surface" hidden={workspaceSection !== "settings"}><Suspense fallback={<div className="gsw-list-empty" role="status">Loading settings…</div>}>{visitedSections.has("settings") && <SettingsPage embedded /> }</Suspense></div>
+        <div className="gsw-operational-surface" hidden={workspaceSection !== "files"}><Suspense fallback={<div className="gsw-list-empty" role="status">Loading files…</div>}>{visitedSections.has("files") && <FilesPage embedded /> }</Suspense></div>
+        <div className="gsw-operational-surface" hidden={workspaceSection !== "chat"}><Suspense fallback={<div className="gsw-list-empty" role="status">Loading chat…</div>}>{visitedSections.has("chat") && <ChatPanel onOpenScheduledWork={() => openWorkspaceSection("scheduled")} /> }</Suspense></div>
+        <div className="gsw-operational-surface" hidden={workspaceSection !== "scheduled"}><Suspense fallback={<div className="gsw-list-empty" role="status">Loading scheduled…</div>}>{visitedSections.has("scheduled") && <ScheduledWorkPanel accountId={account?.id} active={workspaceSection === "scheduled"} /> }</Suspense></div>
       </section>
     </main>
     {compose && <ComposeWindow mode={composeMode} minimized={composeMinimized} to={to} cc={cc} bcc={bcc} subject={subject} html={html} attachments={attachments} persistedAttachments={persistedAttachments} attachmentSyncing={attachmentSyncing} sending={sending} draftStatus={draftStatus} sendError={sendError} sendNote={lastSend ? `${lastSend.status === "scheduled" ? "Scheduled" : "Sent"} · ${lastSend.status}` : undefined} defaultTimeZone={browserTimeZone()} onToChange={(value) => { setTo(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onCcChange={(value) => { setCc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onBccChange={(value) => { setBcc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onSubjectChange={(value) => { setSubject(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onHtmlChange={(value) => { setHtml(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onAttachmentsChange={changeAttachments} onAttachStoredFiles={attachStoredFiles} onRemovePersistedAttachment={(attachment) => { void removePersisted(attachment); }} onMinimize={() => { void saveDraft(); setComposeMinimized((current) => !current); }} onClose={() => { void saveDraft(true); setCompose(false); }} onSubmit={() => void runSend()} onSchedule={(schedule) => void runSchedule(schedule)} onRetry={() => void runSend()} onUndo={lastSend ? () => void runUndo() : undefined} />}
