@@ -264,6 +264,22 @@ export function createMailService(context: MailServiceContext) {
       await engine.setSeen(accountId, [messageId], seen);
     },
 
+    async setFlagged(accountId: string, messageId: string, flagged: boolean) {
+      const engine = await engineFor(accountId, "send");
+      await engine.setFlagged(accountId, [messageId], flagged);
+      return { messageId, flagged };
+    },
+
+    async moveMessage(accountId: string, messageId: string, mailbox: string) {
+      const engine = await engineFor(accountId, "send");
+      const destination = mailbox.trim();
+      if (!destination || destination.toLowerCase() === "outbox" || destination.toLowerCase() === "starred") throw new Error("invalid destination mailbox");
+      const folders = await engine.listMailboxes(accountId);
+      if (!folders.some(folder => folder.name.toLowerCase() === destination.toLowerCase())) throw notFound("destination mailbox not found");
+      await engine.move(accountId, [messageId], destination);
+      return { messageId, mailbox: destination };
+    },
+
     async archive(accountId: string, messageId: string) {
       const engine = await engineFor(accountId, "send");
       await engine.move(accountId, [messageId], "Archive");
