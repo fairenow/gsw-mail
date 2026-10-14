@@ -73,6 +73,23 @@ export async function quarantineExpiredChatExecutions() {
   return rowCount ?? 0;
 }
 
+/**
+ * A running execution is recoverable only if every started tool step has
+ * a durable completed checkpoint. Otherwise, quarantine for manual review.
+ * This is a conservative classification; it never replays tool effects.
+ */
+export async function inspectExpiredChatExecutions() {
+  const { rows } = await pool.query<{ id: string; incomplete_steps: number }>(
+    `SELECT e.id, count(s.id)::integer AS incomplete_steps
+     FROM ai_chat_executions e
+     LEFT JOIN ai_chat_execution_steps s
+       ON s.execution_id=e.id AND s.status <> 'completed'
+     WHERE e.status='running' AND e.lease_expires_at < now()
+     GROUP BY e.id`,
+  );
+  return rows;
+}
+
 export async function getChatExecution(userId: string, commandId: string) {
   const { rows } = await pool.query<ChatExecution>(
     "SELECT * FROM ai_chat_executions WHERE user_id=$1 AND command_id=$2 LIMIT 1",
