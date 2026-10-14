@@ -20,6 +20,20 @@ export async function ensureChatExecutionSchema() {
   completed_at timestamptz,
   UNIQUE (user_id, command_id)
 );
+CREATE TABLE IF NOT EXISTS ai_chat_execution_steps (
+  id uuid PRIMARY KEY,
+  execution_id uuid NOT NULL REFERENCES ai_chat_executions(id) ON DELETE CASCADE,
+  step_key text NOT NULL,
+  kind text NOT NULL,
+  status text NOT NULL CHECK (status IN ('started','completed','uncertain','failed')),
+  input_fingerprint text NOT NULL,
+  result jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (execution_id, step_key)
+);
+CREATE INDEX IF NOT EXISTS ai_chat_execution_steps_execution_idx
+  ON ai_chat_execution_steps (execution_id, created_at);
 CREATE INDEX IF NOT EXISTS ai_chat_executions_claim_idx
   ON ai_chat_executions (status, lease_expires_at, created_at);
 `);
