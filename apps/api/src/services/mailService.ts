@@ -275,7 +275,7 @@ export function createMailService(context: MailServiceContext) {
       const destination = mailbox.trim();
       if (!destination || destination.toLowerCase() === "outbox" || destination.toLowerCase() === "starred") throw new Error("invalid destination mailbox");
       const folders = await engine.listMailboxes(accountId);
-      if (!folders.some(folder => folder.name.toLowerCase() === destination.toLowerCase())) throw notFound("destination mailbox not found");
+      if (!folders.some(folder => folder.engineName.toLowerCase() === destination.toLowerCase())) throw notFound("destination mailbox not found");
       await engine.move(accountId, [messageId], destination);
       return { messageId, mailbox: destination };
     },
