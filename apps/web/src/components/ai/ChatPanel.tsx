@@ -483,15 +483,6 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
     scrollToLatestMessage("smooth");
   };
 
-  const openAttachedFile = async (attachment: AiChatAttachment) => {
-    try {
-      const result = await api.fileDownload(attachment.assetId);
-      window.open(result.url, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      setError("Couldn’t complete the action. Please try again.");
-    }
-  };
-
   async function send(override?: string) {
     if (recording && speechRef.current) {
       sendVoiceOnEndRef.current = true;
