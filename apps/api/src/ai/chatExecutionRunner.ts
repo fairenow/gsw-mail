@@ -32,19 +32,29 @@ export function createChatExecutionRunner(handler: ChatExecutionHandler, options
       let leaseLost = false;
       const abort = new AbortController();
       activeAbort = abort;
+      let heartbeatPending = false;
       const heartbeat = setInterval(() => {
+        if (heartbeatPending || leaseLost || stopped) return;
+        heartbeatPending = true;
         void heartbeatChatExecution(job.id, owner, leaseSeconds)
-          .then(ok => { if (!ok) { leaseLost = true; abort.abort(); } })
-          .catch(error => { leaseLost = true; abort.abort(); options.onError?.(error); });
+          .then(ok => {
+            if (!ok) { leaseLost = true; abort.abort(); }
+          })
+          .catch(error => {
+            leaseLost = true;
+            abort.abort();
+            options.onError?.(error);
+          })
+          .finally(() => { heartbeatPending = false; });
       }, Math.max(1_000, Math.floor(leaseSeconds * 1_000 / 3)));
       try {
         const result = await handler(job, abort.signal);
-        if (!leaseLost) {
+        if (!leaseLost && !stopped && !abort.signal.aborted) {
           const committed = await finishChatExecution(job.id, owner, "completed", result);
           if (!committed) options.onError?.(new Error("Chat execution lease lost before completion"));
         }
       } catch (error) {
-        if (!leaseLost) {
+        if (!leaseLost && !stopped && !abort.signal.aborted) {
           await finishChatExecution(job.id, owner, "uncertain", undefined,
             error instanceof Error ? error.message : "Execution failed");
         }
