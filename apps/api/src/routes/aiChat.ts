@@ -1,3 +1,4 @@
+import { editStoredImage } from "../files/imageEditing.js";
 import { wrapUntrustedContent } from "../ai/untrustedContent.js";
 import { reportChatError, chatErrorText } from "../ai/chatSafeErrors.js";
 import type { FastifyInstance, FastifyReply } from "fastify";
@@ -978,6 +979,11 @@ async function prepareNewConversation(input: {
 
 export default async function aiChatRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
+
+  app.post("/product/chat/images/edit", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (req) => {
+    const input = z.object({ assetId: z.string().uuid(), instruction: z.string().trim().min(3).max(4000), conversationId: z.string().uuid().optional() }).parse(req.body);
+    return editStoredImage(req.user!.id, input.assetId, input.instruction, input.conversationId);
+  });
 
   app.get("/product/chat/tasks", async (req) => {
     const query = z.object({ limit: z.coerce.number().int().min(1).max(50).optional() }).parse(req.query);
