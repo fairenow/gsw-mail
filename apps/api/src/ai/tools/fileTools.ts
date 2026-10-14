@@ -1,3 +1,4 @@
+import { editStoredImage } from "../../files/imageEditing.js";
 import { and, desc, eq, ilike, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { config } from "../../config.js";
@@ -500,6 +501,28 @@ export const filesTransformTool: AgentToolDefinition = {
   },
 };
 
+const editImageInput = z.object({ assetId: z.string().uuid(), instruction: z.string().trim().min(3).max(4000) });
+
+export const filesEditImageTool: AgentToolDefinition = {
+  name: "files.edit_image",
+  description: "Edit the ORIGINAL uploaded image using its assetId and the user's instruction. Use for background removal, recoloring, adding text, and modifications to an existing attached image. NEVER substitute text-to-image generation. The source image must already be attached or stored in GSW Files. Returns a new saved image and sourceAssetId.",
+  inputSchema: {
+    type: "object",
+    properties: { assetId: { type: "string", description: "UUID of the original uploaded image, from message attachments or GSW Files." }, instruction: { type: "string", description: "Specific changes to make to the original image." } },
+    required: ["assetId", "instruction"], additionalProperties: false,
+  },
+  requiredScopes: ["files.read", "files.write", "images.generate"],
+  risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = editImageInput.parse(rawInput);
+      const result = await editStoredImage(ctx.userId, input.assetId, input.instruction, ctx.conversationId);
+      return success(ctx, toolCallId, startedAt, result);
+    } catch (error) { return failure(ctx, toolCallId, startedAt, error); }
+  },
+};
+
 export const filesGenerateImageTool: AgentToolDefinition = {
   name: "files.generate_image",
   description: "Generate a new image from a text prompt and save it into the user's private My Files library. Use this for illustrations, graphics, concepts, banners, thumbnails, and other generated images.",
@@ -604,4 +627,4 @@ export const mailAttachFileTool: AgentToolDefinition = {
   },
 };
 
-export const fileTools: AgentToolDefinition[] = [filesListTool, filesSearchTool, filesReadTool, filesAnalyzeTool, filesCreateTextTool, filesCreateArtifactTool, filesTransformTool, filesGenerateImageTool, mailAttachFileTool];
+export const fileTools: AgentToolDefinition[] = [filesListTool, filesSearchTool, filesReadTool, filesAnalyzeTool, filesCreateTextTool, filesCreateArtifactTool, filesTransformTool, filesGenerateImageTool, filesEditImageTool, mailAttachFileTool];
