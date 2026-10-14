@@ -12,6 +12,16 @@ export type ChatExecution = {
 export async function enqueueChatExecution(input: {
   userId: string; accountId?: string; commandId: string; conversationId?: string; request: unknown;
 }) {
+  // Authentication credentials, access tokens and request headers must never be
+  // serialized into the durable execution queue.
+  if (!input.request || typeof input.request !== "object" || Array.isArray(input.request)) {
+    throw new Error("Chat execution request must be a structured payload");
+  }
+  const unsafe = ["headers", "authorization", "accessToken", "refreshToken", "cookie", "password", "apiKey"];
+  const keys = Object.keys(input.request as Record<string, unknown>);
+  if (keys.some(key => unsafe.some(secret => key.toLowerCase() === secret.toLowerCase()))) {
+    throw new Error("Chat execution request cannot persist authentication credentials");
+  }
   const id = randomUUID();
   const { rows } = await pool.query<ChatExecution>(
     `INSERT INTO ai_chat_executions (id,user_id,account_id,command_id,conversation_id,request)
