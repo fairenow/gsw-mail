@@ -64,6 +64,18 @@ export default async (app: FastifyInstance) => {
       if (trashProbe.length === 0) folders.Trash = { total: 0, unread: 0 };
     }
 
+    // Starred is a virtual view across mailboxes, not a physical JMAP folder.
+    // Count all flagged messages in pages rather than treating a mailbox count as authoritative.
+    let starredTotal = 0;
+    let starredUnread = 0;
+    const starredPageSize = 200;
+    for (let offset = 0; offset < 10000; offset += starredPageSize) {
+      const page = await engine.listMessages(req.query.accountId, { mailbox: "Starred", limit: starredPageSize, offset });
+      starredTotal += page.length;
+      starredUnread += page.filter(message => !message.read).length;
+      if (page.length < starredPageSize) break;
+    }
+    folders.Starred = { total: starredTotal, unread: starredUnread };
     folders.Outbox = { total: await outboxCount(req.query.accountId), unread: 0 };
     return { folders };
   });

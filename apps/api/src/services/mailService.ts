@@ -1,4 +1,7 @@
 import { eq } from "drizzle-orm";
+import { getStalwartAccessToken } from "../auth/stalwartToken.js";
+import { config } from "../config.js";
+import { JmapClient, JmapError } from "../engine/jmap.js";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { getUserEngine } from "../engine/index.js";
 import { db } from "../db/client.js";
@@ -262,6 +265,47 @@ export function createMailService(context: MailServiceContext) {
     async setSeen(accountId: string, messageId: string, seen: boolean) {
       const engine = await engineFor(accountId);
       await engine.setSeen(accountId, [messageId], seen);
+    },
+
+    async listFolders(accountId: string) {
+      const account = await requireAccountPermission(context.userId, accountId, "read");
+      const token = await getStalwartAccessToken({ authUserId: context.authUserId, accountId: account.id, headers: context.headers });
+      const client = new JmapClient({ baseUrl: config.stalwart.jmapUrl, token, sessionTtlMs: config.stalwart.sessionTtlSeconds * 1000 });
+      const session = await client.session();
+      const jmapAccountId = client.resolveAccountId(session, account.address);
+      const response = await client.call([["Mailbox/get", { accountId: jmapAccountId, ids: null, properties: ["id", "name", "parentId", "role"] }, "folders"]]);
+      return (response[0]?.[1]?.list ?? []) as Array<{ id: string; name: string; parentId?: string | null; role?: string | null }>;
+    },
+
+    async createFolder(accountId: string, name: string, parentId?: string | null) {
+      const account = await requireAccountPermission(context.userId, accountId, "send");
+      const folders = await (async () => { const engine = await engineFor(accountId); return engine.listMailboxes(accountId); })();
+      if (name.trim().toLowerCase() === "starred" || folders.some(folder => folder.engineName.toLowerCase() === name.trim().toLowerCase())) throw new Error("folder name is reserved or already exists");
+      if (parentId && !folders.some(folder => folder.engineId === parentId)) throw notFound("parent folder not found");
+      const token = await getStalwartAccessToken({ authUserId: context.authUserId, accountId: account.id, headers: context.headers });
+      const client = new JmapClient({ baseUrl: config.stalwart.jmapUrl, token, sessionTtlMs: config.stalwart.sessionTtlSeconds * 1000 });
+      const session = await client.session();
+      const jmapAccountId = client.resolveAccountId(session, account.address);
+      const response = await client.call([["Mailbox/set", { accountId: jmapAccountId, create: { folder: { name: name.trim(), ...(parentId ? { parentId } : {}), sortOrder: 100 } } }, "createFolder"]]);
+      const created = (response[0]?.[1]?.created as Record<string, { id: string }> | undefined)?.folder;
+      if (!created?.id) throw new JmapError("folder creation failed", "mailbox_not_created", "createFolder", response[0]?.[1]?.notCreated);
+      return { id: created.id, name: name.trim(), parentId: parentId ?? null };
+    },
+
+    async setFlagged(accountId: string, messageId: string, flagged: boolean) {
+      const engine = await engineFor(accountId, "send");
+      await engine.setFlagged(accountId, [messageId], flagged);
+      return { messageId, flagged };
+    },
+
+    async moveMessage(accountId: string, messageId: string, mailbox: string) {
+      const engine = await engineFor(accountId, "send");
+      const destination = mailbox.trim();
+      if (!destination || destination.toLowerCase() === "outbox" || destination.toLowerCase() === "starred") throw new Error("invalid destination mailbox");
+      const folders = await engine.listMailboxes(accountId);
+      if (!folders.some(folder => folder.engineName.toLowerCase() === destination.toLowerCase())) throw notFound("destination mailbox not found");
+      await engine.move(accountId, [messageId], destination);
+      return { messageId, mailbox: destination };
     },
 
     async archive(accountId: string, messageId: string) {

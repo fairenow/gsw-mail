@@ -133,7 +133,7 @@ export class DemoEngine implements MailEngine {
   async listMessages(accountId: EngineAccountId, query: MessageQuery): Promise<MessageSummary[]> {
     const all = this.store(accountId);
     const filtered = all.filter(
-      (m) => (!query.mailbox || m.mailbox === query.mailbox) && (!query.threadId || m.threadId === query.threadId),
+      (m) => (!query.mailbox || (query.mailbox.toLowerCase() === "starred" ? m.flagged : m.mailbox === query.mailbox)) && (!query.threadId || m.threadId === query.threadId),
     );
     const end = (query.offset ?? 0) + (query.limit ?? 50);
     return filtered.slice(query.offset ?? 0, end).map(stripBody);

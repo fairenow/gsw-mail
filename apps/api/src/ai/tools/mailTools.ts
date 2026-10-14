@@ -338,7 +338,71 @@ export const mailTrashDraftTool: AgentToolDefinition = {
   },
 };
 
+const organizeMessageInput = z.object({ messageId: z.string().min(1).max(1_000) });
+const flagMessageInput = organizeMessageInput.extend({ starred: z.boolean() });
+const moveMessageInput = organizeMessageInput.extend({ mailbox: z.string().trim().min(1).max(120) });
+
+export const mailStarTool: AgentToolDefinition = {
+  name: "mail.star",
+  description: "Star or unstar a known message in the selected mailbox. Find the message with mail.search first when necessary.",
+  inputSchema: { type: "object", properties: { messageId: { type: "string" }, starred: { type: "boolean" } }, required: ["messageId", "starred"], additionalProperties: false },
+  requiredScopes: ["mail.write"],
+  risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = flagMessageInput.parse(rawInput);
+      return success(ctx, toolCallId, startedAt, await createMailService(ctx).setFlagged(ctx.accountId, input.messageId, input.starred));
+    } catch (error) { return failure(ctx, toolCallId, startedAt, error); }
+  },
+};
+
+export const mailMoveTool: AgentToolDefinition = {
+  name: "mail.move",
+  description: "Move a known message to an existing mailbox or folder, including Archive or Trash. Do not use for permanent deletion. Destination must already exist.",
+  inputSchema: { type: "object", properties: { messageId: { type: "string" }, mailbox: { type: "string" } }, required: ["messageId", "mailbox"], additionalProperties: false },
+  requiredScopes: ["mail.write"],
+  risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = moveMessageInput.parse(rawInput);
+      return success(ctx, toolCallId, startedAt, await createMailService(ctx).moveMessage(ctx.accountId, input.messageId, input.mailbox));
+    } catch (error) { return failure(ctx, toolCallId, startedAt, error); }
+  },
+};
+
+const createFolderInput = z.object({ name: z.string().trim().min(1).max(120), parentId: z.string().min(1).optional() });
+
+export const mailListFoldersTool: AgentToolDefinition = {
+  name: "mail.list_folders",
+  description: "List existing folders in the selected mailbox, including their IDs and names. Use before creating a folder or moving a message.",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  requiredScopes: ["mail.read"], risk: "read",
+  async execute(ctx, _rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try { return success(ctx, toolCallId, startedAt, { folders: await createMailService(ctx).listFolders(ctx.accountId) }); }
+    catch (error) { return failure(ctx, toolCallId, startedAt, error); }
+  },
+};
+
+export const mailCreateFolderTool: AgentToolDefinition = {
+  name: "mail.create_folder",
+  description: "Create a custom mail folder requested by the user. Check mail.list_folders first. Starred is a virtual view, not a creatable folder.",
+  inputSchema: { type: "object", properties: { name: { type: "string" }, parentId: { type: "string" } }, required: ["name"], additionalProperties: false },
+  requiredScopes: ["mail.write"], risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try { const input = createFolderInput.parse(rawInput); return success(ctx, toolCallId, startedAt, { folder: await createMailService(ctx).createFolder(ctx.accountId, input.name, input.parentId) }); }
+    catch (error) { return failure(ctx, toolCallId, startedAt, error); }
+  },
+};
+
 export const agentMailTools: AgentToolDefinition[] = [
+  mailListFoldersTool,
+  mailCreateFolderTool,
+  mailStarTool,
+  mailMoveTool,
   mailActivityTool,
   mailSearchTool,
   mailReadTool,

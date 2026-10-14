@@ -587,7 +587,9 @@ export class StalwartEngine implements MailEngine {
     if (query.threadId) {
       filter.inThread = query.threadId;
     }
-    if (query.mailbox) {
+    if (query.mailbox?.toLowerCase() === "starred") {
+      filter.hasKeyword = "$flagged";
+    } else if (query.mailbox) {
       const id = await this.mailboxIdByName(engineAccountId, query.mailbox);
       if (id) filter.inMailbox = id;
     }
@@ -712,8 +714,6 @@ export class StalwartEngine implements MailEngine {
     for (const id of messageIds) {
       update[id] = {
         mailboxIds: { [targetId]: true },
-        "/keywords/$seen": null,
-        "/keywords/$flagged": null,
       };
     }
     await this.emailSet(accountId, {
