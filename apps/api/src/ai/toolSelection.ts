@@ -20,6 +20,7 @@ const toolAvailable = (
   if (!tool.requiredScopes.every((scope) => isAiScopeGloballyEnabled(settings, scope))) return false;
   if (tool.name === "files.transform" && !hasOpenAi) return false;
   if (tool.name === "files.generate_image" && !hasImageProvider) return false;
+  if (tool.name === "files.edit_image" && (!process.env.MODAL_IMAGE_EDIT_URL || !process.env.MODAL_PROXY_TOKEN)) return false;
   if (tool.name.startsWith("browser.") && !hasBrowserProvider) return false;
   return true;
 };
