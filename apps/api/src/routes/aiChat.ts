@@ -34,8 +34,7 @@ import { getAiCapabilitySettings, isAiScopeGloballyEnabled } from "../ai/capabil
 import { selectAgentTools } from "../ai/toolSelection.js";
 import { getAgentTask, listAgentTasks } from "../ai/taskService.js";
 import { forbidden } from "../lib/errors.js";
-import { createAssetFromBuffer, getAssetForUser } from "../files/service.js";
-import { verifyGeneratedImage } from "../files/imageValidation.js";
+import { getAssetForUser } from "../files/service.js";
 import { getR2Object } from "../files/r2.js";
 import { analyzeStoredFile } from "../files/intelligence.js";
 import { shouldPreAnalyzeAttachments } from "../files/attachmentIntent.js";
