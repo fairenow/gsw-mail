@@ -55,3 +55,18 @@ export function ChatImageAttachment({ attachment, onUseInEmail, onError, onPrevi
     </div>
   </section>;
 }
+
+/** Thumbnail for an uploaded image in the composer, before the message is sent. */
+export function ChatPendingImagePreview({ attachment }: { attachment: AiChatAttachment }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    void api.fileDownload(attachment.assetId).then(result => {
+      const candidate = new URL(result.url);
+      if (candidate.protocol !== "https:" && !(candidate.protocol === "http:" && candidate.hostname === "localhost")) return;
+      if (active) setUrl(candidate.href);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [attachment.assetId]);
+  return url ? <img src={url} alt="" style={{width:44,height:44,objectFit:"cover",borderRadius:8}} /> : <ImageIcon size={22}/>;
+}
