@@ -52,6 +52,16 @@ export async function completeExecutionStep(input: {
   return rows[0] ?? null;
 }
 
+/** Mark a step uncertain if its outcome cannot be established. */
+export async function markExecutionStepUncertain(executionId: string, stepKey: string) {
+  const { rowCount } = await pool.query(
+    `UPDATE ai_chat_execution_steps SET status='uncertain', updated_at=now()
+     WHERE execution_id=$1 AND step_key=$2 AND status='started'`,
+    [executionId,stepKey],
+  );
+  return rowCount === 1;
+}
+
 /** A started step is never automatically replayed after uncertain execution. */
 export async function getExecutionSteps(executionId: string) {
   const { rows } = await pool.query<ExecutionStep>(
