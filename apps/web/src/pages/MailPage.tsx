@@ -92,6 +92,10 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
   const [sendError, setSendError] = useState<string | null>(null);
   const [sendRequestId, setSendRequestId] = useState<string | null>(null);
   const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>(initialSection);
+  // Mount each workspace on first visit, then preserve its state while hidden.
+  // This avoids mounting every expensive workspace during the initial mailbox render.
+  const [visitedSections, setVisitedSections] = useState<Set<WorkspaceSection>>(() => new Set([initialSection]));
+  useEffect(() => { setVisitedSections(current => current.has(workspaceSection) ? current : new Set([...current, workspaceSection])); }, [workspaceSection]);
   useEffect(() => { window.dispatchEvent(new CustomEvent("gsw-analytics-screen", { detail: { screen: workspaceSection === "mail" ? "mail/" + folder.toLowerCase() : workspaceSection } })); }, [workspaceSection, folder]);
 
   const loadFolder = useCallback(async (accountId: string, name: Folder, nextPage = 0) => {
@@ -155,12 +159,12 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
     let active = true;
     let pending = false;
     const update = async () => {
-      if (!active || pending || document.visibilityState !== "visible") return;
+      if (!active || pending || document.visibilityState !== "visible" || !navigator.onLine) return;
       pending = true;
       try { await silentRefresh(account.id, folder); } finally { pending = false; }
     };
     const onFocus = () => { void update(); };
-    const timer = window.setInterval(() => { void update(); }, 15000);
+    const timer = window.setInterval(() => { void update(); }, 30000);
     document.addEventListener("visibilitychange", onFocus);
     window.addEventListener("focus", onFocus);
     return () => { active = false; window.clearInterval(timer); document.removeEventListener("visibilitychange", onFocus); window.removeEventListener("focus", onFocus); };
@@ -454,12 +458,12 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
       </section>
       <section className={`gsw-reading-pane ${mobileView === "reader" ? "mobile-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${workspaceSection !== "mail" ? "gsw-operational-pane" : ""}`} aria-label={workspaceSection === "mail" ? "Message reader" : `${workspaceSection} workspace`}>
         <div className="gsw-mail-reader-surface" hidden={workspaceSection !== "mail"}>{open ? <MessageReader message={open} accountId={account?.id} accountAddress={account?.address} folder={folder} onBack={() => setMobileView("messages")} onReply={() => openCompose("reply", open)} onReplyAll={() => openCompose("replyAll", open)} onForward={() => openCompose("forward", open)} onArchive={() => void runAction("archive", open.engineId)} onTrash={() => void runAction("trash", open.engineId)} onToggleRead={() => void toggleRead(open)} onRestore={() => void restoreMessage(open.engineId)} onDestroy={() => void destroyMessage(open.engineId)} onComposeEmail={openComposeTo} /> : <EmptyReader />}</div>
-        <div className="gsw-operational-surface" hidden={workspaceSection !== "contacts"}><ContactsPage embedded /></div>
-        <div className="gsw-operational-surface" hidden={workspaceSection !== "calendar"}><CalendarPage embedded active={workspaceSection === "calendar"} /></div>
-        <div className="gsw-operational-surface" hidden={workspaceSection !== "settings"}><SettingsPage embedded /></div>
-        <div className="gsw-operational-surface" hidden={workspaceSection !== "files"}><FilesPage embedded /></div>
-        <div className="gsw-operational-surface" hidden={workspaceSection !== "chat"}><ChatPanel onOpenScheduledWork={() => openWorkspaceSection("scheduled")} /></div>
-        <div className="gsw-operational-surface" hidden={workspaceSection !== "scheduled"}><ScheduledWorkPanel accountId={account?.id} active={workspaceSection === "scheduled"} /></div>
+        <div className="gsw-operational-surface" hidden={workspaceSection !== "contacts"}>{visitedSections.has("contacts") && <ContactsPage embedded /> }</div>
+        <div className="gsw-operational-surface" hidden={workspaceSection !== "calendar"}>{visitedSections.has("calendar") && <CalendarPage embedded active={workspaceSection === "calendar"} /> }</div>
+        <div className="gsw-operational-surface" hidden={workspaceSection !== "settings"}>{visitedSections.has("settings") && <SettingsPage embedded /> }</div>
+        <div className="gsw-operational-surface" hidden={workspaceSection !== "files"}>{visitedSections.has("files") && <FilesPage embedded /> }</div>
+        <div className="gsw-operational-surface" hidden={workspaceSection !== "chat"}>{visitedSections.has("chat") && <ChatPanel onOpenScheduledWork={() => openWorkspaceSection("scheduled")} /> }</div>
+        <div className="gsw-operational-surface" hidden={workspaceSection !== "scheduled"}>{visitedSections.has("scheduled") && <ScheduledWorkPanel accountId={account?.id} active={workspaceSection === "scheduled"} /> }</div>
       </section>
     </main>
     {compose && <ComposeWindow mode={composeMode} minimized={composeMinimized} to={to} cc={cc} bcc={bcc} subject={subject} html={html} attachments={attachments} persistedAttachments={persistedAttachments} attachmentSyncing={attachmentSyncing} sending={sending} draftStatus={draftStatus} sendError={sendError} sendNote={lastSend ? `${lastSend.status === "scheduled" ? "Scheduled" : "Sent"} · ${lastSend.status}` : undefined} defaultTimeZone={browserTimeZone()} onToChange={(value) => { setTo(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onCcChange={(value) => { setCc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onBccChange={(value) => { setBcc(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onSubjectChange={(value) => { setSubject(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onHtmlChange={(value) => { setHtml(value); setDraftDirty(true); setDraftSaveBlocked(false); setSendRequestId(null); }} onAttachmentsChange={changeAttachments} onAttachStoredFiles={attachStoredFiles} onRemovePersistedAttachment={(attachment) => { void removePersisted(attachment); }} onMinimize={() => { void saveDraft(); setComposeMinimized((current) => !current); }} onClose={() => { void saveDraft(true); setCompose(false); }} onSubmit={() => void runSend()} onSchedule={(schedule) => void runSchedule(schedule)} onRetry={() => void runSend()} onUndo={lastSend ? () => void runUndo() : undefined} />}
