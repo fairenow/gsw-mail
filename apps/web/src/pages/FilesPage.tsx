@@ -21,6 +21,23 @@ const iconFor = (item: FileNode) => {
   return <File size={22} strokeWidth={1.65} />;
 };
 
+function FileThumbnail({ assetId, name, kind }: { assetId?: string | null; name: string; kind: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const isImage = kind === "image" || /\\.(png|jpe?g|webp|gif|avif)$/i.test(name);
+  useEffect(() => {
+    if (!assetId || !isImage) return;
+    let active = true;
+    void api.fileDownload(assetId).then(result => {
+      const parsed = new URL(result.url);
+      if ((parsed.protocol === "https:" || (parsed.protocol === "http:" && parsed.hostname === "localhost")) && active) setUrl(parsed.href);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [assetId, isImage]);
+  return <span className={url ? "gsw-file-icon gsw-file-icon-preview" : "gsw-file-icon"}>
+    {url ? <img src={url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setUrl(null)} /> : kind === "image" ? <FileImage size={22} /> : kind === "pdf" || kind === "document" ? <FileText size={22} /> : <File size={22} />}
+  </span>;
+}
+
 export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { configureTopBar } = useAppShell();
   const [view, setView] = useState<FilesView>("folder");
@@ -309,7 +326,7 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
                     (loading ? <div className="gsw-empty-product">Loading files…</div> : files.length === 0 ? <div className="gsw-empty-product"><strong>{view === "trash" ? "Trash is empty" : view === "starred" ? "No starred files" : view === "recent" ? "No recent files" : "This folder is empty"}</strong><p>{view === "folder" ? "Upload a file or create a folder to get started." : "Files will appear here as you use GSW."}</p></div> :
             <div className="gsw-files-list">{files.map((item) => <div className="gsw-file-row" key={item.id}>
               <button className="gsw-file-main" onDoubleClick={() => item.nodeType === "folder" && openFolder(item)} onClick={() => item.nodeType === "folder" ? openFolder(item) : void openPreview(item)}>
-                <span className="gsw-file-icon">{iconFor(item)}</span>
+                {item.nodeType === "folder" ? <span className="gsw-file-icon">{iconFor(item)}</span> : <FileThumbnail assetId={item.assetId} name={item.name} kind={item.kind || ""} />}
                 <span><strong>{item.name}</strong><small>{item.nodeType === "folder" ? "Folder" : `${item.kind || "File"} · ${formatBytes(Number(item.sizeBytes ?? 0))}`}</small></span>
               </button>
               <span className="gsw-file-updated">{new Date(item.updatedAt).toLocaleDateString()}</span>

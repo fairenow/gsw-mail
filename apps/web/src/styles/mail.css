@@ -2350,3 +2350,8 @@
 .gsw-chat-schedule-success button { justify-self: start; border: 1px solid var(--gsw-border, #d9d3c8); border-radius: 9px; background: transparent; color: inherit; padding: 9px 12px; font: inherit; font-size: 13px; cursor: pointer; }
 .gsw-chat-schedule-success button:hover:not(:disabled) { background: var(--gsw-hover, rgba(127,127,127,.12)); }
 .gsw-chat-schedule-success button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* Image-only composer attachment: the preview is the tile, not an overlay on a file chip. */
+.gsw-chat-pending-file.gsw-chat-pending-image-only { position: relative; display: block; width: 84px; height: 84px; min-width: 84px; max-width: 84px; padding: 3px; border-radius: 16px; overflow: visible; }
+.gsw-chat-pending-image-only > img { display: block; width: 76px; height: 76px; object-fit: cover; border-radius: 13px; }
+.gsw-chat-pending-image-only > button { position: absolute; z-index: 1; top: -7px; right: -7px; background: var(--gsw-surface); border: 1px solid var(--gsw-border); }
