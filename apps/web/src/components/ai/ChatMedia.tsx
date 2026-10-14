@@ -11,7 +11,9 @@ const safeUrl = (raw: string) => {
 export function MediaPreviewModal({ attachment, onClose }: { attachment: AiChatAttachment; onClose: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState(false);
-  const video = attachment.mimeType.toLowerCase() === "video/mp4";
+  const video = attachment.mimeType.toLowerCase().startsWith("video/");
+  const image = attachment.mimeType.toLowerCase().startsWith("image/");
+  const pdf = attachment.mimeType.toLowerCase() === "application/pdf";
   useEffect(() => {
     let active = true;
     void api.fileDownload(attachment.assetId).then((result) => {
@@ -29,9 +31,9 @@ export function MediaPreviewModal({ attachment, onClose }: { attachment: AiChatA
       <header><strong>{attachment.filename}</strong><button type="button" onClick={onClose} aria-label="Close preview"><X size={20}/></button></header>
       <div className="gsw-media-preview-body">
         {error ? <p>Preview unavailable. Please try again.</p> : !url ? <p role="status"><LoaderCircle size={18} className="gsw-chat-spin"/> Loading preview…</p> : video
-          ? <video controls playsInline preload="metadata" src={url} /> : <img src={url} alt={attachment.filename} referrerPolicy="no-referrer" />}
+          ? <video controls playsInline preload="metadata" src={url} /> : image ? <img src={url} alt={attachment.filename} referrerPolicy="no-referrer" /> : pdf ? <iframe src={url} title={attachment.filename} style={{width:"100%",minHeight:"65vh",border:0}} /> : <div><p>{attachment.filename}</p><p>Preview is not supported for this file type. You can open or download the original.</p></div>}
       </div>
-      {url && <footer><a href={url} target="_blank" rel="noopener noreferrer" download={attachment.filename}><Download size={16}/> Open or download</a></footer>}
+      {url && <footer><a href={url} target="_blank" rel="noopener noreferrer"><Expand size={16}/> Open file</a><a href={url} download={attachment.filename} rel="noopener noreferrer"><Download size={16}/> Download</a></footer>}
     </div>
   </div>;
 }
