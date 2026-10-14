@@ -702,7 +702,29 @@ export const api = {
   calendarRsvpPublic: (token: string) => get<CalendarRsvpPublic>(`/product/calendar-rsvp?token=${encodeURIComponent(token)}`),
   respondCalendarRsvp: (token: string, response: CalendarRsvpResponse) => post<CalendarRsvpPublic>("/product/calendar-rsvp", { token, response }),
   chat: (accountId: string | null, messages: AiChatMessage[], conversationId?: string | null, assetIds?: string[]) => post<AiChatResponse>("/product/chat", { ...chatRuntimeContext(), ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages: messages.map(({ role, content, attachments }) => ({ role, content, ...(attachments?.length ? { attachments } : {}) })), ...(assetIds?.length ? { assetIds } : {}) }, 100_000),
-  streamChat: (accountId: string | null, messages: AiChatMessage[], conversationId: string | null | undefined, onEvent: (event: AiChatStreamEvent) => void, assetIds?: string[]) => postEventStream("/product/chat/stream", { ...chatRuntimeContext(), ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages: messages.map(({ role, content, attachments }) => ({ role, content, ...(attachments?.length ? { attachments } : {}) })), ...(assetIds?.length ? { assetIds } : {}) }, onEvent, "/product/chat"),
+  streamChat: async (accountId: string | null, messages: AiChatMessage[], conversationId: string | null | undefined, onEvent: (event: AiChatStreamEvent) => void, assetIds?: string[]) => {
+    // A stable command ID prevents duplicate model/tool execution when the SSE connection drops.
+    const commandId = crypto.randomUUID();
+    const payload = { ...chatRuntimeContext(), commandId, ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages: messages.map(({ role, content, attachments }) => ({ role, content, ...(attachments?.length ? { attachments } : {}) })), ...(assetIds?.length ? { assetIds } : {}) };
+    try {
+      // Never fall back to a fresh non-idempotent POST after a lost stream.
+      return await postEventStream("/product/chat/stream", payload, onEvent);
+    } catch (streamError) {
+      // The server may still be executing. Recover the original result, never resubmit.
+      for (let attempt = 0; attempt < 12; attempt++) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 2_000));
+        let status: { status: string; response?: AiChatResponse | null };
+        try { status = await get<{ status: string; response?: AiChatResponse | null }>(`/product/chat/commands/${encodeURIComponent(commandId)}`); }
+        catch { continue; }
+        if (status.status === "completed" && status.response) {
+          onEvent({ type: "result", response: status.response });
+          return status.response;
+        }
+        if (status.status === "uncertain") throw new Error("The request may have completed. Check chat history before retrying to avoid duplicate actions.");
+      }
+      throw new Error("The request is still processing or its status is unavailable. Check chat history before retrying.");
+    }
+  },
   resumeChat: (accountId: string, conversationId: string) => post<AiChatResponse>("/product/chat/resume", { ...chatRuntimeContext(), accountId, conversationId }, 100_000),
   resumeChatStream: (accountId: string, conversationId: string, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/resume/stream", { ...chatRuntimeContext(), accountId, conversationId }, onEvent, "/product/chat/resume"),
   grantChatPermission: (accountId: string, scope: string) => post<{ grant: { id: string; scope: string } }>("/product/chat/permissions", { accountId, scope }),
