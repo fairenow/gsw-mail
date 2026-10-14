@@ -20,7 +20,7 @@ export function createChatExecutionRunner(handler: ChatExecutionHandler, options
   let timer: ReturnType<typeof setInterval> | undefined;
   let running = false;
   let stopped = false;
-  const abort = new AbortController();
+  let activeAbort: AbortController | undefined;
 
   async function tick() {
     if (running || stopped) return;
@@ -30,6 +30,8 @@ export function createChatExecutionRunner(handler: ChatExecutionHandler, options
       const job = await claimChatExecution(owner, leaseSeconds);
       if (!job) return;
       let leaseLost = false;
+      const abort = new AbortController();
+      activeAbort = abort;
       const heartbeat = setInterval(() => {
         void heartbeatChatExecution(job.id, owner, leaseSeconds)
           .then(ok => { if (!ok) { leaseLost = true; abort.abort(); } })
@@ -49,6 +51,7 @@ export function createChatExecutionRunner(handler: ChatExecutionHandler, options
         options.onError?.(error);
       } finally {
         clearInterval(heartbeat);
+        activeAbort = undefined;
       }
     } catch (error) {
       options.onError?.(error);
@@ -66,7 +69,7 @@ export function createChatExecutionRunner(handler: ChatExecutionHandler, options
     },
     stop() {
       stopped = true;
-      abort.abort();
+      activeAbort?.abort();
       if (timer) clearInterval(timer);
       timer = undefined;
     },
