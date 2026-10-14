@@ -338,7 +338,43 @@ export const mailTrashDraftTool: AgentToolDefinition = {
   },
 };
 
+const organizeMessageInput = z.object({ messageId: z.string().min(1).max(1_000) });
+const flagMessageInput = organizeMessageInput.extend({ starred: z.boolean() });
+const moveMessageInput = organizeMessageInput.extend({ mailbox: z.string().trim().min(1).max(120) });
+
+export const mailStarTool: AgentToolDefinition = {
+  name: "mail.star",
+  description: "Star or unstar a known message in the selected mailbox. Find the message with mail.search first when necessary.",
+  inputSchema: { type: "object", properties: { messageId: { type: "string" }, starred: { type: "boolean" } }, required: ["messageId", "starred"], additionalProperties: false },
+  requiredScopes: ["mail.write"],
+  risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = flagMessageInput.parse(rawInput);
+      return success(ctx, toolCallId, startedAt, await createMailService(ctx).setFlagged(ctx.accountId, input.messageId, input.starred));
+    } catch (error) { return failure(ctx, toolCallId, startedAt, error); }
+  },
+};
+
+export const mailMoveTool: AgentToolDefinition = {
+  name: "mail.move",
+  description: "Move a known message to an existing mailbox or folder, including Archive or Trash. Do not use for permanent deletion. Destination must already exist.",
+  inputSchema: { type: "object", properties: { messageId: { type: "string" }, mailbox: { type: "string" } }, required: ["messageId", "mailbox"], additionalProperties: false },
+  requiredScopes: ["mail.write"],
+  risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = moveMessageInput.parse(rawInput);
+      return success(ctx, toolCallId, startedAt, await createMailService(ctx).moveMessage(ctx.accountId, input.messageId, input.mailbox));
+    } catch (error) { return failure(ctx, toolCallId, startedAt, error); }
+  },
+};
+
 export const agentMailTools: AgentToolDefinition[] = [
+  mailStarTool,
+  mailMoveTool,
   mailActivityTool,
   mailSearchTool,
   mailReadTool,
