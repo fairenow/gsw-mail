@@ -2350,3 +2350,11 @@
 .gsw-chat-schedule-success button { justify-self: start; border: 1px solid var(--gsw-border, #d9d3c8); border-radius: 9px; background: transparent; color: inherit; padding: 9px 12px; font: inherit; font-size: 13px; cursor: pointer; }
 .gsw-chat-schedule-success button:hover:not(:disabled) { background: var(--gsw-hover, rgba(127,127,127,.12)); }
 .gsw-chat-schedule-success button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* One square component per chat attachment. Preview fills the component, regardless of source aspect ratio. */
+.gsw-chat-pending-files { align-items: flex-start; overflow-y: visible; padding: 8px 4px 10px; }
+.gsw-chat-attachment-tile { position: relative; display: block; flex: 0 0 84px; width: 84px; height: 84px; min-width: 84px; min-height: 84px; padding: 0; border: 1px solid var(--gsw-border); border-radius: 15px; background: var(--gsw-surface); }
+.gsw-chat-attachment-preview { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; min-width: 0; min-height: 0; padding: 0; margin: 0; border: 0; border-radius: inherit; overflow: hidden; background: transparent; color: var(--gsw-text-body); cursor: pointer; }
+.gsw-chat-attachment-preview .gsw-chat-attachment-image { display: block; flex: 0 0 100%; width: 100%; height: 100%; min-width: 100%; min-height: 100%; max-width: 100%; max-height: 100%; object-fit: cover; object-position: center; border-radius: inherit; }
+.gsw-chat-attachment-remove { position: absolute; z-index: 2; top: -8px; right: -8px; display: grid; place-items: center; width: 23px; height: 23px; padding: 0; border: 1px solid var(--gsw-border); border-radius: 50%; background: var(--gsw-surface); color: var(--gsw-text-body); cursor: pointer; }
+.gsw-chat-attachment-preview:focus-visible, .gsw-chat-attachment-remove:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
