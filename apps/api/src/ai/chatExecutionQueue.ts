@@ -64,13 +64,38 @@ export async function finishChatExecution(id: string, owner: string, status: "co
 
 /** Expired work is marked uncertain, NOT replayed: tools may already have acted. */
 export async function quarantineExpiredChatExecutions() {
-  const { rowCount } = await pool.query(
-    `UPDATE ai_chat_executions SET status='uncertain', lease_owner=NULL,
+  // Persist the outcome of every incomplete step before releasing the lease.
+  // Both updates run in one transaction to avoid losing the recovery audit trail.
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ id: string }>(
+      `SELECT id FROM ai_chat_executions
+       WHERE status='running' AND lease_expires_at < now()
+       FOR UPDATE SKIP LOCKED`,
+    );
+    const ids = rows.map(row => row.id);
+    if (!ids.length) { await client.query("COMMIT"); return 0; }
+    await client.query(
+      `UPDATE ai_chat_execution_steps SET status='uncertain', updated_at=now()
+       WHERE execution_id=ANY($1::uuid[]) AND status='started'`,
+      [ids],
+    );
+    const result = await client.query(
+      `UPDATE ai_chat_executions SET status='uncertain', lease_owner=NULL,
        lease_expires_at=NULL, updated_at=now(),
        error='Worker lease expired; inspect tool effects before retry'
-       WHERE status='running' AND lease_expires_at < now()`,
-  );
-  return rowCount ?? 0;
+       WHERE id=ANY($1::uuid[]) AND status='running'`,
+      [ids],
+    );
+    await client.query("COMMIT");
+    return result.rowCount ?? 0;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /**
