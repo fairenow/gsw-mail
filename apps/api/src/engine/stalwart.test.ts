@@ -451,10 +451,11 @@ test("setSeen and setFlagged update keywords", async () => {
   assert.equal(emails.get("e1")?.keywords["$seen"], false);
 });
 
-test("move relocates and clears keywords", async () => {
+test("move relocates without clearing starred and seen keywords", async () => {
   await engine.move("ramon@gs.com", ["e1"], "Trash");
   assert.deepEqual(emails.get("e1")?.mailboxIds, { "mbox-trash": true });
-  assert.equal(emails.get("e1")?.keywords["$flagged"], undefined);
+  assert.equal(emails.get("e1")?.keywords["$flagged"], true);
+  assert.equal(emails.get("e1")?.keywords["$seen"], false);
 });
 
 test("move to Archive resolves the actual archive mailbox", async () => {
