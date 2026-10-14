@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
-import { Archive, Clock3, FileText, Inbox, Send, Trash2, TriangleAlert } from "lucide-react";
+import { Archive, Clock3, FileText, Inbox, Send, Trash2, TriangleAlert, Star } from "lucide-react";
 
-export const FOLDERS = ["Inbox", "Sent", "Drafts", "Outbox", "Spam", "Trash", "Archive"] as const;
+export const FOLDERS = ["Inbox", "Sent", "Drafts", "Outbox", "Spam", "Trash", "Archive", "Starred"] as const;
 export type Folder = (typeof FOLDERS)[number];
 
 export const FOLDER_ICON: Record<Folder, LucideIcon> = {
@@ -12,6 +12,7 @@ export const FOLDER_ICON: Record<Folder, LucideIcon> = {
   Spam: TriangleAlert,
   Trash: Trash2,
   Archive,
+  Starred: Star,
 };
 
 export const fmtTime = (value: string) => new Date(value).toLocaleString();
