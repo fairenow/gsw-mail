@@ -841,7 +841,7 @@ async function prepareNewConversation(input: {
   }));
 
   const directAttachmentAnalyses = new Map<string, string>();
-  if (attachedAssets.length > 0 && shouldPreAnalyzeAttachments(latestUserMessage.content)) {
+  if (attachedAssets.length > 0 && (shouldPreAnalyzeAttachments(latestUserMessage.content) || attachedAssets.some((asset) => asset.mimeType.startsWith("image/")))) {
     for (const asset of attachedAssets.slice(0, 5)) {
       try {
         const object = await getR2Object(asset.r2Key);
