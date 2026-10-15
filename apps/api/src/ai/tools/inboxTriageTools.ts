@@ -63,13 +63,20 @@ export function buildInboxTriage(activity: Activity) {
     const inbound = group.inbox.filter(m => m.direction === "inbound");
     const outgoing = rows.filter(m => m.direction === "outbound" || m.direction === "outbound_copy");
     if (!inbound.length && !outgoing.length) return [];
+    // Do not present a self-sent Inbox copy as an unanswered incoming email.
     const status = latest.direction === "inbound"
       ? "potential_reply_needed"
       : "waiting_or_followup_candidate";
+    const latestIncoming = [...inbound].sort((a,b)=>new Date(b.date).getTime()-new Date(a.date).getTime())[0];
+    const latestOutgoing = [...outgoing].sort((a,b)=>new Date(b.date).getTime()-new Date(a.date).getTime())[0];
+    const responseEvidence = latestIncoming && latestOutgoing
+      ? new Date(latestOutgoing.date).getTime() >= new Date(latestIncoming.date).getTime()
+        ? "outgoing_after_latest_inbound" : "inbound_after_latest_outgoing"
+      : latestIncoming ? "no_outgoing_in_scanned_folders" : "outgoing_only";
     return [{
       threadId, status, latestDate: new Date(latest.date).toISOString(),
       from: latestInbox.from, subject: latestInbox.subject, snippet: latestInbox.snippet,
-      read: latestInbox.read, inboxMessages: group.inbox.length, sentMessages: group.sent.length,
+      read: latestInbox.read, responseEvidence, inboxMessages: group.inbox.length, sentMessages: group.sent.length,
       latestMessageId: latest.messageId,
       // A missing Sent match cannot prove that no reply was sent through another account.
       requiresThreadReview: true,
