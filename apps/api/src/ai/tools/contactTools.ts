@@ -57,7 +57,8 @@ export const contactSearchTool: AgentToolDefinition = {
     const startedAt = new Date().toISOString();
     try {
       const { query, limit } = z.object({ query: z.string().trim().min(1).max(200), limit: z.number().int().min(1).max(50).default(20) }).parse(rawInput);
-      const result = await listContacts(ctx.userId, query, limit);
+      const context = await getContactEngineContext(ctx.userId, ctx.accessToken, ctx.authUserId, ctx.headers);
+      const result = await listContacts(ctx.userId, query, limit, 0, context);
       return { ok: true, toolCallId, data: result, audit: audit(ctx, startedAt) };
     } catch { return errorResult(ctx, toolCallId, startedAt); }
   },
