@@ -48,7 +48,7 @@ export default async function calendarSyncRoutes(app: FastifyInstance) {
         if (!body) { skipped += 1; continue; }
         const invites = parseCalendarInvites(body.content.toString("utf8"), calendar.engineId);
         for (const invite of invites) {
-          if (invite.method === "CANCEL") { skipped += 1; continue; }
+          if (invite.method && invite.method !== "REQUEST" && invite.method !== "PUBLISH") { skipped += 1; continue; }
           const key = eventKey(invite);
           if (existingKeys.has(key)) { skipped += 1; continue; }
           try {
