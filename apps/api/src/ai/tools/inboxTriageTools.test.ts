@@ -83,3 +83,18 @@ test("incremental scan refuses stale pages rather than doubling counts", () => {
   };
   assert.throws(()=>advanceScan(state,{folder:"inbox",offset:0,pageSize:250,exhausted:false,messages:[]}),/Stale/);
 });
+
+test("scan refuses short nonterminal pages, preventing silently skipped records", () => {
+  const state = {
+    folder:"inbox" as const,offset:0,version:0,updatedAt:"",
+    folders:[
+      {mailbox:"Inbox",role:"inbox",complete:false,messages:[] as ReturnType<typeof row>[]},
+      {mailbox:"Sent",role:"sent",complete:false,messages:[] as ReturnType<typeof row>[]},
+    ],
+  };
+  assert.throws(
+    ()=>advanceScan(state,{folder:"inbox",offset:0,pageSize:250,exhausted:false,messages:[row("a","one","2026-10-10T00:00:00Z","inbound")]}),
+    /Invalid triage page length/,
+  );
+  assert.equal(state.folders[0]?.messages.length,0);
+});
