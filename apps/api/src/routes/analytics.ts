@@ -12,7 +12,21 @@ const requestSchema=z.object({events:z.array(eventSchema).min(1).max(50)}).stric
 export default async function analyticsRoutes(app:FastifyInstance){
  // Anonymous visitors are intentionally not associated with mailbox identities.
  app.post("/product/analytics/events",{config:{rateLimit:{max:90,timeWindow:"1 minute"}}},async(req,reply)=>{
-   if(req.headers.origin && new URL(req.headers.origin).host!==req.headers.host)return reply.code(403).send({error:"invalid origin"});
+   // Vercel forwards same-origin browser requests to Railway, where req.headers.host
+   // is the Railway hostname rather than the browser-visible GSW Mail domain.
+   // Trust only explicit public origins, never arbitrary forwarded host headers.
+   if (req.headers.origin) {
+     let origin: URL;
+     try { origin = new URL(req.headers.origin); }
+     catch { return reply.code(403).send({ error: "invalid origin" }); }
+     const allowedOrigins = new Set([
+       "https://mail.guidedstepswellness.com",
+       ...(process.env.ANALYTICS_ALLOWED_ORIGINS ?? "").split(",").map(value => value.trim()).filter(Boolean),
+     ]);
+     if (origin.origin !== req.headers.origin || !allowedOrigins.has(origin.origin)) {
+       return reply.code(403).send({ error: "invalid origin" });
+     }
+   }
    const events=requestSchema.parse(req.body).events;
    const keys:Record<string,string[]>={page_view:[],click:["target"],scroll_depth:["percent"],page_exit:["durationMs","scrollPercent"],visibility:["state"],web_vital:["metric","value"]};
    for(const event of events){if(Object.keys(event.metadata??{}).some(key=>!keys[event.type]!.includes(key)))return reply.code(400).send({error:"unsupported analytics metadata"});}
