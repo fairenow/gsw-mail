@@ -109,10 +109,17 @@ export const mailTriageTool: AgentToolDefinition = {
       let report = !refresh ? await getSnapshot(ctx.userId,ctx.accountId) : undefined;
       const reusedSnapshot = Boolean(report);
       if (!report) {
-        const activity = await createMailService(ctx).activity(
-          ctx.accountId, "1970-01-01T00:00:00.000Z", "9999-12-31T23:59:59.999Z", ["Inbox","Sent"]
-        );
-        report = buildInboxTriage(activity as Activity);
+        const state = await loadProgress(ctx.userId,ctx.accountId);
+        if (!state || state.folder !== "done") {
+          return {ok:true,toolCallId,audit:audit(),data:{
+            status:"scanning",complete:false,
+            scannedInboxMessages:state?.folders[0]?.messages.length ?? 0,
+            scannedSentMessages:state?.folders[1]?.messages.length ?? 0,
+            nextFolder:state?.folder ?? "inbox",nextOffset:state?.offset ?? 0,
+            instructions:"Use mail.triage_scan_step to advance or resume the scan. Do not present candidate totals yet.",
+          }};
+        }
+        report = buildInboxTriage({complete:true,folders:state.folders});
         await setSnapshot(ctx.userId,ctx.accountId,report);
       }
       return { ok:true,toolCallId,audit:audit(),data:{
