@@ -325,7 +325,7 @@ export const calendarEventInviteTool: AgentToolDefinition = {
       const attendees = [...event.attendees, ...additions];
       if (attendees.length > 50) return { ok: false, toolCallId, error: { code: "attendee_limit", message: "The event cannot have more than 50 attendees.", retryable: false }, audit: audit(ctx, startedAt) };
       const updated = await engine.updateCalendarEvent(ctx.accountId, event.engineId, {
-        calendarId: event.calendarId,
+        calendarId: event.calendarIds[0] ?? "",
         title: event.title,
         description: event.description ?? undefined,
         start: event.start,
