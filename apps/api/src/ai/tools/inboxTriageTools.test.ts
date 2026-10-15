@@ -98,3 +98,19 @@ test("scan refuses short nonterminal pages, preventing silently skipped records"
   );
   assert.equal(state.folders[0]?.messages.length,0);
 });
+
+test("triage tracks whether an outgoing message follows the last inbound message", () => {
+  const report=buildInboxTriage({complete:true,folders:[
+    {role:"inbox",mailbox:"Inbox",complete:true,messages:[row("incoming","thread","2026-10-10T00:00:00Z","inbound")]},
+    {role:"sent",mailbox:"Sent",complete:true,messages:[row("reply","thread","2026-10-11T00:00:00Z","outbound")]},
+  ]});
+  assert.equal(report.candidates[0]?.responseEvidence,"outgoing_after_latest_inbound");
+  assert.equal(report.candidates[0]?.status,"waiting_or_followup_candidate");
+});
+test("triage records inbound arriving after prior outbound",()=>{
+  const report=buildInboxTriage({complete:true,folders:[
+    {role:"inbox",mailbox:"Inbox",complete:true,messages:[row("incoming","thread","2026-10-12T00:00:00Z","inbound")]},
+    {role:"sent",mailbox:"Sent",complete:true,messages:[row("reply","thread","2026-10-11T00:00:00Z","outbound")]},
+  ]});
+  assert.equal(report.candidates[0]?.responseEvidence,"inbound_after_latest_outgoing");
+});
