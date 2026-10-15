@@ -18,7 +18,7 @@ type MailRow = {
 type FolderRow = { role?: string | null; mailbox: string; complete: boolean; messages: MailRow[] };
 type Activity = { complete: boolean; folders: FolderRow[]; missingRequiredMailboxes?: string[] };
 
-// Durable, user+mailbox scoped snapshots. The database must have migration 0029
+// Durable, user+mailbox scoped snapshots. The database must have migration 0031
 // before triage is enabled; failures are surfaced rather than silently reverting
 // to an inaccurate or inconsistent cache across API instances.
 const SCAN_TTL_MINUTES = 15;
