@@ -68,7 +68,7 @@ const config = {
     timeoutMs: Number(env("BROWSER_WORKER_TIMEOUT_MS", "45000")),
   },
   ai: {
-    provider: env("AI_PROVIDER", "gpt-oss-120b"),
+    provider: env("AI_PROVIDER", "qwen"),
     modalProxyToken: process.env.MODAL_PROXY_TOKEN,
     gptOssVllmBaseUrl: process.env.GPT_OSS_VLLM_BASE_URL,
     qwen36BaseUrl: process.env.QWEN36_BASE_URL,
