@@ -141,6 +141,28 @@ export function createMailService(context: MailServiceContext) {
       return engine.search(accountId, query, mailbox);
     },
 
+    async triagePage(accountId: string, folder: "inbox" | "sent", offset: number, limit = 250) {
+      const account = await requireAccountPermission(context.userId, accountId, "read");
+      const engine = await engineFor(accountId);
+      const folders = await engine.listMailboxes(accountId);
+      const target = folders.find(m => m.role?.toLowerCase() === folder)
+        ?? folders.find(m => m.engineName.toLowerCase() === folder);
+      if (!target) throw new Error(`Required mailbox not found: ${folder}`);
+      const pageSize = Math.min(250, Math.max(1,limit));
+      const messages = await engine.listMessages(accountId, {mailbox:target.engineName,offset,limit:pageSize});
+      const own = account.address.toLowerCase();
+      return {
+        folder, offset, pageSize, exhausted:messages.length < pageSize,
+        messages: messages.map(message=>({
+          messageId:message.engineId,threadId:message.threadId,
+          subject:message.subject,date:message.date,from:message.from,to:message.to,
+          snippet:message.snippet,read:message.read,
+          direction:folder==="sent" ? "outbound"
+            : message.from?.email?.toLowerCase()===own ? "outbound_copy" : "inbound",
+        })),
+      };
+    },
+
     async activity(accountId: string, startIso: string, endIso: string, requestedMailboxes?: string[]) {
       const account = await requireAccountPermission(context.userId, accountId, "read");
       const mailboxAddress = account.address.toLowerCase();
