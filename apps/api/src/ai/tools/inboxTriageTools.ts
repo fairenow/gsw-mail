@@ -127,3 +127,59 @@ export const mailTriageTool: AgentToolDefinition = {
     }
   },
 };
+
+const reviewInput = z.object({
+  threadIds: z.array(z.string().trim().min(1).max(1000)).min(1).max(5),
+});
+
+// The coordinator uses this bounded, multi-thread read to reason about actual
+// reply obligations, instead of equating last inbound or unread with "needs reply".
+export const mailTriageReviewTool: AgentToolDefinition = {
+  name: "mail.triage_review",
+  description: "Review up to five candidate inbox threads together, including recent actual message bodies. Decide which require a reply versus no reply, follow-up, waiting, or other action. This returns evidence, not a definitive AI classification; do not infer that a question is unanswered solely because the latest message is inbound.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      threadIds: { type: "array", items: { type: "string" }, minItems:1, maxItems:5,
+        description:"Exact thread IDs from mail.triage; never guessed IDs." },
+    },
+    required:["threadIds"], additionalProperties:false,
+  },
+  requiredScopes:["mail.read"],
+  risk:"read",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    const audit = () => ({userId:ctx.userId,accountId:ctx.accountId,startedAt,completedAt:new Date().toISOString()});
+    try {
+      const {threadIds} = reviewInput.parse(rawInput ?? {});
+      const service = createMailService(ctx);
+      const threads = [];
+      for (const threadId of [...new Set(threadIds)]) {
+        try {
+          const summaries = await service.readThread(ctx.accountId,threadId);
+          const recent = summaries.slice(-8);
+          const messages = await Promise.all(recent.map(async m => {
+            const message = await service.readMessage(ctx.accountId,m.engineId,false);
+            return {
+              messageId:message.engineId, date:message.date,
+              from:message.from,to:message.to,subject:message.subject,
+              excerpt:(message.textBody || message.htmlBody || "").slice(0,2400),
+              bodyTruncated:(message.textBody || message.htmlBody || "").length > 2400,
+            };
+          }));
+          threads.push({threadId,complete:summaries.length<=8,totalMessages:summaries.length,messages});
+        } catch {
+          // Per-thread read errors must not erase successfully reviewed threads.
+          threads.push({threadId,complete:false,totalMessages:0,messages:[],unavailable:true});
+        }
+      }
+      return {ok:true,toolCallId,audit:audit(),data:{
+        threads,requested:threadIds.length,
+        reviewed:threads.filter(t=>!('unavailable' in t)).length,
+        instructions:"Classify each thread using the content and sequence, and flag uncertain or truncated threads for additional reading. Do not report any thread as fully verified if it is unavailable or truncated.",
+      }};
+    } catch (error) {
+      return {ok:false,toolCallId,audit:audit(),error:reportChatError(error,{operation:"mail.triage_review",category:"mail"})};
+    }
+  },
+};
