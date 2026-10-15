@@ -167,7 +167,7 @@ export function createMailService(context: MailServiceContext) {
         // Page across the folder before applying the date filter. A single
         // 250-message page could silently undercount busy outreach mailboxes.
         const pageSize = 250;
-        const maxPages = 20;
+        const maxPages = requested.length === 2 && requested.includes("inbox") && requested.includes("sent") ? 200 : 20;
         const inRange = [];
         let exhausted = false;
         for (let page = 0; page < maxPages; page += 1) {
