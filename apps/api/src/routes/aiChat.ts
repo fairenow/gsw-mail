@@ -163,6 +163,11 @@ type ChatStreamEmitter = (event: ChatStreamStatus) => void;
 const toolLabel = (toolName: string): string => {
   switch (toolName) {
     case "mail.activity": return "Checking recent email activity";
+    case "mail.triage": return "Analyzing Inbox and Sent conversations";
+    case "mail.triage_scan_step": return "Scanning mailbox and saving progress";
+    case "mail.triage_report": return "Compiling the inbox triage report";
+    case "mail.triage_classify": return "Classifying candidate conversations";
+    case "mail.triage_review": return "Reviewing candidate conversation details";
     case "mail.search": return "Searching your mailbox";
     case "mail.read": return "Reading the matching email";
     case "mail.read_thread": return "Reading the conversation";
@@ -597,7 +602,7 @@ async function runConversationTurn(input: {
         const definition = agentMailRegistry.definition(call.function.name);
         const semanticName = call.function.name.replaceAll("__", ".");
         const label = toolLabel(semanticName);
-        const readCallKey = definition?.risk === "read" ? `${semanticName}:${call.function.arguments}` : null;
+        const readCallKey = definition?.risk === "read" && semanticName !== "mail.triage_scan_step" ? `${semanticName}:${call.function.arguments}` : null;
 
         if (readCallKey && seenReadCalls.has(readCallKey)) {
           toolActivity.push({ name: semanticName, ok: true });

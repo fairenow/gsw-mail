@@ -5,6 +5,11 @@ import type { AgentToolDefinition, ProviderToolDefinition } from "./tools/types.
 import { agentMailRegistry } from "./tools/registry.js";
 
 const coreToolNames = new Set([
+  "mail.triage",
+  "mail.triage_review",
+  "mail.triage_classify",
+  "mail.triage_report",
+  "mail.triage_scan_step",
   "mail.search",
   "mail.read",
   "mail.read_thread",
