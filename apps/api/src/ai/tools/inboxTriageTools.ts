@@ -7,7 +7,6 @@ import { pool } from "../../db/client.js";
 const inputSchema = z.object({
   offset: z.number().int().min(0).default(0),
   limit: z.number().int().min(1).max(50).default(30),
-  refresh: z.boolean().default(false),
 });
 
 type MailRow = {
@@ -95,7 +94,6 @@ export const mailTriageTool: AgentToolDefinition = {
     properties: {
       offset: { type: "integer", minimum: 0, description: "Candidate offset, starting at zero." },
       limit: { type: "integer", minimum: 1, maximum: 50, description: "Maximum candidate conversations to return (default 30)." },
-      refresh: { type: "boolean", description: "Force a new mailbox scan instead of using a short-lived snapshot." },
     },
     additionalProperties: false,
   },
@@ -105,8 +103,8 @@ export const mailTriageTool: AgentToolDefinition = {
     const startedAt = new Date().toISOString();
     const audit = () => ({ userId:ctx.userId,accountId:ctx.accountId,startedAt,completedAt:new Date().toISOString() });
     try {
-      const { offset,limit,refresh } = inputSchema.parse(rawInput ?? {});
-      let report = !refresh ? await getSnapshot(ctx.userId,ctx.accountId) : undefined;
+      const { offset,limit } = inputSchema.parse(rawInput ?? {});
+      let report = await getSnapshot(ctx.userId,ctx.accountId);
       const reusedSnapshot = Boolean(report);
       if (!report) {
         const state = await loadProgress(ctx.userId,ctx.accountId);
@@ -252,6 +250,7 @@ export const mailTriageScanStepTool:AgentToolDefinition={
         VALUES($1,$2,$3::jsonb) ON CONFLICT (user_id,account_id) DO NOTHING`,
         [ctx.userId,ctx.accountId,JSON.stringify(freshState())]);
       if(refresh) {
+        await pool.query("DELETE FROM ai_inbox_triage_snapshots WHERE user_id=$1 AND account_id=$2",[ctx.userId,ctx.accountId]);
         await pool.query("UPDATE ai_inbox_triage_progress SET state=$3::jsonb,updated_at=now() WHERE user_id=$1 AND account_id=$2",
           [ctx.userId,ctx.accountId,JSON.stringify(freshState())]);
       }
