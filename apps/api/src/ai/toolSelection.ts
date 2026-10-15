@@ -7,6 +7,7 @@ import { agentMailRegistry } from "./tools/registry.js";
 const coreToolNames = new Set([
   "mail.triage",
   "mail.triage_review",
+  "mail.triage_classify",
   "mail.triage_scan_step",
   "mail.search",
   "mail.read",
