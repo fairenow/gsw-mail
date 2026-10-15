@@ -210,6 +210,9 @@ export function advanceScan(state:ScanState, page:{
   if (state.folder!==page.folder || state.offset!==page.offset) throw new Error("Stale triage scan page");
   const next: ScanState=JSON.parse(JSON.stringify(state)) as ScanState;
   const target=next.folders.find(f=>f.role===page.folder)!;
+  if (page.messages.length > page.pageSize || (!page.exhausted && page.messages.length !== page.pageSize)) {
+    throw new Error("Invalid triage page length; scan cannot safely advance");
+  }
   target.messages.push(...page.messages);
   if(target.messages.length>100_000) throw new Error("Triage scan exceeded safety limit");
   if(page.exhausted) {
