@@ -35,3 +35,20 @@ test("triage considers latest outbound mail as waiting on the other party", () =
   ]});
   assert.equal(report.candidates[0]?.status,"waiting_or_followup_candidate");
 });
+
+test("outbound copy alone is not counted as an unanswered inbound conversation", () => {
+  const report = buildInboxTriage({complete:true,folders:[
+    {role:"inbox",mailbox:"Inbox",complete:true,messages:[row("copy","a","2026-10-10T00:00:00Z","outbound_copy")]},
+    {role:"sent",mailbox:"Sent",complete:true,messages:[]},
+  ]});
+  assert.equal(report.candidateCount,1);
+  assert.equal(report.candidates[0]?.status,"waiting_or_followup_candidate");
+  assert.equal(report.candidates[0]?.requiresThreadReview,true);
+});
+test("missing Sent folder prevents a complete reply-status claim", () => {
+  const report = buildInboxTriage({complete:false,folders:[
+    {role:"inbox",mailbox:"Inbox",complete:true,messages:[row("in","a","2026-10-10T00:00:00Z","inbound")]},
+  ]});
+  assert.equal(report.complete,false);
+  assert.match(report.incompleteReason ?? "",/unavailable|truncated/);
+});
