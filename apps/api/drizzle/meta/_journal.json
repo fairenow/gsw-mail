@@ -120,6 +120,13 @@
       "when": 1791910000000,
       "tag": "0030_file_organization_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792090000000,
+      "tag": "0031_ai_inbox_triage_snapshots",
+      "breakpoints": true
     }
   ]
 }
