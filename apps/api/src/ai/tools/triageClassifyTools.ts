@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pool } from "../../db/client.js";
 import { createMailService } from "../../services/mailService.js";
 import { getAiCapabilitySettings } from "../capabilities.js";
 import { getAiProvider } from "../providers/index.js";
@@ -41,6 +42,13 @@ export const mailTriageClassifyTool:AgentToolDefinition={
       if(!settings.enabled || !settings.mailRead)throw new Error("AI mailbox reading is disabled");
       const provider=getAiProvider(settings.modelProvider);
       const mail=createMailService(ctx);
+      const snapshot=await pool.query<{expires_at:Date;report:{candidates:Array<{threadId:string}>;complete:boolean}}>(
+        "SELECT expires_at,report FROM ai_inbox_triage_snapshots WHERE user_id=$1 AND account_id=$2 AND expires_at>now()",
+        [ctx.userId,ctx.accountId]);
+      const active=snapshot.rows[0];
+      if (!active || !active.report.complete) throw new Error("Finish the inbox scan before classification");
+      const allowed=new Set(active.report.candidates.map(c=>c.threadId));
+      if(threadIds.some(id=>!allowed.has(id))) throw new Error("Requested thread is not in the current scan");
       const results=[];
       for(const threadId of [...new Set(threadIds)]){
         try {
@@ -74,6 +82,15 @@ export const mailTriageClassifyTool:AgentToolDefinition={
             reason:"Thread retrieval or model classification failed.",evidenceMessageIds:[],confidence:"low",
           }});
         }
+      }
+      for (const item of results) {
+        await pool.query(
+          `INSERT INTO ai_inbox_triage_verdicts(user_id,account_id,thread_id,scan_expires_at,verdict,updated_at)
+           VALUES($1,$2,$3,$4,$5::jsonb,now())
+           ON CONFLICT(user_id,account_id,thread_id) DO UPDATE
+           SET scan_expires_at=EXCLUDED.scan_expires_at,verdict=EXCLUDED.verdict,updated_at=now()`,
+          [ctx.userId,ctx.accountId,item.threadId,active.expires_at,JSON.stringify(item)],
+        );
       }
       return {ok:true,toolCallId,audit:audit(),data:{results,classified:results.filter(r=>r.verdict.category!=="uncertain").length,
         requested:[...new Set(threadIds)].length,
