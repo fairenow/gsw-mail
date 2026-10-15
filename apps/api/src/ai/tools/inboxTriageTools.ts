@@ -6,6 +6,7 @@ import { z } from "zod";
 const inputSchema = z.object({
   offset: z.number().int().min(0).default(0),
   limit: z.number().int().min(1).max(50).default(30),
+  refresh: z.boolean().default(false),
 });
 
 type MailRow = {
@@ -15,6 +16,24 @@ type MailRow = {
 };
 type FolderRow = { role?: string | null; mailbox: string; complete: boolean; messages: MailRow[] };
 type Activity = { complete: boolean; folders: FolderRow[]; missingRequiredMailboxes?: string[] };
+
+// Short-lived scan snapshots prevent repeated 2,000+ message fetches when the
+// user asks for the next candidate page. Cache is scoped to the authorized user
+// and selected mailbox, and remains process-local (never a durable job).
+const scanCache = new Map<string, { at: number; report: ReturnType<typeof buildInboxTriage> }>();
+const SCAN_TTL_MS = 3 * 60_000;
+const MAX_SNAPSHOTS = 32;
+function getSnapshot(key: string) {
+  const entry = scanCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() - entry.at > SCAN_TTL_MS) { scanCache.delete(key); return undefined; }
+  return entry.report;
+}
+function setSnapshot(key: string, report: ReturnType<typeof buildInboxTriage>) {
+  for (const [id, entry] of scanCache) if (Date.now() - entry.at > SCAN_TTL_MS) scanCache.delete(id);
+  if (scanCache.size >= MAX_SNAPSHOTS) scanCache.delete(scanCache.keys().next().value!);
+  scanCache.set(key, { at: Date.now(), report });
+}
 
 export function buildInboxTriage(activity: Activity) {
   const inbox = activity.folders.filter(f => f.role?.toLowerCase() === "inbox" || f.mailbox.toLowerCase() === "inbox");
@@ -56,7 +75,7 @@ export function buildInboxTriage(activity: Activity) {
     scannedSentMessages: sent.reduce((s,f) => s + f.messages.length, 0),
     complete: activity.complete && inbox.length > 0 && sent.length > 0
       && inbox.every(f=>f.complete) && sent.every(f=>f.complete),
-    incompleteReason: activity.complete ? undefined : "Mailbox scan reached a page limit or a requested folder was unavailable.",
+    incompleteReason: activity.complete && inbox.length > 0 && sent.length > 0 ? undefined : "A required folder was unavailable or the scan was truncated.",
     candidateCount: candidates.length,
     candidates,
   };
@@ -70,6 +89,7 @@ export const mailTriageTool: AgentToolDefinition = {
     properties: {
       offset: { type: "integer", minimum: 0, description: "Candidate offset, starting at zero." },
       limit: { type: "integer", minimum: 1, maximum: 50, description: "Maximum candidate conversations to return (default 30)." },
+      refresh: { type: "boolean", description: "Force a new mailbox scan instead of using a short-lived snapshot." },
     },
     additionalProperties: false,
   },
@@ -79,19 +99,26 @@ export const mailTriageTool: AgentToolDefinition = {
     const startedAt = new Date().toISOString();
     const audit = () => ({ userId:ctx.userId,accountId:ctx.accountId,startedAt,completedAt:new Date().toISOString() });
     try {
-      const { offset,limit } = inputSchema.parse(rawInput ?? {});
-      const activity = await createMailService(ctx).activity(
-        ctx.accountId, "1970-01-01T00:00:00.000Z", "9999-12-31T23:59:59.999Z", ["Inbox","Sent"]
-      );
-      const report = buildInboxTriage(activity as Activity);
+      const { offset,limit,refresh } = inputSchema.parse(rawInput ?? {});
+      const cacheKey = JSON.stringify([ctx.userId,ctx.accountId]);
+      let report = !refresh ? getSnapshot(cacheKey) : undefined;
+      const reusedSnapshot = Boolean(report);
+      if (!report) {
+        const activity = await createMailService(ctx).activity(
+          ctx.accountId, "1970-01-01T00:00:00.000Z", "9999-12-31T23:59:59.999Z", ["Inbox","Sent"]
+        );
+        report = buildInboxTriage(activity as Activity);
+        setSnapshot(cacheKey, report);
+      }
       return { ok:true,toolCallId,audit:audit(),data:{
         scannedInboxMessages:report.scannedInboxMessages,
         scannedSentMessages:report.scannedSentMessages,
         complete:report.complete,
         incompleteReason:report.incompleteReason,
-        missingRequiredMailboxes:activity.missingRequiredMailboxes,
+        snapshotReused:reusedSnapshot, snapshotLifetimeSeconds:180,
         candidateCount:report.candidateCount,offset,returned:report.candidates.slice(offset,offset+limit).length,
         hasMore:offset+limit<report.candidateCount,
+        nextOffset:offset+limit<report.candidateCount ? offset+limit : null,
         candidates:report.candidates.slice(offset,offset+limit),
         note:"Candidates require conversation-level verification. Read and unread are both included. Counts are candidates, not confirmed messages requiring replies."
       }};
