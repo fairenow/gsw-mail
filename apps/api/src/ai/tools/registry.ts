@@ -1,5 +1,6 @@
 import type { AgentExecutionContext, AgentToolDefinition, ProviderToolDefinition } from "./types.js";
 import { agentMailTools, readOnlyMailTools } from "./mailTools.js";
+import { mailTriageReportTool } from "./triageReportTools.js";
 import { mailTriageClassifyTool } from "./triageClassifyTools.js";
 import { mailTriageTool, mailTriageReviewTool, mailTriageScanStepTool } from "./inboxTriageTools.js";
 import { automationTools } from "./automationTools.js";
@@ -87,7 +88,7 @@ export class AgentToolRegistry {
   }
 }
 
-const baseAgentTools: AgentToolDefinition[] = [mailTriageClassifyTool, mailTriageTool, mailTriageReviewTool, mailTriageScanStepTool, ...agentMailTools, ...automationTools, ...taskTools, ...workerTools, ...integrationTools, ...browserTools, ...searchTools, ...contactTools, ...calendarTools, ...campaignTools, ...templateTools, ...domainTools, ...fileTools, ...fileManagementTools, ...fileOrganizationTools, ...durableFileOrganizationTools, ...videoTools];
+const baseAgentTools: AgentToolDefinition[] = [mailTriageReportTool, mailTriageClassifyTool, mailTriageTool, mailTriageReviewTool, mailTriageScanStepTool, ...agentMailTools, ...automationTools, ...taskTools, ...workerTools, ...integrationTools, ...browserTools, ...searchTools, ...contactTools, ...calendarTools, ...campaignTools, ...templateTools, ...domainTools, ...fileTools, ...fileManagementTools, ...fileOrganizationTools, ...durableFileOrganizationTools, ...videoTools];
 const baseAgentRegistry = new AgentToolRegistry(baseAgentTools);
 
 const capabilitySearchTool: AgentToolDefinition = {
@@ -133,4 +134,4 @@ const capabilitySearchTool: AgentToolDefinition = {
 };
 
 export const agentMailRegistry = new AgentToolRegistry([...baseAgentTools, capabilitySearchTool]);
-export const readOnlyMailRegistry = new AgentToolRegistry([...readOnlyMailTools, mailTriageClassifyTool, mailTriageTool, mailTriageReviewTool, mailTriageScanStepTool]);
+export const readOnlyMailRegistry = new AgentToolRegistry([...readOnlyMailTools, mailTriageReportTool, mailTriageClassifyTool, mailTriageTool, mailTriageReviewTool, mailTriageScanStepTool]);
