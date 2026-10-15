@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildInboxTriage } from "./inboxTriageTools.js";
+import { buildInboxTriage, advanceScan } from "./inboxTriageTools.js";
 
 const row = (id: string, thread: string, date: string, direction: string, read = true) => ({
   messageId: id, threadId: thread, date, direction, subject: "Sample", from: "customer@example.com",
@@ -51,4 +51,35 @@ test("missing Sent folder prevents a complete reply-status claim", () => {
   ]});
   assert.equal(report.complete,false);
   assert.match(report.incompleteReason ?? "",/unavailable|truncated/);
+});
+
+test("incremental scans save progress and transition Inbox to Sent before completion", () => {
+  const state = {
+    folder:"inbox" as const,offset:0,version:0,updatedAt:"",
+    folders:[
+      {mailbox:"Inbox",role:"inbox",complete:false,messages:[] as ReturnType<typeof row>[]},
+      {mailbox:"Sent",role:"sent",complete:false,messages:[] as ReturnType<typeof row>[]},
+    ],
+  };
+  const next=advanceScan(state,{
+    folder:"inbox",offset:0,pageSize:250,exhausted:true,
+    messages:[row("one","t","2026-10-10T00:00:00Z","inbound")],
+  });
+  assert.equal(next.folder,"sent");
+  assert.equal(next.version,1);
+  assert.equal(next.folders[0]?.complete,true);
+  assert.equal(state.folders[0]?.messages.length,0);
+  const done=advanceScan(next,{folder:"sent",offset:0,pageSize:250,exhausted:true,messages:[]});
+  assert.equal(done.folder,"done");
+  assert.equal(done.version,2);
+});
+test("incremental scan refuses stale pages rather than doubling counts", () => {
+  const state = {
+    folder:"inbox" as const,offset:250,version:1,updatedAt:"",
+    folders:[
+      {mailbox:"Inbox",role:"inbox",complete:false,messages:[] as ReturnType<typeof row>[]},
+      {mailbox:"Sent",role:"sent",complete:false,messages:[] as ReturnType<typeof row>[]},
+    ],
+  };
+  assert.throws(()=>advanceScan(state,{folder:"inbox",offset:0,pageSize:250,exhausted:false,messages:[]}),/Stale/);
 });
