@@ -237,7 +237,7 @@ async function saveProgress(userId:string,accountId:string,before:ScanState,afte
 }
 export const mailTriageScanStepTool:AgentToolDefinition={
   name:"mail.triage_scan_step",
-  description:"Advance a durable whole-inbox scan in bounded pages. Reinvoke while status is scanning. Progress survives server restarts. Call mail.triage for candidate results once finished. Does not classify reply needs.",
+  description:"Advance a durable whole-inbox scan using short, time-bounded batches of up to 32 pages. Reinvoke while status is scanning. Progress survives server restarts. Call mail.triage for candidate results once finished. Does not classify reply needs.",
   inputSchema:{type:"object",properties:{refresh:{type:"boolean",description:"Reset the scan and begin again (only if explicitly requested)."}},additionalProperties:false},
   requiredScopes:["mail.read"],risk:"read",
   async execute(ctx,rawInput,toolCallId) {
@@ -256,7 +256,8 @@ export const mailTriageScanStepTool:AgentToolDefinition={
       }
       let state=(await loadProgress(ctx.userId,ctx.accountId))!;
       const service=createMailService(ctx);
-      for(let index=0;index<4 && state.folder!=="done";index++){
+      const deadline=Date.now()+12_000;
+      for(let index=0;index<32 && state.folder!=="done" && Date.now()<deadline;index++){
         const page=await service.triagePage(ctx.accountId,state.folder,state.offset,250);
         const next=advanceScan(state,page);
         await saveProgress(ctx.userId,ctx.accountId,state,next);
