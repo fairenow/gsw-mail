@@ -12,8 +12,8 @@ const inputSchema = z.object({
 
 type MailRow = {
   messageId: string; threadId?: string | null; subject?: string | null;
-  date: string | Date; from: unknown; to: unknown; snippet?: string | null;
-  read?: boolean; direction: string;
+  date: string | Date; from: unknown; to: unknown; snippet?: string | null | undefined;
+  read?: boolean | undefined; direction: string;
 };
 type FolderRow = { role?: string | null; mailbox: string; complete: boolean; messages: MailRow[] };
 type Activity = { complete: boolean; folders: FolderRow[]; missingRequiredMailboxes?: string[] };
