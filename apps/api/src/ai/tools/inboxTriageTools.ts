@@ -2,6 +2,7 @@ import type { AgentToolDefinition } from "./types.js";
 import { createMailService } from "../../services/mailService.js";
 import { reportChatError } from "../chatSafeErrors.js";
 import { z } from "zod";
+import { pool } from "../../db/client.js";
 
 const inputSchema = z.object({
   offset: z.number().int().min(0).default(0),
@@ -17,22 +18,27 @@ type MailRow = {
 type FolderRow = { role?: string | null; mailbox: string; complete: boolean; messages: MailRow[] };
 type Activity = { complete: boolean; folders: FolderRow[]; missingRequiredMailboxes?: string[] };
 
-// Short-lived scan snapshots prevent repeated 2,000+ message fetches when the
-// user asks for the next candidate page. Cache is scoped to the authorized user
-// and selected mailbox, and remains process-local (never a durable job).
-const scanCache = new Map<string, { at: number; report: ReturnType<typeof buildInboxTriage> }>();
-const SCAN_TTL_MS = 3 * 60_000;
-const MAX_SNAPSHOTS = 32;
-function getSnapshot(key: string) {
-  const entry = scanCache.get(key);
-  if (!entry) return undefined;
-  if (Date.now() - entry.at > SCAN_TTL_MS) { scanCache.delete(key); return undefined; }
-  return entry.report;
+// Durable, user+mailbox scoped snapshots. The database must have migration 0029
+// before triage is enabled; failures are surfaced rather than silently reverting
+// to an inaccurate or inconsistent cache across API instances.
+const SCAN_TTL_MINUTES = 15;
+type TriageReport = ReturnType<typeof buildInboxTriage>;
+async function getSnapshot(userId: string, accountId: string): Promise<TriageReport | undefined> {
+  const result = await pool.query<{ report: TriageReport }>(
+    `SELECT report FROM ai_inbox_triage_snapshots
+     WHERE user_id=$1 AND account_id=$2 AND expires_at>now()`,
+    [userId,accountId],
+  );
+  return result.rows[0]?.report;
 }
-function setSnapshot(key: string, report: ReturnType<typeof buildInboxTriage>) {
-  for (const [id, entry] of scanCache) if (Date.now() - entry.at > SCAN_TTL_MS) scanCache.delete(id);
-  if (scanCache.size >= MAX_SNAPSHOTS) scanCache.delete(scanCache.keys().next().value!);
-  scanCache.set(key, { at: Date.now(), report });
+async function setSnapshot(userId:string, accountId:string, report:TriageReport) {
+  await pool.query(
+    `INSERT INTO ai_inbox_triage_snapshots (user_id,account_id,report,expires_at)
+     VALUES ($1,$2,$3::jsonb,now()+interval '15 minutes')
+     ON CONFLICT (user_id,account_id) DO UPDATE
+     SET report=EXCLUDED.report, expires_at=EXCLUDED.expires_at, updated_at=now()`,
+    [userId,accountId,JSON.stringify(report)],
+  );
 }
 
 export function buildInboxTriage(activity: Activity) {
@@ -100,22 +106,21 @@ export const mailTriageTool: AgentToolDefinition = {
     const audit = () => ({ userId:ctx.userId,accountId:ctx.accountId,startedAt,completedAt:new Date().toISOString() });
     try {
       const { offset,limit,refresh } = inputSchema.parse(rawInput ?? {});
-      const cacheKey = JSON.stringify([ctx.userId,ctx.accountId]);
-      let report = !refresh ? getSnapshot(cacheKey) : undefined;
+      let report = !refresh ? await getSnapshot(ctx.userId,ctx.accountId) : undefined;
       const reusedSnapshot = Boolean(report);
       if (!report) {
         const activity = await createMailService(ctx).activity(
           ctx.accountId, "1970-01-01T00:00:00.000Z", "9999-12-31T23:59:59.999Z", ["Inbox","Sent"]
         );
         report = buildInboxTriage(activity as Activity);
-        setSnapshot(cacheKey, report);
+        await setSnapshot(ctx.userId,ctx.accountId,report);
       }
       return { ok:true,toolCallId,audit:audit(),data:{
         scannedInboxMessages:report.scannedInboxMessages,
         scannedSentMessages:report.scannedSentMessages,
         complete:report.complete,
         incompleteReason:report.incompleteReason,
-        snapshotReused:reusedSnapshot, snapshotLifetimeSeconds:180,
+        snapshotReused:reusedSnapshot, snapshotLifetimeSeconds:SCAN_TTL_MINUTES*60,
         candidateCount:report.candidateCount,offset,returned:report.candidates.slice(offset,offset+limit).length,
         hasMore:offset+limit<report.candidateCount,
         nextOffset:offset+limit<report.candidateCount ? offset+limit : null,
