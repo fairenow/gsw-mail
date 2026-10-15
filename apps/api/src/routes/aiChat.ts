@@ -40,6 +40,7 @@ import { analyzeStoredFile } from "../files/intelligence.js";
 import { shouldPreAnalyzeAttachments } from "../files/attachmentIntent.js";
 import { config } from "../config.js";
 import { reserveChatCommand, updateChatCommand, getChatCommand } from "../ai/chatCommands.js";
+import { getChatExecution } from "../ai/chatExecutionQueue.js";
 import { workingDraftForConversation } from "../ai/chatDrafts.js";
 
 const chatAttachmentSchema = z.object({
@@ -1271,8 +1272,17 @@ export default async function aiChatRoutes(app: FastifyInstance) {
   app.get("/product/chat/commands/:commandId", async (req, reply) => {
     const { commandId } = z.object({ commandId: z.string().uuid() }).parse(req.params);
     const command = await getChatCommand(req.user!.id, commandId);
-    if (!command) return reply.code(404).send({ error: "Chat command not found" });
-    return command;
+    if (command) return command;
+    // Queue-backed executions use the same authenticated command-status endpoint.
+    // Legacy command records take precedence until traffic is migrated.
+    const execution = await getChatExecution(req.user!.id, commandId);
+    if (!execution) return reply.code(404).send({ error: "Chat command not found" });
+    return {
+      status: execution.status === "completed" ? "completed"
+        : execution.status === "uncertain" || execution.status === "failed" ? "uncertain" : "processing",
+      conversationId: execution.conversation_id,
+      response: execution.status === "completed" ? execution.result : null,
+    };
   });
 
   app.post("/product/chat/stream", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req, reply) => {

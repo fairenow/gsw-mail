@@ -7,6 +7,7 @@ import { ensureWebOAuthTestClient } from "./auth/ensureWebOAuthTestClient.js";
 import { ensureScheduledSendSchema } from "./outbound/ensureScheduledSchema.js";
 import { ensureCalendarRsvpSchema } from "./calendar/ensureRsvpSchema.js";
 import { ensureAiAgentSchema } from "./ai/ensureAgentSchema.js";
+import { ensureChatExecutionSchema } from "./ai/ensureChatExecutionSchema.js";
 import { getOutboundWorker } from "./outbound/worker.js";
 import { getAutomationWorker } from "./ai/automationWorker.js";
 import { getAgentTaskRunner } from "./ai/taskRunner.js";
@@ -28,6 +29,7 @@ async function main() {
   await ensureCalendarEmailReminderSchema();
   await ensureAutomationSummaryEmailSchema();
   await ensureAiAgentSchema();
+  await ensureChatExecutionSchema();
   await ensureEmailTemplateSchema();
   await ensureFilesSchema();
   await ensureFileOrganizationSchema();
