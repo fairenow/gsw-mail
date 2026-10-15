@@ -10,7 +10,7 @@ test("meeting requests select calendar tools", () => {
   assert.ok(skills.some(skill => skillToolMatch(skill, "calendar.events.list")));
 });
 test("calendar write operations require confirmation and write permission", () => {
-  for (const name of ["calendar.events.create", "calendar.events.update", "calendar.events.delete"]) {
+  for (const name of ["calendar.events.create", "calendar.events.update", "calendar.events.invite", "calendar.events.delete"]) {
     const tool = calendarTools.find(item => item.name === name);
     assert.ok(tool);
     assert.equal(tool.risk, "external");
@@ -25,4 +25,12 @@ test("calendar discovery is read-only", () => {
     assert.equal(tool.risk, "read");
     assert.deepEqual(tool.requiredScopes, ["calendar.read"]);
   }
+});
+
+test("existing-event invitation is a distinct approval-gated tool", () => {
+  const invite = calendarTools.find(item => item.name === "calendar.events.invite");
+  assert.ok(invite);
+  assert.equal(invite.risk, "external");
+  assert.deepEqual(invite.requiredScopes, ["calendar.write"]);
+  assert.ok(calendarTools.some(item => item.name === "calendar.events.list"));
 });
