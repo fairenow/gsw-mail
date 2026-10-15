@@ -34,8 +34,8 @@ export function buildInboxTriage(activity: Activity) {
   const candidates = [...byThread.entries()].flatMap(([threadId, group]) => {
     if (!group.inbox.length) return [];
     const rows = [...group.inbox, ...group.sent].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    const latest = rows[0];
-    const latestInbox = [...group.inbox].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+    const latest = rows[0]!;
+    const latestInbox = [...group.inbox].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]!;
     const inbound = group.inbox.filter(m => m.direction === "inbound");
     const outgoing = rows.filter(m => m.direction === "outbound" || m.direction === "outbound_copy");
     if (!inbound.length && !outgoing.length) return [];
