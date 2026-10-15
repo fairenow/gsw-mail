@@ -600,7 +600,7 @@ async function runConversationTurn(input: {
         const definition = agentMailRegistry.definition(call.function.name);
         const semanticName = call.function.name.replaceAll("__", ".");
         const label = toolLabel(semanticName);
-        const readCallKey = definition?.risk === "read" ? `${semanticName}:${call.function.arguments}` : null;
+        const readCallKey = definition?.risk === "read" && semanticName !== "mail.triage_scan_step" ? `${semanticName}:${call.function.arguments}` : null;
 
         if (readCallKey && seenReadCalls.has(readCallKey)) {
           toolActivity.push({ name: semanticName, ok: true });
