@@ -188,3 +188,90 @@ export const mailTriageReviewTool: AgentToolDefinition = {
     }
   },
 };
+
+type ScanState = {
+  folder: "inbox" | "sent" | "done"; offset: number; version: number;
+  folders: FolderRow[]; updatedAt: string;
+};
+const freshState = (): ScanState => ({
+  folder:"inbox",offset:0,version:0,
+  folders:[{mailbox:"Inbox",role:"inbox",complete:false,messages:[]},
+           {mailbox:"Sent",role:"sent",complete:false,messages:[]}],
+  updatedAt:new Date().toISOString(),
+});
+export function advanceScan(state:ScanState, page:{
+  folder:"inbox"|"sent";offset:number;pageSize:number;exhausted:boolean;messages:MailRow[];
+}):ScanState {
+  if (state.folder!==page.folder || state.offset!==page.offset) throw new Error("Stale triage scan page");
+  const next: ScanState=JSON.parse(JSON.stringify(state)) as ScanState;
+  const target=next.folders.find(f=>f.role===page.folder)!;
+  target.messages.push(...page.messages);
+  if(target.messages.length>100_000) throw new Error("Triage scan exceeded safety limit");
+  if(page.exhausted) {
+    target.complete=true;
+    next.folder=page.folder==="inbox" ? "sent" : "done";
+    next.offset=0;
+  } else next.offset+=page.messages.length;
+  next.version++;
+  next.updatedAt=new Date().toISOString();
+  return next;
+}
+async function loadProgress(userId:string,accountId:string):Promise<ScanState|undefined> {
+  const r=await pool.query<{state:ScanState}>(
+    "SELECT state FROM ai_inbox_triage_progress WHERE user_id=$1 AND account_id=$2",[userId,accountId]
+  );
+  return r.rows[0]?.state;
+}
+async function saveProgress(userId:string,accountId:string,before:ScanState,after:ScanState) {
+  const result=await pool.query(
+    `UPDATE ai_inbox_triage_progress SET state=$3::jsonb,updated_at=now()
+      WHERE user_id=$1 AND account_id=$2 AND (state->>'version')::int=$4`,
+    [userId,accountId,JSON.stringify(after),before.version]
+  );
+  if(!result.rowCount) throw new Error("Scan was advanced by another request; retry for current progress");
+}
+export const mailTriageScanStepTool:AgentToolDefinition={
+  name:"mail.triage_scan_step",
+  description:"Advance a durable whole-inbox scan in bounded pages. Reinvoke while status is scanning. Progress survives server restarts. Call mail.triage for candidate results once finished. Does not classify reply needs.",
+  inputSchema:{type:"object",properties:{refresh:{type:"boolean",description:"Reset the scan and begin again (only if explicitly requested)."}},additionalProperties:false},
+  requiredScopes:["mail.read"],risk:"read",
+  async execute(ctx,rawInput,toolCallId) {
+    const startedAt=new Date().toISOString();
+    const audit=()=>({userId:ctx.userId,accountId:ctx.accountId,startedAt,completedAt:new Date().toISOString()});
+    try {
+      const {refresh}=z.object({refresh:z.boolean().default(false)}).parse(rawInput??{});
+      // No secrets are persisted; only message summary metadata.
+      await pool.query(`INSERT INTO ai_inbox_triage_progress(user_id,account_id,state)
+        VALUES($1,$2,$3::jsonb) ON CONFLICT (user_id,account_id) DO NOTHING`,
+        [ctx.userId,ctx.accountId,JSON.stringify(freshState())]);
+      if(refresh) {
+        await pool.query("UPDATE ai_inbox_triage_progress SET state=$3::jsonb,updated_at=now() WHERE user_id=$1 AND account_id=$2",
+          [ctx.userId,ctx.accountId,JSON.stringify(freshState())]);
+      }
+      let state=(await loadProgress(ctx.userId,ctx.accountId))!;
+      const service=createMailService(ctx);
+      for(let index=0;index<4 && state.folder!=="done";index++){
+        const page=await service.triagePage(ctx.accountId,state.folder,state.offset,250);
+        const next=advanceScan(state,page);
+        await saveProgress(ctx.userId,ctx.accountId,state,next);
+        state=next;
+      }
+      if(state.folder==="done"){
+        const report=buildInboxTriage({complete:true,folders:state.folders});
+        await setSnapshot(ctx.userId,ctx.accountId,report);
+      }
+      return {ok:true,toolCallId,audit:audit(),data:{
+        status:state.folder==="done"?"completed":"scanning",folder:state.folder,
+        nextOffset:state.offset,version:state.version,
+        inboxScanned:state.folders[0]?.messages.length??0,
+        sentScanned:state.folders[1]?.messages.length??0,
+        complete:state.folder==="done",
+        instructions:state.folder==="done"
+          ?"The scan has finished. Use mail.triage to retrieve candidate pages for review."
+          :"Call mail.triage_scan_step again to continue from the saved checkpoint; never claim complete coverage yet.",
+      }};
+    }catch(error){
+      return {ok:false,toolCallId,audit:audit(),error:reportChatError(error,{operation:"mail.triage_scan_step",category:"mail"})};
+    }
+  },
+};
