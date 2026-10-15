@@ -165,6 +165,7 @@ const toolLabel = (toolName: string): string => {
     case "mail.activity": return "Checking recent email activity";
     case "mail.triage": return "Analyzing Inbox and Sent conversations";
     case "mail.triage_scan_step": return "Scanning mailbox and saving progress";
+    case "mail.triage_report": return "Compiling the inbox triage report";
     case "mail.triage_classify": return "Classifying candidate conversations";
     case "mail.triage_review": return "Reviewing candidate conversation details";
     case "mail.search": return "Searching your mailbox";
