@@ -163,6 +163,7 @@ type ChatStreamEmitter = (event: ChatStreamStatus) => void;
 const toolLabel = (toolName: string): string => {
   switch (toolName) {
     case "mail.activity": return "Checking recent email activity";
+    case "mail.triage": return "Analyzing Inbox and Sent conversations";
     case "mail.search": return "Searching your mailbox";
     case "mail.read": return "Reading the matching email";
     case "mail.read_thread": return "Reading the conversation";
