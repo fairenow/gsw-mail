@@ -254,8 +254,15 @@ export const mailTriageScanStepTool:AgentToolDefinition={
         [ctx.userId,ctx.accountId,JSON.stringify(freshState())]);
       if(refresh) {
         await pool.query("DELETE FROM ai_inbox_triage_snapshots WHERE user_id=$1 AND account_id=$2",[ctx.userId,ctx.accountId]);
-        await pool.query("UPDATE ai_inbox_triage_progress SET state=$3::jsonb,updated_at=now() WHERE user_id=$1 AND account_id=$2",
-          [ctx.userId,ctx.accountId,JSON.stringify(freshState())]);
+        // A refresh must increment the checkpoint version; resetting it to
+        // zero could let an old in-flight page overwrite the restarted scan.
+        await pool.query(
+          `UPDATE ai_inbox_triage_progress
+           SET state=jsonb_set($3::jsonb,'{version}',
+             to_jsonb(COALESCE((state->>'version')::integer,0)+1)),updated_at=now()
+           WHERE user_id=$1 AND account_id=$2`,
+          [ctx.userId,ctx.accountId,JSON.stringify(freshState())],
+        );
       }
       let state=(await loadProgress(ctx.userId,ctx.accountId))!;
       const service=createMailService(ctx);
