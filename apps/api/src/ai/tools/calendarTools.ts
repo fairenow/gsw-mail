@@ -286,4 +286,59 @@ export const calendarEventPreviewChangeTool: AgentToolDefinition = {
     } catch(error) { return failed(ctx,toolCallId,startedAt,error); }
   },
 };
-export const calendarTools: AgentToolDefinition[] = [calendarListTool, calendarEventsTool, calendarAvailabilityTool, calendarRsvpStatusTool, calendarEventPreviewChangeTool, calendarEventCreateTool, calendarEventUpdateTool, calendarEventDeleteTool];
+/**
+ * Add invitees to an already-created event without asking the model to rebuild it.
+ * The event ID and original start must come from calendar.events.list.
+ */
+export const calendarEventInviteTool: AgentToolDefinition = {
+  name: "calendar.events.invite",
+  description: "Invite additional email addresses to an EXISTING calendar event. First resolve names using contacts.search and locate the event using calendar.events.list. Requires explicit approval before sending invitations; never recreate the event.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      eventId: { type: "string", description: "Exact event ID from calendar.events.list" },
+      currentStart: { type: "string", description: "Current event start ISO8601 with offset, from calendar.events.list" },
+      attendeeEmails: { type: "array", items: { type: "string", format: "email" }, minItems: 1, maxItems: 50 },
+    },
+    required: ["eventId", "currentStart", "attendeeEmails"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["calendar.write"],
+  risk: "external",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = z.object({
+        eventId: z.string().min(1).max(500),
+        currentStart: z.string().datetime({ offset: true }),
+        attendeeEmails: z.array(z.string().email()).min(1).max(50),
+      }).parse(rawInput);
+      const engine = await writableEngine(ctx);
+      const startMs = Date.parse(input.currentStart);
+      const events = await engine.listCalendarEvents(ctx.accountId, new Date(startMs - 86400000).toISOString(), new Date(startMs + 86400000).toISOString());
+      const event = events.find(item => item.engineId === input.eventId && Date.parse(item.start) === startMs);
+      if (!event) return { ok: false, toolCallId, error: { code: "event_not_found", message: "The original event was not found at that start time. Find it again before inviting anyone.", retryable: false }, audit: audit(ctx, startedAt) };
+      if (!event.end || Date.parse(event.end) <= startMs) return { ok: false, toolCallId, error: { code: "event_invalid_duration", message: "The event has no valid end time; review it before inviting attendees.", retryable: false }, audit: audit(ctx, startedAt) };
+      const existing = new Set(event.attendees.map(email => email.trim().toLowerCase()));
+      const additions = [...new Set(input.attendeeEmails.map(email => email.trim().toLowerCase()))].filter(email => !existing.has(email));
+      if (!additions.length) return success(ctx, toolCallId, startedAt, { eventId: event.engineId, unchanged: true, invitationsSent: false, alreadyInvited: input.attendeeEmails });
+      const attendees = [...event.attendees, ...additions];
+      if (attendees.length > 50) return { ok: false, toolCallId, error: { code: "attendee_limit", message: "The event cannot have more than 50 attendees.", retryable: false }, audit: audit(ctx, startedAt) };
+      const updated = await engine.updateCalendarEvent(ctx.accountId, event.engineId, {
+        calendarId: event.calendarId,
+        title: event.title,
+        description: event.description ?? undefined,
+        start: event.start,
+        durationMinutes: Math.round((Date.parse(event.end) - startMs) / 60000),
+        location: event.location ?? undefined,
+        meetingLink: event.meetingLink ?? undefined,
+        attendees,
+        sendSchedulingMessages: true,
+        allDay: event.allDay,
+      });
+      return success(ctx, toolCallId, startedAt, { event: updated, addedAttendees: additions, invitationsRequested: true });
+    } catch (error) { return failed(ctx, toolCallId, startedAt, error); }
+  },
+};
+
+export const calendarTools: AgentToolDefinition[] = [calendarListTool, calendarEventsTool, calendarAvailabilityTool, calendarRsvpStatusTool, calendarEventPreviewChangeTool, calendarEventCreateTool, calendarEventUpdateTool, calendarEventInviteTool, calendarEventDeleteTool];
