@@ -11,7 +11,7 @@ import { pool } from "../db/client.js";
 // revocable offline user authorization and per-tool durable checkpoints.
 export const backgroundChatRequestSchema = z.object({
   kind: z.literal("model_only"),
-  messages: z.array(z.object({role:z.enum(["user","assistant","system"]),content:z.string().max(20_000)})).min(1).max(30),
+  messages: z.array(z.object({role:z.enum(["user","assistant"]),content:z.string().max(20_000)})).min(1).max(30),
 });
 const owner = `gsw-chat-worker:${randomUUID()}`;
 let timer: ReturnType<typeof setInterval>|null=null;
