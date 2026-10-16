@@ -19,12 +19,14 @@ import { ensureEngagementAnalyticsSchema } from "./analytics/ensureSchema.js";
 import { ensurePromptingQuotaSchema } from "./ai/ensurePromptingQuotaSchema.js";
 import { ensureProposalSchema } from "./ai/proposalStore.js";
 import { ensureProposalConversationSchema } from "./ai/proposalConversation.js";
+import { startProposalNotificationWorker } from "./ai/proposalNotificationWorker.js";
 
 const app = buildApp();
 const worker = getOutboundWorker();
 const automationWorker = getAutomationWorker();
 const agentTaskRunner = getAgentTaskRunner();
 let stopFileOrganizer: (() => void) | null = null;
+let stopProposalNotifier: (() => void) | null = null;
 
 async function main() {
   await ensureScheduledSendSchema();
@@ -42,6 +44,7 @@ async function main() {
   await ensureProposalConversationSchema();
   await ensureWebOAuthTestClient();
   worker.start();
+  stopProposalNotifier = startProposalNotificationWorker(error => app.log.error(error, "proposal notification worker failed"));
   const reminderTimer = setInterval(() => { void deliverDueCalendarEmailReminders().catch(error => app.log.error(error, "calendar reminder worker failed")); }, 60_000);
   reminderTimer.unref();
   void deliverDueCalendarEmailReminders().catch(error => app.log.error(error, "calendar reminder worker failed"));
@@ -54,6 +57,7 @@ async function main() {
 const shutdown = async (signal: string) => {
   app.log.info(`received ${signal}, shutting down`);
   worker.stop();
+  stopProposalNotifier?.();
   automationWorker.stop();
   agentTaskRunner.stop();
   stopFileOrganizer?.();
