@@ -1,5 +1,21 @@
 import type { FastifyInstance } from "fastify";
 import { config } from "../config.js";
+import { aiScopes } from "../ai/permissions/types.js";
+
+export const mcpAdvertisedScopes = [
+  "mail.read","mail.write","mail.send",
+  "contacts.read","contacts.write",
+  "calendar.read","calendar.write",
+  "files.read","files.write",
+  "automations.read","automations.write",
+] as const;
+
+// Never advertise a scope that the authorization server will reject.
+const validOAuthScopes = new Set<string>(aiScopes);
+for (const scope of mcpAdvertisedScopes) {
+  if (!validOAuthScopes.has(scope)) throw new Error(`MCP advertises unsupported OAuth scope: ${scope}`);
+}
+
 
 /**
  * RFC 9728 protected resource metadata for the future /mcp resource.
@@ -13,7 +29,7 @@ export async function mcpProtectedResourceMetadata(app:FastifyInstance):Promise<
     resource,
     authorization_servers:[config.auth.issuer],
     bearer_methods_supported:["header"],
-    scopes_supported:["mail.read","mail.write","mail.send","contacts.read","contacts.write","calendar.read","calendar.write","files.read","files.write","automation.read","automation.write"],
+    scopes_supported:mcpAdvertisedScopes,
   };
   app.get("/.well-known/oauth-protected-resource/mcp",async (_request,reply)=>
     reply.header("cache-control","public, max-age=300").send(metadata));
