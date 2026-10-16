@@ -24,9 +24,13 @@ async function workOnce() {
     const job=await claimChatExecution(owner,LEASE_SECONDS);
     if(!job)return;
     console.info("[chat-worker] job claimed",{executionId:job.id,commandId:job.command_id,attempt:job.attempts});
+    let leaseLost=false;
     const heartbeat=setInterval(()=>{
-      void heartbeatChatExecution(job.id,owner,LEASE_SECONDS).catch(err=>
-        console.error("[chat-worker] heartbeat failed",{executionId:job.id,errorType:err instanceof Error?err.name:"unknown"}));
+      void heartbeatChatExecution(job.id,owner,LEASE_SECONDS).then(ok=>{
+        if(!ok){leaseLost=true;console.warn("[chat-worker] lease lost",{executionId:job.id});}
+      }).catch(err=>{
+        console.error("[chat-worker] heartbeat failed",{executionId:job.id,errorType:err instanceof Error?err.name:"unknown"});
+      });
     },30_000);
     try{
       await updateChatExecutionStage(job.id,owner,"Preparing AI request");
@@ -50,6 +54,7 @@ async function workOnce() {
         if (deadline) clearTimeout(deadline);
       }
       await updateChatExecutionStage(job.id,owner,"Saving completed response");
+      if(leaseLost)throw new Error("Worker lost its lease");
       const content=result.content?.trim();
       if(!content || result.toolCalls?.length)throw new Error("Model-only worker returned no usable reply");
       const response={
