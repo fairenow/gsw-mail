@@ -1361,7 +1361,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
         const request = backgroundChatRequestSchema.parse({
           kind:"model_only",
           messages:prepared.providerMessages.filter(message=>
-            message.role==="user" || message.role==="assistant" || message.role==="system"
+            message.role==="user" || message.role==="assistant"
           ).map(message=>({role:message.role,content:message.content})),
         });
         await enqueueChatExecution({
