@@ -333,6 +333,12 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
 
 
   useEffect(() => {
+    // Chat opening triggers model readiness without creating a conversation or
+    // sending the user's draft prompt. Errors never block the composer.
+    void api.prewarmChatModel().catch(() => undefined);
+  }, [account?.id]);
+
+  useEffect(() => {
     let cancelled = false;
     const key = `gsw-chat-conversation:${account?.id ?? "none"}`;
     const savedId = localStorage.getItem(key);
