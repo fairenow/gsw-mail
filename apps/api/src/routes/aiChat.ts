@@ -41,7 +41,7 @@ import { analyzeStoredFile } from "../files/intelligence.js";
 import { shouldPreAnalyzeAttachments } from "../files/attachmentIntent.js";
 import { config } from "../config.js";
 import { reserveChatCommand, updateChatCommand, getChatCommand } from "../ai/chatCommands.js";
-import { getChatExecution, enqueueChatExecution, stopChatExecution } from "../ai/chatExecutionQueue.js";
+import { getChatExecution, getLatestActiveChatExecution, enqueueChatExecution, stopChatExecution } from "../ai/chatExecutionQueue.js";
 import { backgroundChatRequestSchema } from "../ai/chatBackgroundWorker.js";
 import { workingDraftForConversation } from "../ai/chatDrafts.js";
 
@@ -1300,6 +1300,16 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       conversationId: prepared.conversation.id,
       providerMessages: prepared.providerMessages,
     });
+  });
+
+  app.get("/product/chat/active-command", async(req)=>{
+    const query=z.object({accountId:z.string().uuid().optional()}).parse(req.query);
+    const execution=await getLatestActiveChatExecution(req.user!.id,query.accountId);
+    return {command:execution?{
+      commandId:execution.command_id,
+      conversationId:execution.conversation_id,
+      status:execution.status,
+    }:null};
   });
 
   app.post("/product/chat/commands/:commandId/stop", async(req,reply)=>{
