@@ -796,7 +796,7 @@ async function runConversationTurn(input: {
             "Do not claim unverified changes, emails sent, files saved, or mailbox-wide coverage.",
             "If the job is not finished, explain it can be continued from the existing conversation.",
             "Do not call tools; do not tell the user to narrow their request.",
-          ].join("\\n"),
+          ].join("\n"),
         }],
         tools: [],
       });
@@ -813,7 +813,7 @@ async function runConversationTurn(input: {
         failed.length ? `Operations needing another attempt or review: ${[...new Set(failed)].join(", ")}.` : "",
         createdFiles.length ? `Files confirmed saved: ${createdFiles.map((file) => file.filename).join(", ")}.` : "",
         "I can continue from this conversation, retaining the verified results already recorded.",
-      ].filter(Boolean).join("\\n");
+      ].filter(Boolean).join("\n");
     }
     await appendAiMessage({
       conversationId: input.conversationId,
