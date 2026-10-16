@@ -688,7 +688,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
       })}
       {executionActivities.length > 0 && <section className="gsw-chat-execution" aria-live="polite" style={{ maxHeight: 104, overflow: "hidden" }}>
         <div className="gsw-chat-execution-toggle">
-          <span className="gsw-chat-execution-title">{sending ? "GSW is working" : "Work summary"}</span>
+          <span className="gsw-chat-execution-title">{sending ? <>GSW is working <span className="gsw-chat-working-dots" aria-hidden="true"><span /><span /><span /></span></> : "Work summary"}</span>
         </div>
         <div className="gsw-chat-execution-list" style={{ maxHeight: 72, overflow: "hidden" }}>
           {executionActivities.slice(-3).map((activity) => <div
