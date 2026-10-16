@@ -37,10 +37,16 @@ async function workOnce() {
       const provider=getAiProvider(settings.modelProvider);
       // Avoid replaying an ambiguous provider outcome after a crash.
       const messages=request.messages.map(message=>message.role==="user" ? {role:"user" as const,content:message.content} : {role:"assistant" as const,content:message.content});
-      const result=await Promise.race([
-        provider.run({messages}),
-        new Promise<never>((_,reject)=>setTimeout(()=>reject(new Error("Model inference deadline exceeded")),150_000)),
-      ]);
+      let deadline: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        deadline = setTimeout(() => reject(new Error("Model inference deadline exceeded")), 150_000);
+      });
+      let result: Awaited<ReturnType<typeof provider.run>>;
+      try {
+        result = await Promise.race([provider.run({messages}), timeout]);
+      } finally {
+        if (deadline) clearTimeout(deadline);
+      }
       const content=result.content?.trim();
       if(!content || result.toolCalls?.length)throw new Error("Model-only worker returned no usable reply");
       const response={
