@@ -3,6 +3,7 @@ import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { users, oauthConsent, oauthClient } from "../db/schema.js";
 import { and, eq } from "drizzle-orm";
+import { consentPermitsMcpToken } from "./consentPolicy.js";
 
 /**
  * This verifier never accepts GSW's first-party Stalwart/mobile audience.
@@ -24,12 +25,11 @@ export async function verifyMcpBearer(token:string):Promise<{
     const [resolved]=await db.select({id:users.id,status:users.status}).from(users).where(eq(users.authUserId,payload.sub)).limit(1);
     if(!resolved || resolved.status!=="active")return null;
     // Connection revocation is enforced even for previously issued JWTs.
-    const [consent]=await db.select({scopes:oauthConsent.scopes}).from(oauthConsent)
+    const [consent]=await db.select({scopes:oauthConsent.scopes, disabled:oauthClient.disabled}).from(oauthConsent)
       .innerJoin(oauthClient,eq(oauthConsent.clientId,oauthClient.clientId))
       .where(and(eq(oauthConsent.userId,payload.sub),eq(oauthConsent.clientId,clientId),eq(oauthClient.disabled,false)))
       .limit(1);
-    if(!consent)return null;
-    if([...scopes].some(scope=>!consent.scopes.includes(scope)))return null;
+    if(!consentPermitsMcpToken({tokenScopes:scopes,consentScopes:consent?.scopes??null,clientDisabled:consent?.disabled===true}))return null;
     return {userId:resolved.id,authUserId:payload.sub,oauthScopes:scopes,clientId};
   }catch{return null;}
 }
