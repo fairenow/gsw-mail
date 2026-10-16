@@ -5,7 +5,6 @@ import { getAiCapabilitySettings } from "./capabilities.js";
 import { getAiProvider } from "./providers/index.js";
 import { claimChatExecution, finishChatExecution, heartbeatChatExecution, quarantineExpiredChatExecutions } from "./chatExecutionQueue.js";
 import { updateChatCommand } from "./chatCommands.js";
-import { pool } from "../db/client.js";
 
 // Deliberately model-only. Mail/JMAP and external side effects require a
 // revocable offline user authorization and per-tool durable checkpoints.
