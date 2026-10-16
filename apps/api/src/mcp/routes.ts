@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { requireAccountPermission } from "../auth/authorize.js";
 import type { FastifyInstance } from "fastify";
 import { verifyMcpBearer } from "./verifyBearer.js";
 import { agentMailRegistry } from "../ai/tools/registry.js";
