@@ -40,7 +40,7 @@ export default async function prompting(app: FastifyInstance) {
       const url = new URL(base);
       if (url.protocol !== "https:") throw new Error("HTTPS required");
       endpoint = url.pathname.endsWith("/v1/chat/completions") ? url
-        : new URL(url.pathname.replace(/\\/$/, "") + "/v1/chat/completions", url.origin);
+        : new URL((url.pathname.endsWith("/") ? url.pathname.slice(0, -1) : url.pathname) + "/v1/chat/completions", url.origin);
     } catch {
       return reply.code(503).send({ error: "inference_unavailable" });
     }
@@ -99,7 +99,7 @@ export default async function prompting(app: FastifyInstance) {
       if (choice?.finish_reason === "length" || !content) {
         return reply.code(502).send({ error: "invalid_inference_response" });
       }
-      if (/<\\|(?:im_start|im_end|channel_sep|fim_prefix)|(?:^|\\n)assistant\\s+(?:analysis|commentary)\\b/i.test(content)) {
+      if (content.includes("<|") || /(?:^|\n)assistant\s+(?:analysis|commentary)\b/i.test(content)) {
         return reply.code(502).send({ error: "invalid_inference_response" });
       }
       return { choices: [{ message: { role: "assistant", content } }] };
