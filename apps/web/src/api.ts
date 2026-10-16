@@ -701,6 +701,7 @@ export const api = {
   calendarRsvpStatuses: (accountId: string, eventId: string) => get<{ responses: CalendarRsvpStatus[] }>(`/product/calendar-rsvps?accountId=${encodeURIComponent(accountId)}&eventId=${encodeURIComponent(eventId)}`),
   calendarRsvpPublic: (token: string) => get<CalendarRsvpPublic>(`/product/calendar-rsvp?token=${encodeURIComponent(token)}`),
   respondCalendarRsvp: (token: string, response: CalendarRsvpResponse) => post<CalendarRsvpPublic>("/product/calendar-rsvp", { token, response }),
+  prewarmChatModel: () => post<{status:"started"|"recent"|"unsupported";provider:string}>("/product/chat/prewarm", {}, 12_000),
   chat: (accountId: string | null, messages: AiChatMessage[], conversationId?: string | null, assetIds?: string[]) => post<AiChatResponse>("/product/chat", { ...chatRuntimeContext(), ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages: messages.map(({ role, content, attachments }) => ({ role, content, ...(attachments?.length ? { attachments } : {}) })), ...(assetIds?.length ? { assetIds } : {}) }, 100_000),
   streamChat: async (accountId: string | null, messages: AiChatMessage[], conversationId: string | null | undefined, onEvent: (event: AiChatStreamEvent) => void, assetIds?: string[]) => {
     // A stable command ID prevents duplicate model/tool execution when the SSE connection drops.
