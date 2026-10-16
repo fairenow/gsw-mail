@@ -1306,7 +1306,17 @@ export default async function aiChatRoutes(app: FastifyInstance) {
     const { commandId } = z.object({ commandId: z.string().uuid() }).parse(req.params);
     const command = await getChatCommand(req.user!.id, commandId);
     const execution = await getChatExecution(req.user!.id, commandId);
-    if (execution && execution.status === "completed") return {status:"completed",conversationId:execution.conversation_id,response:execution.result};
+    if (execution) return {
+      status:execution.status==="completed"?"completed"
+        :execution.status==="uncertain"||execution.status==="failed"?"uncertain":"processing",
+      conversationId:execution.conversation_id,
+      response:execution.status==="completed"?execution.result:null,
+      activity:execution.status==="queued"
+        ? {label:"Queued for background processing",phase:"queued",updatedAt:new Date().toISOString()}
+        : execution.status==="running"
+          ? {label:"Processing independently of this browser",phase:"thinking",updatedAt:new Date().toISOString()}
+          : null,
+    };
     if (command) return command;
     // Queue-backed executions use the same authenticated command-status endpoint.
     // Legacy command records take precedence until traffic is migrated.
