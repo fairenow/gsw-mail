@@ -1,8 +1,9 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
-import { oauthClient, oauthConsent, oauthAccessToken, oauthRefreshToken } from "../db/schema.js";
+import { requireOrgPermission } from "../auth/authorize.js";
+import { auditEvents, users, organizationMemberships, oauthClient, oauthConsent, oauthAccessToken, oauthRefreshToken } from "../db/schema.js";
 
 /**
  * User-owned OAuth connections, sourced directly from Better Auth records.
@@ -32,6 +33,30 @@ export default async function connectedAppRoutes(app:FastifyInstance) {
     }))};
   });
 
+  app.get("/api/account/connected-apps/activity", async (req,reply) => {
+    if(!req.authUserId)return reply.code(403).send({error:"auth_identity_required"});
+    const events=await db.select({action:auditEvents.action,resourceId:auditEvents.resourceId,createdAt:auditEvents.createdAt,metadata:auditEvents.metadata})
+      .from(auditEvents).where(and(eq(auditEvents.actorUserId,req.user!.id),eq(auditEvents.resourceType,"oauth_connection")))
+      .orderBy(desc(auditEvents.createdAt)).limit(100);
+    return {events};
+  });
+
+  app.get<{Querystring:{organizationId:string}}>("/api/admin/oauth-clients",async(req,reply)=>{
+    const organizationId=req.query.organizationId;
+    if(!organizationId)return reply.code(400).send({error:"organization_required"});
+    await requireOrgPermission(req.user!.id,organizationId,["owner","admin"]);
+    const members=await db.select({authUserId:users.authUserId}).from(organizationMemberships)
+      .innerJoin(users,eq(organizationMemberships.userId,users.id))
+      .where(and(eq(organizationMemberships.organizationId,organizationId),eq(organizationMemberships.status,"active")));
+    const ids=members.map(m=>m.authUserId).filter((id):id is string=>Boolean(id));
+    if(!ids.length)return {clients:[]};
+    const rows=await db.select({clientId:oauthClient.clientId,name:oauthClient.name,website:oauthClient.uri,disabled:oauthClient.disabled,
+      scopes:oauthConsent.scopes,approvedAt:oauthConsent.createdAt}).from(oauthConsent)
+      .innerJoin(oauthClient,eq(oauthConsent.clientId,oauthClient.clientId))
+      .where(inArray(oauthConsent.userId,ids));
+    return {clients:rows};
+  });
+
   app.delete<{Params:{clientId:string}}>("/api/account/connected-apps/:clientId", async (req,reply) => {
     const userId=req.authUserId;
     if(!userId) return reply.code(403).send({error:"auth_identity_required"});
@@ -44,6 +69,7 @@ export default async function connectedAppRoutes(app:FastifyInstance) {
       await tx.delete(oauthAccessToken).where(and(eq(oauthAccessToken.userId,userId),eq(oauthAccessToken.clientId,clientId)));
       await tx.delete(oauthRefreshToken).where(and(eq(oauthRefreshToken.userId,userId),eq(oauthRefreshToken.clientId,clientId)));
       await tx.delete(oauthConsent).where(and(eq(oauthConsent.userId,userId),eq(oauthConsent.clientId,clientId)));
+      await tx.insert(auditEvents).values({actorUserId:req.user!.id,action:"oauth.connection.disconnected",resourceType:"oauth_connection",resourceId:clientId,metadata:{source:"connected_apps"}});
       return true;
     });
     if(!result)return reply.code(404).send({error:"connection_not_found"});
