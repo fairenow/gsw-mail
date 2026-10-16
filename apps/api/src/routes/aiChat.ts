@@ -1318,15 +1318,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
           : null,
     };
     if (command) return command;
-    // Queue-backed executions use the same authenticated command-status endpoint.
-    // Legacy command records take precedence until traffic is migrated.
-    if (!execution) return reply.code(404).send({ error: "Chat command not found" });
-    return {
-      status: execution.status === "completed" ? "completed"
-        : execution.status === "uncertain" || execution.status === "failed" ? "uncertain" : "processing",
-      conversationId: execution.conversation_id,
-      response: execution.status === "completed" ? execution.result : null,
-    };
+    return reply.code(404).send({ error: "Chat command not found" });
   });
 
   app.post("/product/chat/stream", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req, reply) => {
