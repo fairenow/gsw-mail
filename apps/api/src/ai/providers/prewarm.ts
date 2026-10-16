@@ -41,7 +41,7 @@ export async function startSelectedModelWarmup(userId:string):Promise<{status:"s
       const response=await fetch(endpoint,{
         method:"POST",
         headers:{authorization:`Bearer ${target.token}`,"content-type":"application/json"},
-        body:JSON.stringify({model:target.model,messages:[{role:"user",content:"Ready?"}],max_tokens:2,temperature:0,stream:false}),
+        body:JSON.stringify({model:target.model,messages:[{role:"user",content:"Ready?"}],max_tokens:2,stream:false}),
         signal:AbortSignal.timeout(90_000),
       });
       if(!response.ok){
