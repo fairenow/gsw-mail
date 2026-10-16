@@ -188,6 +188,17 @@ export async function getChatExecution(userId: string, commandId: string) {
   return rows[0] ?? null;
 }
 
+/** Public-safe execution health, excluding prompts and credentials. */
+export async function getChatExecutionHealth(userId:string,commandId:string){
+  const {rows}=await pool.query<{
+    status:ChatExecutionStatus;attempts:number;created_at:Date;updated_at:Date;
+    lease_expires_at:Date|null;error:string|null;conversation_id:string|null;
+  }>(`SELECT status,attempts,created_at,updated_at,lease_expires_at,error,conversation_id
+       FROM ai_chat_executions WHERE user_id=$1 AND command_id=$2 LIMIT 1`,
+       [userId,commandId]);
+  return rows[0]??null;
+}
+
 /** A stop request fences completion. Queued work stops immediately; running
  * work becomes uncertain until its in-flight provider call returns. */
 export async function stopChatExecution(userId:string,commandId:string){
