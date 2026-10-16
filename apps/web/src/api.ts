@@ -712,7 +712,7 @@ export const api = {
       return await postEventStream("/product/chat/stream", payload, onEvent);
     } catch (streamError) {
       // The server may still be executing. Recover the original result, never resubmit.
-      for (let attempt = 0; attempt < 12; attempt++) {
+      for (let attempt = 0; attempt < 150; attempt++) {
         await new Promise<void>((resolve) => setTimeout(resolve, 2_000));
         let status: { status: string; response?: AiChatResponse | null };
         try { status = await get<{ status: string; response?: AiChatResponse | null }>(`/product/chat/commands/${encodeURIComponent(commandId)}`); }
