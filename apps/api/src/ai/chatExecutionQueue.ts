@@ -72,6 +72,47 @@ export async function finishChatExecution(id: string, owner: string, status: "co
   return rowCount === 1;
 }
 
+/** Atomically commit exactly one assistant message and the completed model-only job. */
+export async function commitModelOnlyChatResult(input:{
+  executionId:string; owner:string; conversationId:string;
+  content:string;provider:string;model:string;response:unknown;
+}) {
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    const {rows}=await client.query<{id:string}>(
+      `SELECT id FROM ai_chat_executions
+       WHERE id=$1 AND lease_owner=$2 AND status='running'
+         AND lease_expires_at>now() AND account_id IS NULL
+         AND request->>'kind'='model_only' FOR UPDATE`,
+      [input.executionId,input.owner],
+    );
+    if(!rows[0]) { await client.query("ROLLBACK");return false; }
+    // Execution UUID doubles as its unique assistant-message UUID.
+    // A committed reply and its status can never be separated by a crash.
+    await client.query(
+      `INSERT INTO ai_messages(id,conversation_id,role,content,provider,model)
+       VALUES($1,$2,'assistant',$3,$4,$5) ON CONFLICT(id) DO NOTHING`,
+      [input.executionId,input.conversationId,input.content,input.provider,input.model],
+    );
+    await client.query(
+      "UPDATE ai_conversations SET updated_at=now(),last_message_at=now() WHERE id=$1",
+      [input.conversationId],
+    );
+    await client.query(
+      `UPDATE ai_chat_executions SET status='completed',result=$3::jsonb,
+       lease_owner=NULL,lease_expires_at=NULL,completed_at=now(),updated_at=now()
+       WHERE id=$1 AND lease_owner=$2`,
+      [input.executionId,input.owner,JSON.stringify(input.response)],
+    );
+    await client.query("COMMIT");
+    return true;
+  }catch(error){
+    await client.query("ROLLBACK");
+    throw error;
+  }finally{client.release();}
+}
+
 /** Expired work is marked uncertain, NOT replayed: tools may already have acted. */
 export async function quarantineExpiredChatExecutions() {
   // Persist the outcome of every incomplete step before releasing the lease.
@@ -85,21 +126,35 @@ export async function quarantineExpiredChatExecutions() {
        FOR UPDATE SKIP LOCKED`,
     );
     const ids = rows.map(row => row.id);
-    if (!ids.length) { await client.query("COMMIT"); return 0; }
+    // Pure inference has no external tool effects. Safely requeue after a
+    // process restart; the completed response transaction prevents duplicates.
+    const retried=await client.query<{id:string}>(
+      `UPDATE ai_chat_executions SET status='queued',lease_owner=NULL,
+       lease_expires_at=NULL,updated_at=now()
+       WHERE id=ANY($1::uuid[]) AND status='running'
+       AND request->>'kind'='model_only' AND attempts<3
+       AND NOT EXISTS(SELECT 1 FROM ai_chat_execution_steps s
+                      WHERE s.execution_id=ai_chat_executions.id)
+       RETURNING id`,
+      [ids],
+    );
+    const retryIds=new Set(retried.rows.map(row=>row.id));
+    const unsafeIds=ids.filter(id=>!retryIds.has(id));
+    if (!unsafeIds.length) { await client.query("COMMIT"); return retryIds.size; }
     await client.query(
       `UPDATE ai_chat_execution_steps SET status='uncertain', updated_at=now()
        WHERE execution_id=ANY($1::uuid[]) AND status='started'`,
-      [ids],
+      [unsafeIds],
     );
     const result = await client.query(
       `UPDATE ai_chat_executions SET status='uncertain', lease_owner=NULL,
        lease_expires_at=NULL, updated_at=now(),
        error='Worker lease expired; inspect tool effects before retry'
        WHERE id=ANY($1::uuid[]) AND status='running'`,
-      [ids],
+      [unsafeIds],
     );
     await client.query("COMMIT");
-    return result.rowCount ?? 0;
+    return (result.rowCount ?? 0)+retryIds.size;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
