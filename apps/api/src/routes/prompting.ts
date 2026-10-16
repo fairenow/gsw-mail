@@ -21,7 +21,7 @@ const body = z.object({
 
 export default async function prompting(app: FastifyInstance) {
   app.post("/api/prompting/chat", {
-    config: { rateLimit: { max: 3, timeWindow: "1 minute" } },
+    config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
     bodyLimit: 40000,
   }, async (req, reply) => {
     if (process.env.PROMPTING_ANONYMOUS_INFERENCE_ENABLED !== "true") {
@@ -40,13 +40,13 @@ export default async function prompting(app: FastifyInstance) {
         VALUES ($1, $2, 1)
         ON CONFLICT (identity_hash, hour_start)
         DO UPDATE SET used = prompting_hourly_quota.used + 1
-        WHERE prompting_hourly_quota.used < 3
+        WHERE prompting_hourly_quota.used < 30
         RETURNING used
       `, [identity, hour]);
       if (!result.rowCount) {
         const retryAfter = Math.max(1, Math.ceil((hour.getTime() + 3_600_000 - Date.now()) / 1000));
         return reply.code(429).header("Retry-After", String(retryAfter))
-          .send({ error: "hourly_limit_reached", limit: 3, retryAfterSeconds: retryAfter });
+          .send({ error: "hourly_limit_reached", limit: 30, retryAfterSeconds: retryAfter });
       }
     } catch (error) {
       req.log.error({ error }, "Prompting quota check unavailable");
