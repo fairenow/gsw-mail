@@ -52,6 +52,18 @@ export async function claimChatExecution(owner: string, leaseSeconds = 120) {
   return rows[0] ?? null;
 }
 
+/** Persist a truthful worker stage for reconnecting clients, fenced by its lease. */
+export async function updateChatExecutionStage(id:string,owner:string,label:string){
+  const {rowCount}=await pool.query(
+    `UPDATE ai_chat_executions SET result=jsonb_build_object(
+       'activity',jsonb_build_object('label',$3::text,'phase','thinking','updatedAt',now()::text)),
+       updated_at=now()
+     WHERE id=$1 AND lease_owner=$2 AND status='running' AND lease_expires_at>now()`,
+     [id,owner,label],
+  );
+  return rowCount===1;
+}
+
 export async function heartbeatChatExecution(id: string, owner: string, leaseSeconds = 120) {
   const { rowCount } = await pool.query(
     `UPDATE ai_chat_executions SET lease_expires_at=now()+($3::integer * interval '1 second'),
