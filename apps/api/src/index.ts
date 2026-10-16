@@ -8,6 +8,7 @@ import { ensureScheduledSendSchema } from "./outbound/ensureScheduledSchema.js";
 import { ensureCalendarRsvpSchema } from "./calendar/ensureRsvpSchema.js";
 import { ensureAiAgentSchema } from "./ai/ensureAgentSchema.js";
 import { startChatExecutionWorker } from "./ai/chatBackgroundWorker.js";
+import { ensureBackgroundMailboxGrantSchema } from "./ai/backgroundMailboxGrants.js";
 import { ensureChatExecutionSchema } from "./ai/ensureChatExecutionSchema.js";
 import { getOutboundWorker } from "./outbound/worker.js";
 import { getAutomationWorker } from "./ai/automationWorker.js";
@@ -33,6 +34,7 @@ async function main() {
   await ensureAutomationSummaryEmailSchema();
   await ensureAiAgentSchema();
   await ensureChatExecutionSchema();
+  await ensureBackgroundMailboxGrantSchema();
   await ensureEmailTemplateSchema();
   await ensureFilesSchema();
   await ensureFileOrganizationSchema();
