@@ -1,0 +1,33 @@
+import { useEffect, useState } from "react";
+import { api, type ConnectedOAuthApp } from "../api";
+
+export function ConnectedAppsSettings() {
+  const [apps,setApps]=useState<ConnectedOAuthApp[]>([]);
+  const [loading,setLoading]=useState(true);
+  const [busy,setBusy]=useState<string|null>(null);
+  const [error,setError]=useState("");
+  const reload=async()=>{
+    setLoading(true);
+    try{setApps((await api.connectedApps()).connections);setError("");}
+    catch(e){setError(e instanceof Error?e.message:"Unable to load connected apps");}
+    finally{setLoading(false);}
+  };
+  useEffect(()=>{void reload();},[]);
+  const disconnect=async (app:ConnectedOAuthApp)=>{
+    if(!window.confirm(`Disconnect ${app.name}? It will lose access to GSW Mail until you authorize it again.`))return;
+    setBusy(app.clientId);
+    try {await api.disconnectConnectedApp(app.clientId);await reload();}
+    catch(e){setError(e instanceof Error?e.message:"Could not disconnect app");}
+    finally{setBusy(null);}
+  };
+  return <div className="gsw-settings-card">
+    <div className="gsw-settings-card-head"><div><h2>Connected Apps</h2><p>Manage apps you have authorized to access GSW Mail. Disconnecting a client revokes its GSW MCP access.</p></div><button className="gsw-secondary-btn" disabled={loading} onClick={()=>void reload()}>Refresh</button></div>
+    {error && <p role="alert">{error}</p>}
+    {loading?<p>Loading connected apps…</p>:apps.length===0?<p>No authorized applications yet. Once you connect ChatGPT or Claude, they will appear here.</p>:
+      <div>{apps.map(app=><div key={app.consentId} className="gsw-settings-card" style={{marginBottom:12}}>
+        <div className="gsw-settings-card-head"><div><h3>{app.name}</h3><p>{app.website||"Registered OAuth application"}</p><small>{app.disabled?"Client disabled":app.activeRefreshAuthorization?"Active refresh authorization":"Authorized consent"} · Approved {new Date(app.approvedAt).toLocaleDateString()}</small></div>
+          <button className="gsw-secondary-btn" disabled={busy!==null} onClick={()=>void disconnect(app)}>{busy===app.clientId?"Disconnecting…":"Disconnect"}</button></div>
+        <p><strong>Permissions:</strong> {app.scopes.join(", ")||"No scopes"}</p>
+      </div>)}</div>}
+  </div>;
+}
