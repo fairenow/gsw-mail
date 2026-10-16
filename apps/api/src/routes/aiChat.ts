@@ -60,6 +60,7 @@ const chatMessagesSchema = z.array(z.object({
 
 const bodySchema = z.object({
   commandId: z.string().uuid().optional(),
+  executionMode: z.enum(["interactive","model_only_background"]).optional(),
   conversationId: z.string().uuid().optional(),
   accountId: z.string().uuid().optional(),
   timeZone: z.string().trim().min(1).max(100).optional(),
@@ -1350,7 +1351,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
     // cannot execute twice, even if an earlier SSE response was lost.
     const reserved = input.commandId ? await reserveChatCommand({
       userId: req.user!.id, commandId: input.commandId, ...(input.accountId ? { accountId: input.accountId } : {}),
-      payload: { accountId: input.accountId, conversationId: input.conversationId, messages: input.messages, assetIds: input.assetIds },
+      payload: { accountId: input.accountId, conversationId: input.conversationId, messages: input.messages, assetIds: input.assetIds, executionMode:input.executionMode },
     }) : null;
     if (reserved && reserved.status !== "new") {
       const stream = openEventStream(reply);
@@ -1380,7 +1381,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       // Model-only chats do not need a live mailbox identity, so they can run
       // independently of this HTTP stream. Never enqueue mail or other tools
       // without an explicit revocable background authorization.
-      if (reserved && !input.accountId && !(input.assetIds?.length) &&
+      if (reserved && input.executionMode === "model_only_background" && !input.accountId && !(input.assetIds?.length) &&
           input.messages.every(message=>!(message.attachments?.length))) {
         const request = backgroundChatRequestSchema.parse({
           kind:"model_only",
