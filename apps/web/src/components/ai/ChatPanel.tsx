@@ -123,6 +123,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [activeCommandId, setActiveCommandId] = useState<string | null>(null);
+  const stoppedCommandsRef = useRef(new Set<string>());
   const [error, setError] = useState("");
   const [failedTurn, setFailedTurn] = useState<AiChatMessage | null>(null);
   const [retryResume, setRetryResume] = useState(false);
@@ -270,6 +271,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
       const result = await api.stopChatCommand(id);
       if (!result.stopped) { setError("This request cannot be stopped from the background queue."); return; }
       localStorage.removeItem(`gsw-chat-active-command:${account?.id ?? "none"}`);
+      stoppedCommandsRef.current.add(id);
       setActiveCommandId(null);
       setSending(false);
       setExecutionActivities([]);
@@ -584,6 +586,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
       localStorage.setItem(activeKey,commandId);
       setActiveCommandId(commandId);
       const response = await api.streamChat(account?.id ?? null, next, conversationId, handleStreamEvent, attachmentsForTurn.map((item) => item.assetId),commandId);
+      if (stoppedCommandsRef.current.has(commandId)) return;
       localStorage.removeItem(activeKey);
       setActiveCommandId(null);
       setConversationId(response.conversationId);
@@ -599,6 +602,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
       else settleAndClearActivities();
       scrollToLatestMessage("smooth");
     } catch (err) {
+      if (!localStorage.getItem(`gsw-chat-active-command:${account?.id ?? "none"}`) && stoppedCommandsRef.current.size) return;
       setExecutionActivities((current) => current.map((item) => item.status === "running" ? { ...item, status: "error" as const } : item));
       setActivityCollapsed(true);
       setPendingAttachments((current) => current.length ? current : attachmentsForTurn);
