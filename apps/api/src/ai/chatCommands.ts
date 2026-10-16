@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { aiIdempotencyKeys } from "../db/schema.js";
 
@@ -39,6 +39,15 @@ export async function updateChatCommand(key: string, status: "reserved" | "compl
     status, result: record, updatedAt: new Date(),
     ...(status === "completed" ? { completedAt: new Date() } : {}),
   }).where(eq(aiIdempotencyKeys.key, key));
+}
+
+
+export async function updateChatCommandActivity(key:string,activity:{label:string;phase:string;updatedAt:string}) {
+  // Atomic JSONB field update, guarded against late events overwriting completion.
+  await db.update(aiIdempotencyKeys).set({
+    result:sql`coalesce(${aiIdempotencyKeys.result},'{}'::jsonb) || jsonb_build_object('activity', ${JSON.stringify(activity)}::jsonb)`,
+    updatedAt:new Date(),
+  }).where(and(eq(aiIdempotencyKeys.key,key),eq(aiIdempotencyKeys.status,"reserved")));
 }
 
 export async function getChatCommand(userId: string, commandId: string) {
