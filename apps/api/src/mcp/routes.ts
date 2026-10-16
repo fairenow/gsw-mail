@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
+import { config } from "../config.js";
 import { verifyMcpBearer } from "./verifyBearer.js";
 import { agentMailRegistry } from "../ai/tools/registry.js";
 import { resolveMcpUserToolPermission } from "./resolvePermissions.js";
@@ -12,7 +13,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
     const identity=authorization?.startsWith("Bearer ")?
       await verifyMcpBearer(authorization.slice(7)):null;
     if(!identity){
-      const metadataUrl = new URL("/.well-known/oauth-protected-resource/mcp", process.env.GSW_MCP_RESOURCE_URL ?? "https://api.guidedstepswellness.com/mcp").toString();
+      const metadataUrl = new URL("/.well-known/oauth-protected-resource/mcp", process.env.GSW_MCP_RESOURCE_URL ?? `${config.auth.baseUrl.replace(/\/$/, "")}/mcp`).toString();
       return reply.code(401)
         .header("WWW-Authenticate", `Bearer resource_metadata="${metadataUrl}"`)
         .send({error:"unauthorized"});
