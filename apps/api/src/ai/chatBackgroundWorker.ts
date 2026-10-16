@@ -37,7 +37,10 @@ async function workOnce() {
       const provider=getAiProvider(settings.modelProvider);
       // Avoid replaying an ambiguous provider outcome after a crash.
       const messages=request.messages.map(message=>message.role==="user" ? {role:"user" as const,content:message.content} : {role:"assistant" as const,content:message.content});
-      const result=await provider.run({messages});
+      const result=await Promise.race([
+        provider.run({messages}),
+        new Promise<never>((_,reject)=>setTimeout(()=>reject(new Error("Model inference deadline exceeded")),150_000)),
+      ]);
       const content=result.content?.trim();
       if(!content || result.toolCalls?.length)throw new Error("Model-only worker returned no usable reply");
       const response={
@@ -52,7 +55,8 @@ async function workOnce() {
       if(done)await updateChatCommand(`chat-command:${job.user_id}:${job.command_id}`,"completed",{
         conversationId:job.conversation_id,response,
       });
-      console.info("[chat-worker] job completed",{executionId:job.id,commandId:job.command_id});
+      if (done) console.info("[chat-worker] job completed",{executionId:job.id,commandId:job.command_id});
+      else console.info("[chat-worker] job result discarded after stop or lease loss",{executionId:job.id});
     }catch(error){
       await finishChatExecution(job.id,owner,"uncertain",undefined,"Background execution could not be verified");
       console.error("[chat-worker] job requires review",{executionId:job.id,
