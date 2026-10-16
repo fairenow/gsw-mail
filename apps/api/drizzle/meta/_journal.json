@@ -141,6 +141,13 @@
       "when": 1792092000000,
       "tag": "0033_ai_inbox_triage_verdicts",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792092100000,
+      "tag": "0034_prompting_hourly_quota",
+      "breakpoints": true
     }
   ]
 }
