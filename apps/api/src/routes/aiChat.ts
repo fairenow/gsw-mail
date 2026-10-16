@@ -40,7 +40,7 @@ import { getR2Object } from "../files/r2.js";
 import { analyzeStoredFile } from "../files/intelligence.js";
 import { shouldPreAnalyzeAttachments } from "../files/attachmentIntent.js";
 import { config } from "../config.js";
-import { reserveChatCommand, updateChatCommand, getChatCommand } from "../ai/chatCommands.js";
+import { reserveChatCommand, updateChatCommand, updateChatCommandActivity, getChatCommand } from "../ai/chatCommands.js";
 import { getChatExecution } from "../ai/chatExecutionQueue.js";
 import { workingDraftForConversation } from "../ai/chatDrafts.js";
 
@@ -1361,9 +1361,9 @@ export default async function aiChatRoutes(app: FastifyInstance) {
         emit: (event) => {
           stream.send(event);
           if (reserved && (event.phase === "thinking" || event.phase === "tool_started")) {
-            void updateChatCommand(reserved.key, "reserved", {activity:{
+            void updateChatCommandActivity(reserved.key, {
               label:event.label,phase:event.phase,updatedAt:new Date().toISOString(),
-            }}).catch(err => req.log.warn({err},"Could not persist chat activity"));
+            }).catch(err => req.log.warn({err},"Could not persist chat activity"));
           }
         },
       });
