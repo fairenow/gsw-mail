@@ -69,7 +69,7 @@ export default async function prompting(app: FastifyInstance) {
     }
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), Math.max(config.ai.timeoutMs, 90_000));
+    const timer = setTimeout(() => controller.abort(), Math.max(config.ai.timeoutMs, 180_000));
     try {
       // No GSW system prompt, mailbox state, or tools are attached.
       const upstream = await fetch(endpoint, {
@@ -81,7 +81,8 @@ export default async function prompting(app: FastifyInstance) {
         body: JSON.stringify({
           model: "gpt-oss-120b",
           messages: input.data.messages,
-          max_tokens: input.data.max_tokens ?? 750,
+          max_tokens: 4096,
+          reasoning_effort: "low",
           temperature: input.data.temperature ?? 0.35,
           stream: false,
         }),
@@ -92,17 +93,25 @@ export default async function prompting(app: FastifyInstance) {
         return reply.code(upstream.status === 429 ? 429 : 502).send({ error: "inference_unavailable" });
       }
       const data = await upstream.json() as {
-        choices?: Array<{ finish_reason?: string; message?: { content?: string | null } }>;
+        choices?: Array<{ finish_reason?: string; message?: { content?: string | null; reasoning_content?: string | null } }>;
+        usage?: { completion_tokens?: number };
       };
       const choice = data.choices?.[0];
       const content = choice?.message?.content?.trim();
       if (choice?.finish_reason === "length" || !content) {
-        return reply.code(502).send({ error: "invalid_inference_response" });
+        req.log.warn({
+          finishReason: choice?.finish_reason ?? "missing",
+          completionTokens: data.usage?.completion_tokens ?? null,
+          hasContent: Boolean(content),
+          hasReasoning: Boolean(choice?.message?.reasoning_content),
+        }, "Prompting OSS returned no complete final text");
+        return reply.code(502).send({ error: "inference_incomplete" });
       }
       if (content.includes("<|") || /(?:^|\n)assistant\s+(?:analysis|commentary)\b/i.test(content)) {
+        req.log.warn({ finishReason: choice?.finish_reason ?? "missing" }, "Prompting OSS returned protocol text");
         return reply.code(502).send({ error: "invalid_inference_response" });
       }
-      return { choices: [{ message: { role: "assistant", content } }] };
+      return { choices: [{ message: { role: "assistant", content: content.slice(0, 15000) } }] };
     } catch (error) {
       req.log.warn({ reason: error instanceof Error ? error.name : "unknown" }, "Prompting OSS request failed");
       return reply.code(503).send({ error: "inference_unavailable" });
