@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getAiCapabilitySettings } from "./capabilities.js";
 import { getAiProvider } from "./providers/index.js";
-import { claimChatExecution, commitModelOnlyChatResult, finishChatExecution, heartbeatChatExecution, quarantineExpiredChatExecutions } from "./chatExecutionQueue.js";
+import { claimChatExecution, commitModelOnlyChatResult, finishChatExecution, heartbeatChatExecution, updateChatExecutionStage, quarantineExpiredChatExecutions } from "./chatExecutionQueue.js";
 import { updateChatCommand } from "./chatCommands.js";
 
 // Deliberately model-only. Mail/JMAP and external side effects require a
@@ -29,6 +29,7 @@ async function workOnce() {
         console.error("[chat-worker] heartbeat failed",{executionId:job.id,errorType:err instanceof Error?err.name:"unknown"}));
     },30_000);
     try{
+      await updateChatExecutionStage(job.id,owner,"Preparing AI request");
       const request=backgroundChatRequestSchema.parse(job.request);
       if(job.account_id)throw new Error("Offline mailbox tool execution is not authorized");
       if(!job.conversation_id)throw new Error("Missing durable conversation");
@@ -37,6 +38,7 @@ async function workOnce() {
       const provider=getAiProvider(settings.modelProvider);
       // Avoid replaying an ambiguous provider outcome after a crash.
       const messages=request.messages.map(message=>message.role==="user" ? {role:"user" as const,content:message.content} : {role:"assistant" as const,content:message.content});
+      await updateChatExecutionStage(job.id,owner,"Waiting for model response");
       let deadline: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<never>((_, reject) => {
         deadline = setTimeout(() => reject(new Error("Model inference deadline exceeded")), 150_000);
@@ -47,6 +49,7 @@ async function workOnce() {
       } finally {
         if (deadline) clearTimeout(deadline);
       }
+      await updateChatExecutionStage(job.id,owner,"Saving completed response");
       const content=result.content?.trim();
       if(!content || result.toolCalls?.length)throw new Error("Model-only worker returned no usable reply");
       const response={
