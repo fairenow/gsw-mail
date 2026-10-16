@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
-import { api, type ConnectedOAuthApp } from "../api";
+import { api, type ConnectedOAuthApp, type OAuthConnectionEvent } from "../api";
 
 export function ConnectedAppsSettings() {
   const [apps,setApps]=useState<ConnectedOAuthApp[]>([]);
+  const [events,setEvents]=useState<OAuthConnectionEvent[]>([]);
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState<string|null>(null);
   const [error,setError]=useState("");
   const reload=async()=>{
     setLoading(true);
-    try{setApps((await api.connectedApps()).connections);setError("");}
+    try{const [connections,activity]=await Promise.all([api.connectedApps(),api.connectedAppActivity()]);setApps(connections.connections);setEvents(activity.events);setError("");}
     catch(e){setError(e instanceof Error?e.message:"Unable to load connected apps");}
     finally{setLoading(false);}
   };
@@ -29,5 +30,7 @@ export function ConnectedAppsSettings() {
           <button className="gsw-secondary-btn" disabled={busy!==null} onClick={()=>void disconnect(app)}>{busy===app.clientId?"Disconnecting…":"Disconnect"}</button></div>
         <p><strong>Permissions:</strong> {app.scopes.join(", ")||"No scopes"}</p>
       </div>)}</div>}
+    <h3>Recent connection activity</h3>
+    {events.length===0?<p>No connection activity recorded yet.</p>:<ul>{events.slice(0,20).map((e,i)=><li key={`${e.createdAt}-${i}`}>{e.action} · {e.resourceId??"Unknown app"} · {new Date(e.createdAt).toLocaleString()}</li>)}</ul>}
   </div>;
 }
