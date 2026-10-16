@@ -1,6 +1,8 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { config } from "../config.js";
-import { resolveOrProvisionUser } from "../auth/middleware.js";
+import { db } from "../db/client.js";
+import { users } from "../db/schema.js";
+import { eq } from "drizzle-orm";
 
 /**
  * This verifier never accepts GSW's first-party Stalwart/mobile audience.
@@ -19,7 +21,8 @@ export async function verifyMcpBearer(token:string):Promise<{
     const scopes=new Set(typeof payload.scope==="string"?payload.scope.split(/\s+/).filter(Boolean):[]);
     if(!scopes.has("openid"))return null;
     // Use the existing internal subject mapping; never trust a user ID in request parameters.
-    const resolved=await resolveOrProvisionUser(config.auth.identityProvider,payload.sub);
-    return {userId:resolved.user.id,authUserId:payload.sub,oauthScopes:scopes,clientId};
+    const [resolved]=await db.select({id:users.id,status:users.status}).from(users).where(eq(users.authUserId,payload.sub)).limit(1);
+    if(!resolved || resolved.status!=="active")return null;
+    return {userId:resolved.id,authUserId:payload.sub,oauthScopes:scopes,clientId};
   }catch{return null;}
 }
