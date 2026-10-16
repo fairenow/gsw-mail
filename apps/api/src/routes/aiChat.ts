@@ -40,7 +40,7 @@ import { getR2Object } from "../files/r2.js";
 import { analyzeStoredFile } from "../files/intelligence.js";
 import { shouldPreAnalyzeAttachments } from "../files/attachmentIntent.js";
 import { config } from "../config.js";
-import { reserveChatCommand, updateChatCommand, getChatCommand } from "../ai/chatCommands.js";
+import { reserveChatCommand, updateChatCommand, updateChatCommandActivity, getChatCommand } from "../ai/chatCommands.js";
 import { getChatExecution, getChatExecutionHealth, getLatestActiveChatExecution, enqueueChatExecution, stopChatExecution } from "../ai/chatExecutionQueue.js";
 import { backgroundChatRequestSchema } from "../ai/chatBackgroundWorker.js";
 import { requestBackgroundMailboxGrant, listBackgroundMailboxGrants, revokeBackgroundMailboxGrant } from "../ai/backgroundMailboxGrants.js";
@@ -1472,7 +1472,14 @@ export default async function aiChatRoutes(app: FastifyInstance) {
         headers: req.headers as Record<string, string>,
         conversationId,
         providerMessages: prepared.providerMessages,
-        emit: stream.send,
+        emit: (event) => {
+          stream.send(event);
+          if (reserved && (event.phase === "thinking" || event.phase === "tool_started")) {
+            void updateChatCommandActivity(reserved.key, {
+              label:event.label,phase:event.phase,updatedAt:new Date().toISOString(),
+            }).catch(err => req.log.warn({err},"Could not persist chat activity"));
+          }
+        },
       });
       if (reserved) await updateChatCommand(reserved.key, "completed", { conversationId, response });
       stream.send({ type: "result", response });
