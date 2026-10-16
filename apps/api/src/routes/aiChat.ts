@@ -1,3 +1,4 @@
+import { startSelectedModelWarmup } from "../ai/providers/prewarm.js";
 import { editStoredImage } from "../files/imageEditing.js";
 import { wrapUntrustedContent } from "../ai/untrustedContent.js";
 import { reportChatError, chatErrorText } from "../ai/chatSafeErrors.js";
@@ -985,6 +986,10 @@ async function prepareNewConversation(input: {
 
 export default async function aiChatRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
+
+  app.post("/product/chat/prewarm", {config:{rateLimit:{max:6,timeWindow:"1 minute"}}}, async(req)=>{
+    return startSelectedModelWarmup(req.user!.id);
+  });
 
   app.post("/product/chat/images/edit", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (req) => {
     const input = z.object({ assetId: z.string().uuid(), instruction: z.string().trim().min(3).max(4000), conversationId: z.string().uuid().optional() }).parse(req.body);
