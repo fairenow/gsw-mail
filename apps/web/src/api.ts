@@ -726,6 +726,7 @@ export const api = {
       throw new Error("The request is still processing or its status is unavailable. Check chat history before retrying.");
     }
   },
+  activeChatCommand: () => get<{command:{commandId:string;conversationId:string|null;status:string}|null}>("/product/chat/active-command"),
   stopChatCommand: (commandId: string) => post<{stopped:boolean;status?:string;reason?:string}>(`/product/chat/commands/${encodeURIComponent(commandId)}/stop`, {}),
   chatCommand: (commandId: string) => get<{status:string;conversationId:string|null;response?:AiChatResponse|null}>(`/product/chat/commands/${encodeURIComponent(commandId)}`),
   resumeChat: (accountId: string, conversationId: string) => post<AiChatResponse>("/product/chat/resume", { ...chatRuntimeContext(), accountId, conversationId }, 100_000),
