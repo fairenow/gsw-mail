@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { appendAiMessage } from "./agentState.js";
 import { getAiCapabilitySettings } from "./capabilities.js";
 import { getAiProvider } from "./providers/index.js";
-import { claimChatExecution, finishChatExecution, heartbeatChatExecution, quarantineExpiredChatExecutions } from "./chatExecutionQueue.js";
+import { claimChatExecution, commitModelOnlyChatResult, finishChatExecution, heartbeatChatExecution, quarantineExpiredChatExecutions } from "./chatExecutionQueue.js";
 import { updateChatCommand } from "./chatCommands.js";
 
 // Deliberately model-only. Mail/JMAP and external side effects require a
@@ -40,8 +39,6 @@ async function workOnce() {
       const result=await provider.run({messages});
       const content=result.content?.trim();
       if(!content || result.toolCalls?.length)throw new Error("Model-only worker returned no usable reply");
-      await appendAiMessage({conversationId:job.conversation_id,role:"assistant",content,
-        provider:provider.id,model:result.model});
       const response={
         conversationId:job.conversation_id,
         message:{role:"assistant" as const,content},intervention:null,
@@ -49,7 +46,8 @@ async function workOnce() {
           persistentConversation:true,streamingExecution:false},
         toolActivity:[],
       };
-      const done=await finishChatExecution(job.id,owner,"completed",response);
+      const done=await commitModelOnlyChatResult({executionId:job.id,owner,conversationId:job.conversation_id,
+        content,provider:provider.id,model:result.model,response});
       if(done)await updateChatCommand(`chat-command:${job.user_id}:${job.command_id}`,"completed",{
         conversationId:job.conversation_id,response,
       });
