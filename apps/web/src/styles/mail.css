@@ -2358,3 +2358,30 @@
 .gsw-chat-attachment-preview .gsw-chat-attachment-image { display: block; flex: 0 0 100%; width: 100%; height: 100%; min-width: 100%; min-height: 100%; max-width: 100%; max-height: 100%; object-fit: cover; object-position: center; border-radius: inherit; }
 .gsw-chat-attachment-remove { position: absolute; z-index: 2; top: -8px; right: -8px; display: grid; place-items: center; width: 23px; height: 23px; padding: 0; border: 1px solid var(--gsw-border); border-radius: 50%; background: var(--gsw-surface); color: var(--gsw-text-body); cursor: pointer; }
 .gsw-chat-attachment-preview:focus-visible, .gsw-chat-attachment-remove:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+
+/* Compact, gentle indicator beside GSW is working. */
+.gsw-chat-working-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 3px;
+  vertical-align: middle;
+}
+.gsw-chat-working-dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: .35;
+  animation: gsw-working-dot-pulse 1.2s ease-in-out infinite;
+}
+.gsw-chat-working-dots span:nth-child(2) { animation-delay: .2s; }
+.gsw-chat-working-dots span:nth-child(3) { animation-delay: .4s; }
+@keyframes gsw-working-dot-pulse {
+  0%, 70%, 100% { opacity: .3; transform: scale(.8); }
+  35% { opacity: 1; transform: scale(1.25); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gsw-chat-working-dots span { animation: none; opacity: .7; transform: none; }
+}
