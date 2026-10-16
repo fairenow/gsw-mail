@@ -12,9 +12,9 @@ export interface McpProposal {
   kind: ProposalKind;
   priority: ProposalPriority;
   summary: string;
-  evidence?: string;
-  suggestedAction?: string;
-  relatedTool?: string;
+  evidence?: string | undefined;
+  suggestedAction?: string | undefined;
+  relatedTool?: string | undefined;
   sourceClient: string;
   requesterUserId: string;
 }
