@@ -7,8 +7,8 @@ import { resolveMcpUserToolPermission } from "./resolvePermissions.js";
 
 /** Read-only transport while persisted write approvals are under construction. */
 export async function mcpRoutes(app:FastifyInstance):Promise<void> {
-  // Scope the parser to MCP. Some clients probe using octet-stream before OAuth.
-  app.addContentTypeParser("application/octet-stream", { parseAs: "string", bodyLimit: 1024 * 1024 }, (_request, body, done) => {
+  // Scope fallback parsing to MCP. Clients can probe with nonstandard media types before OAuth.
+  app.addContentTypeParser("*", { parseAs: "string", bodyLimit: 1024 * 1024 }, (_request, body, done) => {
     try { done(null, JSON.parse(body as string)); }
     catch { done(null, null); }
   });
