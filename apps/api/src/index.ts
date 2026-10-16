@@ -16,6 +16,7 @@ import { ensureFilesSchema } from "./files/ensureFilesSchema.js";
 import { startOrganizationWorker } from "./files/organizationJobs.js";
 import { ensureFileOrganizationSchema } from "./files/ensureOrganizationSchema.js";
 import { ensureEngagementAnalyticsSchema } from "./analytics/ensureSchema.js";
+import { ensurePromptingQuotaSchema } from "./ai/ensurePromptingQuotaSchema.js";
 
 const app = buildApp();
 const worker = getOutboundWorker();
@@ -34,6 +35,7 @@ async function main() {
   await ensureFilesSchema();
   await ensureFileOrganizationSchema();
   await ensureEngagementAnalyticsSchema();
+  await ensurePromptingQuotaSchema();
   await ensureWebOAuthTestClient();
   worker.start();
   const reminderTimer = setInterval(() => { void deliverDueCalendarEmailReminders().catch(error => app.log.error(error, "calendar reminder worker failed")); }, 60_000);
