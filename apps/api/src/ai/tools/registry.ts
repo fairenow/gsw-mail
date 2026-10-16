@@ -19,6 +19,8 @@ import { workerTools } from "./workerTools.js";
 import { integrationTools } from "./integrationTools.js";
 import { browserTools } from "./browserTools.js";
 import { videoTools } from "./videoTools.js";
+import { proposalTools } from "./proposalTools.js";
+import { proposalConversationTools } from "./proposalConversationTools.js";
 
 export class AgentToolRegistry {
   private readonly tools = new Map<string, AgentToolDefinition>();
@@ -88,7 +90,7 @@ export class AgentToolRegistry {
   }
 }
 
-const baseAgentTools: AgentToolDefinition[] = [mailTriageReportTool, mailTriageClassifyTool, mailTriageTool, mailTriageReviewTool, mailTriageScanStepTool, ...agentMailTools, ...automationTools, ...taskTools, ...workerTools, ...integrationTools, ...browserTools, ...searchTools, ...contactTools, ...calendarTools, ...campaignTools, ...templateTools, ...domainTools, ...fileTools, ...fileManagementTools, ...fileOrganizationTools, ...durableFileOrganizationTools, ...videoTools];
+const baseAgentTools: AgentToolDefinition[] = [mailTriageReportTool, mailTriageClassifyTool, mailTriageTool, mailTriageReviewTool, mailTriageScanStepTool, ...agentMailTools, ...automationTools, ...taskTools, ...workerTools, ...integrationTools, ...browserTools, ...searchTools, ...contactTools, ...calendarTools, ...campaignTools, ...templateTools, ...domainTools, ...fileTools, ...fileManagementTools, ...fileOrganizationTools, ...durableFileOrganizationTools, ...videoTools, ...proposalTools, ...proposalConversationTools];
 const baseAgentRegistry = new AgentToolRegistry(baseAgentTools);
 
 const capabilitySearchTool: AgentToolDefinition = {

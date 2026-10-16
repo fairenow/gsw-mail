@@ -9,6 +9,7 @@ import { db } from "../db/client.js";
 import { authAccounts, authSessions, authUsers, authVerifications, domains, emailAccounts, jwks, oauthAccessToken, oauthClient, oauthConsent, oauthRefreshToken, organizationMemberships, users } from "../db/schema.js";
 import { and, eq } from "drizzle-orm";
 import { renderGswAuthEmail } from "./email.js";
+import { aiScopes } from "../ai/permissions/types.js";
 import { GSW_OAUTH_CONSENT_PAGE, GSW_OIDC_SUPPORTED_SCOPES, legacyInternalUserInfoClaims, oidcClientIdFromJwt } from "./oidcContract.js";
 
 const AUTH_SENDER = "admin@team.guidedstepswellness.com";
@@ -100,8 +101,8 @@ export const auth = betterAuth({
         page: "/oauth/select-account",
         shouldRedirect: async () => false,
       },
-      scopes: [...GSW_OIDC_SUPPORTED_SCOPES],
-      validAudiences: [config.auth.stalwartAudience],
+      scopes: [...GSW_OIDC_SUPPORTED_SCOPES, ...aiScopes],
+      validAudiences: [config.auth.stalwartAudience, `${config.auth.baseUrl.replace(/\/$/, "")}/mcp`],
       accessTokenExpiresIn: config.auth.tokenTtlSeconds,
       refreshTokenReuseInterval: 30,
       customUserInfoClaims: ({ user, scopes, jwt }) => legacyInternalUserInfoClaims({
