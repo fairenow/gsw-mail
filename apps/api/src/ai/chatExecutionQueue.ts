@@ -199,3 +199,18 @@ export async function stopChatExecution(userId:string,commandId:string){
       RETURNING status`,[userId,commandId]);
   return rows.length>0;
 }
+
+/** Discover the most recent live background execution for this authenticated
+ * user. Never return other users' jobs or request/prompt contents. */
+export async function getLatestActiveChatExecution(userId:string,accountId?:string){
+  const {rows}=await pool.query<ChatExecution>(
+    `SELECT id,user_id,account_id,command_id,conversation_id,status,attempts,
+       lease_owner,result,request
+     FROM ai_chat_executions
+     WHERE user_id=$1 AND status IN ('queued','running')
+       AND ($2::uuid IS NULL OR account_id=$2::uuid)
+     ORDER BY created_at DESC LIMIT 1`,
+    [userId,accountId??null],
+  );
+  return rows[0]??null;
+}
