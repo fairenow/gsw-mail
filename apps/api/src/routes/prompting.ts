@@ -1,11 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { config } from "../config.js";
+import { pool } from "../db/client.js";
+import { createHmac } from "node:crypto";
 
 /**
  * Separate, feature-flagged inference endpoint for the account-free Prompting app.
  * Never register GSW mailbox tools or borrow mailbox authorization here.
- * Do not enable in production until shared, durable quotas and abuse monitoring exist.
+ * Database quota is atomic across Railway instances; this is an anonymous, IP-based fair-use limit.
  */
 const message = z.object({
   role: z.enum(["system", "user", "assistant"]),
@@ -19,7 +21,7 @@ const body = z.object({
 
 export default async function prompting(app: FastifyInstance) {
   app.post("/api/prompting/chat", {
-    config: { rateLimit: { max: 2, timeWindow: "1 minute" } },
+    config: { rateLimit: { max: 3, timeWindow: "1 minute" } },
     bodyLimit: 40000,
   }, async (req, reply) => {
     if (process.env.PROMPTING_ANONYMOUS_INFERENCE_ENABLED !== "true") {
@@ -28,6 +30,28 @@ export default async function prompting(app: FastifyInstance) {
     const input = body.safeParse(req.body);
     if (!input.success) return reply.code(400).send({ error: "invalid_prompt" });
     if (!config.ai.hetznerApiKey) return reply.code(503).send({ error: "inference_unavailable" });
+    // Server-observed address only. Never trust a client-supplied X-Forwarded-For.
+    // This can group multiple users behind NAT; production proxy IP handling needs verification.
+    const identity = createHmac("sha256", config.auth.secret).update(req.ip).digest("hex");
+    const hour = new Date(Math.floor(Date.now() / 3_600_000) * 3_600_000);
+    try {
+      const result = await pool.query(`
+        INSERT INTO prompting_hourly_quota (identity_hash, hour_start, used)
+        VALUES ($1, $2, 1)
+        ON CONFLICT (identity_hash, hour_start)
+        DO UPDATE SET used = prompting_hourly_quota.used + 1
+        WHERE prompting_hourly_quota.used < 3
+        RETURNING used
+      `, [identity, hour]);
+      if (!result.rowCount) {
+        const retryAfter = Math.max(1, Math.ceil((hour.getTime() + 3_600_000 - Date.now()) / 1000));
+        return reply.code(429).header("Retry-After", String(retryAfter))
+          .send({ error: "hourly_limit_reached", limit: 3, retryAfterSeconds: retryAfter });
+      }
+    } catch (error) {
+      req.log.error({ error }, "Prompting quota check unavailable");
+      return reply.code(503).send({ error: "quota_unavailable" });
+    }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
     try {
