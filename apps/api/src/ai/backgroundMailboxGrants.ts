@@ -48,3 +48,33 @@ export async function revokeBackgroundMailboxGrant(input:{
      WHERE user_id=$1 AND account_id=$2 AND scope=$3`,
     [input.userId,input.accountId,input.scope]);
 }
+
+export type BackgroundMailboxScope = "mail.read" | "mail.draft";
+
+/** Explicit consent starts as pending; it cannot activate access or issue credentials. */
+export async function requestBackgroundMailboxGrant(input:{
+  userId:string; accountId:string; scope:BackgroundMailboxScope; expiresAt:Date;
+}) {
+  const {rows}=await pool.query<{id:string;status:string;expires_at:Date|null}>(
+    `INSERT INTO ai_background_mail_grants
+       (id,user_id,account_id,scope,status,credential_ref,expires_at,revoked_at)
+     VALUES(gen_random_uuid(),$1,$2,$3,'pending',NULL,$4,NULL)
+     ON CONFLICT(user_id,account_id,scope) DO UPDATE
+     SET status='pending',credential_ref=NULL,expires_at=EXCLUDED.expires_at,
+         revoked_at=NULL,updated_at=now()
+     RETURNING id,status,expires_at`,
+    [input.userId,input.accountId,input.scope,input.expiresAt],
+  );
+  return rows[0]!;
+}
+
+export async function listBackgroundMailboxGrants(userId:string,accountId:string){
+  const {rows}=await pool.query<{
+    id:string;scope:BackgroundMailboxScope;status:string;expires_at:Date|null;
+    credential_configured:boolean;
+  }>(`SELECT id,scope,status,expires_at,
+       (credential_ref IS NOT NULL) AS credential_configured
+     FROM ai_background_mail_grants
+     WHERE user_id=$1 AND account_id=$2 ORDER BY scope`,[userId,accountId]);
+  return rows;
+}
