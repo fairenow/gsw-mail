@@ -1353,6 +1353,23 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       });
       conversationId = prepared.conversation.id;
       if (reserved) await updateChatCommand(reserved.key, "reserved", { conversationId });
+      // Model-only chats do not need a live mailbox identity, so they can run
+      // independently of this HTTP stream. Never enqueue mail or other tools
+      // without an explicit revocable background authorization.
+      if (reserved && !input.accountId && !(input.assetIds?.length) &&
+          input.messages.every(message=>!(message.attachments?.length))) {
+        const request = backgroundChatRequestSchema.parse({
+          kind:"model_only",
+          messages:prepared.providerMessages.filter(message=>
+            message.role==="user" || message.role==="assistant" || message.role==="system"
+          ).map(message=>({role:message.role,content:message.content})),
+        });
+        await enqueueChatExecution({
+          userId:req.user!.id,commandId:input.commandId!,conversationId,request,
+        });
+        stream.send({type:"pending",commandId:input.commandId!,status:"queued"});
+        return;
+      }
       const response = await runConversationTurn({
         userId: req.user!.id,
         authUserId: req.authUserId ?? req.user!.id,
