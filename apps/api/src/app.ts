@@ -46,6 +46,7 @@ import { auth as betterAuth } from "./auth/better.js";
 import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } from "@better-auth/oauth-provider";
 import { config } from "./config.js";
 import { JmapError } from "./engine/jmap.js";
+import { mcpProtectedResourceMetadata } from "./mcp/resourceMetadata.js";
 
 const MAIL_ATTACHMENT_BODY_LIMIT = 30 * 1024 * 1024;
 
@@ -55,6 +56,7 @@ export function buildApp() {
   app.register(cors, { origin: true });
   app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
   app.register(formbody);
+  app.register(mcpProtectedResourceMetadata);
   const metadataResponse = async (handler: (request: Request) => Promise<Response>, req: { url: string; headers: Record<string, string | string[] | undefined> }, reply: { code: (status: number) => { header: (name: string, value: string) => unknown; send: (body: Buffer) => unknown } }) => {
     const response = await handler(new Request(`${config.auth.baseUrl}${req.url}`, { headers: req.headers as Record<string, string> }));
     const target = reply.code(response.status);
