@@ -41,7 +41,7 @@ import { analyzeStoredFile } from "../files/intelligence.js";
 import { shouldPreAnalyzeAttachments } from "../files/attachmentIntent.js";
 import { config } from "../config.js";
 import { reserveChatCommand, updateChatCommand, getChatCommand } from "../ai/chatCommands.js";
-import { getChatExecution, getLatestActiveChatExecution, enqueueChatExecution, stopChatExecution } from "../ai/chatExecutionQueue.js";
+import { getChatExecution, getChatExecutionHealth, getLatestActiveChatExecution, enqueueChatExecution, stopChatExecution } from "../ai/chatExecutionQueue.js";
 import { backgroundChatRequestSchema } from "../ai/chatBackgroundWorker.js";
 import { workingDraftForConversation } from "../ai/chatDrafts.js";
 
@@ -1329,18 +1329,27 @@ export default async function aiChatRoutes(app: FastifyInstance) {
     const { commandId } = z.object({ commandId: z.string().uuid() }).parse(req.params);
     const command = await getChatCommand(req.user!.id, commandId);
     const execution = await getChatExecution(req.user!.id, commandId);
-    if (execution) return {
+    if (execution) {
+      const health=await getChatExecutionHealth(req.user!.id,commandId);
+      return {
       status:execution.status==="completed"?"completed"
         :execution.status==="uncertain"||execution.status==="failed"?"uncertain":"processing",
       conversationId:execution.conversation_id,
       background:true,
+      health:health?{
+        attempts:health.attempts,
+        updatedAt:health.updated_at,
+        leaseExpiresAt:health.lease_expires_at,
+        stopped:health.error==="Stopped by user",
+      }:null,
       response:execution.status==="completed"?execution.result:null,
       activity:execution.status==="queued"
         ? {label:"Queued for background processing",phase:"queued",updatedAt:new Date().toISOString()}
         : execution.status==="running"
           ? {label:"Processing independently of this browser",phase:"thinking",updatedAt:new Date().toISOString()}
           : null,
-    };
+      };
+    }
     if (command) return command;
     return reply.code(404).send({ error: "Chat command not found" });
   });
