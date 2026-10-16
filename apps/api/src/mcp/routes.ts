@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { requireAccountPermission } from "../auth/authorize.js";
 import type { FastifyInstance } from "fastify";
 import { verifyMcpBearer } from "./verifyBearer.js";
 import { agentMailRegistry } from "../ai/tools/registry.js";
@@ -18,7 +19,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
     if(input.method==="initialize")return wrap({protocolVersion:"2025-03-26",capabilities:{tools:{}},serverInfo:{name:"GSW Mail",version:"0.1"}});
     if(input.method==="notifications/initialized")return reply.code(202).send();
     if(input.method==="tools/list"){
-      return wrap({tools:agentMailRegistry.definitions().filter(t=>t.risk==="read"&&t.requiredScopes.every(s=>identity.oauthScopes.has(s))).map(t=>({name:t.name.replaceAll(".","__"),description:t.description,inputSchema:t.inputSchema}))});
+      return wrap({tools:agentMailRegistry.definitions().filter(t=>t.risk==="read"&&t.requiredScopes.every(s=>identity.oauthScopes.has(s))).map(t=>({name:t.name.replaceAll(".","__"),description:t.description,inputSchema:{...t.inputSchema,properties:{...(t.inputSchema.properties as Record<string,unknown> ?? {}),accountId:{type:"string",description:"GSW mailbox account UUID to operate within"}},required:[...((t.inputSchema.required as string[] | undefined) ?? []),"accountId"]}}))});
     }
     if(input.method==="tools/call"){
       const name=typeof input.params?.name==="string"?input.params.name:"";
