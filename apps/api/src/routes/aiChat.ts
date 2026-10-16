@@ -45,6 +45,8 @@ import { getChatExecution, getChatExecutionHealth, getLatestActiveChatExecution,
 import { backgroundChatRequestSchema } from "../ai/chatBackgroundWorker.js";
 import { requestBackgroundMailboxGrant, listBackgroundMailboxGrants, revokeBackgroundMailboxGrant } from "../ai/backgroundMailboxGrants.js";
 import { workingDraftForConversation } from "../ai/chatDrafts.js";
+import { inboxTriageSchemaHealth } from "../ai/ensureInboxTriageSchema.js";
+import { createMailService } from "../services/mailService.js";
 
 const chatAttachmentSchema = z.object({
   assetId: z.string().uuid(),
@@ -1039,6 +1041,32 @@ export default async function aiChatRoutes(app: FastifyInstance) {
     await requireAccountPermission(req.user!.id,input.accountId,"read");
     await revokeBackgroundMailboxGrant({userId:req.user!.id,...input});
     return {revoked:true};
+  });
+
+  app.get("/product/chat/triage-health", async (req) => {
+    const { accountId } = z.object({ accountId: z.string().uuid() }).parse(req.query);
+    await requireAccountPermission(req.user!.id, accountId, "read");
+    const schemaReady = await inboxTriageSchemaHealth();
+    let mailboxReady = false;
+    let failureStage: "database" | "mailbox" | null = schemaReady ? null : "database";
+    if (schemaReady) {
+      try {
+        const mail = createMailService({
+          userId: req.user!.id,
+          authUserId: req.authUserId ?? req.user!.id,
+          headers: req.headers as Record<string,string>,
+        });
+        // A one-message Inbox page verifies actual scoped JMAP read access.
+        // Do not disclose message contents in a health response.
+        await mail.triagePage(accountId, "inbox", 0, 1);
+        mailboxReady = true;
+      } catch (error) {
+        failureStage = "mailbox";
+        reportChatError(error, { operation: "mail.triage_health", category: "mail", correlationId: req.id });
+      }
+    }
+    req.log.info({ schemaReady, mailboxReady, failureStage }, "mail triage health check");
+    return { schemaReady, mailboxReady, ready: schemaReady && mailboxReady, failureStage };
   });
 
   app.post("/product/chat/prewarm", {config:{rateLimit:{max:6,timeWindow:"1 minute"}}}, async(req)=>{
