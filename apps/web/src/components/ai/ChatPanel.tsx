@@ -174,7 +174,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
       busy = true;
       try {
         const result = await api.chatCommand(commandId);
-        if (disposed) return;
+        if (disposed || localStorage.getItem(key) !== commandId) return;
         if (result.status === "processing") setReconnecting(!result.activity);
         setBackgroundStopAvailable(Boolean(result.background) && result.status === "processing");
         if (result.background && result.status === "processing") {
