@@ -122,6 +122,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
   const [, setActivityCollapsed] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [activeCommandId, setActiveCommandId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [failedTurn, setFailedTurn] = useState<AiChatMessage | null>(null);
   const [retryResume, setRetryResume] = useState(false);
@@ -150,6 +151,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
     const key = `gsw-chat-active-command:${account?.id ?? "none"}`;
     const commandId = localStorage.getItem(key);
     if (!commandId) return;
+    setActiveCommandId(commandId);
     let disposed = false;
     let busy = false;
     setSending(true);
@@ -166,6 +168,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
         }
         if (result.status === "completed" && result.response) {
           localStorage.removeItem(key);
+          setActiveCommandId(null);
           const detail = result.conversationId ? await api.chatConversation(result.conversationId) : null;
           if (disposed) return;
           if(detail) {
@@ -180,6 +183,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
           setExecutionActivities([]);
         } else if(result.status === "uncertain" || result.status === "failed") {
           localStorage.removeItem(key);
+          setActiveCommandId(null);
           setSending(false);
           setExecutionActivities([]);
           setError("The prior request stopped before completion. Check the conversation before retrying.");
@@ -248,6 +252,19 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
         id: activityCounterRef.current, label, toolName: event.toolName, status: "running" as const,
       }];
     });
+  };
+
+  const stopCurrentWork = async () => {
+    const id = activeCommandId ?? localStorage.getItem(`gsw-chat-active-command:${account?.id ?? "none"}`);
+    if (!id) return;
+    try {
+      const result = await api.stopChatCommand(id);
+      if (!result.stopped) { setError("This request cannot be stopped from the background queue."); return; }
+      localStorage.removeItem(`gsw-chat-active-command:${account?.id ?? "none"}`);
+      setActiveCommandId(null);
+      setSending(false);
+      setExecutionActivities([]);
+    } catch { setError("Could not stop the request. Check its status before retrying."); }
   };
 
   const settleAndClearActivities = () => {
@@ -556,8 +573,10 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
       const activeKey = `gsw-chat-active-command:${account?.id ?? "none"}`;
       const commandId = crypto.randomUUID();
       localStorage.setItem(activeKey,commandId);
+      setActiveCommandId(commandId);
       const response = await api.streamChat(account?.id ?? null, next, conversationId, handleStreamEvent, attachmentsForTurn.map((item) => item.assetId),commandId);
       localStorage.removeItem(activeKey);
+      setActiveCommandId(null);
       setConversationId(response.conversationId);
       localStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`, response.conversationId);
       setIntervention(response.intervention);
@@ -742,6 +761,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
       {executionActivities.length > 0 && <section className="gsw-chat-execution" aria-live="polite" style={{ maxHeight: 104, overflow: "hidden" }}>
         <div className="gsw-chat-execution-toggle">
           <span className="gsw-chat-execution-title">{sending ? <>GSW is working <span className="gsw-chat-working-dots" aria-hidden="true"><span /><span /><span /></span></> : "Work summary"}</span>
+          {sending && activeCommandId && <button type="button" onClick={() => void stopCurrentWork()} aria-label="Stop GSW work" title="Stop background work" style={{marginLeft:"auto",color:"inherit",border:"1px solid currentColor",borderRadius:8,padding:"3px 9px",background:"transparent"}}><Square size={12} /> Stop</button>}
         </div>
         <div className="gsw-chat-execution-list" style={{ maxHeight: 72, overflow: "hidden" }}>
           {executionActivities.slice(-3).map((activity) => <div
