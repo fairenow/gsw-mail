@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, Clock3, Copy, File, LoaderCircle, Mic, Paperclip, RefreshCcw, ShieldCheck, Square, Trash2, X } from "lucide-react";
+import { Archive, ArrowUp, Check, CheckCircle2, Clock3, Copy, File, LoaderCircle, Mic, Paperclip, RefreshCcw, ShieldCheck, Square, Trash2, X } from "lucide-react";
 import { api, type AiChatAttachment, type AiChatMessage, type AiChatStreamEvent, type AiConversationRecord, type AiIntervention } from "../../api";
 import { useAppShell } from "../AppShell";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -119,7 +119,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
   const [interventionBusy, setInterventionBusy] = useState(false);
   const [executionActivities, setExecutionActivities] = useState<ExecutionActivity[]>([]);
   const activityCounterRef = useRef(0);
-  const [activityCollapsed, setActivityCollapsed] = useState(false);
+  const [, setActivityCollapsed] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
