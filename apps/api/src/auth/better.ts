@@ -95,6 +95,9 @@ export const auth = betterAuth({
       },
     }),
     oauthProvider({
+      allowDynamicClientRegistration: true,
+      allowUnauthenticatedClientRegistration: true,
+      clientRegistrationDefaultApplicationType: "infer",
       loginPage: "/sign-in",
       consentPage: GSW_OAUTH_CONSENT_PAGE,
       selectAccount: {
