@@ -7,6 +7,7 @@ type CommandRecord = {
   fingerprint: string;
   conversationId?: string;
   response?: unknown;
+  activity?: { label:string; phase:string; updatedAt:string };
 };
 
 const keyFor = (userId: string, commandId: string) => `chat-command:${userId}:${commandId}`;
@@ -50,5 +51,6 @@ export async function getChatCommand(userId: string, commandId: string) {
     status: record.status === "completed" ? "completed" : record.status === "uncertain" || stale ? "uncertain" : "processing",
     conversationId: result.conversationId ?? null,
     response: record.status === "completed" ? result.response ?? null : null,
+    activity: result.activity ?? null,
   };
 }
