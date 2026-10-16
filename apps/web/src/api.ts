@@ -728,7 +728,7 @@ export const api = {
   },
   activeChatCommand: () => get<{command:{commandId:string;conversationId:string|null;status:string}|null}>("/product/chat/active-command"),
   stopChatCommand: (commandId: string) => post<{stopped:boolean;status?:string;reason?:string}>(`/product/chat/commands/${encodeURIComponent(commandId)}/stop`, {}),
-  chatCommand: (commandId: string) => get<{status:string;conversationId:string|null;response?:AiChatResponse|null;background?:boolean}>(`/product/chat/commands/${encodeURIComponent(commandId)}`),
+  chatCommand: (commandId: string) => get<{status:string;conversationId:string|null;response?:AiChatResponse|null;background?:boolean;health?:{attempts:number;updatedAt:string;leaseExpiresAt:string|null;stopped:boolean}|null}>(`/product/chat/commands/${encodeURIComponent(commandId)}`),
   resumeChat: (accountId: string, conversationId: string) => post<AiChatResponse>("/product/chat/resume", { ...chatRuntimeContext(), accountId, conversationId }, 100_000),
   resumeChatStream: (accountId: string, conversationId: string, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/resume/stream", { ...chatRuntimeContext(), accountId, conversationId }, onEvent, "/product/chat/resume"),
   grantChatPermission: (accountId: string, scope: string) => post<{ grant: { id: string; scope: string } }>("/product/chat/permissions", { accountId, scope }),
