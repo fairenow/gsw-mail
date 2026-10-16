@@ -123,6 +123,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [activeCommandId, setActiveCommandId] = useState<string | null>(null);
+  const [backgroundStopAvailable, setBackgroundStopAvailable] = useState(false);
   const stoppedCommandsRef = useRef(new Set<string>());
   const [error, setError] = useState("");
   const [failedTurn, setFailedTurn] = useState<AiChatMessage | null>(null);
@@ -172,6 +173,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
       try {
         const result = await api.chatCommand(commandId);
         if (disposed) return;
+        setBackgroundStopAvailable(Boolean(result.background) && result.status === "processing");
         if (result.conversationId) {
           setConversationId(result.conversationId);
           localStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`,result.conversationId);
@@ -273,6 +275,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
       localStorage.removeItem(`gsw-chat-active-command:${account?.id ?? "none"}`);
       stoppedCommandsRef.current.add(id);
       setActiveCommandId(null);
+      setBackgroundStopAvailable(false);
       setSending(false);
       setExecutionActivities([]);
     } catch { setError("Could not stop the request. Check its status before retrying."); }
@@ -774,7 +777,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
       {executionActivities.length > 0 && <section className="gsw-chat-execution" aria-live="polite" style={{ maxHeight: 104, overflow: "hidden" }}>
         <div className="gsw-chat-execution-toggle">
           <span className="gsw-chat-execution-title">{sending ? <>GSW is working <span className="gsw-chat-working-dots" aria-hidden="true"><span /><span /><span /></span></> : "Work summary"}</span>
-          {sending && activeCommandId && <button type="button" onClick={() => void stopCurrentWork()} aria-label="Stop GSW work" title="Stop background work" style={{marginLeft:"auto",color:"inherit",border:"1px solid currentColor",borderRadius:8,padding:"3px 9px",background:"transparent"}}><Square size={12} /> Stop</button>}
+          {sending && activeCommandId && backgroundStopAvailable && <button type="button" onClick={() => void stopCurrentWork()} aria-label="Stop GSW work" title="Stop background work" style={{marginLeft:"auto",color:"inherit",border:"1px solid currentColor",borderRadius:8,padding:"3px 9px",background:"transparent"}}><Square size={12} /> Stop</button>}
         </div>
         <div className="gsw-chat-execution-list" style={{ maxHeight: 72, overflow: "hidden" }}>
           {executionActivities.slice(-3).map((activity) => <div
