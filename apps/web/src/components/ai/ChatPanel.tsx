@@ -149,15 +149,24 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
   // command ledger; never replay the POST, which could repeat email actions.
   useEffect(() => {
     const key = `gsw-chat-active-command:${account?.id ?? "none"}`;
-    const commandId = localStorage.getItem(key);
-    if (!commandId) return;
-    setActiveCommandId(commandId);
+    let commandId = localStorage.getItem(key);
     let disposed = false;
     let busy = false;
-    setSending(true);
-    setExecutionActivities([{id:0,label:"Reconnecting to your ongoing work",status:"running"}]);
+    const markActive = (id: string) => {
+      setActiveCommandId(id);
+      setSending(true);
+      setExecutionActivities([{id:0,label:"Reconnecting to your ongoing work",status:"running"}]);
+    };
+    if (commandId) markActive(commandId);
+    else void api.activeChatCommand().then(({command})=>{
+      if (disposed || !command || commandId) return;
+      commandId=command.commandId;
+      localStorage.setItem(key,commandId);
+      markActive(commandId);
+      void poll();
+    }).catch(()=>undefined);
     const poll = async () => {
-      if (disposed || busy) return;
+      if (disposed || busy || !commandId) return;
       busy = true;
       try {
         const result = await api.chatCommand(commandId);
