@@ -41,7 +41,7 @@ import { analyzeStoredFile } from "../files/intelligence.js";
 import { shouldPreAnalyzeAttachments } from "../files/attachmentIntent.js";
 import { config } from "../config.js";
 import { reserveChatCommand, updateChatCommand, getChatCommand } from "../ai/chatCommands.js";
-import { getChatExecution, enqueueChatExecution } from "../ai/chatExecutionQueue.js";
+import { getChatExecution, enqueueChatExecution, stopChatExecution } from "../ai/chatExecutionQueue.js";
 import { backgroundChatRequestSchema } from "../ai/chatBackgroundWorker.js";
 import { workingDraftForConversation } from "../ai/chatDrafts.js";
 
@@ -1300,6 +1300,18 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       conversationId: prepared.conversation.id,
       providerMessages: prepared.providerMessages,
     });
+  });
+
+  app.post("/product/chat/commands/:commandId/stop", async(req,reply)=>{
+    const {commandId}=z.object({commandId:z.string().uuid()}).parse(req.params);
+    const stopped=await stopChatExecution(req.user!.id,commandId);
+    if(!stopped){
+      const existing=await getChatExecution(req.user!.id,commandId);
+      if(!existing)return reply.code(409).send({stopped:false,reason:"This request is not a queue-backed job or has already finished."});
+      return {stopped:false,status:existing.status};
+    }
+    req.log.info({commandId,userId:req.user!.id},"chat job stop requested");
+    return {stopped:true,status:"uncertain"};
   });
 
   app.get("/product/chat/commands/:commandId", async (req, reply) => {
