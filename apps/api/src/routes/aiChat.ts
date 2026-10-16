@@ -1346,7 +1346,9 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       activity:execution.status==="queued"
         ? {label:"Queued for background processing",phase:"queued",updatedAt:new Date().toISOString()}
         : execution.status==="running"
-          ? {label:"Processing independently of this browser",phase:"thinking",updatedAt:new Date().toISOString()}
+          ? ((execution.result && typeof execution.result==="object" && "activity" in execution.result)
+            ? (execution.result as {activity:unknown}).activity
+            : {label:"Preparing background execution",phase:"thinking",updatedAt:new Date().toISOString()})
           : null,
       };
     }
