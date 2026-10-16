@@ -187,3 +187,15 @@ export async function getChatExecution(userId: string, commandId: string) {
   );
   return rows[0] ?? null;
 }
+
+/** A stop request fences completion. Queued work stops immediately; running
+ * work becomes uncertain until its in-flight provider call returns. */
+export async function stopChatExecution(userId:string,commandId:string){
+  const {rows}=await pool.query<{status:string}>(
+    `UPDATE ai_chat_executions SET status='uncertain',
+      error='Stopped by user',updated_at=now(),
+      lease_owner=NULL,lease_expires_at=NULL
+      WHERE user_id=$1 AND command_id=$2 AND status IN ('queued','running')
+      RETURNING status`,[userId,commandId]);
+  return rows.length>0;
+}
