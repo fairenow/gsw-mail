@@ -7,6 +7,11 @@ import { resolveMcpUserToolPermission } from "./resolvePermissions.js";
 
 /** Read-only transport while persisted write approvals are under construction. */
 export async function mcpRoutes(app:FastifyInstance):Promise<void> {
+  // Scope fallback parsing to MCP. Clients can probe with nonstandard media types before OAuth.
+  app.addContentTypeParser("*", { parseAs: "string", bodyLimit: 1024 * 1024 }, (_request, body, done) => {
+    try { done(null, JSON.parse(body as string)); }
+    catch { done(null, null); }
+  });
   app.post("/mcp",async(request,reply)=>{
     if(process.env.GSW_MCP_ENABLED!=="true")return reply.code(503).send({error:"mcp_disabled"});
     const authorization=request.headers.authorization;
