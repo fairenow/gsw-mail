@@ -176,35 +176,26 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
 
   const handleStreamEvent = (event: AiChatStreamEvent) => {
     if (event.type !== "status") return;
-
-
     if (event.phase === "tool_completed") {
       if (event.toolName?.startsWith("tasks.")) window.dispatchEvent(new Event("gsw-agent-task-changed"));
-      setExecutionActivities((current) => {
-        const next = [...current];
-        for (let index = next.length - 1; index >= 0; index -= 1) {
-          const item = next[index];
-          if (item?.status === "running" && item.toolName === event.toolName) {
-            next[index] = { ...item, status: event.ok === false ? "error" : "done" };
-            return next;
-          }
-        }
-        return next;
-      });
+      setExecutionActivities((current) => current.map((activity) =>
+        activity.status === "running" && activity.toolName === event.toolName
+          ? { ...activity, status: event.ok === false ? "error" : "done" }
+          : activity
+      ));
       return;
     }
-
-    setActivityCollapsed(false);
+    // Keep a single live activity instead of appending a row for every provider turn.
+    const label = event.phase === "thinking"
+      ? (event.label === "Reviewing what I found" ? "Reviewing the information gathered" : "Preparing the next step")
+      : event.label || "Using a GSW tool";
     setExecutionActivities((current) => {
-      const settled = current.map((item) => item.status === "running" && !item.toolName ? { ...item, status: "done" as const } : item);
-      const last = settled[settled.length - 1];
-      // Avoid repetitive "Preparing response" steps when the model re-enters its planning loop.
-      if (event.phase === "thinking" && last?.label === "Preparing response" && !last.toolName) return settled;
-      if (last?.label === event.label && last.status === "running" && last.toolName === event.toolName) return settled;
+      const last = current[current.length - 1];
+      if (last?.label === label && last.status === "running") return current;
       activityCounterRef.current += 1;
-      return [...settled.slice(-39), {
+      return [...current.filter((activity) => activity.status !== "running").slice(-11), {
         id: activityCounterRef.current,
-        label: event.phase === "thinking" ? "Preparing response" : "Working on your request",
+        label,
         toolName: event.toolName,
         status: "running" as const,
       }];
@@ -212,10 +203,11 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
   };
 
   const settleAndClearActivities = () => {
-    setExecutionActivities((current) => current.map((item) => item.status === "running" ? { ...item, status: "done" as const } : item));
+    setExecutionActivities((current) => current.map((activity) =>
+      activity.status === "running" ? { ...activity, status: "done" as const } : activity
+    ));
     setActivityCollapsed(true);
   };
-
 
   const stopVoiceVisualizer = () => {
     if (voiceAnimationFrameRef.current !== null) {
@@ -699,10 +691,21 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
         <button type="button" className="gsw-chat-execution-toggle" aria-expanded={!activityCollapsed}
           onClick={() => setActivityCollapsed((collapsed) => !collapsed)}>
           <span className="gsw-chat-execution-title">{sending ? "GSW is working" : executionActivities.some((activity) => activity.status === "error") ? "Work completed with issues" : "Work history"}</span>
-          <span className="gsw-chat-execution-toggle-hint">{activityCollapsed ? "Show details ▾" : "Hide details ▴"}</span>
+          <span className="gsw-chat-execution-toggle-hint">{activityCollapsed ? "Show details ▾" : "Details ▾"}</span>
         </button>
-        {!activityCollapsed && <div className="gsw-chat-execution-list">{executionActivities.map((activity) => <div className={`gsw-chat-execution-item ${activity.status}`} key={activity.id}>
+        {sending && (() => {
+          const current = executionActivities[executionActivities.length - 1];
+          return current ? <div className={`gsw-chat-execution-item ${current.status}`}>
+            {current.status === "running" ? <LoaderCircle size={14} className="gsw-chat-spin" /> : current.status === "done" ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+            <span>{current.label}</span>
+          </div> : null;
+        })()}
+        {!activityCollapsed && !sending && <div className="gsw-chat-execution-list">{executionActivities.slice(-12).map((activity) => <div className={`gsw-chat-execution-item ${activity.status}`} key={activity.id}>
           {activity.status === "running" ? <LoaderCircle size={14} className="gsw-chat-spin" /> : activity.status === "done" ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+          <span>{activity.label}</span>
+        </div>)}</div>}
+        {!activityCollapsed && sending && executionActivities.length > 1 && <div className="gsw-chat-execution-list">{executionActivities.slice(0,-1).slice(-8).map((activity) => <div className={`gsw-chat-execution-item ${activity.status}`} key={activity.id}>
+          {activity.status === "done" ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
           <span>{activity.label}</span>
         </div>)}</div>}
       </section>}
