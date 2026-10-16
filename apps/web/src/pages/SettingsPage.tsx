@@ -4,9 +4,10 @@ import { requestAccountDeletion } from "../auth";
 import { useAppShell } from "../components/AppShell";
 import { RichTextEditor } from "../components/RichTextEditor";
 import { MailWorkspace } from "../components/MailWorkspace";
+import { ConnectedAppsSettings } from "../components/ConnectedAppsSettings";
 
-type Section = "General" | "Signature" | "Compose" | "Contacts" | "AI" | "Templates";
-const sections: Section[] = ["General", "Signature", "Compose", "Contacts", "AI", "Templates"];
+type Section = "General" | "Signature" | "Compose" | "Contacts" | "AI" | "Templates" | "Security";
+const sections: Section[] = ["General", "Signature", "Compose", "Contacts", "AI", "Templates", "Security"];
 const CREATE_TEMPLATE_KEY = "__create__";
 const defaultTheme: EmailTemplateTheme = {
   borderColor: "#e8e1d4",
@@ -114,6 +115,7 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
 
   return wrap(<main className="gsw-settings-layout gsw-settings-layout-horizontal"><nav className="gsw-settings-nav" aria-label="Workspace settings"><p>Workspace</p>{sections.map((item) => <button key={item} className={section === item ? "active" : ""} onClick={() => setSection(item)}>{item}</button>)}</nav>
     <section className="gsw-settings-content"><div className="gsw-page-heading"><div><p className="gsw-eyebrow">Preferences</p><h1>{section}</h1><p>{section === "Signature" ? "A reusable, editable identity for every message." : section === "Templates" ? "Create a reusable email look that stays consistent across GSW Mail and AI-generated drafts." : "Keep the parts of GSW Mail that make communication feel like yours."}</p></div>{notice && <span className="gsw-save-notice">{notice}</span>}</div>
+      {section === "Security" && <ConnectedAppsSettings />}
       {section === "General" && <div className="gsw-settings-card"><label>Timezone<select value={String(settings.general.timezone ?? "America/Detroit")} onChange={(event) => setSettings({ ...settings, general: { ...settings.general, timezone: event.target.value } })}><option>America/Detroit</option><option>America/New_York</option><option>America/Chicago</option><option>UTC</option></select></label><label>Language<select value={String(settings.general.language ?? "en-US")} onChange={(event) => setSettings({ ...settings, general: { ...settings.general, language: event.target.value } })}><option value="en-US">English (US)</option></select></label><label><strong>Profile image</strong><span className="gsw-template-logo-picker">{settings.general.profileImageUrl ? <img src={String(settings.general.profileImageUrl)} alt="Profile" /> : <span>Initials</span>}<span><label className="gsw-secondary-btn">{profileUploading ? "Uploading…" : "Upload image"}<input className="gsw-hidden-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={profileUploading} onChange={(event) => void uploadProfileImage(event)} /></label>{Boolean(settings.general.profileImageAssetId) && <button className="gsw-link-btn" type="button" disabled={profileUploading} onClick={() => {
         const general = { ...settings.general, profileImageAssetId: null, profileImageUrl: "" };
         void api.updateSettings({ general }).then((saved) => {

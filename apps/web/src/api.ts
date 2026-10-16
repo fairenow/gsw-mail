@@ -1,3 +1,17 @@
+export interface OAuthConnectionEvent { action: string; resourceId: string | null; createdAt: string; metadata: Record<string,unknown> | null; }
+
+export interface ConnectedOAuthApp {
+  consentId: string;
+  clientId: string;
+  name: string;
+  website: string | null;
+  scopes: string[];
+  approvedAt: string;
+  updatedAt: string;
+  disabled: boolean;
+  activeRefreshAuthorization: boolean;
+}
+
 export interface Account {
   id: string;
   address: string;
@@ -596,6 +610,9 @@ const setupProvisioningTimeout = 30_000;
 export type BulkMailAction = "archive" | "trash" | "restore" | "destroy" | "read" | "unread" | "star" | "unstar";
 
 export const api = {
+  connectedAppActivity: () => get<{events:OAuthConnectionEvent[]}>("/api/account/connected-apps/activity"),
+  connectedApps: () => get<{ connections: ConnectedOAuthApp[] }>("/api/account/connected-apps"),
+  disconnectConnectedApp: (clientId: string) => request(`/api/account/connected-apps/${encodeURIComponent(clientId)}`, { method: "DELETE", headers: headers(), credentials: "include" }).then(res => json<{ disconnected: boolean }>(res)),
   lookupAvatars: (emails: string[]) => post<{ avatars: Record<string, string> }>("/product/avatars/lookup", { emails }),
   setup: () => get<SetupState>("/api/setup"),
   updateWorkspace: (name: string) => patch<Pick<SetupState, "workspace" | "currentStep">>("/api/setup/workspace", { name }),
