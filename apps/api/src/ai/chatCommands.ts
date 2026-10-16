@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { aiIdempotencyKeys } from "../db/schema.js";
 
@@ -7,6 +7,7 @@ type CommandRecord = {
   fingerprint: string;
   conversationId?: string;
   response?: unknown;
+  activity?: { label:string; phase:string; updatedAt:string };
 };
 
 const keyFor = (userId: string, commandId: string) => `chat-command:${userId}:${commandId}`;
@@ -40,6 +41,15 @@ export async function updateChatCommand(key: string, status: "reserved" | "compl
   }).where(eq(aiIdempotencyKeys.key, key));
 }
 
+
+export async function updateChatCommandActivity(key:string,activity:{label:string;phase:string;updatedAt:string}) {
+  // Atomic JSONB field update, guarded against late events overwriting completion.
+  await db.update(aiIdempotencyKeys).set({
+    result:sql`coalesce(${aiIdempotencyKeys.result},'{}'::jsonb) || jsonb_build_object('activity', ${JSON.stringify(activity)}::jsonb)`,
+    updatedAt:new Date(),
+  }).where(and(eq(aiIdempotencyKeys.key,key),eq(aiIdempotencyKeys.status,"reserved")));
+}
+
 export async function getChatCommand(userId: string, commandId: string) {
   const [record] = await db.select().from(aiIdempotencyKeys)
     .where(eq(aiIdempotencyKeys.key, keyFor(userId, commandId))).limit(1);
@@ -50,5 +60,6 @@ export async function getChatCommand(userId: string, commandId: string) {
     status: record.status === "completed" ? "completed" : record.status === "uncertain" || stale ? "uncertain" : "processing",
     conversationId: result.conversationId ?? null,
     response: record.status === "completed" ? result.response ?? null : null,
+    activity: result.activity ?? null,
   };
 }
