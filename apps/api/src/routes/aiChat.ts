@@ -781,18 +781,40 @@ async function runConversationTurn(input: {
     console.warn("[gsw-chat] tool attempts exhausted", { runId: run.id, failedTools: toolActivity.filter((item) => !item.ok).map((item) => item.name) });
     const createdFiles = [...new Map(generatedAttachments.map((item) => [item.assetId, item])).values()];
     const anyFailedTools = toolActivity.some((item) => !item.ok);
-    const content = createdFiles.length
-      ? [
-          "I saved the following file(s) to GSW Files:",
-          ...createdFiles.map((file) => `- ${file.filename} (${file.mimeType}; ${file.sizeBytes} bytes)`),
-          "",
-          anyFailedTools
-            ? "Some subsequent steps did not finish. The files listed above were saved, but I cannot confirm any unfinished edits or further actions."
-            : "The file creation succeeded, but I could not finish the remaining explanation. You can open the saved file in GSW Files.",
-        ].join("\\n")
-      : anyFailedTools
-        ? "I couldn't complete this request. One or more actions failed, and I have not verified that a new file was saved. Check GSW Files before trying again."
-        : "I couldn't finish this request within the available processing steps. No newly created file was confirmed. Please narrow the task or try again.";
+    // A long request is not a failed file operation. Give the model one
+    // tool-free chance to summarize verified accomplishments and next steps.
+    // The finalization run has no tools, so it cannot repeat side effects.
+    let content = "";
+    try {
+      const finalization = await provider.run({
+        messages: [...input.providerMessages, {
+          role: "user",
+          content: [
+            "Execution has reached the current tool-round budget.",
+            "Write a concise user-facing progress report using ONLY verified tool outputs in this conversation.",
+            "Include what was completed, what remains, and a specific next step.",
+            "Do not claim unverified changes, emails sent, files saved, or mailbox-wide coverage.",
+            "If the job is not finished, explain it can be continued from the existing conversation.",
+            "Do not call tools; do not tell the user to narrow their request.",
+          ].join("\\n"),
+        }],
+        tools: [],
+      });
+      content = finalization.content?.trim() || "";
+    } catch (finalizationError) {
+      reportChatError(finalizationError,{operation:"chat.progress_summary",category:"chat",correlationId:run.id});
+    }
+    if (!content) {
+      const completed = toolActivity.filter((item) => item.ok).map((item) => item.name);
+      const failed = toolActivity.filter((item) => !item.ok).map((item) => item.name);
+      content = [
+        "I reached the current processing limit before finishing everything.",
+        completed.length ? `Completed operations: ${[...new Set(completed)].join(", ")}.` : "No completed operations were confirmed.",
+        failed.length ? `Operations needing another attempt or review: ${[...new Set(failed)].join(", ")}.` : "",
+        createdFiles.length ? `Files confirmed saved: ${createdFiles.map((file) => file.filename).join(", ")}.` : "",
+        "I can continue from this conversation, retaining the verified results already recorded.",
+      ].filter(Boolean).join("\\n");
+    }
     await appendAiMessage({
       conversationId: input.conversationId,
       role: "assistant",
