@@ -7,6 +7,7 @@ import { ensureWebOAuthTestClient } from "./auth/ensureWebOAuthTestClient.js";
 import { ensureScheduledSendSchema } from "./outbound/ensureScheduledSchema.js";
 import { ensureCalendarRsvpSchema } from "./calendar/ensureRsvpSchema.js";
 import { ensureAiAgentSchema } from "./ai/ensureAgentSchema.js";
+import { startChatExecutionWorker } from "./ai/chatBackgroundWorker.js";
 import { ensureChatExecutionSchema } from "./ai/ensureChatExecutionSchema.js";
 import { getOutboundWorker } from "./outbound/worker.js";
 import { getAutomationWorker } from "./ai/automationWorker.js";
@@ -22,6 +23,7 @@ const app = buildApp();
 const worker = getOutboundWorker();
 const automationWorker = getAutomationWorker();
 const agentTaskRunner = getAgentTaskRunner();
+let stopChatWorker: (()=>void)|null=null;
 let stopFileOrganizer: (() => void) | null = null;
 
 async function main() {
@@ -43,6 +45,7 @@ async function main() {
   void deliverDueCalendarEmailReminders().catch(error => app.log.error(error, "calendar reminder worker failed"));
   automationWorker.start();
   agentTaskRunner.start();
+  stopChatWorker=startChatExecutionWorker();
   stopFileOrganizer = startOrganizationWorker(error => app.log.error(error, "file organization worker failed"));
   await app.listen({ port: config.port, host: "0.0.0.0" });
 }
@@ -52,6 +55,7 @@ const shutdown = async (signal: string) => {
   worker.stop();
   automationWorker.stop();
   agentTaskRunner.stop();
+  stopChatWorker?.();
   stopFileOrganizer?.();
   await app.close();
   await pool.end();
