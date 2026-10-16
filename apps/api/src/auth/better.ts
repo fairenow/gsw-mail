@@ -102,7 +102,7 @@ export const auth = betterAuth({
         shouldRedirect: async () => false,
       },
       scopes: [...GSW_OIDC_SUPPORTED_SCOPES, ...aiScopes],
-      validAudiences: [config.auth.stalwartAudience, `${config.auth.baseUrl.replace(/\/$/, "")}/mcp`],
+      validAudiences: [config.auth.stalwartAudience, process.env.GSW_MCP_RESOURCE_URL ?? `${config.auth.baseUrl.replace(/\/$/, "")}/mcp`],
       accessTokenExpiresIn: config.auth.tokenTtlSeconds,
       refreshTokenReuseInterval: 30,
       customUserInfoClaims: ({ user, scopes, jwt }) => legacyInternalUserInfoClaims({

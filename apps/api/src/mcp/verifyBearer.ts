@@ -8,7 +8,7 @@ import { eq } from "drizzle-orm";
  * This verifier never accepts GSW's first-party Stalwart/mobile audience.
  * A dedicated third-party MCP resource token is required.
  */
-const resource=()=>`${config.auth.baseUrl.replace(/\/$/,"")}/mcp`;
+const resource=()=>process.env.GSW_MCP_RESOURCE_URL ?? `${config.auth.baseUrl.replace(/\/$/,"")}/mcp`;
 const jwks=createRemoteJWKSet(new URL(`${config.auth.issuer}/jwks`));
 export async function verifyMcpBearer(token:string):Promise<{
  userId:string; authUserId:string; oauthScopes:Set<string>; clientId:string;

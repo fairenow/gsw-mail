@@ -8,7 +8,7 @@ import { config } from "../config.js";
  */
 export async function mcpProtectedResourceMetadata(app:FastifyInstance):Promise<void> {
   const base=config.auth.baseUrl.replace(/\/$/,"");
-  const resource=`${base}/mcp`;
+  const resource=process.env.GSW_MCP_RESOURCE_URL ?? `${base}/mcp`;
   const metadata={
     resource,
     authorization_servers:[config.auth.issuer],
