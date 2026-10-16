@@ -122,6 +122,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
   const [, setActivityCollapsed] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [error, setError] = useState("");
   const [failedTurn, setFailedTurn] = useState<AiChatMessage | null>(null);
   const [retryResume, setRetryResume] = useState(false);
@@ -153,13 +154,19 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
     let disposed = false;
     let busy = false;
     setSending(true);
-    setExecutionActivities([{id:0,label:"Reconnecting to your ongoing work",status:"running"}]);
+    setReconnecting(true);
+    setExecutionActivities([]);
     const poll = async () => {
       if (disposed || busy) return;
       busy = true;
       try {
         const result = await api.chatCommand(commandId);
         if (disposed) return;
+        if (result.status === "processing") {
+          const label = result.activity?.label ?? "Connecting to the running task";
+          setReconnecting(!result.activity);
+          setExecutionActivities([{id:0,label,status:"running"}]);
+        }
         if (result.conversationId) {
           setConversationId(result.conversationId);
           localStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`,result.conversationId);
@@ -177,6 +184,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
           }
           setIntervention(result.response.intervention);
           setSending(false);
+          setReconnecting(false);
           setExecutionActivities([]);
         } else if(result.status === "uncertain" || result.status === "failed") {
           localStorage.removeItem(key);
@@ -754,7 +762,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
           </div>)}
         </div>
       </section>}
-      {sending && executionActivities.length === 0 && <article className="gsw-chat-message assistant gsw-chat-thinking"><div className="gsw-chat-message-label">GSW</div><div className="gsw-chat-thinking-dots" aria-label="Thinking"><span /><span /><span /></div></article>}
+      {sending && !reconnecting && !conversationLoading && executionActivities.length === 0 && <article className="gsw-chat-message assistant gsw-chat-thinking"><div className="gsw-chat-message-label">GSW</div><div className="gsw-chat-thinking-dots" aria-label="Thinking"><span /><span /><span /></div></article>}
       {intervention && <section className="gsw-chat-intervention">
         <div className="gsw-chat-intervention-icon"><ShieldCheck size={19} strokeWidth={1.8} /></div>
         <div className="gsw-chat-intervention-copy">
