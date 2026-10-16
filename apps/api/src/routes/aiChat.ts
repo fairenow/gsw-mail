@@ -43,6 +43,7 @@ import { config } from "../config.js";
 import { reserveChatCommand, updateChatCommand, getChatCommand } from "../ai/chatCommands.js";
 import { getChatExecution, getChatExecutionHealth, getLatestActiveChatExecution, enqueueChatExecution, stopChatExecution } from "../ai/chatExecutionQueue.js";
 import { backgroundChatRequestSchema } from "../ai/chatBackgroundWorker.js";
+import { requestBackgroundMailboxGrant, listBackgroundMailboxGrants, revokeBackgroundMailboxGrant } from "../ai/backgroundMailboxGrants.js";
 import { workingDraftForConversation } from "../ai/chatDrafts.js";
 
 const chatAttachmentSchema = z.object({
@@ -1010,6 +1011,35 @@ async function prepareNewConversation(input: {
 
 export default async function aiChatRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
+
+  // Explicit background authorization is kept separate from interactive AI
+  // grants. No offline credential is issued by these endpoints; requests remain
+  // pending until a secure credential broker is connected.
+  const backgroundGrantInput = z.object({
+    accountId:z.string().uuid(),
+    scope:z.enum(["mail.read","mail.draft"]),
+  });
+  app.get("/product/chat/background-mail-grants",async(req)=>{
+    const {accountId}=z.object({accountId:z.string().uuid()}).parse(req.query);
+    await requireAccountPermission(req.user!.id,accountId,"read");
+    return {grants:await listBackgroundMailboxGrants(req.user!.id,accountId)};
+  });
+  app.post("/product/chat/background-mail-grants",async(req)=>{
+    const input=backgroundGrantInput.parse(req.body);
+    await requireAccountPermission(req.user!.id,input.accountId,
+      input.scope==="mail.draft"?"send":"read");
+    const grant=await requestBackgroundMailboxGrant({
+      userId:req.user!.id,accountId:input.accountId,scope:input.scope,
+      expiresAt:new Date(Date.now()+24*60*60*1000),
+    });
+    return {grant,credentialReady:false,executionEnabled:false};
+  });
+  app.post("/product/chat/background-mail-grants/revoke",async(req)=>{
+    const input=backgroundGrantInput.parse(req.body);
+    await requireAccountPermission(req.user!.id,input.accountId,"read");
+    await revokeBackgroundMailboxGrant({userId:req.user!.id,...input});
+    return {revoked:true};
+  });
 
   app.post("/product/chat/prewarm", {config:{rateLimit:{max:6,timeWindow:"1 minute"}}}, async(req)=>{
     return startSelectedModelWarmup(req.user!.id);
