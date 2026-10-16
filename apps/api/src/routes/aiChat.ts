@@ -41,8 +41,12 @@ import { analyzeStoredFile } from "../files/intelligence.js";
 import { shouldPreAnalyzeAttachments } from "../files/attachmentIntent.js";
 import { config } from "../config.js";
 import { reserveChatCommand, updateChatCommand, updateChatCommandActivity, getChatCommand } from "../ai/chatCommands.js";
-import { getChatExecution } from "../ai/chatExecutionQueue.js";
+import { getChatExecution, getChatExecutionHealth, getLatestActiveChatExecution, enqueueChatExecution, stopChatExecution } from "../ai/chatExecutionQueue.js";
+import { backgroundChatRequestSchema } from "../ai/chatBackgroundWorker.js";
+import { requestBackgroundMailboxGrant, listBackgroundMailboxGrants, revokeBackgroundMailboxGrant } from "../ai/backgroundMailboxGrants.js";
 import { workingDraftForConversation } from "../ai/chatDrafts.js";
+import { inboxTriageSchemaHealth } from "../ai/ensureInboxTriageSchema.js";
+import { createMailService } from "../services/mailService.js";
 
 const chatAttachmentSchema = z.object({
   assetId: z.string().uuid(),
@@ -59,6 +63,7 @@ const chatMessagesSchema = z.array(z.object({
 
 const bodySchema = z.object({
   commandId: z.string().uuid().optional(),
+  executionMode: z.enum(["interactive","model_only_background"]).optional(),
   conversationId: z.string().uuid().optional(),
   accountId: z.string().uuid().optional(),
   timeZone: z.string().trim().min(1).max(100).optional(),
@@ -1009,6 +1014,61 @@ async function prepareNewConversation(input: {
 export default async function aiChatRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
 
+  // Explicit background authorization is kept separate from interactive AI
+  // grants. No offline credential is issued by these endpoints; requests remain
+  // pending until a secure credential broker is connected.
+  const backgroundGrantInput = z.object({
+    accountId:z.string().uuid(),
+    scope:z.enum(["mail.read","mail.draft"]),
+  });
+  app.get("/product/chat/background-mail-grants",async(req)=>{
+    const {accountId}=z.object({accountId:z.string().uuid()}).parse(req.query);
+    await requireAccountPermission(req.user!.id,accountId,"read");
+    return {grants:await listBackgroundMailboxGrants(req.user!.id,accountId)};
+  });
+  app.post("/product/chat/background-mail-grants",async(req)=>{
+    const input=backgroundGrantInput.parse(req.body);
+    await requireAccountPermission(req.user!.id,input.accountId,
+      input.scope==="mail.draft"?"send":"read");
+    const grant=await requestBackgroundMailboxGrant({
+      userId:req.user!.id,accountId:input.accountId,scope:input.scope,
+      expiresAt:new Date(Date.now()+24*60*60*1000),
+    });
+    return {grant,credentialReady:false,executionEnabled:false};
+  });
+  app.post("/product/chat/background-mail-grants/revoke",async(req)=>{
+    const input=backgroundGrantInput.parse(req.body);
+    await requireAccountPermission(req.user!.id,input.accountId,"read");
+    await revokeBackgroundMailboxGrant({userId:req.user!.id,...input});
+    return {revoked:true};
+  });
+
+  app.get("/product/chat/triage-health", async (req) => {
+    const { accountId } = z.object({ accountId: z.string().uuid() }).parse(req.query);
+    await requireAccountPermission(req.user!.id, accountId, "read");
+    const schemaReady = await inboxTriageSchemaHealth();
+    let mailboxReady = false;
+    let failureStage: "database" | "mailbox" | null = schemaReady ? null : "database";
+    if (schemaReady) {
+      try {
+        const mail = createMailService({
+          userId: req.user!.id,
+          authUserId: req.authUserId ?? req.user!.id,
+          headers: req.headers as Record<string,string>,
+        });
+        // A one-message Inbox page verifies actual scoped JMAP read access.
+        // Do not disclose message contents in a health response.
+        await mail.triagePage(accountId, "inbox", 0, 1);
+        mailboxReady = true;
+      } catch (error) {
+        failureStage = "mailbox";
+        reportChatError(error, { operation: "mail.triage_health", category: "mail", correlationId: req.id });
+      }
+    }
+    req.log.info({ schemaReady, mailboxReady, failureStage }, "mail triage health check");
+    return { schemaReady, mailboxReady, ready: schemaReady && mailboxReady, failureStage };
+  });
+
   app.post("/product/chat/prewarm", {config:{rateLimit:{max:6,timeWindow:"1 minute"}}}, async(req)=>{
     return startSelectedModelWarmup(req.user!.id);
   });
@@ -1301,20 +1361,57 @@ export default async function aiChatRoutes(app: FastifyInstance) {
     });
   });
 
+  app.get("/product/chat/active-command", async(req)=>{
+    const query=z.object({accountId:z.string().uuid().optional()}).parse(req.query);
+    const execution=await getLatestActiveChatExecution(req.user!.id,query.accountId);
+    return {command:execution?{
+      commandId:execution.command_id,
+      conversationId:execution.conversation_id,
+      status:execution.status,
+    }:null};
+  });
+
+  app.post("/product/chat/commands/:commandId/stop", async(req,reply)=>{
+    const {commandId}=z.object({commandId:z.string().uuid()}).parse(req.params);
+    const stopped=await stopChatExecution(req.user!.id,commandId);
+    if(!stopped){
+      const existing=await getChatExecution(req.user!.id,commandId);
+      if(!existing)return reply.code(409).send({stopped:false,reason:"This request is not a queue-backed job or has already finished."});
+      return {stopped:false,status:existing.status};
+    }
+    req.log.info({commandId,userId:req.user!.id},"chat job stop requested");
+    return {stopped:true,status:"uncertain"};
+  });
+
   app.get("/product/chat/commands/:commandId", async (req, reply) => {
     const { commandId } = z.object({ commandId: z.string().uuid() }).parse(req.params);
     const command = await getChatCommand(req.user!.id, commandId);
-    if (command) return command;
-    // Queue-backed executions use the same authenticated command-status endpoint.
-    // Legacy command records take precedence until traffic is migrated.
     const execution = await getChatExecution(req.user!.id, commandId);
-    if (!execution) return reply.code(404).send({ error: "Chat command not found" });
-    return {
-      status: execution.status === "completed" ? "completed"
-        : execution.status === "uncertain" || execution.status === "failed" ? "uncertain" : "processing",
-      conversationId: execution.conversation_id,
-      response: execution.status === "completed" ? execution.result : null,
-    };
+    if (execution) {
+      const health=await getChatExecutionHealth(req.user!.id,commandId);
+      return {
+      status:execution.status==="completed"?"completed"
+        :execution.status==="uncertain"||execution.status==="failed"?"uncertain":"processing",
+      conversationId:execution.conversation_id,
+      background:true,
+      health:health?{
+        attempts:health.attempts,
+        updatedAt:health.updated_at,
+        leaseExpiresAt:health.lease_expires_at,
+        stopped:health.error==="Stopped by user",
+      }:null,
+      response:execution.status==="completed"?execution.result:null,
+      activity:execution.status==="queued"
+        ? {label:"Queued for background processing",phase:"queued",updatedAt:new Date().toISOString()}
+        : execution.status==="running"
+          ? ((execution.result && typeof execution.result==="object" && "activity" in execution.result)
+            ? (execution.result as {activity:unknown}).activity
+            : {label:"Preparing background execution",phase:"thinking",updatedAt:new Date().toISOString()})
+          : null,
+      };
+    }
+    if (command) return command;
+    return reply.code(404).send({ error: "Chat command not found" });
   });
 
   app.post("/product/chat/stream", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req, reply) => {
@@ -1324,7 +1421,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
     // cannot execute twice, even if an earlier SSE response was lost.
     const reserved = input.commandId ? await reserveChatCommand({
       userId: req.user!.id, commandId: input.commandId, ...(input.accountId ? { accountId: input.accountId } : {}),
-      payload: { accountId: input.accountId, conversationId: input.conversationId, messages: input.messages, assetIds: input.assetIds },
+      payload: { accountId: input.accountId, conversationId: input.conversationId, messages: input.messages, assetIds: input.assetIds, executionMode:input.executionMode },
     }) : null;
     if (reserved && reserved.status !== "new") {
       const stream = openEventStream(reply);
@@ -1351,6 +1448,23 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       });
       conversationId = prepared.conversation.id;
       if (reserved) await updateChatCommand(reserved.key, "reserved", { conversationId });
+      // Model-only chats do not need a live mailbox identity, so they can run
+      // independently of this HTTP stream. Never enqueue mail or other tools
+      // without an explicit revocable background authorization.
+      if (reserved && input.executionMode === "model_only_background" && !input.accountId && !(input.assetIds?.length) &&
+          input.messages.every(message=>!(message.attachments?.length))) {
+        const request = backgroundChatRequestSchema.parse({
+          kind:"model_only",
+          messages:prepared.providerMessages.filter(message=>
+            message.role==="user" || message.role==="assistant"
+          ).map(message=>({role:message.role,content:message.content})),
+        });
+        await enqueueChatExecution({
+          userId:req.user!.id,commandId:input.commandId!,conversationId,request,
+        });
+        stream.send({type:"pending",commandId:input.commandId!,status:"queued"});
+        return;
+      }
       const response = await runConversationTurn({
         userId: req.user!.id,
         authUserId: req.authUserId ?? req.user!.id,

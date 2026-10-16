@@ -52,6 +52,18 @@ export async function claimChatExecution(owner: string, leaseSeconds = 120) {
   return rows[0] ?? null;
 }
 
+/** Persist a truthful worker stage for reconnecting clients, fenced by its lease. */
+export async function updateChatExecutionStage(id:string,owner:string,label:string){
+  const {rowCount}=await pool.query(
+    `UPDATE ai_chat_executions SET result=jsonb_build_object(
+       'activity',jsonb_build_object('label',$3::text,'phase','thinking','updatedAt',now()::text)),
+       updated_at=now()
+     WHERE id=$1 AND lease_owner=$2 AND status='running' AND lease_expires_at>now()`,
+     [id,owner,label],
+  );
+  return rowCount===1;
+}
+
 export async function heartbeatChatExecution(id: string, owner: string, leaseSeconds = 120) {
   const { rowCount } = await pool.query(
     `UPDATE ai_chat_executions SET lease_expires_at=now()+($3::integer * interval '1 second'),
@@ -72,6 +84,47 @@ export async function finishChatExecution(id: string, owner: string, status: "co
   return rowCount === 1;
 }
 
+/** Atomically commit exactly one assistant message and the completed model-only job. */
+export async function commitModelOnlyChatResult(input:{
+  executionId:string; owner:string; conversationId:string;
+  content:string;provider:string;model:string;response:unknown;
+}) {
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    const {rows}=await client.query<{id:string}>(
+      `SELECT id FROM ai_chat_executions
+       WHERE id=$1 AND lease_owner=$2 AND status='running'
+         AND lease_expires_at>now() AND account_id IS NULL
+         AND request->>'kind'='model_only' FOR UPDATE`,
+      [input.executionId,input.owner],
+    );
+    if(!rows[0]) { await client.query("ROLLBACK");return false; }
+    // Execution UUID doubles as its unique assistant-message UUID.
+    // A committed reply and its status can never be separated by a crash.
+    await client.query(
+      `INSERT INTO ai_messages(id,conversation_id,role,content,provider,model)
+       VALUES($1,$2,'assistant',$3,$4,$5) ON CONFLICT(id) DO NOTHING`,
+      [input.executionId,input.conversationId,input.content,input.provider,input.model],
+    );
+    await client.query(
+      "UPDATE ai_conversations SET updated_at=now(),last_message_at=now() WHERE id=$1",
+      [input.conversationId],
+    );
+    await client.query(
+      `UPDATE ai_chat_executions SET status='completed',result=$3::jsonb,
+       lease_owner=NULL,lease_expires_at=NULL,completed_at=now(),updated_at=now()
+       WHERE id=$1 AND lease_owner=$2`,
+      [input.executionId,input.owner,JSON.stringify(input.response)],
+    );
+    await client.query("COMMIT");
+    return true;
+  }catch(error){
+    await client.query("ROLLBACK");
+    throw error;
+  }finally{client.release();}
+}
+
 /** Expired work is marked uncertain, NOT replayed: tools may already have acted. */
 export async function quarantineExpiredChatExecutions() {
   // Persist the outcome of every incomplete step before releasing the lease.
@@ -85,21 +138,35 @@ export async function quarantineExpiredChatExecutions() {
        FOR UPDATE SKIP LOCKED`,
     );
     const ids = rows.map(row => row.id);
-    if (!ids.length) { await client.query("COMMIT"); return 0; }
+    // Pure inference has no external tool effects. Safely requeue after a
+    // process restart; the completed response transaction prevents duplicates.
+    const retried=await client.query<{id:string}>(
+      `UPDATE ai_chat_executions SET status='queued',lease_owner=NULL,
+       lease_expires_at=NULL,updated_at=now()
+       WHERE id=ANY($1::uuid[]) AND status='running'
+       AND request->>'kind'='model_only' AND attempts<3
+       AND NOT EXISTS(SELECT 1 FROM ai_chat_execution_steps s
+                      WHERE s.execution_id=ai_chat_executions.id)
+       RETURNING id`,
+      [ids],
+    );
+    const retryIds=new Set(retried.rows.map(row=>row.id));
+    const unsafeIds=ids.filter(id=>!retryIds.has(id));
+    if (!unsafeIds.length) { await client.query("COMMIT"); return retryIds.size; }
     await client.query(
       `UPDATE ai_chat_execution_steps SET status='uncertain', updated_at=now()
        WHERE execution_id=ANY($1::uuid[]) AND status='started'`,
-      [ids],
+      [unsafeIds],
     );
     const result = await client.query(
       `UPDATE ai_chat_executions SET status='uncertain', lease_owner=NULL,
        lease_expires_at=NULL, updated_at=now(),
        error='Worker lease expired; inspect tool effects before retry'
        WHERE id=ANY($1::uuid[]) AND status='running'`,
-      [ids],
+      [unsafeIds],
     );
     await client.query("COMMIT");
-    return result.rowCount ?? 0;
+    return (result.rowCount ?? 0)+retryIds.size;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -131,4 +198,42 @@ export async function getChatExecution(userId: string, commandId: string) {
     [userId,commandId],
   );
   return rows[0] ?? null;
+}
+
+/** Public-safe execution health, excluding prompts and credentials. */
+export async function getChatExecutionHealth(userId:string,commandId:string){
+  const {rows}=await pool.query<{
+    status:ChatExecutionStatus;attempts:number;created_at:Date;updated_at:Date;
+    lease_expires_at:Date|null;error:string|null;conversation_id:string|null;
+  }>(`SELECT status,attempts,created_at,updated_at,lease_expires_at,error,conversation_id
+       FROM ai_chat_executions WHERE user_id=$1 AND command_id=$2 LIMIT 1`,
+       [userId,commandId]);
+  return rows[0]??null;
+}
+
+/** A stop request fences completion. Queued work stops immediately; running
+ * work becomes uncertain until its in-flight provider call returns. */
+export async function stopChatExecution(userId:string,commandId:string){
+  const {rows}=await pool.query<{status:string}>(
+    `UPDATE ai_chat_executions SET status='uncertain',
+      error='Stopped by user',updated_at=now(),
+      lease_owner=NULL,lease_expires_at=NULL
+      WHERE user_id=$1 AND command_id=$2 AND status IN ('queued','running')
+      RETURNING status`,[userId,commandId]);
+  return rows.length>0;
+}
+
+/** Discover the most recent live background execution for this authenticated
+ * user. Never return other users' jobs or request/prompt contents. */
+export async function getLatestActiveChatExecution(userId:string,accountId?:string){
+  const {rows}=await pool.query<ChatExecution>(
+    `SELECT id,user_id,account_id,command_id,conversation_id,status,attempts,
+       lease_owner,result,request
+     FROM ai_chat_executions
+     WHERE user_id=$1 AND status IN ('queued','running')
+       AND ($2::uuid IS NULL OR account_id=$2::uuid)
+     ORDER BY created_at DESC LIMIT 1`,
+    [userId,accountId??null],
+  );
+  return rows[0]??null;
 }

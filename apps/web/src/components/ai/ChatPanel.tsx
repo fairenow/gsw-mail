@@ -124,6 +124,9 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
   const [sending, setSending] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [activeCommandId, setActiveCommandId] = useState<string | null>(null);
+  const [backgroundStopAvailable, setBackgroundStopAvailable] = useState(false);
+  const stoppedCommandsRef = useRef(new Set<string>());
   const [error, setError] = useState("");
   const [failedTurn, setFailedTurn] = useState<AiChatMessage | null>(null);
   const [retryResume, setRetryResume] = useState(false);
@@ -150,23 +153,39 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
   // command ledger; never replay the POST, which could repeat email actions.
   useEffect(() => {
     const key = `gsw-chat-active-command:${account?.id ?? "none"}`;
-    const commandId = localStorage.getItem(key);
-    if (!commandId) return;
+    let commandId = localStorage.getItem(key);
     let disposed = false;
     let busy = false;
-    setSending(true);
-    setReconnecting(true);
-    setExecutionActivities([{id:0,label:"Restoring your current task",status:"running"}]);
+    const markActive = (id: string) => {
+      setActiveCommandId(id);
+      setSending(true);
+      setExecutionActivities([{id:0,label:"Reconnecting to your ongoing work",status:"running"}]);
+    };
+    if (commandId) markActive(commandId);
+    else void api.activeChatCommand().then(({command})=>{
+      if (disposed || !command || commandId) return;
+      commandId=command.commandId;
+      localStorage.setItem(key,commandId);
+      markActive(commandId);
+      void poll();
+    }).catch(()=>undefined);
     const poll = async () => {
-      if (disposed || busy) return;
+      if (disposed || busy || !commandId) return;
       busy = true;
       try {
         const result = await api.chatCommand(commandId);
         if (disposed) return;
-        if (result.status === "processing") {
-          const label = result.activity?.label ?? "Connecting to the running task";
-          setReconnecting(!result.activity);
-          setExecutionActivities([{id:0,label,status:"running"}]);
+        if (result.status === "processing") setReconnecting(!result.activity);
+        setBackgroundStopAvailable(Boolean(result.background) && result.status === "processing");
+        if (result.background && result.status === "processing") {
+          const leaseExpired = result.health?.leaseExpiresAt &&
+            Date.parse(result.health.leaseExpiresAt) < Date.now();
+          const label = leaseExpired
+            ? "Checking background worker recovery"
+            : result.activity?.label ?? (result.health?.attempts
+              ? "Processing in background"
+              : "Waiting for background worker");
+          setExecutionActivities([{ id: 0, label, status: "running" }]);
         }
         if (result.conversationId) {
           setConversationId(result.conversationId);
@@ -174,6 +193,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
         }
         if (result.status === "completed" && result.response) {
           localStorage.removeItem(key);
+          setActiveCommandId(null);
           const detail = result.conversationId ? await api.chatConversation(result.conversationId) : null;
           if (disposed) return;
           if(detail) {
@@ -189,9 +209,10 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
           setExecutionActivities([]);
         } else if(result.status === "uncertain" || result.status === "failed") {
           localStorage.removeItem(key);
+          setActiveCommandId(null);
           setSending(false);
           setExecutionActivities([]);
-          setError("The prior request stopped before completion. Check the conversation before retrying.");
+          setError(result.health?.stopped ? "Work stopped." : "The prior request stopped before completion. Check the conversation before retrying.");
         }
       } catch {
         // Temporary network errors do not mean the server stopped processing.
@@ -258,6 +279,21 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
         id: activityCounterRef.current, label, toolName: event.toolName, status: "running" as const,
       }];
     });
+  };
+
+  const stopCurrentWork = async () => {
+    const id = activeCommandId ?? localStorage.getItem(`gsw-chat-active-command:${account?.id ?? "none"}`);
+    if (!id) return;
+    try {
+      const result = await api.stopChatCommand(id);
+      if (!result.stopped) { setError("This request cannot be stopped from the background queue."); return; }
+      localStorage.removeItem(`gsw-chat-active-command:${account?.id ?? "none"}`);
+      stoppedCommandsRef.current.add(id);
+      setActiveCommandId(null);
+      setBackgroundStopAvailable(false);
+      setSending(false);
+      setExecutionActivities([]);
+    } catch { setError("Could not stop the request. Check its status before retrying."); }
   };
 
   const settleAndClearActivities = () => {
@@ -567,8 +603,11 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
       const activeKey = `gsw-chat-active-command:${account?.id ?? "none"}`;
       const commandId = crypto.randomUUID();
       localStorage.setItem(activeKey,commandId);
+      setActiveCommandId(commandId);
       const response = await api.streamChat(account?.id ?? null, next, conversationId, handleStreamEvent, attachmentsForTurn.map((item) => item.assetId),commandId);
+      if (stoppedCommandsRef.current.has(commandId)) return;
       localStorage.removeItem(activeKey);
+      setActiveCommandId(null);
       setConversationId(response.conversationId);
       localStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`, response.conversationId);
       setIntervention(response.intervention);
@@ -582,6 +621,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
       else settleAndClearActivities();
       scrollToLatestMessage("smooth");
     } catch (err) {
+      if (!localStorage.getItem(`gsw-chat-active-command:${account?.id ?? "none"}`) && stoppedCommandsRef.current.size) return;
       setExecutionActivities((current) => current.map((item) => item.status === "running" ? { ...item, status: "error" as const } : item));
       setActivityCollapsed(true);
       setPendingAttachments((current) => current.length ? current : attachmentsForTurn);
@@ -754,6 +794,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
       {executionActivities.length > 0 && <section className="gsw-chat-execution" aria-live="polite" style={{ maxHeight: 104, overflow: "hidden" }}>
         <div className="gsw-chat-execution-toggle">
           <span className="gsw-chat-execution-title">{sending && (connecting || reconnecting) ? "Connecting to GSW…" : sending ? <>GSW is working <span className="gsw-chat-working-dots" aria-hidden="true"><span /><span /><span /></span></> : "Work summary"}</span>
+          {sending && activeCommandId && backgroundStopAvailable && <button type="button" onClick={() => void stopCurrentWork()} aria-label="Stop GSW work" title="Stop background work" style={{marginLeft:"auto",color:"inherit",border:"1px solid currentColor",borderRadius:8,padding:"3px 9px",background:"transparent"}}><Square size={12} /> Stop</button>}
         </div>
         <div className="gsw-chat-execution-list" style={{ maxHeight: 72, overflow: "hidden" }}>
           {executionActivities.slice(-3).map((activity) => <div

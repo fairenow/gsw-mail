@@ -712,7 +712,7 @@ export const api = {
       return await postEventStream("/product/chat/stream", payload, onEvent);
     } catch (streamError) {
       // The server may still be executing. Recover the original result, never resubmit.
-      for (let attempt = 0; attempt < 12; attempt++) {
+      for (let attempt = 0; attempt < 150; attempt++) {
         await new Promise<void>((resolve) => setTimeout(resolve, 2_000));
         let status: { status: string; response?: AiChatResponse | null };
         try { status = await get<{ status: string; response?: AiChatResponse | null }>(`/product/chat/commands/${encodeURIComponent(commandId)}`); }
@@ -726,7 +726,9 @@ export const api = {
       throw new Error("The request is still processing or its status is unavailable. Check chat history before retrying.");
     }
   },
-  chatCommand: (commandId: string) => get<{status:string;conversationId:string|null;response?:AiChatResponse|null;activity?:{label:string;phase:string;updatedAt:string}|null}>(`/product/chat/commands/${encodeURIComponent(commandId)}`),
+  activeChatCommand: () => get<{command:{commandId:string;conversationId:string|null;status:string}|null}>("/product/chat/active-command"),
+  stopChatCommand: (commandId: string) => post<{stopped:boolean;status?:string;reason?:string}>(`/product/chat/commands/${encodeURIComponent(commandId)}/stop`, {}),
+  chatCommand: (commandId: string) => get<{status:string;conversationId:string|null;response?:AiChatResponse|null;background?:boolean;activity?:{label:string;phase:string;updatedAt:string}|null;health?:{attempts:number;updatedAt:string;leaseExpiresAt:string|null;stopped:boolean}|null}>(`/product/chat/commands/${encodeURIComponent(commandId)}`),
   resumeChat: (accountId: string, conversationId: string) => post<AiChatResponse>("/product/chat/resume", { ...chatRuntimeContext(), accountId, conversationId }, 100_000),
   resumeChatStream: (accountId: string, conversationId: string, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/resume/stream", { ...chatRuntimeContext(), accountId, conversationId }, onEvent, "/product/chat/resume"),
   grantChatPermission: (accountId: string, scope: string) => post<{ grant: { id: string; scope: string } }>("/product/chat/permissions", { accountId, scope }),
