@@ -23,6 +23,7 @@ async function workOnce() {
     await quarantineExpiredChatExecutions();
     const job=await claimChatExecution(owner,LEASE_SECONDS);
     if(!job)return;
+    console.info("[chat-worker] job claimed",{executionId:job.id,commandId:job.command_id,attempt:job.attempts});
     const heartbeat=setInterval(()=>{
       void heartbeatChatExecution(job.id,owner,LEASE_SECONDS).catch(err=>
         console.error("[chat-worker] heartbeat failed",{executionId:job.id,errorType:err instanceof Error?err.name:"unknown"}));
