@@ -48,6 +48,6 @@ export default async function connectedAppRoutes(app:FastifyInstance) {
     });
     if(!result)return reply.code(404).send({error:"connection_not_found"});
     // Important: DB deletion does not immediately revoke already-issued signed JWTs.
-    return {disconnected:true,warning:"Existing signed access tokens may remain valid until expiration; resource-side revocation enforcement is required."};
+    return {disconnected:true,warning:"MCP checks current consent on each request. Other OAuth resource services may continue accepting previously issued signed tokens until expiration."};
   });
 }
