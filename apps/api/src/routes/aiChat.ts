@@ -1358,7 +1358,14 @@ export default async function aiChatRoutes(app: FastifyInstance) {
         headers: req.headers as Record<string, string>,
         conversationId,
         providerMessages: prepared.providerMessages,
-        emit: stream.send,
+        emit: (event) => {
+          stream.send(event);
+          if (reserved && (event.phase === "thinking" || event.phase === "tool_started")) {
+            void updateChatCommand(reserved.key, "reserved", {activity:{
+              label:event.label,phase:event.phase,updatedAt:new Date().toISOString(),
+            }}).catch(err => req.log.warn({err},"Could not persist chat activity"));
+          }
+        },
       });
       if (reserved) await updateChatCommand(reserved.key, "completed", { conversationId, response });
       stream.send({ type: "result", response });
