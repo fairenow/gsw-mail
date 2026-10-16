@@ -174,6 +174,16 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
         const result = await api.chatCommand(commandId);
         if (disposed) return;
         setBackgroundStopAvailable(Boolean(result.background) && result.status === "processing");
+        if (result.background && result.status === "processing") {
+          const leaseExpired = result.health?.leaseExpiresAt &&
+            Date.parse(result.health.leaseExpiresAt) < Date.now();
+          const label = leaseExpired
+            ? "Checking background worker recovery"
+            : result.activity?.label ?? (result.health?.attempts
+              ? "Processing in background"
+              : "Waiting for background worker");
+          setExecutionActivities([{ id: 0, label, status: "running" }]);
+        }
         if (result.conversationId) {
           setConversationId(result.conversationId);
           localStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`,result.conversationId);
@@ -198,7 +208,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
           setActiveCommandId(null);
           setSending(false);
           setExecutionActivities([]);
-          setError("The prior request stopped before completion. Check the conversation before retrying.");
+          setError(result.health?.stopped ? "Work stopped." : "The prior request stopped before completion. Check the conversation before retrying.");
         }
       } catch {
         // Temporary network errors do not mean the server stopped processing.
