@@ -80,7 +80,7 @@ export function buildApp() {
     return reply.send(Buffer.from(await response.arrayBuffer()));
   });
 
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
     if (error instanceof HttpError) {
       return reply.code(error.status).send({ error: error.message });
     }
@@ -91,6 +91,8 @@ export function buildApp() {
       return reply.code(401).send({ error: "mail_identity_rejected" });
     }
     if ((error as { code?: string }).code === "FST_ERR_CTP_INVALID_MEDIA_TYPE") {
+      // Record request metadata only; never log OAuth credentials or MCP payloads.
+      app.log.warn({ method: request.method, path: request.url.split("?")[0], contentType: request.headers["content-type"] ?? "(missing)", accept: request.headers.accept ?? "(missing)" }, "unsupported content type");
       return reply.code(415).send({ error: "unsupported media type" });
     }
     app.log.error(error);
