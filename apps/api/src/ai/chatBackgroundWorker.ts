@@ -37,7 +37,8 @@ async function workOnce() {
       if(!settings.enabled)throw new Error("GSW AI is disabled");
       const provider=getAiProvider(settings.modelProvider);
       // Avoid replaying an ambiguous provider outcome after a crash.
-      const result=await provider.run({messages:request.messages});
+      const messages=request.messages.map(message=>message.role==="user" ? {role:"user" as const,content:message.content} : {role:"assistant" as const,content:message.content});
+      const result=await provider.run({messages});
       const content=result.content?.trim();
       if(!content || result.toolCalls?.length)throw new Error("Model-only worker returned no usable reply");
       await appendAiMessage({conversationId:job.conversation_id,role:"assistant",content,
