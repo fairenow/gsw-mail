@@ -1333,6 +1333,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
       status:execution.status==="completed"?"completed"
         :execution.status==="uncertain"||execution.status==="failed"?"uncertain":"processing",
       conversationId:execution.conversation_id,
+      background:true,
       response:execution.status==="completed"?execution.result:null,
       activity:execution.status==="queued"
         ? {label:"Queued for background processing",phase:"queued",updatedAt:new Date().toISOString()}
