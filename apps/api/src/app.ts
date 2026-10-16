@@ -33,6 +33,7 @@ import templateAssetsPublic from "./routes/templateAssetsPublic.js";
 import { avatarLookup, publicAvatars } from "./routes/publicAvatars.js";
 import setup from "./routes/setup.js";
 import account from "./routes/account.js";
+import connectedApps from "./routes/connectedApps.js";
 import accountPassword from "./routes/accountPassword.js";
 import mailboxSetup from "./routes/mailboxSetup.js";
 import recovery from "./routes/recovery.js";
@@ -134,6 +135,7 @@ export function buildApp() {
   app.register(templates);
   app.register(setup);
   app.register(account);
+  app.register(connectedApps);
   app.register(accountPassword);
   app.register(mailboxSetup);
   app.register(recovery);
