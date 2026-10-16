@@ -13,8 +13,7 @@ import { config } from "../config.js";
  * - `offline_access` remains supported for the existing GSW Mobile flow; it is
  *   not implied for future external clients.
  */
-import { aiScopes } from "../ai/permissions/types.js";
-export const GSW_OIDC_SUPPORTED_SCOPES = ["openid", "profile", "email", "offline_access", ...aiScopes] as const;
+export const GSW_OIDC_SUPPORTED_SCOPES = ["openid", "profile", "email", "offline_access"] as const;
 export const GSW_OAUTH_CONSENT_PAGE = "/oauth/consent" as const;
 
 export type GswOidcScope = (typeof GSW_OIDC_SUPPORTED_SCOPES)[number];
