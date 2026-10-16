@@ -10,6 +10,7 @@ import { authAccounts, authSessions, authUsers, authVerifications, domains, emai
 import { and, eq } from "drizzle-orm";
 import { renderGswAuthEmail } from "./email.js";
 import { aiScopes } from "../ai/permissions/types.js";
+import { legacyMcpOAuthScopes } from "../mcp/scopeAliases.js";
 import { GSW_OAUTH_CONSENT_PAGE, GSW_OIDC_SUPPORTED_SCOPES, legacyInternalUserInfoClaims, oidcClientIdFromJwt } from "./oidcContract.js";
 
 const AUTH_SENDER = "admin@team.guidedstepswellness.com";
@@ -104,7 +105,7 @@ export const auth = betterAuth({
         page: "/oauth/select-account",
         shouldRedirect: async () => false,
       },
-      scopes: [...GSW_OIDC_SUPPORTED_SCOPES, ...aiScopes],
+      scopes: [...GSW_OIDC_SUPPORTED_SCOPES, ...aiScopes, ...legacyMcpOAuthScopes],
       validAudiences: [config.auth.stalwartAudience, process.env.GSW_MCP_RESOURCE_URL ?? `${config.auth.baseUrl.replace(/\/$/, "")}/mcp`],
       accessTokenExpiresIn: config.auth.tokenTtlSeconds,
       refreshTokenReuseInterval: 30,

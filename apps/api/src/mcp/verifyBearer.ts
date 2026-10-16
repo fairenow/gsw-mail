@@ -4,6 +4,7 @@ import { db } from "../db/client.js";
 import { users, oauthConsent, oauthClient } from "../db/schema.js";
 import { and, eq } from "drizzle-orm";
 import { consentPermitsMcpToken } from "./consentPolicy.js";
+import { canonicalMcpOAuthScopes } from "./scopeAliases.js";
 
 /**
  * This verifier never accepts GSW's first-party Stalwart/mobile audience.
@@ -30,6 +31,6 @@ export async function verifyMcpBearer(token:string):Promise<{
       .where(and(eq(oauthConsent.userId,payload.sub),eq(oauthConsent.clientId,clientId),eq(oauthClient.disabled,false)))
       .limit(1);
     if(!consentPermitsMcpToken({tokenScopes:scopes,consentScopes:consent?.scopes??null,clientDisabled:consent?.disabled===true}))return null;
-    return {userId:resolved.id,authUserId:payload.sub,oauthScopes:scopes,clientId};
+    return {userId:resolved.id,authUserId:payload.sub,oauthScopes:canonicalMcpOAuthScopes(scopes),clientId};
   }catch{return null;}
 }
