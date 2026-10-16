@@ -144,6 +144,55 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
   const canSend = (input.trim().length > 0 || pendingAttachments.length > 0 || recording) && !sending && !uploadingFiles;
   const speechSupported = typeof window !== "undefined" && speechRecognitionConstructor() !== null;
 
+  // The command ID survives a page reload. Reconnect through the server-side
+  // command ledger; never replay the POST, which could repeat email actions.
+  useEffect(() => {
+    const key = `gsw-chat-active-command:${account?.id ?? "none"}`;
+    const commandId = localStorage.getItem(key);
+    if (!commandId) return;
+    let disposed = false;
+    let busy = false;
+    setSending(true);
+    setExecutionActivities([{id:0,label:"Reconnecting to your ongoing work",status:"running"}]);
+    const poll = async () => {
+      if (disposed || busy) return;
+      busy = true;
+      try {
+        const result = await api.chatCommand(commandId);
+        if (disposed) return;
+        if (result.conversationId) {
+          setConversationId(result.conversationId);
+          localStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`,result.conversationId);
+        }
+        if (result.status === "completed" && result.response) {
+          localStorage.removeItem(key);
+          const detail = result.conversationId ? await api.chatConversation(result.conversationId) : null;
+          if (disposed) return;
+          if(detail) {
+            setMessages(detail.messages.filter(m=>m.role==="user"||m.role==="assistant").map(m=>({
+              role:m.role as "user"|"assistant",content:m.content,attachments:attachmentsFromMetadata(m.metadata),
+            })).slice(-24));
+          } else if(result.response.message) {
+            setMessages(current=>[...current,result.response!.message!].slice(-24));
+          }
+          setIntervention(result.response.intervention);
+          setSending(false);
+          setExecutionActivities([]);
+        } else if(result.status === "uncertain" || result.status === "failed") {
+          localStorage.removeItem(key);
+          setSending(false);
+          setExecutionActivities([]);
+          setError("The prior request stopped before completion. Check the conversation before retrying.");
+        }
+      } catch {
+        // Temporary network errors do not mean the server stopped processing.
+      } finally { busy=false; }
+    };
+    void poll();
+    const timer = window.setInterval(()=>void poll(),2500);
+    return ()=>{disposed=true;window.clearInterval(timer);};
+  },[account?.id]);
+
   const visibleMessages = useMemo(() => messages, [messages]);
 
   const scrollToLatestMessage = (behavior: ScrollBehavior = "auto") => {
@@ -504,7 +553,11 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
     try {
       setExecutionActivities([]);
       setActivityCollapsed(false);
-      const response = await api.streamChat(account?.id ?? null, next, conversationId, handleStreamEvent, attachmentsForTurn.map((item) => item.assetId));
+      const activeKey = `gsw-chat-active-command:${account?.id ?? "none"}`;
+      const commandId = crypto.randomUUID();
+      localStorage.setItem(activeKey,commandId);
+      const response = await api.streamChat(account?.id ?? null, next, conversationId, handleStreamEvent, attachmentsForTurn.map((item) => item.assetId),commandId);
+      localStorage.removeItem(activeKey);
       setConversationId(response.conversationId);
       localStorage.setItem(`gsw-chat-conversation:${account?.id ?? "none"}`, response.conversationId);
       setIntervention(response.intervention);

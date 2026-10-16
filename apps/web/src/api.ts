@@ -703,9 +703,9 @@ export const api = {
   respondCalendarRsvp: (token: string, response: CalendarRsvpResponse) => post<CalendarRsvpPublic>("/product/calendar-rsvp", { token, response }),
   prewarmChatModel: () => post<{status:"started"|"recent"|"unsupported";provider:string}>("/product/chat/prewarm", {}, 12_000),
   chat: (accountId: string | null, messages: AiChatMessage[], conversationId?: string | null, assetIds?: string[]) => post<AiChatResponse>("/product/chat", { ...chatRuntimeContext(), ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages: messages.map(({ role, content, attachments }) => ({ role, content, ...(attachments?.length ? { attachments } : {}) })), ...(assetIds?.length ? { assetIds } : {}) }, 100_000),
-  streamChat: async (accountId: string | null, messages: AiChatMessage[], conversationId: string | null | undefined, onEvent: (event: AiChatStreamEvent) => void, assetIds?: string[]) => {
+  streamChat: async (accountId: string | null, messages: AiChatMessage[], conversationId: string | null | undefined, onEvent: (event: AiChatStreamEvent) => void, assetIds?: string[], existingCommandId?: string) => {
     // A stable command ID prevents duplicate model/tool execution when the SSE connection drops.
-    const commandId = crypto.randomUUID();
+    const commandId = existingCommandId ?? crypto.randomUUID();
     const payload = { ...chatRuntimeContext(), commandId, ...(accountId ? { accountId } : {}), ...(conversationId ? { conversationId } : {}), messages: messages.map(({ role, content, attachments }) => ({ role, content, ...(attachments?.length ? { attachments } : {}) })), ...(assetIds?.length ? { assetIds } : {}) };
     try {
       // Never fall back to a fresh non-idempotent POST after a lost stream.
@@ -726,6 +726,7 @@ export const api = {
       throw new Error("The request is still processing or its status is unavailable. Check chat history before retrying.");
     }
   },
+  chatCommand: (commandId: string) => get<{status:string;conversationId:string|null;response?:AiChatResponse|null}>(`/product/chat/commands/${encodeURIComponent(commandId)}`),
   resumeChat: (accountId: string, conversationId: string) => post<AiChatResponse>("/product/chat/resume", { ...chatRuntimeContext(), accountId, conversationId }, 100_000),
   resumeChatStream: (accountId: string, conversationId: string, onEvent: (event: AiChatStreamEvent) => void) => postEventStream("/product/chat/resume/stream", { ...chatRuntimeContext(), accountId, conversationId }, onEvent, "/product/chat/resume"),
   grantChatPermission: (accountId: string, scope: string) => post<{ grant: { id: string; scope: string } }>("/product/chat/permissions", { accountId, scope }),
