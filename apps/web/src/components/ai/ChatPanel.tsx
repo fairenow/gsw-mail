@@ -193,11 +193,10 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
       const last = current[current.length - 1];
       if (last?.label === label && last.status === "running") return current;
       activityCounterRef.current += 1;
-      return [...current.filter((activity) => activity.status !== "running").slice(-11), {
-        id: activityCounterRef.current,
-        label,
-        toolName: event.toolName,
-        status: "running" as const,
+      // Only keep the latest three progress lines. Tool failures remain in the
+      // server audit/logs, not an alarming red timeline in the chat UI.
+      return [...current.slice(-2).map((item) => item.status === "running" ? {...item,status:"done" as const} : item), {
+        id: activityCounterRef.current, label, toolName: event.toolName, status: "running" as const,
       }];
     });
   };
@@ -687,27 +686,20 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
           <button className="gsw-chat-copy" type="button" aria-label={message.role === "user" ? "Copy prompt" : "Copy full response"} title={message.role === "user" ? "Copy prompt" : "Copy full response"} onClick={() => void navigator.clipboard.writeText(message.role === "assistant" ? cleanAssistantText(message.content) : message.content)}><Copy size={14} strokeWidth={1.8} /></button>
         </article>;
       })}
-      {executionActivities.length > 0 && <section className="gsw-chat-execution" aria-live="polite">
-        <button type="button" className="gsw-chat-execution-toggle" aria-expanded={!activityCollapsed}
-          onClick={() => setActivityCollapsed((collapsed) => !collapsed)}>
-          <span className="gsw-chat-execution-title">{sending ? "GSW is working" : executionActivities.some((activity) => activity.status === "error") ? "Work completed with issues" : "Work history"}</span>
-          <span className="gsw-chat-execution-toggle-hint">{activityCollapsed ? "Show details ▾" : "Details ▾"}</span>
-        </button>
-        {sending && (() => {
-          const current = executionActivities[executionActivities.length - 1];
-          return current ? <div className={`gsw-chat-execution-item ${current.status}`}>
-            {current.status === "running" ? <LoaderCircle size={14} className="gsw-chat-spin" /> : current.status === "done" ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
-            <span>{current.label}</span>
-          </div> : null;
-        })()}
-        {!activityCollapsed && !sending && <div className="gsw-chat-execution-list">{executionActivities.slice(-12).map((activity) => <div className={`gsw-chat-execution-item ${activity.status}`} key={activity.id}>
-          {activity.status === "running" ? <LoaderCircle size={14} className="gsw-chat-spin" /> : activity.status === "done" ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
-          <span>{activity.label}</span>
-        </div>)}</div>}
-        {!activityCollapsed && sending && executionActivities.length > 1 && <div className="gsw-chat-execution-list">{executionActivities.slice(0,-1).slice(-8).map((activity) => <div className={`gsw-chat-execution-item ${activity.status}`} key={activity.id}>
-          {activity.status === "done" ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
-          <span>{activity.label}</span>
-        </div>)}</div>}
+      {executionActivities.length > 0 && <section className="gsw-chat-execution" aria-live="polite" style={{ maxHeight: 104, overflow: "hidden" }}>
+        <div className="gsw-chat-execution-toggle">
+          <span className="gsw-chat-execution-title">{sending ? "GSW is working" : "Work summary"}</span>
+        </div>
+        <div className="gsw-chat-execution-list" style={{ maxHeight: 72, overflow: "hidden" }}>
+          {executionActivities.slice(-3).map((activity) => <div
+            className="gsw-chat-execution-item"
+            key={activity.id}
+            style={{ color: "inherit", maxHeight: 24, overflow: "hidden" }}
+          >
+            {activity.status === "running" ? <LoaderCircle size={14} className="gsw-chat-spin" /> : <CheckCircle2 size={14} />}
+            <span style={{ overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", color: "inherit" }}>{activity.label}</span>
+          </div>)}
+        </div>
       </section>}
       {sending && executionActivities.length === 0 && <article className="gsw-chat-message assistant gsw-chat-thinking"><div className="gsw-chat-message-label">GSW</div><div className="gsw-chat-thinking-dots" aria-label="Thinking"><span /><span /><span /></div></article>}
       {intervention && <section className="gsw-chat-intervention">
