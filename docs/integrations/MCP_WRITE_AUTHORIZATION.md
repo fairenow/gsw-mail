@@ -40,3 +40,7 @@ The current MCP transport deliberately exposes and executes only tools with `ris
 - A failed action returns an accurate error and never reports successful delivery or persistence without evidence.
 
 Related: [Superpowered MCP plan](MCP_SUPERPOWERED_CAPABILITY_PLAN.md), [Remote MCP architecture](REMOTE_MCP.md).
+
+## Deployment prerequisite
+
+The Railway production service currently uses a narrowly scoped pre-deploy SQL patch and **does not automatically run the Drizzle migration journal**. Before enabling the new first-party approval review routes in production, apply `apps/api/drizzle/0035_mcp_action_approvals.sql` through the established production database migration procedure and verify the table and indexes exist. Do not assume that merging this PR applies the migration. Keep MCP writes disabled until the full execution and approval flow is tested.
