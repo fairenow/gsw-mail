@@ -74,6 +74,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
             ...(query!==undefined?{query}:{}),
             ...(offset!==undefined?{offset}:{}),
             ...(limit!==undefined?{limit}:{}),
+            writeTestEnabled,
           });
           return wrap({content:[{type:"text",text:JSON.stringify(catalog)}]});
         } catch {
