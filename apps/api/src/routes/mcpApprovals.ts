@@ -19,6 +19,9 @@ export default async function mcpApprovalsRoutes(app: FastifyInstance) {
   });
 
   app.get("/product/mcp/approvals/:id/draft", async (req, reply) => {
+    if (req.headers.authorization && req.headers.cookie) {
+      return reply.code(403).send({ error: "ambiguous_authentication" });
+    }
     const params = z.object({ id: z.string().uuid() }).parse(req.params);
     const draft = await loadMcpDraftForReview({ userId: req.user!.id, approvalId: params.id });
     if (!draft) return reply.code(404).send({ error: "draft_not_found_or_not_pending" });
