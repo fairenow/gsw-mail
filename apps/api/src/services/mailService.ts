@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { pageRecentMessages } from "./recentMessages.js";
 import { getStalwartAccessToken } from "../auth/stalwartToken.js";
 import { config } from "../config.js";
 import { JmapClient, JmapError } from "../engine/jmap.js";
@@ -139,6 +140,36 @@ export function createMailService(context: MailServiceContext) {
       await requireAccountPermission(context.userId, accountId, "read");
       const engine = await engineFor(accountId);
       return engine.search(accountId, query, mailbox);
+    },
+
+    async listRecent(accountId: string, options: { mailbox?: string | undefined; limit?: number | undefined; cursor?: string | undefined; unreadOnly?: boolean | undefined }) {
+      await requireAccountPermission(context.userId, accountId, "read");
+      const engine = await engineFor(accountId);
+      const mailboxes = await engine.listMailboxes(accountId);
+      const requested = (options.mailbox ?? "Inbox").trim().toLowerCase();
+      const target = mailboxes.find(m => m.role?.toLowerCase() === requested)
+        ?? mailboxes.find(m => m.engineName.toLowerCase() === requested);
+      if (!target) throw new Error(`Mailbox not found: ${options.mailbox ?? "Inbox"}`);
+      const page = await pageRecentMessages(
+        (offset, limit) => engine.listMessages(accountId, { mailbox: target.engineName, offset, limit }),
+        { limit: options.limit ?? 10, ...(options.cursor !== undefined ? { cursor: options.cursor } : {}), unreadOnly: options.unreadOnly ?? false },
+      );
+      return {
+        mailbox: target.engineName,
+        messages: page.messages.map(message => ({
+          messageId: message.engineId,
+          threadId: message.threadId,
+          subject: message.subject,
+          date: message.date,
+          from: message.from,
+          snippet: message.snippet,
+          read: message.read,
+          hasAttachments: message.hasAttachments,
+        })),
+        nextCursor: page.nextCursor,
+        complete: page.complete,
+        scanned: page.scanned,
+      };
     },
 
     async triagePage(accountId: string, folder: "inbox" | "sent", offset: number, limit = 250) {
