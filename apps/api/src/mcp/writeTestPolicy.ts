@@ -8,8 +8,8 @@ import { mcpArgumentsDigest } from "./writeApprovalPolicy.js";
  */
 export function canUseMcpWriteTestMode(input: {
   userId: string;
-  enabled?: string;
-  allowedUserId?: string;
+  enabled?: string | undefined;
+  allowedUserId?: string | undefined;
 }): boolean {
   return input.enabled === "true" &&
     typeof input.allowedUserId === "string" &&
