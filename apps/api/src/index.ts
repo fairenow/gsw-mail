@@ -23,6 +23,7 @@ import { ensurePromptingQuotaSchema } from "./ai/ensurePromptingQuotaSchema.js";
 import { ensureProposalSchema } from "./ai/proposalStore.js";
 import { ensureProposalConversationSchema } from "./ai/proposalConversation.js";
 import { startProposalNotificationWorker } from "./ai/proposalNotificationWorker.js";
+import { startMcpPayloadRetentionWorker } from "./mcp/payloadRetentionWorker.js";
 
 const app = buildApp();
 const worker = getOutboundWorker();
@@ -31,6 +32,7 @@ const agentTaskRunner = getAgentTaskRunner();
 let stopChatWorker: (()=>void)|null=null;
 let stopFileOrganizer: (() => void) | null = null;
 let stopProposalNotifier: (() => void) | null = null;
+let stopMcpPayloadRetention: (() => void) | null = null;
 
 async function main() {
   await ensureScheduledSendSchema();
@@ -49,6 +51,10 @@ async function main() {
   await ensureProposalSchema();
   await ensureProposalConversationSchema();
   await ensureWebOAuthTestClient();
+  stopMcpPayloadRetention = startMcpPayloadRetentionWorker(
+    error => app.log.error(error, "MCP payload retention cleanup failed"),
+    count => app.log.info({ count }, "Expired MCP encrypted payloads removed"),
+  );
   worker.start();
   stopProposalNotifier = startProposalNotificationWorker(error => app.log.error(error, "proposal notification worker failed"));
   const reminderTimer = setInterval(() => { void deliverDueCalendarEmailReminders().catch(error => app.log.error(error, "calendar reminder worker failed")); }, 60_000);
@@ -65,6 +71,7 @@ const shutdown = async (signal: string) => {
   app.log.info(`received ${signal}, shutting down`);
   worker.stop();
   stopProposalNotifier?.();
+  stopMcpPayloadRetention?.();
   automationWorker.stop();
   agentTaskRunner.stop();
   stopChatWorker?.();

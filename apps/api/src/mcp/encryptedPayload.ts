@@ -18,7 +18,7 @@ export interface EncryptedMcpPayload {
 }
 
 export function decodeMcpPayloadKey(encoded: string | undefined): Buffer {
-  if (!encoded || !/^(?:[A-Za-z0-9+/]{4}){10}[A-Za-z0-9+/]{2}==$/.test(encoded)) {
+  if (!encoded || !/^[A-Za-z0-9+/]{43}=$/.test(encoded)) {
     throw new Error("MCP approval payload encryption key is missing or malformed");
   }
   const key = Buffer.from(encoded, "base64");

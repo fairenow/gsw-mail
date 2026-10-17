@@ -35,8 +35,11 @@ test("tampering and unsupported versions fail closed", () => {
 });
 
 test("requires a valid, stable 32-byte base64 encryption key", () => {
-  const key = randomBytes(32);
-  assert.deepEqual(decodeMcpPayloadKey(key.toString("base64")), key);
+  for (let i = 0; i < 32; i++) {
+    const key = randomBytes(32);
+    assert.deepEqual(decodeMcpPayloadKey(key.toString("base64")), key);
+  }
+  assert.deepEqual(decodeMcpPayloadKey(Buffer.alloc(32).toString("base64")), Buffer.alloc(32));
   for (const value of [undefined, "", "development-secret", Buffer.alloc(16).toString("base64")]) {
     assert.throws(() => decodeMcpPayloadKey(value));
   }
