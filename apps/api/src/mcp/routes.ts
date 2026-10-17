@@ -155,10 +155,8 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
         try {
           const result=await agentMailRegistry.execute(name,JSON.stringify(toolArguments),context,randomUUID());
           if(result.ok) {
-            const safeResult=result.data&&typeof result.data==="object"
-              ?result.data as Record<string,unknown>
-              :{value:result.data??null};
-            await completeAiIdempotency(decision.key,safeResult);
+            // Store only a completion marker; raw mail/file/contact results can be sensitive.
+            await completeAiIdempotency(decision.key,{completed:true});
           } else {
             await failAiIdempotency(decision.key,new Error(result.error?.code??"tool_failed"));
           }
