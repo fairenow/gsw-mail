@@ -12,7 +12,7 @@ export interface PersistedMcpApproval {
   clientId: string;
   toolName: string;
   argumentsDigest: string;
-  status: "pending" | "approved" | "rejected" | "consumed" | "revoked";
+  status: string; // Database-backed status; unknown values fail closed.
   expiresAt: Date;
 }
 

@@ -26,6 +26,7 @@ import calendarRsvp from "./routes/calendarRsvp.js";
 import calendarRsvpPublic from "./routes/calendarRsvpPublic.js";
 import aiChat from "./routes/aiChat.js";
 import aiAutomations from "./routes/aiAutomations.js";
+import mcpApprovals from "./routes/mcpApprovals.js";
 import prompting from "./routes/prompting.js";
 import contactSuggestions from "./routes/contactSuggestions.js";
 import templates from "./routes/templates.js";
@@ -131,6 +132,7 @@ export function buildApp() {
   app.register(calendarRsvp);
   app.register(aiChat);
   app.register(aiAutomations);
+  app.register(mcpApprovals);
   app.register(prompting);
   app.register(calendarSync);
   app.register(contactSuggestions);

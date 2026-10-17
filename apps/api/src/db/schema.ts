@@ -1243,3 +1243,30 @@ export const aiIdempotencyKeys = pgTable(
     index("ai_idempotency_keys_status_idx").on(t.status, t.createdAt),
   ],
 );
+
+/**
+ * MCP approvals are separate from in-app AI confirmations: they are bound to
+ * the external OAuth client, mailbox and exact arguments digest.
+ * The ledger stores no raw email/file arguments.
+ */
+export const mcpActionApprovals = pgTable(
+  "mcp_action_approvals",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id").notNull().references(() => emailAccounts.id, { onDelete: "cascade" }),
+    clientId: text("client_id").notNull(),
+    toolName: text("tool_name").notNull(),
+    argumentsDigest: text("arguments_digest").notNull(),
+    summary: text("summary").notNull(),
+    status: text("status").default("pending").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    index("mcp_action_approvals_owner_idx").on(t.userId, t.status, t.createdAt),
+    index("mcp_action_approvals_expiry_idx").on(t.expiresAt),
+  ],
+);
