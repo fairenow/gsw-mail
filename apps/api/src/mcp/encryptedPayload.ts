@@ -42,7 +42,9 @@ export function encryptMcpPayload(input: {
   key: Buffer;
 }): EncryptedMcpPayload {
   if (input.key.length !== 32) throw new Error("Invalid MCP encryption key length");
-  const plain = Buffer.from(JSON.stringify(input.argumentsValue), "utf8");
+  const serialized = JSON.stringify(input.argumentsValue);
+  if (typeof serialized !== "string") throw new Error("Invalid MCP payload arguments");
+  const plain = Buffer.from(serialized, "utf8");
   if (plain.length === 0 || plain.length > MAX_PLAINTEXT_BYTES) {
     throw new Error("MCP approval payload exceeds size limit");
   }
