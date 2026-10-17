@@ -31,6 +31,29 @@ const scopeDescriptions: Record<string, { title: string; description: string }> 
   },
 };
 
+const productScopeNames = [
+  "mail.read","mail.write","mail.send","mail.bulk_write",
+  "calendar.read","calendar.write","contacts.read","contacts.write",
+  "templates.read","templates.write","signatures.read","signatures.write",
+  "files.read","files.write","images.generate","videos.generate",
+  "campaign.read","campaign.write","campaign.send","research.use",
+  "browser.read","browser.write","automations.read","automations.write",
+  "automation.read","automation.write","tasks.read","tasks.write",
+  "settings.read","settings.write","workspace.read","workspace.admin",
+  "domain.read","domain.write","alias.read","alias.write",
+  "mailbox_admin.read","mailbox_admin.write","admin.health.read","admin.audit.read",
+] as const;
+const knownProductScopes = new Set<string>(productScopeNames);
+function describeScope(scope: string): {title:string;description:string} | null {
+  if (scopeDescriptions[scope]) return scopeDescriptions[scope];
+  if (!knownProductScopes.has(scope)) return null;
+  const [domain,action] = scope.split(".");
+  const label = (domain === "automation" ? "automations" : domain).replaceAll("_"," ");
+  const verbs: Record<string,string> = {read:"Read",write:"Modify",send:"Send",bulk_write:"Modify in bulk",generate:"Generate",use:"Use",admin:"Administer"};
+  const verb = verbs[action ?? ""] ?? "Access";
+  return {title:`${verb} ${label}`,description:`${verb} GSW Mail ${label} within your existing account permissions.`};
+}
+
 interface ConsentRequestDisplay {
   clientId: string;
   scopes: string[];
@@ -47,7 +70,7 @@ function readConsentRequest(): ConsentRequestDisplay | null {
   const scopes = (scopeValues[0] ?? "").split(/\s+/).map((scope) => scope.trim()).filter(Boolean);
   if (!clientId || scopes.length === 0 || !scopes.includes("openid")) return null;
   if (new Set(scopes).size !== scopes.length) return null;
-  if (scopes.some((scope) => !scopeDescriptions[scope])) return null;
+  if (scopes.some((scope) => !describeScope(scope))) return null;
 
   return { clientId, scopes, acceptedScope: scopes.join(" ") };
 }
@@ -138,7 +161,7 @@ export function OAuthConsentPage() {
           <div className="gsw-consent-access" aria-label="Requested access">
             <h2>Requested access</h2>
             {request?.scopes.map((scope) => {
-              const detail = scopeDescriptions[scope];
+              const detail = describeScope(scope)!;
               return <div className="gsw-consent-scope" key={scope}>
                 <ShieldCheck size={20} aria-hidden="true" />
                 <div><strong>{detail.title}</strong><p>{detail.description}</p></div>
@@ -147,8 +170,8 @@ export function OAuthConsentPage() {
           </div>
 
           <div className="gsw-consent-boundary">
-            <strong>This does not grant access to your GSW Mail data.</strong>
-            <p>Identity permissions do not allow this application to read your mailboxes, messages, calendar, contacts, or other GSW product data.</p>
+            <strong>{request?.scopes.some((scope) => knownProductScopes.has(scope)) ? "This application may access the GSW Mail features listed above." : "Only identity access is requested."}</strong>
+            <p>Access is limited to the permissions you approve and your existing GSW Mail account rights. Disconnect the app at any time under Settings → Security → Connected Apps.</p>
           </div>
 
           {error && <AuthError>{error}</AuthError>}
