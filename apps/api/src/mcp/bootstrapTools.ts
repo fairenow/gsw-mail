@@ -7,6 +7,20 @@ export const mcpBootstrapTools = [
     requiredScopes: ["openid"],
   },
   {
+    name: "list_capabilities",
+    description: "Inspect the GSW Mail MCP capability catalog, including backend tools not yet exposed for execution. Reports OAuth scope gaps and whether write transport is disabled. Use this to discover available primitives without assuming an advertised tool is callable.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", maxLength: 200, description: "Optional tool name, description, or OAuth scope filter." },
+        offset: { type: "integer", minimum: 0, description: "Pagination offset; defaults to 0." },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "Maximum entries per page; defaults to 50." },
+      },
+      additionalProperties: false,
+    },
+    requiredScopes: ["openid"],
+  },
+  {
     name: "list_accounts",
     description: "List GSW Mail accounts this user is permitted to read. Use an accountId from this list with mail tools.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
