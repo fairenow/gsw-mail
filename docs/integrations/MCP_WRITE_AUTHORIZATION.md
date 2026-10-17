@@ -62,3 +62,11 @@ The `mcp_action_payloads` table introduced by migration `0036_mcp_action_payload
 **Configuration prerequisite:** set `MCP_APPROVAL_PAYLOAD_KEY` to a cryptographically random 32-byte key encoded in canonical base64 in the Railway API service secrets. Do not place it in the repository, log it, rotate it without a planned re-encryption or expiration strategy, or reuse a general-purpose app secret. With the key missing, proposed draft storage fails closed. The migration does not require the key.
 
 **Still disabled:** the MCP transport does not yet advertise a preparation or execution tool, and no UI exposes the decrypted review data. Do not enable either until user-facing exact-content review, CSRF protections, OAuth scope checks, account ACL checks, replay/idempotency, and expiration cleanup are implemented and tested. Encrypted records currently expire logically; a scheduled purge must be added before enabling production usage.
+
+## MCP draft preparation transport (opt-in, non-executing)
+
+The `prepare_action` MCP tool supports only `mail.create_draft` and requires `mail.write` OAuth consent, live GSW AI permission, enabled capability settings, and the mailbox ACL. It validates the proposed recipients/content, encrypts and stores the exact arguments for the first-party GSW Security review screen, and returns an approval ID. **It never creates a draft or sends mail.**
+
+The transport remains **off by default** via `GSW_MCP_PREPARE_ENABLED` (only the exact string `true` enables it). Keep this false until the `0036` migration is confirmed, `MCP_APPROVAL_PAYLOAD_KEY` is configured securely, expiration cleanup is scheduled, and end-to-end tests pass. A user with only read scopes must reauthorize the connected client to grant `mail.write`; no implicit scope escalation occurs. Even when preparation is enabled, all registry write execution stays blocked by the existing MCP read-only gate.
+
+Do not expose generic approval execution until one-time claims, crash-safe idempotency, and action result audit are complete.
