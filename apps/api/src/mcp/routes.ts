@@ -56,12 +56,21 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
     if(input.method==="resources/list")return wrap({resources:[]});
     if(input.method==="prompts/list")return wrap({prompts:[]});
     if(input.method==="tools/list"){
-      return wrap({tools:[...mcpBootstrapTools.filter(t=>(t.name!=="prepare_action" || process.env.GSW_MCP_PREPARE_ENABLED==="true") && t.requiredScopes.every(s=>identity.oauthScopes.has(s))),...agentMailRegistry.definitions().filter(t=>(t.risk==="read"||writeTestEnabled)&&t.requiredScopes.every(s=>identity.oauthScopes.has(s))).map(t=>({name:t.name.replaceAll(".","__"),description:t.description+(t.risk==="external"?" CAUTION: This action can send, publish, delete or trigger external effects. Set confirmExternal=true only after reviewing the exact intended effect.":""),inputSchema:{...t.inputSchema,properties:{...(t.inputSchema.properties as Record<string,unknown> ?? {}),accountId:{type:"string",description:"GSW mailbox account UUID to operate within"},...(t.risk!=="read"?{requestId:{type:"string",format:"uuid",description:"Fresh UUID per intended action; reuse for retries to prevent duplicate execution"},...(t.risk==="external"?{confirmExternal:{type:"boolean",description:"Set true only after explicit user authorization of this external action"}}:{})}:{})},required:[...((t.inputSchema.required as string[] | undefined) ?? []),"accountId",...(t.risk!=="read"?["requestId",...(t.risk==="external"?["confirmExternal"]:[])]:[])]}}))]});
+      return wrap({tools:[...mcpBootstrapTools.filter(t=>t.name!=="prepare_action" || process.env.GSW_MCP_PREPARE_ENABLED==="true"),{name:"invoke_tool",description:"Universal MCP dispatcher for every GSW Mail registry tool. Use list_capabilities to discover names, required OAuth scopes and risk. All actions enforce OAuth, GSW permissions and mailbox ACL at execution. Writes require the configured owner-only test mode and a fresh UUID requestId; external actions also require confirmExternal=true.",inputSchema:{type:"object",properties:{toolName:{type:"string",description:"Registered GSW tool name, dotted or double-underscore format"},accountId:{type:"string",description:"Authorized mailbox account UUID"},arguments:{type:"object",description:"Arguments matching the selected registered tool schema",additionalProperties:true},requestId:{type:"string",format:"uuid",description:"Required for writes; unique for each intended action"},confirmExternal:{type:"boolean",description:"Required true for explicitly authorized external effects"}},required:["toolName","accountId","arguments"],additionalProperties:false}},...agentMailRegistry.definitions().map(t=>({name:t.name.replaceAll(".","__"),description:t.description+(t.risk==="external"?" CAUTION: This action can send, publish, delete or trigger external effects. Set confirmExternal=true only after reviewing the exact intended effect.":""),inputSchema:{...t.inputSchema,properties:{...(t.inputSchema.properties as Record<string,unknown> ?? {}),accountId:{type:"string",description:"GSW mailbox account UUID to operate within"},...(t.risk!=="read"?{requestId:{type:"string",format:"uuid",description:"Fresh UUID per intended action; reuse for retries to prevent duplicate execution"},...(t.risk==="external"?{confirmExternal:{type:"boolean",description:"Set true only after explicit user authorization of this external action"}}:{})}:{})},required:[...((t.inputSchema.required as string[] | undefined) ?? []),"accountId",...(t.risk!=="read"?["requestId",...(t.risk==="external"?["confirmExternal"]:[])]:[])]}}))]});
     }
     if(input.method==="tools/call"){
-      const name=typeof input.params?.name==="string"?input.params.name:"";
+      let name=typeof input.params?.name==="string"?input.params.name:"";
       const args=input.params?.arguments;
-      const params=args&&typeof args==="object"&&!Array.isArray(args)?args as Record<string,unknown>:{};
+      let params=args&&typeof args==="object"&&!Array.isArray(args)?args as Record<string,unknown>:{};
+      if(name==="invoke_tool") {
+        const requestedName=typeof params.toolName==="string"?params.toolName:"";
+        const nested=params.arguments;
+        if(!agentMailRegistry.definition(requestedName) || !nested || typeof nested!=="object" || Array.isArray(nested)) {
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"unknown_tool_or_invalid_arguments"})}]});
+        }
+        name=requestedName;
+        params={...(nested as Record<string,unknown>),accountId:params.accountId,requestId:params.requestId,confirmExternal:params.confirmExternal};
+      }
       if(name==="get_current_user") {
         return wrap({content:[{type:"text",text:JSON.stringify({userId:identity.userId})}]});
       }
