@@ -148,6 +148,13 @@
       "when": 1792092100000,
       "tag": "0034_prompting_hourly_quota",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792092200000,
+      "tag": "0035_mcp_action_approvals",
+      "breakpoints": true
     }
   ]
 }
