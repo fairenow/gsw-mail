@@ -4,6 +4,8 @@ import { config } from "../config.js";
 import { verifyMcpBearer } from "./verifyBearer.js";
 import { agentMailRegistry } from "../ai/tools/registry.js";
 import { resolveMcpUserToolPermission } from "./resolvePermissions.js";
+import { getAccessibleAccounts } from "../auth/authorize.js";
+import { mcpBootstrapTools } from "./bootstrapTools.js";
 
 /** Read-only transport while persisted write approvals are under construction. */
 export async function mcpRoutes(app:FastifyInstance):Promise<void> {
@@ -46,12 +48,22 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
     if(input.method==="resources/list")return wrap({resources:[]});
     if(input.method==="prompts/list")return wrap({prompts:[]});
     if(input.method==="tools/list"){
-      return wrap({tools:agentMailRegistry.definitions().filter(t=>t.risk==="read"&&t.requiredScopes.every(s=>identity.oauthScopes.has(s))).map(t=>({name:t.name.replaceAll(".","__"),description:t.description,inputSchema:{...t.inputSchema,properties:{...(t.inputSchema.properties as Record<string,unknown> ?? {}),accountId:{type:"string",description:"GSW mailbox account UUID to operate within"}},required:[...((t.inputSchema.required as string[] | undefined) ?? []),"accountId"]}}))});
+      return wrap({tools:[...mcpBootstrapTools.filter(t=>t.requiredScopes.every(s=>identity.oauthScopes.has(s))),...agentMailRegistry.definitions().filter(t=>t.risk==="read"&&t.requiredScopes.every(s=>identity.oauthScopes.has(s))).map(t=>({name:t.name.replaceAll(".","__"),description:t.description,inputSchema:{...t.inputSchema,properties:{...(t.inputSchema.properties as Record<string,unknown> ?? {}),accountId:{type:"string",description:"GSW mailbox account UUID to operate within"}},required:[...((t.inputSchema.required as string[] | undefined) ?? []),"accountId"]}}))]});
     }
     if(input.method==="tools/call"){
       const name=typeof input.params?.name==="string"?input.params.name:"";
       const args=input.params?.arguments;
       const params=args&&typeof args==="object"&&!Array.isArray(args)?args as Record<string,unknown>:{};
+      if(name==="get_current_user") {
+        return wrap({content:[{type:"text",text:JSON.stringify({userId:identity.userId})}]});
+      }
+      if(name==="list_accounts") {
+        if(!identity.oauthScopes.has("mail.read")) return wrap({isError:true,content:[{type:"text",text:"mail.read scope required"}]});
+        const accounts=(await getAccessibleAccounts(identity.userId))
+          .filter(account=>account.permissions.includes("read"))
+          .map(account=>({accountId:account.id,address:account.address,displayName:account.displayName,role:account.role}));
+        return wrap({content:[{type:"text",text:JSON.stringify({accounts})}]});
+      }
       const accountId=typeof params.accountId==="string"?params.accountId:"";
       const policy=await resolveMcpUserToolPermission({userId:identity.userId,accountId,oauthScopes:identity.oauthScopes,toolName:name});
       if(!policy.allowed||policy.tool.risk!=="read")return wrap({isError:true,content:[{type:"text",text:"Permission denied or write action disabled"}]});
