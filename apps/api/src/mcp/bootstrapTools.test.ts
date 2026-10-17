@@ -22,7 +22,10 @@ test("bootstrap tools expose discovery and narrowly scoped draft preparation", (
   assert.ok("accountId" in prepare.inputSchema.properties);
   assert.ok("toolName" in prepare.inputSchema.properties);
   assert.ok("arguments" in prepare.inputSchema.properties);
-  assert.ok(prepare.inputSchema.required.includes("accountId"));
-  assert.ok(prepare.inputSchema.required.includes("toolName"));
-  assert.ok(prepare.inputSchema.required.includes("arguments"));
+  assert.ok("required" in prepare.inputSchema);
+  if ("required" in prepare.inputSchema) {
+    assert.ok(prepare.inputSchema.required.includes("accountId"));
+    assert.ok(prepare.inputSchema.required.includes("toolName"));
+    assert.ok(prepare.inputSchema.required.includes("arguments"));
+  }
 });
