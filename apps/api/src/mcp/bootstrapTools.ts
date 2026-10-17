@@ -21,6 +21,36 @@ export const mcpBootstrapTools = [
     requiredScopes: ["openid"],
   },
   {
+    name: "prepare_action",
+    description: "Prepare an email draft for exact-content review in GSW Mail Security settings. Creates a pending approval request only; does NOT create or send email. Currently supports mail.create_draft.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        accountId: { type: "string", format: "uuid", description: "Mailbox account UUID" },
+        toolName: { type: "string", enum: ["mail.create_draft"] },
+        arguments: {
+          type: "object",
+          properties: {
+            to: { type: "array", items: { type: "string", format: "email" }, minItems: 1, maxItems: 100 },
+            cc: { type: "array", items: { type: "string", format: "email" }, maxItems: 100 },
+            bcc: { type: "array", items: { type: "string", format: "email" }, maxItems: 100 },
+            subject: { type: "string", maxLength: 998 },
+            textBody: { type: "string", maxLength: 200000 },
+            htmlBody: { type: "string", maxLength: 500000 },
+            replyTo: { type: "string", format: "email" },
+            inReplyTo: { type: "string", maxLength: 2000 },
+            references: { type: "string", maxLength: 8000 },
+          },
+          required: ["to"],
+          additionalProperties: false,
+        },
+      },
+      required: ["accountId", "toolName", "arguments"],
+      additionalProperties: false,
+    },
+    requiredScopes: ["mail.write"],
+  },
+  {
     name: "list_accounts",
     description: "List GSW Mail accounts this user is permitted to read. Use an accountId from this list with mail tools.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },

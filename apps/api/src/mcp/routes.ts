@@ -7,6 +7,8 @@ import { resolveMcpUserToolPermission } from "./resolvePermissions.js";
 import { getAccessibleAccounts } from "../auth/authorize.js";
 import { mcpBootstrapTools } from "./bootstrapTools.js";
 import { discoverMcpCapabilities } from "./capabilityDiscovery.js";
+import { mcpPrepareDraftRequest } from "./prepareDraftAction.js";
+import { storePreparedMcpDraft } from "./draftPayloadStore.js";
 
 /** Read-only transport while persisted write approvals are under construction. */
 export async function mcpRoutes(app:FastifyInstance):Promise<void> {
@@ -49,7 +51,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
     if(input.method==="resources/list")return wrap({resources:[]});
     if(input.method==="prompts/list")return wrap({prompts:[]});
     if(input.method==="tools/list"){
-      return wrap({tools:[...mcpBootstrapTools.filter(t=>t.requiredScopes.every(s=>identity.oauthScopes.has(s))),...agentMailRegistry.definitions().filter(t=>t.risk==="read"&&t.requiredScopes.every(s=>identity.oauthScopes.has(s))).map(t=>({name:t.name.replaceAll(".","__"),description:t.description,inputSchema:{...t.inputSchema,properties:{...(t.inputSchema.properties as Record<string,unknown> ?? {}),accountId:{type:"string",description:"GSW mailbox account UUID to operate within"}},required:[...((t.inputSchema.required as string[] | undefined) ?? []),"accountId"]}}))]});
+      return wrap({tools:[...mcpBootstrapTools.filter(t=>(t.name!=="prepare_action" || process.env.GSW_MCP_PREPARE_ENABLED==="true") && t.requiredScopes.every(s=>identity.oauthScopes.has(s))),...agentMailRegistry.definitions().filter(t=>t.risk==="read"&&t.requiredScopes.every(s=>identity.oauthScopes.has(s))).map(t=>({name:t.name.replaceAll(".","__"),description:t.description,inputSchema:{...t.inputSchema,properties:{...(t.inputSchema.properties as Record<string,unknown> ?? {}),accountId:{type:"string",description:"GSW mailbox account UUID to operate within"}},required:[...((t.inputSchema.required as string[] | undefined) ?? []),"accountId"]}}))]});
     }
     if(input.method==="tools/call"){
       const name=typeof input.params?.name==="string"?input.params.name:"";
@@ -71,6 +73,40 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
           return wrap({content:[{type:"text",text:JSON.stringify(catalog)}]});
         } catch {
           return wrap({isError:true,content:[{type:"text",text:"Invalid capability discovery parameters"}]});
+        }
+      }
+      if(name==="prepare_action") {
+        // Disabled by default. Preparation is not draft creation or sending.
+        if(process.env.GSW_MCP_PREPARE_ENABLED!=="true") {
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"preparation_disabled"})}]});
+        }
+        const parsed=mcpPrepareDraftRequest.safeParse(params);
+        if(!parsed.success) {
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({
+            error:"invalid_proposal",issues:parsed.error.issues.map(issue=>({path:issue.path,message:issue.message}))
+          })}]});
+        }
+        const proposal=parsed.data;
+        const permission=await resolveMcpUserToolPermission({
+          userId:identity.userId,accountId:proposal.accountId,
+          oauthScopes:identity.oauthScopes,toolName:proposal.toolName,
+        });
+        if(!permission.allowed || permission.tool.risk!=="reversible_write") {
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"permission_denied"})}]});
+        }
+        try {
+          const approval=await storePreparedMcpDraft({
+            userId:identity.userId,accountId:proposal.accountId,clientId:identity.clientId,
+            argumentsValue:proposal.arguments,expiresAt:new Date(Date.now()+15*60_000),
+          });
+          return wrap({content:[{type:"text",text:JSON.stringify({
+            approvalId:approval.id,status:approval.status,summary:approval.summary,
+            expiresAt:approval.expiresAt,reviewLocation:"GSW Mail > Settings > Security > AI app approvals",
+            draftCreated:false,emailSent:false,executionEnabled:false,
+            message:"Proposal saved for first-party review only. No email draft has been created.",
+          })}]});
+        } catch {
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"proposal_storage_unavailable"})}]});
         }
       }
       if(name==="list_accounts") {
