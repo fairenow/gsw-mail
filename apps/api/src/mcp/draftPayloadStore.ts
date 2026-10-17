@@ -1,4 +1,4 @@
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, lt, inArray } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { mcpActionApprovals, mcpActionPayloads } from "../db/schema.js";
 import { mcpArgumentsDigest } from "./writeApprovalPolicy.js";
@@ -102,4 +102,15 @@ export async function loadMcpDraftForReview(input: {
     expiresAt: record.expiresAt,
     arguments: argumentsValue,
   };
+}
+
+/** Remove expired ciphertext without deleting the audit ledger. Schedule before enabling MCP proposals. */
+export async function purgeExpiredMcpDraftPayloads(now = new Date()): Promise<number> {
+  const expiredIds = db.select({ id: mcpActionApprovals.id })
+    .from(mcpActionApprovals)
+    .where(lt(mcpActionApprovals.expiresAt, now));
+  const deleted = await db.delete(mcpActionPayloads)
+    .where(inArray(mcpActionPayloads.approvalId, expiredIds))
+    .returning({ approvalId: mcpActionPayloads.approvalId });
+  return deleted.length;
 }
