@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { config } from "../config.js";
 import { verifyMcpBearer } from "./verifyBearer.js";
@@ -148,14 +148,14 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
         // tool, mailbox and canonical arguments. A repeated request never runs again.
         const reservation=await reserveAiIdempotency({
           key:decision.key,userId:identity.userId,accountId,
-          toolName:policy.tool.name,toolCallId:decision.digest,
+          toolName:policy.tool.name,toolCallId:(() => {\n            const hex=createHash("sha256").update(decision.digest).digest("hex");\n            return `${hex.slice(0,8)}-${hex.slice(8,12)}-4${hex.slice(13,16)}-8${hex.slice(17,20)}-${hex.slice(20,32)}`;\n          })(),
           expiresAt:new Date(Date.now()+24*60*60_000),
         });
         if(reservation.reused) {
           const same=reservation.reservation.userId===identity.userId &&
             reservation.reservation.accountId===accountId &&
             reservation.reservation.toolName===policy.tool.name &&
-            reservation.reservation.toolCallId===decision.digest;
+            reservation.reservation.toolCallId===(() => {\n              const hex=createHash("sha256").update(decision.digest).digest("hex");\n              return `${hex.slice(0,8)}-${hex.slice(8,12)}-4${hex.slice(13,16)}-8${hex.slice(17,20)}-${hex.slice(20,32)}`;\n            })();
           return wrap({isError:!same||reservation.reservation.status!=="completed",
             content:[{type:"text",text:JSON.stringify(same&&reservation.reservation.status==="completed"
               ?{status:"already_completed",result:reservation.reservation.result}
