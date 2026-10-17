@@ -43,5 +43,5 @@ export function mcpWriteCallPolicy(input: {
     accountId: input.accountId, toolName: input.toolName.replaceAll("__", "."),
     arguments: input.argumentsValue,
   });
-  return { allowed: true, key, digest };
+  // ai_idempotency_keys.tool_call_id is PostgreSQL UUID, not a text digest.\n  return { allowed: true, key, digest };
 }
