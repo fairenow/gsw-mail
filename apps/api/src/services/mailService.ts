@@ -142,7 +142,7 @@ export function createMailService(context: MailServiceContext) {
       return engine.search(accountId, query, mailbox);
     },
 
-    async listRecent(accountId: string, options: { mailbox?: string; limit?: number; cursor?: string; unreadOnly?: boolean }) {
+    async listRecent(accountId: string, options: { mailbox?: string | undefined; limit?: number | undefined; cursor?: string | undefined; unreadOnly?: boolean | undefined }) {
       await requireAccountPermission(context.userId, accountId, "read");
       const engine = await engineFor(accountId);
       const mailboxes = await engine.listMailboxes(accountId);
