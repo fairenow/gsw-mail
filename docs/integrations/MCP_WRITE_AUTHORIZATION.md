@@ -54,3 +54,11 @@ node apps/api/dist/db/applyMcpApprovalMigration.js
 ```
 
 The command is idempotent and verifies the new approval table in one transaction. A successful build alone does not mean the migration ran; confirm the Railway pre-deploy logs show `MCP approval schema verified` before using approval endpoints. Keep MCP writes disabled.
+
+## Encrypted proposed-draft payloads
+
+The `mcp_action_payloads` table introduced by migration `0036_mcp_action_payloads.sql` holds AES-256-GCM encrypted tool arguments. The payload is authenticated against the approval ID and canonical arguments digest. `storePreparedMcpDraft` inserts the approval and ciphertext in one database transaction; `loadMcpDraftForReview` requires the authenticated GSW user ID, checks that the request is pending and unexpired, decrypts, revalidates, and verifies the digest.
+
+**Configuration prerequisite:** set `MCP_APPROVAL_PAYLOAD_KEY` to a cryptographically random 32-byte key encoded in canonical base64 in the Railway API service secrets. Do not place it in the repository, log it, rotate it without a planned re-encryption or expiration strategy, or reuse a general-purpose app secret. With the key missing, proposed draft storage fails closed. The migration does not require the key.
+
+**Still disabled:** the MCP transport does not yet advertise a preparation or execution tool, and no UI exposes the decrypted review data. Do not enable either until user-facing exact-content review, CSRF protections, OAuth scope checks, account ACL checks, replay/idempotency, and expiration cleanup are implemented and tested. Encrypted records currently expire logically; a scheduled purge must be added before enabling production usage.

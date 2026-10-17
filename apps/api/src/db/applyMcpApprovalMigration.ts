@@ -11,6 +11,7 @@ import { Client } from "pg";
 export async function applyMcpApprovalMigration(connectionString: string): Promise<void> {
   if (!connectionString) throw new Error("DATABASE_URL is required");
   const sql = readFileSync(new URL("../../drizzle/0035_mcp_action_approvals.sql", import.meta.url), "utf8");
+  const payloadSql = readFileSync(new URL("../../drizzle/0036_mcp_action_payloads.sql", import.meta.url), "utf8");
   const client = new Client({ connectionString });
   await client.connect();
   try {
@@ -20,10 +21,13 @@ export async function applyMcpApprovalMigration(connectionString: string): Promi
     // Preserve the existing Railway pre-deploy send_policy patch in this single runner.
     await client.query("ALTER TABLE ai_automations ADD COLUMN IF NOT EXISTS send_policy jsonb");
     await client.query(sql);
+    await client.query(payloadSql);
     const verified = await client.query<{ table_name: string }>(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'mcp_action_approvals'",
     );
     if (verified.rowCount !== 1) throw new Error("MCP approval table verification failed");
+    const payloadVerified = await client.query("SELECT to_regclass(current_schema() || '.mcp_action_payloads') AS relation");
+    if (!payloadVerified.rows[0]?.relation) throw new Error("MCP encrypted payload table verification failed");
     await client.query("COMMIT");
     process.stdout.write("send_policy schema verified\\n");
   } catch (error) {
@@ -36,7 +40,7 @@ export async function applyMcpApprovalMigration(connectionString: string): Promi
 
 if (process.argv[1]?.endsWith("applyMcpApprovalMigration.js")) {
   applyMcpApprovalMigration(process.env.DATABASE_URL ?? "")
-    .then(() => { process.stdout.write("MCP approval schema verified\n"); })
+    .then(() => { process.stdout.write("MCP approval and encrypted payload schemas verified\n"); })
     .catch((error: unknown) => {
       process.stderr.write(`MCP approval migration failed: ${error instanceof Error ? error.message : "unknown error"}\n`);
       process.exitCode = 1;

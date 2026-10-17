@@ -1270,3 +1270,16 @@ export const mcpActionApprovals = pgTable(
     index("mcp_action_approvals_expiry_idx").on(t.expiresAt),
   ],
 );
+
+/** Encrypted MCP action arguments; approval deletion cascades to this payload. */
+export const mcpActionPayloads = pgTable(
+  "mcp_action_payloads",
+  {
+    approvalId: uuid("approval_id").primaryKey().references(() => mcpActionApprovals.id, { onDelete: "cascade" }),
+    version: integer("version").default(1).notNull(),
+    nonce: text("nonce").notNull(),
+    ciphertext: text("ciphertext").notNull(),
+    authTag: text("auth_tag").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+);
