@@ -1,5 +1,34 @@
 export interface OAuthConnectionEvent { action: string; resourceId: string | null; createdAt: string; metadata: Record<string,unknown> | null; }
 
+export interface McpApprovalRecord {
+  id: string;
+  accountId: string;
+  clientId: string;
+  toolName: string;
+  summary: string;
+  status: string;
+  expiresAt: string;
+  createdAt: string;
+}
+export interface McpDraftPreview {
+  approvalId: string;
+  accountId: string;
+  toolName: string;
+  status: string;
+  expiresAt: string;
+  arguments: {
+    to: string[];
+    cc?: string[];
+    bcc?: string[];
+    subject?: string;
+    textBody?: string;
+    htmlBody?: string;
+    replyTo?: string;
+    inReplyTo?: string;
+    references?: string;
+  };
+}
+
 export interface ConnectedOAuthApp {
   consentId: string;
   clientId: string;
@@ -611,6 +640,9 @@ export type BulkMailAction = "archive" | "trash" | "restore" | "destroy" | "read
 
 export const api = {
   connectedAppActivity: () => get<{events:OAuthConnectionEvent[]}>("/api/account/connected-apps/activity"),
+  mcpApprovals: () => get<{ approvals: McpApprovalRecord[] }>("/product/mcp/approvals"),
+  mcpDraftPreview: (id: string) => get<{ draft: McpDraftPreview }>(`/product/mcp/approvals/${encodeURIComponent(id)}/draft`),
+  decideMcpApproval: (id: string, decision: "approved" | "rejected") => post<{ approval: McpApprovalRecord }>(`/product/mcp/approvals/${encodeURIComponent(id)}/decision`, { decision }),
   connectedApps: () => get<{ connections: ConnectedOAuthApp[] }>("/api/account/connected-apps"),
   disconnectConnectedApp: (clientId: string) => request(`/api/account/connected-apps/${encodeURIComponent(clientId)}`, { method: "DELETE", headers: headers(), credentials: "include" }).then(res => json<{ disconnected: boolean }>(res)),
   lookupAvatars: (emails: string[]) => post<{ avatars: Record<string, string> }>("/product/avatars/lookup", { emails }),
