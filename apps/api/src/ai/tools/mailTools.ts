@@ -67,6 +67,39 @@ const sendDraftInput = z.object({
   draftId: z.string().min(1).max(1_000),
 });
 
+const listRecentInput = z.object({
+  mailbox: z.string().trim().min(1).max(100).optional(),
+  limit: z.number().int().min(1).max(50).optional(),
+  cursor: z.string().regex(/^(0|[1-9][0-9]*)$/).optional(),
+  unreadOnly: z.boolean().optional(),
+});
+
+export const mailListRecentTool: AgentToolDefinition = {
+  name: "mail.list_recent",
+  description: "List the newest messages in a mailbox without a keyword query. Use this for 'show my latest emails', 'most recent Inbox messages', unread Inbox previews, and chronological mailbox browsing. Use mail.search only for sender, subject, or keyword matching. Results are newest first; pass nextCursor to continue.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      mailbox: { type: "string", description: "Mailbox name or role; defaults to Inbox." },
+      limit: { type: "integer", minimum: 1, maximum: 50, description: "Maximum number of messages to return; defaults to 10." },
+      cursor: { type: "string", description: "Opaque continuation cursor returned as nextCursor by the previous page." },
+      unreadOnly: { type: "boolean", description: "Only return unread messages; defaults to false." },
+    },
+    additionalProperties: false,
+  },
+  requiredScopes: ["mail.read"],
+  risk: "read",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const input = listRecentInput.parse(rawInput);
+      return success(ctx, toolCallId, startedAt, await createMailService(ctx).listRecent(ctx.accountId, input));
+    } catch (error) {
+      return failure(ctx, toolCallId, startedAt, error);
+    }
+  },
+};
+
 export const mailSearchTool: AgentToolDefinition = {
   name: "mail.search",
   description: "Search the user's currently selected mailbox for messages matching a natural-language query. Use this before reading a message when the message ID is not already known.",
@@ -404,6 +437,7 @@ export const agentMailTools: AgentToolDefinition[] = [
   mailStarTool,
   mailMoveTool,
   mailActivityTool,
+  mailListRecentTool,
   mailSearchTool,
   mailReadTool,
   mailReadThreadTool,
