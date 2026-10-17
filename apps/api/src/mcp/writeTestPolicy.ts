@@ -13,7 +13,7 @@ export function canUseMcpWriteTestMode(input: {
 }): boolean {
   return input.enabled === "true" &&
     typeof input.allowedUserId === "string" &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.allowedUserId) &&
+    /^[A-Za-z0-9_-]{10,128}$/.test(input.allowedUserId) &&
     input.userId === input.allowedUserId;
 }
 
