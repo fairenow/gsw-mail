@@ -133,7 +133,8 @@ export async function reserveAiIdempotency(input: {
   key: string;
   userId: string;
   accountId?: string | undefined;
-  toolCallId: string;
+  toolCallId: string | null;
+  fingerprint?: string | undefined;
   toolName: string;
   expiresAt?: Date | undefined;
 }) {
@@ -146,6 +147,7 @@ export async function reserveAiIdempotency(input: {
     accountId: input.accountId ?? null,
     toolCallId: input.toolCallId,
     toolName: input.toolName,
+    result: input.fingerprint ? { fingerprint: input.fingerprint } : null,
     status: "reserved",
     expiresAt: input.expiresAt ?? null,
   }).onConflictDoNothing({ target: aiIdempotencyKeys.key }).returning();
