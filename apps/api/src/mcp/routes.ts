@@ -150,14 +150,14 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
         const actionFingerprintId=`${hex.slice(0,8)}-${hex.slice(8,12)}-4${hex.slice(13,16)}-8${hex.slice(17,20)}-${hex.slice(20,32)}`;
         const reservation=await reserveAiIdempotency({
           key:decision.key,userId:identity.userId,accountId,
-          toolName:policy.tool.name,toolCallId:actionFingerprintId,
+          toolName:policy.tool.name,toolCallId:null, fingerprint:actionFingerprintId,
           expiresAt:new Date(Date.now()+24*60*60_000),
         });
         if(reservation.reused) {
           const same=reservation.reservation.userId===identity.userId &&
             reservation.reservation.accountId===accountId &&
             reservation.reservation.toolName===policy.tool.name &&
-            reservation.reservation.toolCallId===actionFingerprintId;
+            (reservation.reservation.result as { fingerprint?: string } | null)?.fingerprint===actionFingerprintId;
           return wrap({isError:!same||reservation.reservation.status!=="completed",
             content:[{type:"text",text:JSON.stringify(same&&reservation.reservation.status==="completed"
               ?{status:"already_completed",result:reservation.reservation.result}
