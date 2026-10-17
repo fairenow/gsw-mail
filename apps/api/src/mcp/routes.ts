@@ -9,8 +9,10 @@ import { mcpBootstrapTools } from "./bootstrapTools.js";
 import { discoverMcpCapabilities } from "./capabilityDiscovery.js";
 import { mcpPrepareDraftRequest } from "./prepareDraftAction.js";
 import { storePreparedMcpDraft } from "./draftPayloadStore.js";
+import { canUseMcpWriteTestMode, mcpWriteCallPolicy } from "./writeTestPolicy.js";
+import { reserveAiIdempotency, completeAiIdempotency, failAiIdempotency } from "../ai/agentState.js";
 
-/** Read-only transport while persisted write approvals are under construction. */
+/** OAuth-scoped MCP transport with owner-only, explicitly enabled write testing. */
 export async function mcpRoutes(app:FastifyInstance):Promise<void> {
   // Scope fallback parsing to MCP. Clients can probe with nonstandard media types before OAuth.
   app.addContentTypeParser("*", { parseAs: "string", bodyLimit: 1024 * 1024 }, (_request, body, done) => {
@@ -28,8 +30,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
         .header("WWW-Authenticate", `Bearer resource_metadata="${metadataUrl}"`)
         .send({error:"unauthorized"});
     }
-    // The server supports stateless Streamable HTTP: JSON responses, no SSE
-    // notification stream and no session ID. It never enables write tools.
+    // Stateless Streamable HTTP: JSON responses, no SSE or session ID.
     const origin=request.headers.origin;
     if(origin){
       try {
@@ -38,6 +39,10 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
           return reply.code(403).send({error:"origin_not_allowed"});
       }catch{return reply.code(403).send({error:"origin_not_allowed"});}
     }
+    const writeTestEnabled=canUseMcpWriteTestMode({
+      userId:identity.userId,enabled:process.env.GSW_MCP_WRITE_TEST_ENABLED,
+      allowedUserId:process.env.GSW_MCP_WRITE_TEST_USER_ID,
+    });
     const input=request.body as {jsonrpc?:string;id?:number|string;method?:string;params?:Record<string,unknown>};
     if(!input || input.jsonrpc!=="2.0")return reply.code(400).send({error:"invalid_jsonrpc"});
     const wrap=(result:unknown)=>({jsonrpc:"2.0",id:input.id??null,result});
@@ -51,7 +56,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
     if(input.method==="resources/list")return wrap({resources:[]});
     if(input.method==="prompts/list")return wrap({prompts:[]});
     if(input.method==="tools/list"){
-      return wrap({tools:[...mcpBootstrapTools.filter(t=>(t.name!=="prepare_action" || process.env.GSW_MCP_PREPARE_ENABLED==="true") && t.requiredScopes.every(s=>identity.oauthScopes.has(s))),...agentMailRegistry.definitions().filter(t=>t.risk==="read"&&t.requiredScopes.every(s=>identity.oauthScopes.has(s))).map(t=>({name:t.name.replaceAll(".","__"),description:t.description,inputSchema:{...t.inputSchema,properties:{...(t.inputSchema.properties as Record<string,unknown> ?? {}),accountId:{type:"string",description:"GSW mailbox account UUID to operate within"}},required:[...((t.inputSchema.required as string[] | undefined) ?? []),"accountId"]}}))]});
+      return wrap({tools:[...mcpBootstrapTools.filter(t=>(t.name!=="prepare_action" || process.env.GSW_MCP_PREPARE_ENABLED==="true") && t.requiredScopes.every(s=>identity.oauthScopes.has(s))),...agentMailRegistry.definitions().filter(t=>(t.risk==="read"||writeTestEnabled)&&t.requiredScopes.every(s=>identity.oauthScopes.has(s))).map(t=>({name:t.name.replaceAll(".","__"),description:t.description+(t.risk==="external"?" CAUTION: This action can send, publish, delete or trigger external effects. Set confirmExternal=true only after reviewing the exact intended effect.":""),inputSchema:{...t.inputSchema,properties:{...(t.inputSchema.properties as Record<string,unknown> ?? {}),accountId:{type:"string",description:"GSW mailbox account UUID to operate within"},...(t.risk!=="read"?{requestId:{type:"string",format:"uuid",description:"Fresh UUID per intended action; reuse for retries to prevent duplicate execution"},...(t.risk==="external"?{confirmExternal:{type:"boolean",description:"Set true only after explicit user authorization of this external action"}}:{})}:{})},required:[...((t.inputSchema.required as string[] | undefined) ?? []),"accountId",...(t.risk!=="read"?["requestId",...(t.risk==="external"?["confirmExternal"]:[])]:[])]}}))]});
     }
     if(input.method==="tools/call"){
       const name=typeof input.params?.name==="string"?input.params.name:"";
@@ -69,6 +74,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
             ...(query!==undefined?{query}:{}),
             ...(offset!==undefined?{offset}:{}),
             ...(limit!==undefined?{limit}:{}),
+            writeTestEnabled,
           });
           return wrap({content:[{type:"text",text:JSON.stringify(catalog)}]});
         } catch {
@@ -118,9 +124,49 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
       }
       const accountId=typeof params.accountId==="string"?params.accountId:"";
       const policy=await resolveMcpUserToolPermission({userId:identity.userId,accountId,oauthScopes:identity.oauthScopes,toolName:name});
-      if(!policy.allowed||policy.tool.risk!=="read")return wrap({isError:true,content:[{type:"text",text:"Permission denied or write action disabled"}]});
-      const {accountId:_,...toolArguments}=params;
-      const result=await agentMailRegistry.execute(name,JSON.stringify(toolArguments),{userId:identity.userId,authUserId:identity.authUserId,accountId,headers:{}},randomUUID());
+      if(!policy.allowed || (policy.tool.risk!=="read"&&!writeTestEnabled))
+        return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"permission_denied_or_write_test_disabled"})}]});
+      const {accountId:_,requestId,confirmExternal,...toolArguments}=params;
+      const context={userId:identity.userId,authUserId:identity.authUserId,accountId,headers:{}};
+      if(policy.tool.risk!=="read") {
+        const decision=mcpWriteCallPolicy({
+          risk:policy.tool.risk,requestId,confirmExternal,
+          userId:identity.userId,clientId:identity.clientId,accountId,
+          toolName:policy.tool.name,argumentsValue:toolArguments,
+        });
+        if(!decision.allowed) return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:decision.reason})}]});
+        // One persistent reservation per user/client/requestId, bound to exact
+        // tool, mailbox and canonical arguments. A repeated request never runs again.
+        const reservation=await reserveAiIdempotency({
+          key:decision.key,userId:identity.userId,accountId,
+          toolName:policy.tool.name,toolCallId:decision.digest,
+          expiresAt:new Date(Date.now()+24*60*60_000),
+        });
+        if(reservation.reused) {
+          const same=reservation.reservation.userId===identity.userId &&
+            reservation.reservation.accountId===accountId &&
+            reservation.reservation.toolName===policy.tool.name &&
+            reservation.reservation.toolCallId===decision.digest;
+          return wrap({isError:!same||reservation.reservation.status!=="completed",
+            content:[{type:"text",text:JSON.stringify(same&&reservation.reservation.status==="completed"
+              ?{status:"already_completed",result:reservation.reservation.result}
+              :{error:same?"request_already_attempted":"request_id_reused_with_different_action"})}]});
+        }
+        try {
+          const result=await agentMailRegistry.execute(name,JSON.stringify(toolArguments),context,randomUUID());
+          if(result.ok) {
+            // Store only a completion marker; raw mail/file/contact results can be sensitive.
+            await completeAiIdempotency(decision.key,{completed:true});
+          } else {
+            await failAiIdempotency(decision.key,new Error(result.error?.code??"tool_failed"));
+          }
+          return wrap({isError:!result.ok,content:[{type:"text",text:JSON.stringify(result.ok?result.data:result.error).slice(0,50000)}]});
+        } catch {
+          await failAiIdempotency(decision.key,new Error("mcp_write_execution_failed"));
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"write_execution_failed_check_action_status_before_retrying"})}]});
+        }
+      }
+      const result=await agentMailRegistry.execute(name,JSON.stringify(toolArguments),context,randomUUID());
       return wrap({isError:!result.ok,content:[{type:"text",text:JSON.stringify(result.ok?result.data:result.error).slice(0,50000)}]});
     }
     return reply.code(200).send({jsonrpc:"2.0",id:input.id??null,error:{code:-32601,message:"Method not found"}});

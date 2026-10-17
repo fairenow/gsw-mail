@@ -76,3 +76,11 @@ Do not expose generic approval execution until one-time claims, crash-safe idemp
 The API starts `startMcpPayloadRetentionWorker` at boot and every five minutes removes expired encrypted payload rows through `purgeExpiredMcpDraftPayloads`. The approval audit ledger is preserved, and only deletion counts are logged. Failures are logged and retried at the next interval without stopping the API. Multiple API instances can run cleanup concurrently because deletion is idempotent. Cleanup is **not** an authorization mechanism: every review and future execution path must independently enforce approval status, expiry, owner, client, account and argument digest.
 
 The API test command now includes `src/mcp/*.test.ts`, so MCP encryption and policy unit tests are part of the regular CI suite.
+
+## Owner-only integration test mode
+
+The MCP transport can expose registry write actions **only** to one explicitly configured test user. Both `GSW_MCP_WRITE_TEST_ENABLED=true` and `GSW_MCP_WRITE_TEST_USER_ID=<exact authenticated internal user ID>` are required. The user ID is an opaque internal identifier, not necessarily a UUID. Do not set a shared account, wildcard or client ID. The feature is disabled if either variable is missing.
+
+Every write still requires an OAuth scope, active GSW AI scope grant, globally enabled capability, and mailbox ACL. For each intended write, the MCP client must supply a fresh UUID `requestId` (reuse it only for retries). The server stores a persistent reservation keyed by authenticated user, OAuth client and request ID, with an exact account/tool/arguments digest. Repeated calls never execute the operation again, even if a previous attempt failed or its result is uncertain. Actions classified as `external` also require `confirmExternal=true`, which should be provided only after the human explicitly authorizes the exact action. These are real operations, **not** dry runs; sending, deleting, scheduling, publishing, and launching campaigns can have lasting effects.
+
+For a test cycle, use a dedicated mailbox and test recipients, begin with reversible actions, then confirm any external action individually. Disable `GSW_MCP_WRITE_TEST_ENABLED` after testing. Do not enable this mode for multiple users or as a substitute for the normal first-party review and approval system.
