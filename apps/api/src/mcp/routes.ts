@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { config } from "../config.js";
 import { verifyMcpBearer } from "./verifyBearer.js";
@@ -146,16 +146,18 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
         if(!decision.allowed) return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:decision.reason})}]});
         // One persistent reservation per user/client/requestId, bound to exact
         // tool, mailbox and canonical arguments. A repeated request never runs again.
+        const hex=createHash("sha256").update(decision.digest).digest("hex");
+        const actionFingerprintId=`${hex.slice(0,8)}-${hex.slice(8,12)}-4${hex.slice(13,16)}-8${hex.slice(17,20)}-${hex.slice(20,32)}`;
         const reservation=await reserveAiIdempotency({
           key:decision.key,userId:identity.userId,accountId,
-          toolName:policy.tool.name,toolCallId:decision.digest,
+          toolName:policy.tool.name,toolCallId:actionFingerprintId,
           expiresAt:new Date(Date.now()+24*60*60_000),
         });
         if(reservation.reused) {
           const same=reservation.reservation.userId===identity.userId &&
             reservation.reservation.accountId===accountId &&
             reservation.reservation.toolName===policy.tool.name &&
-            reservation.reservation.toolCallId===decision.digest;
+            reservation.reservation.toolCallId===actionFingerprintId;
           return wrap({isError:!same||reservation.reservation.status!=="completed",
             content:[{type:"text",text:JSON.stringify(same&&reservation.reservation.status==="completed"
               ?{status:"already_completed",result:reservation.reservation.result}
