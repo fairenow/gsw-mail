@@ -1,0 +1,103 @@
+import { useEffect, useState } from "react";
+import { api, type McpApprovalRecord, type McpDraftPreview } from "../api";
+
+/** GSW first-party review surface; no draft is executed by these controls. */
+export function McpDraftApprovals() {
+  const [approvals, setApprovals] = useState<McpApprovalRecord[]>([]);
+  const [selected, setSelected] = useState<McpDraftPreview | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const reload = async () => {
+    setLoading(true);
+    try {
+      const result = await api.mcpApprovals();
+      setApprovals(result.approvals);
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load pending actions");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { void reload(); }, []);
+
+  const review = async (approval: McpApprovalRecord) => {
+    setBusy(approval.id);
+    setSelected(null);
+    setNotice("");
+    try {
+      const result = await api.mcpDraftPreview(approval.id);
+      setSelected(result.draft);
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load draft preview");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const decide = async (decision: "approved" | "rejected") => {
+    if (!selected) return;
+    const id = selected.approvalId;
+    setBusy(id);
+    try {
+      await api.decideMcpApproval(id, decision);
+      setSelected(null);
+      setNotice(decision === "approved"
+        ? "Draft proposal approved. Execution is not enabled yet; no draft was created."
+        : "Draft proposal rejected. No draft was created.");
+      await reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not record approval decision");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const pending = approvals.filter(a => a.status === "pending" && Date.parse(a.expiresAt) > Date.now());
+  return <div className="gsw-settings-card">
+    <div className="gsw-settings-card-head">
+      <div>
+        <h2>AI app approvals</h2>
+        <p>Review exact draft contents before approving a request from a connected app. Approving currently records your decision only; it does not create or send an email.</p>
+      </div>
+      <button type="button" className="gsw-secondary-btn" disabled={loading} onClick={() => void reload()}>Refresh</button>
+    </div>
+    {error && <p role="alert">{error}</p>}
+    {notice && <p role="status">{notice}</p>}
+    {loading ? <p>Loading approvals…</p> : pending.length === 0 ? <p>No pending draft approvals.</p> :
+      <ul>{pending.map(a => <li key={a.id}>
+        <strong>{a.summary}</strong> — {a.toolName}
+        <span> · Expires {new Date(a.expiresAt).toLocaleString()}</span>{" "}
+        <button type="button" className="gsw-secondary-btn" disabled={busy !== null} onClick={() => void review(a)}>
+          {busy === a.id ? "Loading…" : "Review"}
+        </button>
+      </li>)}</ul>}
+    {selected && <section className="gsw-settings-card" aria-label="Proposed email draft">
+      <h3>Review proposed email draft</h3>
+      <p><strong>Mailbox:</strong> {selected.accountId}</p>
+      <p><strong>To:</strong> {selected.arguments.to.join(", ")}</p>
+      {selected.arguments.cc?.length ? <p><strong>CC:</strong> {selected.arguments.cc.join(", ")}</p> : null}
+      {selected.arguments.bcc?.length ? <p><strong>BCC:</strong> {selected.arguments.bcc.join(", ")}</p> : null}
+      <p><strong>Subject:</strong> {selected.arguments.subject || "(no subject)"}</p>
+      {selected.arguments.replyTo && <p><strong>Reply to:</strong> {selected.arguments.replyTo}</p>}
+      {selected.arguments.textBody !== undefined && <>
+        <h4>Plain-text body</h4>
+        <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{selected.arguments.textBody}</pre>
+      </>}
+      {selected.arguments.htmlBody !== undefined && <>
+        <h4>HTML body (source, not executed)</h4>
+        <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{selected.arguments.htmlBody}</pre>
+      </>}
+      <p>Expires {new Date(selected.expiresAt).toLocaleString()}. No draft will be created by this approval.</p>
+      <div style={{ display: "flex", gap: 12 }}>
+        <button type="button" className="gsw-primary-btn" disabled={busy !== null || Date.parse(selected.expiresAt) <= Date.now()} onClick={() => void decide("approved")}>Approve proposal</button>
+        <button type="button" className="gsw-secondary-btn" disabled={busy !== null} onClick={() => void decide("rejected")}>Reject</button>
+        <button type="button" className="gsw-secondary-btn" disabled={busy !== null} onClick={() => setSelected(null)}>Close</button>
+      </div>
+    </section>}
+  </div>;
+}
