@@ -174,7 +174,7 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
       busy = true;
       try {
         const result = await api.chatCommand(commandId);
-        if (disposed) return;
+        if (disposed || localStorage.getItem(key) !== commandId) return;
         if (result.status === "processing") setReconnecting(!result.activity);
         setBackgroundStopAvailable(Boolean(result.background) && result.status === "processing");
         if (result.background && result.status === "processing") {
@@ -208,11 +208,32 @@ export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () =>
           setReconnecting(false);
           setExecutionActivities([]);
         } else if(result.status === "uncertain" || result.status === "failed") {
-          localStorage.removeItem(key);
+          // An interrupted stream can leave a real assistant progress report in
+          // conversation history. Restore it before showing an error, rather
+          // than implying nothing was accomplished.
+          let restoredReply = false;
+          if (result.conversationId) {
+            try {
+              const saved = await api.chatConversation(result.conversationId);
+              if (disposed) return;
+              const history = saved.messages.filter(m=>m.role==="user"||m.role==="assistant");
+              if (history.length) {
+                setMessages(history.map(m=>({
+                  role:m.role as "user"|"assistant",content:m.content,
+                  attachments:attachmentsFromMetadata(m.metadata),
+                })).slice(-24));
+                restoredReply = history[history.length-1]?.role === "assistant";
+              }
+            } catch { /* Preserve the in-memory conversation on retrieval errors. */ }
+          }
+          if (localStorage.getItem(key) === commandId) localStorage.removeItem(key);
           setActiveCommandId(null);
           setSending(false);
+          setReconnecting(false);
           setExecutionActivities([]);
-          setError(result.health?.stopped ? "Work stopped." : "The prior request stopped before completion. Check the conversation before retrying.");
+          setError(result.health?.stopped ? "Work stopped." : restoredReply
+            ? "Partial results were saved. This request has ended; further batches were not run in the background."
+            : "This request stopped before completion. Check saved conversation history before retrying.");
         }
       } catch {
         // Temporary network errors do not mean the server stopped processing.
