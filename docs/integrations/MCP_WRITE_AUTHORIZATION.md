@@ -44,3 +44,13 @@ Related: [Superpowered MCP plan](MCP_SUPERPOWERED_CAPABILITY_PLAN.md), [Remote M
 ## Deployment prerequisite
 
 The Railway production service currently uses a narrowly scoped pre-deploy SQL patch and **does not automatically run the Drizzle migration journal**. Before enabling the new first-party approval review routes in production, apply `apps/api/drizzle/0035_mcp_action_approvals.sql` through the established production database migration procedure and verify the table and indexes exist. Do not assume that merging this PR applies the migration. Keep MCP writes disabled until the full execution and approval flow is tested.
+
+### Production migration runner (PR #169)
+
+Once the migration runner has passed CI and merged, preserve the existing Railway pre-deploy `send_policy` patch and append:
+
+```sh
+node apps/api/dist/db/applyMcpApprovalMigration.js
+```
+
+The command is idempotent and verifies the new approval table in one transaction. A successful build alone does not mean the migration ran; confirm the Railway pre-deploy logs show `MCP approval schema verified` before using approval endpoints. Keep MCP writes disabled.
