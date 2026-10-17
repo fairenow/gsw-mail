@@ -1,0 +1,18 @@
+{
+  "apps": "./.app.json",
+  "author": {
+    "name": "App developer"
+  },
+  "description": "GSW Mail management of custom domain emails.",
+  "interface": {
+    "capabilities": [],
+    "category": "Other",
+    "defaultPrompt": null,
+    "developerName": "App developer",
+    "displayName": "GSW Mail",
+    "longDescription": "GSW Mail management of custom domain emails.",
+    "shortDescription": "GSW Mail management of custom domain emails."
+  },
+  "name": "dev-6ad29393d07c81919c80bd72ebb4c51c",
+  "version": "1.0.1"
+}
