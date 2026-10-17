@@ -3,6 +3,7 @@ import { z } from "zod";
 import { config } from "../config.js";
 import { requireUser } from "../auth/middleware.js";
 import { decideMcpApproval, listMcpApprovals } from "../mcp/approvalStore.js";
+import { loadMcpDraftForReview } from "../mcp/draftPayloadStore.js";
 
 /**
  * First-party GSW product session routes, deliberately separate from /mcp.
@@ -15,6 +16,18 @@ export default async function mcpApprovalsRoutes(app: FastifyInstance) {
   app.get("/product/mcp/approvals", async (req) => {
     const query = z.object({ limit: z.coerce.number().int().min(1).max(100).optional() }).parse(req.query);
     return { approvals: await listMcpApprovals(req.user!.id, query.limit ?? 30) };
+  });
+
+  app.get("/product/mcp/approvals/:id/draft", async (req, reply) => {
+    if (req.headers.authorization && req.headers.cookie) {
+      return reply.code(403).send({ error: "ambiguous_authentication" });
+    }
+    const params = z.object({ id: z.string().uuid() }).parse(req.params);
+    const draft = await loadMcpDraftForReview({ userId: req.user!.id, approvalId: params.id });
+    if (!draft) return reply.code(404).send({ error: "draft_not_found_or_not_pending" });
+    reply.header("Cache-Control", "no-store");
+    reply.header("Pragma", "no-cache");
+    return { draft };
   });
 
   app.post("/product/mcp/approvals/:id/decision", async (req, reply) => {
