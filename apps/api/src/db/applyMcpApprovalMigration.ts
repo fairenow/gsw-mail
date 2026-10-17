@@ -17,12 +17,15 @@ export async function applyMcpApprovalMigration(connectionString: string): Promi
     await client.query("BEGIN");
     // Prevent two overlapping deploys from racing the DDL.
     await client.query("SELECT pg_advisory_xact_lock(20261017, 35)");
+    // Preserve the existing Railway pre-deploy send_policy patch in this single runner.
+    await client.query("ALTER TABLE ai_automations ADD COLUMN IF NOT EXISTS send_policy jsonb");
     await client.query(sql);
     const verified = await client.query<{ table_name: string }>(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'mcp_action_approvals'",
     );
     if (verified.rowCount !== 1) throw new Error("MCP approval table verification failed");
     await client.query("COMMIT");
+    process.stdout.write("send_policy schema verified\\n");
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
