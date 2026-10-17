@@ -6,6 +6,7 @@ import { agentMailRegistry } from "../ai/tools/registry.js";
 import { resolveMcpUserToolPermission } from "./resolvePermissions.js";
 import { getAccessibleAccounts } from "../auth/authorize.js";
 import { mcpBootstrapTools } from "./bootstrapTools.js";
+import { discoverMcpCapabilities } from "./capabilityDiscovery.js";
 
 /** Read-only transport while persisted write approvals are under construction. */
 export async function mcpRoutes(app:FastifyInstance):Promise<void> {
@@ -56,6 +57,21 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
       const params=args&&typeof args==="object"&&!Array.isArray(args)?args as Record<string,unknown>:{};
       if(name==="get_current_user") {
         return wrap({content:[{type:"text",text:JSON.stringify({userId:identity.userId})}]});
+      }
+      if(name==="list_capabilities") {
+        try {
+          const query=typeof params.query==="string"?params.query:undefined;
+          const offset=typeof params.offset==="number"?params.offset:undefined;
+          const limit=typeof params.limit==="number"?params.limit:undefined;
+          const catalog=discoverMcpCapabilities(agentMailRegistry.definitions(),identity.oauthScopes,{
+            ...(query!==undefined?{query}:{}),
+            ...(offset!==undefined?{offset}:{}),
+            ...(limit!==undefined?{limit}:{}),
+          });
+          return wrap({content:[{type:"text",text:JSON.stringify(catalog)}]});
+        } catch {
+          return wrap({isError:true,content:[{type:"text",text:"Invalid capability discovery parameters"}]});
+        }
       }
       if(name==="list_accounts") {
         if(!identity.oauthScopes.has("mail.read")) return wrap({isError:true,content:[{type:"text",text:"mail.read scope required"}]});
