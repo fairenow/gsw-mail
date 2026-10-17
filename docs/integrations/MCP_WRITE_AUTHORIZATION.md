@@ -70,3 +70,9 @@ The `prepare_action` MCP tool supports only `mail.create_draft` and requires `ma
 The transport remains **off by default** via `GSW_MCP_PREPARE_ENABLED` (only the exact string `true` enables it). Keep this false until the `0036` migration is confirmed, `MCP_APPROVAL_PAYLOAD_KEY` is configured securely, expiration cleanup is scheduled, and end-to-end tests pass. A user with only read scopes must reauthorize the connected client to grant `mail.write`; no implicit scope escalation occurs. Even when preparation is enabled, all registry write execution stays blocked by the existing MCP read-only gate.
 
 Do not expose generic approval execution until one-time claims, crash-safe idempotency, and action result audit are complete.
+
+## Automatic encrypted payload expiration
+
+The API starts `startMcpPayloadRetentionWorker` at boot and every five minutes removes expired encrypted payload rows through `purgeExpiredMcpDraftPayloads`. The approval audit ledger is preserved, and only deletion counts are logged. Failures are logged and retried at the next interval without stopping the API. Multiple API instances can run cleanup concurrently because deletion is idempotent. Cleanup is **not** an authorization mechanism: every review and future execution path must independently enforce approval status, expiry, owner, client, account and argument digest.
+
+The API test command now includes `src/mcp/*.test.ts`, so MCP encryption and policy unit tests are part of the regular CI suite.
