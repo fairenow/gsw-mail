@@ -8,7 +8,7 @@ export const mcpBootstrapTools = [
   },
   {
     name: "list_capabilities",
-    description: "Inspect the GSW Mail MCP capability catalog, including backend tools not yet exposed for execution. Reports OAuth scope gaps and whether write transport is disabled. Use this to discover available primitives without assuming an advertised tool is callable.",
+    description: "Paginated inventory of every registered GSW Mail tool with required scopes, risk, OAuth gaps, and write-mode availability. All registered tools can be invoked through invoke_tool; authorization and test-mode restrictions are checked at call time.",
     inputSchema: {
       type: "object",
       properties: {
