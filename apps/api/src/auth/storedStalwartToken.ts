@@ -4,6 +4,7 @@ import { db } from "../db/client.js";
 import { oauthAccessToken, emailAccounts } from "../db/schema.js";
 import { config } from "../config.js";
 import { verifyStalwartMailboxJwt } from "./verifyStalwartMailboxJwt.js";
+import { selectVerifiedStoredToken } from "./selectStoredStalwartToken.js";
 
 /**
  * Reuse only an existing, persisted, signed first-party mailbox credential.
@@ -33,18 +34,11 @@ export async function findStoredStalwartMailboxToken(input: {
     gt(oauthAccessToken.expiresAt, new Date(Date.now() + 60_000)),
   )).orderBy(desc(oauthAccessToken.expiresAt)).limit(5);
 
-  for (const candidate of candidates) {
-    if (!candidate.scopes.includes("email")) continue;
-    try {
-      await verifyStalwartMailboxJwt(candidate.token,
-        { productUserId: input.productUserId, authUserId: input.authUserId, accountId: input.accountId },
-        jwks,
-        { issuer: config.auth.issuer, audience: config.auth.stalwartAudience, mailboxAddress: account.address },
-      );
-      return candidate.token;
-    } catch {
-      // Token could be opaque, expired, wrong audience, or bound to another mailbox.
-    }
-  }
-  return null;
+  return selectVerifiedStoredToken(candidates, async (token) => {
+    await verifyStalwartMailboxJwt(token,
+      { productUserId: input.productUserId, authUserId: input.authUserId, accountId: input.accountId },
+      jwks,
+      { issuer: config.auth.issuer, audience: config.auth.stalwartAudience, mailboxAddress: account.address },
+    );
+  });
 }
