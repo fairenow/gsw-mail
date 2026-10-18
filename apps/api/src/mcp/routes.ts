@@ -1,4 +1,4 @@
-import { resolveMcpPersistedApproval } from "./resolvePersistedApproval.js";
+import { consumeMcpPersistedApproval } from "./resolvePersistedApproval.js";
 import { executeAuthorizedCapability } from "../ai/authorizedCapability.js";
 import { randomUUID, createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
@@ -174,19 +174,6 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
           toolName:policy.tool.name,argumentsValue:toolArguments,
         });
         if(!decision.allowed) return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:decision.reason})}]});
-        // Opt-in until the first-party approval UI and atomic consumption are ready.
-        // A client-provided approvalId is only a lookup key, never evidence itself.
-        if (process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL === "true") {
-          const approved = await resolveMcpPersistedApproval({
-            approvalId: typeof approvalId === "string" ? approvalId : "",
-            risk: policy.tool.risk,
-            userId: identity.userId, accountId, clientId: identity.clientId,
-            toolName: policy.tool.name, argumentsValue: toolArguments,
-          });
-          if (!approved.allowed) return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:approved.reason})}]});
-          // Do not enable production writes on this flag alone: the owner-only
-          // write-test restriction above continues to apply.
-        }
         // One persistent reservation per user/client/requestId, bound to exact
         // tool, mailbox and canonical arguments. A repeated request never runs again.
         const hex=createHash("sha256").update(decision.digest).digest("hex");
@@ -205,6 +192,19 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
             content:[{type:"text",text:JSON.stringify(same&&reservation.reservation.status==="completed"
               ?{status:"already_completed",result:reservation.reservation.result}
               :{error:same?"request_already_attempted":"request_id_reused_with_different_action"})}]});
+        }
+        // Opt-in until the first-party approval UI and atomic consumption are ready.
+        // A client-provided approvalId is only a lookup key, never evidence itself.
+        if (process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL === "true") {
+          const approved = await consumeMcpPersistedApproval({
+            approvalId: typeof approvalId === "string" ? approvalId : "",
+            risk: policy.tool.risk,
+            userId: identity.userId, accountId, clientId: identity.clientId,
+            toolName: policy.tool.name, argumentsValue: toolArguments,
+          });
+          if (!approved.allowed) return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:approved.reason})}]});
+          // Do not enable production writes on this flag alone: the owner-only
+          // write-test restriction above continues to apply.
         }
         try {
           const writeContext=createMcpExecutionContext(identity,accountId,{
