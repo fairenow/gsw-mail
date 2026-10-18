@@ -5,6 +5,7 @@ import { api, type McpApprovalRecord, type McpDraftPreview } from "../api";
 export function McpDraftApprovals() {
   const [approvals, setApprovals] = useState<McpApprovalRecord[]>([]);
   const [selected, setSelected] = useState<McpDraftPreview | null>(null);
+  const [reviewedDigest, setReviewedDigest] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -27,10 +28,12 @@ export function McpDraftApprovals() {
   const review = async (approval: McpApprovalRecord) => {
     setBusy(approval.id);
     setSelected(null);
+    setReviewedDigest(null);
     setNotice("");
     try {
       const result = await api.mcpDraftPreview(approval.id);
       setSelected(result.draft);
+      setReviewedDigest(result.reviewedArgumentsDigest);
       setError("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load draft preview");
@@ -40,12 +43,13 @@ export function McpDraftApprovals() {
   };
 
   const decide = async (decision: "approved" | "rejected") => {
-    if (!selected) return;
+    if (!selected || !reviewedDigest) return;
     const id = selected.approvalId;
     setBusy(id);
     try {
-      await api.decideMcpApproval(id, decision);
+      await api.decideMcpApproval(id, decision, reviewedDigest);
       setSelected(null);
+      setReviewedDigest(null);
       setNotice(decision === "approved"
         ? "Draft proposal approved. Execution is not enabled yet; no draft was created."
         : "Draft proposal rejected. No draft was created.");
@@ -69,14 +73,14 @@ export function McpDraftApprovals() {
     {error && <p role="alert">{error}</p>}
     {notice && <p role="status">{notice}</p>}
     {loading ? <p>Loading approvals…</p> : pending.length === 0 ? <p>No pending draft approvals.</p> :
-      <ul>{pending.map(a => <li key={a.id}>
+      <ul style={{ maxHeight: 280, overflowY: "auto", paddingRight: 12 }}>{pending.map(a => <li key={a.id}>
         <strong>{a.summary}</strong> — {a.toolName}
         <span> · Expires {new Date(a.expiresAt).toLocaleString()}</span>{" "}
         <button type="button" className="gsw-secondary-btn" disabled={busy !== null} onClick={() => void review(a)}>
           {busy === a.id ? "Loading…" : "Review"}
         </button>
       </li>)}</ul>}
-    {selected && <section className="gsw-settings-card" aria-label="Proposed email draft">
+    {selected && <section className="gsw-settings-card" aria-label="Proposed email draft" style={{ maxHeight: "min(65vh, 600px)", overflowY: "auto", overflowX: "hidden", overflowWrap: "anywhere" }}>
       <h3>Review proposed email draft</h3>
       <p><strong>Mailbox:</strong> {selected.accountId}</p>
       <p><strong>To:</strong> {selected.arguments.to.join(", ")}</p>
@@ -94,7 +98,7 @@ export function McpDraftApprovals() {
       </>}
       <p>Expires {new Date(selected.expiresAt).toLocaleString()}. No draft will be created by this approval.</p>
       <div style={{ display: "flex", gap: 12 }}>
-        <button type="button" className="gsw-primary-btn" disabled={busy !== null || Date.parse(selected.expiresAt) <= Date.now()} onClick={() => void decide("approved")}>Approve proposal</button>
+        <button type="button" className="gsw-primary-btn" disabled={busy !== null || !reviewedDigest || Date.parse(selected.expiresAt) <= Date.now()} onClick={() => void decide("approved")}>Approve proposal</button>
         <button type="button" className="gsw-secondary-btn" disabled={busy !== null} onClick={() => void decide("rejected")}>Reject</button>
         <button type="button" className="gsw-secondary-btn" disabled={busy !== null} onClick={() => setSelected(null)}>Close</button>
       </div>
