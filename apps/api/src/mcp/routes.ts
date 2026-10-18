@@ -133,8 +133,10 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
       }
       const accountId=typeof params.accountId==="string"?params.accountId:"";
       const policy=await resolveMcpUserToolPermission({userId:identity.userId,accountId,oauthScopes:identity.oauthScopes,toolName:name});
-      if(!policy.allowed || (policy.tool.risk!=="read"&&!writeTestEnabled))
-        return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"permission_denied_or_write_test_disabled"})}]});
+      if(!policy.allowed)
+        return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"permission_denied",reason:policy.reason,tool:name})}]});
+      if(policy.tool.risk!=="read"&&!writeTestEnabled)
+        return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"write_test_disabled",tool:name})}]});
       const {accountId:_,requestId,confirmExternal,...toolArguments}=params;
       const context={userId:identity.userId,authUserId:identity.authUserId,accountId,headers:{}};
       if(policy.tool.risk!=="read") {
