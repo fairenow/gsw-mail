@@ -80,8 +80,9 @@ export function McpDraftApprovals() {
           {busy === a.id ? "Loading…" : "Review"}
         </button>
       </li>)}</ul>}
-    {selected && <section className="gsw-settings-card" aria-label="Proposed email draft" style={{ maxHeight: "min(65vh, 600px)", overflowY: "auto", overflowX: "hidden", overflowWrap: "anywhere" }}>
+    {selected && <section className="gsw-settings-card" aria-label="Proposed email draft" style={{ overflowWrap: "anywhere" }}>
       <h3>Review proposed email draft</h3>
+      <div role="region" aria-label="Draft content to review" tabIndex={0} style={{ maxHeight: "min(45vh, 420px)", overflowY: "auto", overscrollBehavior: "contain", paddingRight: 12 }}>
       <p><strong>Mailbox:</strong> {selected.accountId}</p>
       <p><strong>To:</strong> {selected.arguments.to.join(", ")}</p>
       {selected.arguments.cc?.length ? <p><strong>CC:</strong> {selected.arguments.cc.join(", ")}</p> : null}
@@ -96,11 +97,12 @@ export function McpDraftApprovals() {
         <h4>HTML body (source, not executed)</h4>
         <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{selected.arguments.htmlBody}</pre>
       </>}
+      </div>
       <p>Expires {new Date(selected.expiresAt).toLocaleString()}. No draft will be created by this approval.</p>
       <div style={{ display: "flex", gap: 12 }}>
         <button type="button" className="gsw-primary-btn" disabled={busy !== null || !reviewedDigest || Date.parse(selected.expiresAt) <= Date.now()} onClick={() => void decide("approved")}>Approve proposal</button>
         <button type="button" className="gsw-secondary-btn" disabled={busy !== null} onClick={() => void decide("rejected")}>Reject</button>
-        <button type="button" className="gsw-secondary-btn" disabled={busy !== null} onClick={() => setSelected(null)}>Close</button>
+        <button type="button" className="gsw-secondary-btn" disabled={busy !== null} onClick={() => { setSelected(null); setReviewedDigest(null); }}>Close</button>
       </div>
     </section>}
   </div>;
