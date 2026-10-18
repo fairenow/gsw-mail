@@ -1,3 +1,4 @@
+import { requiresExplicitActionConfirmation } from "./actionConfirmationPolicy.js";
 import { firstDisabledCapabilityScope, firstMissingCapabilityGrant } from "../ai/capabilityScopePolicy.js";
 import { requiredMailboxPermission } from "./mailboxToolPermission.js";
 import { executeAuthorizedCapability } from "./authorizedCapability.js";
@@ -184,7 +185,7 @@ export async function executeAgentTool(input: {
     return policy === "always" || (policy === "contextual" && definition.risk === "external");
   });
 
-  if (!input.confirmationApproved && (definition.risk === "external" || confirmationScope)) {
+  if (!input.confirmationApproved && requiresExplicitActionConfirmation(definition.risk, definition.requiredScopes)) {
     const confirmation = await requestAiConfirmation({
       conversationId: input.conversationId,
       runId: input.runId,
