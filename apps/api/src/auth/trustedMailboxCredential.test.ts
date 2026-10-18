@@ -16,9 +16,10 @@ test("credential broker authorizes before requesting a mailbox-scoped token", as
       stages.push("issued");
       return { token: "test-token", authUserId: "auth-a", accountId: "mailbox-a" };
     },
+    verify: async () => { stages.push("verified"); },
   });
   assert.equal(token, "test-token");
-  assert.deepEqual(stages, ["authorized", "issued"]);
+  assert.deepEqual(stages, ["authorized", "issued", "verified"]);
 });
 
 test("denied authorization never calls credential issuance", async () => {
@@ -26,6 +27,7 @@ test("denied authorization never calls credential issuance", async () => {
   await assert.rejects(resolveTrustedMailboxCredential(principal, "read", {
     authorize: async () => { throw new Error("account_access_denied"); },
     issue: async () => { issued = true; return { token: "test", authUserId: "auth-a", accountId: "mailbox-a" }; },
+    verify: async () => {},
   }), /account_access_denied/);
   assert.equal(issued, false);
 });
@@ -35,6 +37,7 @@ test("rejects credentials associated with another mailbox or principal", async (
     await assert.rejects(resolveTrustedMailboxCredential(principal, "read", {
       authorize: async () => {},
       issue: async () => ({ token: "test", authUserId: "auth-a", accountId: "mailbox-a", ...overrides }),
+      verify: async () => {},
     }), /mailbox_credential_binding_mismatch/);
   }
 });
@@ -44,6 +47,15 @@ test("rejects incomplete principal before consulting issuer", async () => {
   await assert.rejects(resolveTrustedMailboxCredential({ ...principal, accountId: "" }, "read", {
     authorize: async () => { invoked = true; },
     issue: async () => { invoked = true; return { token: "test", authUserId: "auth-a", accountId: "mailbox-a" }; },
+    verify: async () => {},
   }), /mailbox_identity_required/);
   assert.equal(invoked, false);
+});
+
+test("broker never returns an unverified credential", async () => {
+  await assert.rejects(resolveTrustedMailboxCredential(principal, "read", {
+    authorize: async () => {},
+    issue: async () => ({ token: "unverified", authUserId: "auth-a", accountId: "mailbox-a" }),
+    verify: async () => { throw new Error("invalid_mailbox_token"); },
+  }), /invalid_mailbox_token/);
 });
