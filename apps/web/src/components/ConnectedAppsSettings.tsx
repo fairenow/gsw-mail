@@ -28,7 +28,9 @@ export function ConnectedAppsSettings() {
       <div>{apps.map(app=><div key={app.consentId} className="gsw-settings-card" style={{marginBottom:12}}>
         <div className="gsw-settings-card-head"><div><h3>{app.name}</h3><p>{app.website||"Registered OAuth application"}</p><small>{app.disabled?"Client disabled":app.activeRefreshAuthorization?"Active refresh authorization":"Authorized consent"} · Approved {new Date(app.approvedAt).toLocaleDateString()}</small></div>
           <button className="gsw-secondary-btn" disabled={busy!==null} onClick={()=>void disconnect(app)}>{busy===app.clientId?"Disconnecting…":"Disconnect"}</button></div>
-        <p><strong>Permissions:</strong> {app.scopes.join(", ")||"No scopes"}</p>
+        <div><strong>Permissions</strong><div role="region" aria-label={`${app.name} granted scopes`} tabIndex={0} style={{ maxHeight: 176, overflowY: "auto", overscrollBehavior: "contain", border: "1px solid var(--border, #d8d8d8)", borderRadius: 10, padding: "8px 12px", marginTop: 8 }}>
+          {app.scopes.length ? <ul style={{ margin: 0, paddingLeft: 20 }}>{app.scopes.map(scope => <li key={scope} style={{ overflowWrap: "anywhere", paddingBlock: 3 }}>{scope}</li>)}</ul> : <p style={{ margin: 0 }}>No scopes</p>}
+        </div></div>
       </div>)}</div>}
     <h3>Recent connection activity</h3>
     {events.length===0?<p>No connection activity recorded yet.</p>:<ul>{events.slice(0,20).map((e,i)=><li key={`${e.createdAt}-${i}`}>{e.action} · {e.resourceId??"Unknown app"} · {new Date(e.createdAt).toLocaleString()}</li>)}</ul>}
