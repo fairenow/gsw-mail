@@ -168,7 +168,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
       const context=createMcpExecutionContext(identity,accountId);
       if(policy.tool.risk!=="read") {
         const decision=mcpWriteCallPolicy({
-          risk:policy.tool.risk,requestId,confirmExternal,
+          risk:policy.tool.risk,requiredScopes:policy.tool.requiredScopes,requestId,confirmExternal,
           userId:identity.userId,clientId:identity.clientId,accountId,
           toolName:policy.tool.name,argumentsValue:toolArguments,
         });
