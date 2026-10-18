@@ -1,3 +1,4 @@
+import { firstDisabledCapabilityScope, firstMissingCapabilityGrant } from "../ai/capabilityScopePolicy.js";
 import { listActiveAiScopes } from "../ai/agentState.js";
 import { getAiCapabilitySettings, isAiScopeGloballyEnabled } from "../ai/capabilities.js";
 import { requireAccountPermission } from "../auth/authorize.js";
@@ -15,9 +16,9 @@ export async function resolveMcpUserToolPermission(input: {
   if(!input.userId || !input.accountId) return {allowed:false,reason:"identity_required"};
   if(!tool.requiredScopes.every(scope=>input.oauthScopes.has(scope))) return {allowed:false,reason:"oauth_scope_missing"};
   const settings=await getAiCapabilitySettings(input.userId);
-  if(!tool.requiredScopes.every(scope=>isAiScopeGloballyEnabled(settings,scope))) return {allowed:false,reason:"capability_disabled"};
+  if(Boolean(firstDisabledCapabilityScope(tool.requiredScopes,scope=>isAiScopeGloballyEnabled(settings,scope)))) return {allowed:false,reason:"capability_disabled"};
   const granted=new Set((await listActiveAiScopes(input.userId,input.accountId)).map(item=>item.scope));
-  if(!tool.requiredScopes.every(scope=>granted.has(scope))) return {allowed:false,reason:"user_permission_denied"};
+  if(Boolean(firstMissingCapabilityGrant(tool.requiredScopes,granted))) return {allowed:false,reason:"user_permission_denied"};
   try {
     await requireAccountPermission(input.userId,input.accountId,requiredMailboxPermission(tool.requiredScopes));
   } catch {
