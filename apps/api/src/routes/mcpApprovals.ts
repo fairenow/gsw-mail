@@ -2,7 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { config } from "../config.js";
 import { requireUser } from "../auth/middleware.js";
-import { decideMcpApproval, listMcpApprovals } from "../mcp/approvalStore.js";
+import { listMcpApprovals } from "../mcp/approvalStore.js";
+import { decideReviewedMcpDraft } from "../mcp/decideReviewedDraft.js";
+import { mcpArgumentsDigest } from "../mcp/writeApprovalPolicy.js";
 import { loadMcpDraftForReview } from "../mcp/draftPayloadStore.js";
 
 /**
@@ -27,7 +29,7 @@ export default async function mcpApprovalsRoutes(app: FastifyInstance) {
     if (!draft) return reply.code(404).send({ error: "draft_not_found_or_not_pending" });
     reply.header("Cache-Control", "no-store");
     reply.header("Pragma", "no-cache");
-    return { draft };
+    return { draft, reviewedArgumentsDigest: mcpArgumentsDigest(draft.arguments) };
   });
 
   app.post("/product/mcp/approvals/:id/decision", async (req, reply) => {
@@ -42,11 +44,12 @@ export default async function mcpApprovalsRoutes(app: FastifyInstance) {
     })) return reply.code(403).send({ error: "untrusted_origin" });
     if (!origin && req.headers.cookie) return reply.code(403).send({ error: "origin_required" });
     const params = z.object({ id: z.string().uuid() }).parse(req.params);
-    const input = z.object({ decision: z.enum(["approved", "rejected"]) }).parse(req.body);
-    const approval = await decideMcpApproval({
+    const input = z.object({ decision: z.enum(["approved", "rejected"]), reviewedArgumentsDigest: z.string().regex(/^[0-9a-f]{64}$/) }).parse(req.body);
+    const approval = await decideReviewedMcpDraft({
       userId: req.user!.id,
       approvalId: params.id,
-      decision: input.decision,
+      decision: input.decision === "approved" ? "approve" : "reject",
+      reviewedArgumentsDigest: input.reviewedArgumentsDigest,
     });
     if (!approval) return reply.code(404).send({ error: "approval_not_found_or_not_pending" });
     return { approval };
