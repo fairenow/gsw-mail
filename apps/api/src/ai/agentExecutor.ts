@@ -1,3 +1,4 @@
+import { requiredMailboxPermission } from "./mailboxToolPermission.js";
 import { executeAuthorizedCapability } from "./authorizedCapability.js";
 import { confirmationSummaryForAction, permissionCopyForScope } from "./actionDisplay.js";
 import { requireAccountPermission } from "../auth/authorize.js";
@@ -95,9 +96,7 @@ const permissionCopy = (scope: AiScope) => {
   return permissionCopyForScope(scope);
 };
 
-export function requiredMailboxPermission(scopes: readonly string[]): "read" | "send" {
-  return scopes.some((scope) => scope === "mail.send" || scope === "mail.write") ? "send" : "read";
-}
+export { requiredMailboxPermission } from "./mailboxToolPermission.js";
 
 export async function executeAgentTool(input: {
   registry: AgentToolRegistry;
