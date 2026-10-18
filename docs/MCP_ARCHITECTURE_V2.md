@@ -1,7 +1,7 @@
 # GSW Mail MCP Architecture v2
 ## Technical Architecture, Refactoring & Implementation Plan
 
-**Status:** Proposed — implementation not started  
+**Status:** Implemented — under production-readiness validation on `test/mcp-v2-production-readiness`  
 **Repository:** `fairenow/gsw-mail`  
 **Primary API:** Fastify / TypeScript  
 **Production MCP endpoint:** `https://api.guidedstepswellness.com/mcp`  
@@ -387,7 +387,7 @@ Maintain alongside implementation:
 6. `docs/MCP_MIGRATION_RUNBOOK.md` — deployment and rollback.
 7. `docs/MCP_DECISION_LOG.md` — decisions and trade-offs.
 
-These supporting documents are **planned deliverables**, not files that already exist.
+Tracked so far in `docs/MCP_V2_PHASE0_BASELINE.md` and `docs/MCP_V2_PHASE1_SEND_INVESTIGATION.md`. The remaining documents above are still planned deliverables, not files that already exist.
 
 ## 10. Working agreement
 

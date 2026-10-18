@@ -10,8 +10,5 @@ export function requiresExplicitActionConfirmation(
   requiredScopes: readonly string[],
 ): boolean {
   if (risk === "external") return true;
-  return requiredScopes.some(scope => {
-    const policy = scopeConfirmationPolicy[scope as AiScope];
-    return policy === "always" || (policy === "contextual" && risk === "external");
-  });
+  return requiredScopes.some(scope => scopeConfirmationPolicy[scope as AiScope] === "always");
 }

@@ -127,7 +127,10 @@ export async function getUserEngine(input: {
   headers: Record<string, string>;
   permission?: "read" | "send" | "manage";
 }): Promise<MailEngine> {
-  if (config.mailEngine === "demo") return getEngine();
+  if (config.mailEngine === "demo") {
+    await requireAccountPermission(input.productUserId, input.accountId, input.permission ?? "read");
+    return getEngine();
+  }
   const { token } = await getUserMailboxToken(input);
   return getEngine(token);
 }

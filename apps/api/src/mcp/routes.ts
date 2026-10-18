@@ -174,19 +174,10 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
           toolName:policy.tool.name,argumentsValue:toolArguments,
         });
         if(!decision.allowed) return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:decision.reason})}]});
-        // Reject absent, expired or mismatched approval before reserving the
-        // request ID. Consumption still occurs after reservation, atomically.
-        if (process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL === "true") {
-          const preflight = await resolveMcpPersistedApproval({
-            approvalId: typeof approvalId === "string" ? approvalId : "",
-            risk: policy.tool.risk,
-            userId: identity.userId, accountId, clientId: identity.clientId,
-            toolName: policy.tool.name, argumentsValue: toolArguments,
-          });
-          if (!preflight.allowed) return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:preflight.reason})}]});
-        }
         // One persistent reservation per user/client/requestId, bound to exact
-        // tool, mailbox and canonical arguments. A repeated request never runs again.
+        // tool, mailbox and canonical arguments. A repeated request never runs
+        // again and reports its durable outcome before any approval check, so a
+        // safe retry of a completed action is not masked by a consumed approval.
         const hex=createHash("sha256").update(decision.digest).digest("hex");
         const actionFingerprintId=`${hex.slice(0,8)}-${hex.slice(8,12)}-4${hex.slice(13,16)}-8${hex.slice(17,20)}-${hex.slice(20,32)}`;
         const reservation=await reserveAiIdempotency({
@@ -203,6 +194,21 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
             content:[{type:"text",text:JSON.stringify(same&&reservation.reservation.status==="completed"
               ?{status:"already_completed",result:reservation.reservation.result}
               :{error:same?"request_already_attempted":"request_id_reused_with_different_action"})}]});
+        }
+        // Absent, expired or mismatched approval fails the reserved request
+        // terminally. No capability has started, so the reservation is completed
+        // as a denial instead of an ambiguous in-progress action.
+        if (process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL === "true") {
+          const preflight = await resolveMcpPersistedApproval({
+            approvalId: typeof approvalId === "string" ? approvalId : "",
+            risk: policy.tool.risk,
+            userId: identity.userId, accountId, clientId: identity.clientId,
+            toolName: policy.tool.name, argumentsValue: toolArguments,
+          });
+          if (!preflight.allowed) {
+            await failAiIdempotency(decision.key, new Error(preflight.reason));
+            return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:preflight.reason})}]});
+          }
         }
         // Opt-in: atomically consume approved action before invoking a capability.
         // A client-provided approvalId is only a lookup key, never evidence itself.
