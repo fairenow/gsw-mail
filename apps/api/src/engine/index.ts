@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { decodeStalwartTokenMetadata, getStalwartAccessToken, getStalwartTokenFormat } from "../auth/stalwartToken.js";
 import { findStoredStalwartMailboxToken } from "../auth/storedStalwartToken.js";
+import { refreshStoredStalwartMailboxToken } from "../auth/refreshStalwartMailboxToken.js";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { authUsers, emailAccounts, mailAccountMemberships } from "../db/schema.js";
@@ -109,14 +110,24 @@ async function getUserMailboxToken(input: {
 
   // Sessionless clients may only reuse an already-issued, verified first-party
   // credential after this function has checked mailbox ACL and identity linkage.
-  const stored = Object.keys(input.headers).length === 0
+  // An expired access token is renewed server-side from the persisted first-party
+  // refresh authorization; a third-party MCP bearer is never substituted for it.
+  const sessionless = Object.keys(input.headers).length === 0;
+  const stored = sessionless
     ? await findStoredStalwartMailboxToken({
         productUserId: input.productUserId,
         authUserId: input.authUserId,
         accountId: account.id,
       })
     : null;
-  const token = stored ?? await getStalwartAccessToken({ authUserId: input.authUserId, accountId: account.id, headers: input.headers });
+  const renewed = stored ?? (sessionless
+    ? await refreshStoredStalwartMailboxToken({
+        productUserId: input.productUserId,
+        authUserId: input.authUserId,
+        accountId: account.id,
+      })
+    : null);
+  const token = renewed ?? await getStalwartAccessToken({ authUserId: input.authUserId, accountId: account.id, headers: input.headers });
   return { token, accountAddress: account.address };
 }
 
