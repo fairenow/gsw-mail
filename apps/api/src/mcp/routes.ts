@@ -10,7 +10,8 @@ import { discoverMcpCapabilities } from "./capabilityDiscovery.js";
 import { mcpPrepareDraftRequest } from "./prepareDraftAction.js";
 import { storePreparedMcpDraft } from "./draftPayloadStore.js";
 import { canUseMcpWriteTestMode, mcpWriteCallPolicy } from "./writeTestPolicy.js";
-import { reserveAiIdempotency, completeAiIdempotency, failAiIdempotency } from "../ai/agentState.js";
+import { reserveAiIdempotency, completeAiIdempotency, failAiIdempotency, grantAiScope, listActiveAiScopes } from "../ai/agentState.js";
+import { requireAccountPermission } from "../auth/authorize.js";
 
 /** OAuth-scoped MCP transport with owner-only, explicitly enabled write testing. */
 export async function mcpRoutes(app:FastifyInstance):Promise<void> {
@@ -122,6 +123,30 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
           })}]});
         } catch {
           return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"proposal_storage_unavailable"})}]});
+        }
+      }
+      if(name==="grant_my_scopes") {
+        // Self-service, owner-only grant: never grants scopes beyond the OAuth
+        // consent of this authenticated client or the registry's known scopes.
+        const accountId=typeof params.accountId==="string"?params.accountId:"";
+        const requested=params.scopes;
+        if(!writeTestEnabled || params.confirmGrant!==true ||
+           !Array.isArray(requested) || requested.length===0 || requested.length>100 ||
+           !requested.every(scope=>typeof scope==="string")) {
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"owner_grant_not_authorized"})}]});
+        }
+        try {
+          const account=await requireAccountPermission(identity.userId,accountId,"manage");
+          if(account.role!=="owner") throw new Error("not_owner");
+          const known=new Set(agentMailRegistry.definitions().flatMap(tool=>tool.requiredScopes));
+          const scopes=[...new Set(requested as string[])];
+          if(!scopes.every(scope=>known.has(scope) && identity.oauthScopes.has(scope)))
+            return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"scope_not_in_oauth_consent",requested:scopes.filter(scope=>!identity.oauthScopes.has(scope))})}]});
+          for(const scope of scopes) await grantAiScope({userId:identity.userId,accountId,scope,source:"mcp_owner_self_grant"});
+          const active=new Set((await listActiveAiScopes(identity.userId,accountId)).map(item=>item.scope));
+          return wrap({content:[{type:"text",text:JSON.stringify({accountId,granted:scopes.filter(scope=>active.has(scope)),status:"active"})}]});
+        } catch {
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"owner_account_access_denied"})}]});
         }
       }
       if(name==="list_accounts") {

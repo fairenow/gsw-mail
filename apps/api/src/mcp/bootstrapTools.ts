@@ -51,6 +51,21 @@ export const mcpBootstrapTools = [
     requiredScopes: ["mail.write"],
   },
   {
+    name: "grant_my_scopes",
+    description: "Owner-only: explicitly grant selected GSW AI permissions to your own mailbox. Requires enabled owner write-test mode, account ownership, OAuth consent for each scope, and confirmGrant=true. Does not send email.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        accountId: { type: "string", format: "uuid" },
+        scopes: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 100 },
+        confirmGrant: { type: "boolean", description: "Confirm that these permissions should be activated for your mailbox." },
+      },
+      required: ["accountId", "scopes", "confirmGrant"],
+      additionalProperties: false,
+    },
+    requiredScopes: ["openid"],
+  },
+  {
     name: "list_accounts",
     description: "List GSW Mail accounts this user is permitted to read. Use an accountId from this list with mail tools.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
