@@ -1,3 +1,4 @@
+import { executeAuthorizedCapability } from "./authorizedCapability.js";
 import { confirmationSummaryForAction, permissionCopyForScope } from "./actionDisplay.js";
 import { requireAccountPermission } from "../auth/authorize.js";
 import {
@@ -113,12 +114,7 @@ export async function executeAgentTool(input: {
   if (!definition) {
     return {
       kind: "result",
-      result: await input.registry.execute(
-        input.providerToolName,
-        input.rawArguments,
-        input.ctx,
-        input.providerToolCallId,
-      ),
+      result: await executeAuthorizedCapability({registry:input.registry,toolName:input.providerToolName,rawArguments:input.rawArguments,context:input.ctx,toolCallId:input.providerToolCallId}),
     };
   }
 
@@ -267,12 +263,7 @@ export async function executeAgentTool(input: {
   }
 
   try {
-    const result = await input.registry.execute(
-      input.providerToolName,
-      input.rawArguments,
-      input.ctx,
-      input.providerToolCallId,
-    );
+    const result = await executeAuthorizedCapability({registry:input.registry,toolName:input.providerToolName,rawArguments:input.rawArguments,context:input.ctx,toolCallId:input.providerToolCallId});
     if (definition.risk !== "read") {
       const stored = result.data && typeof result.data === "object"
         ? result.data as Record<string, unknown>
