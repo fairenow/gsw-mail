@@ -3,6 +3,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
 import { count, eq, inArray, sql } from "drizzle-orm";
+import { createServer, type Server as HttpServer } from "node:http";
+import { generateKeyPairSync, randomUUID, type KeyObject } from "node:crypto";
+import { SignJWT, exportJWK } from "jose";
 
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? "postgres://gsw_mail:gsw_mail@localhost:5432/gsw_mail_test";
 if (new URL(process.env.DATABASE_URL).pathname !== "/gsw_mail_test") throw new Error("Integration tests require gsw_mail_test");
@@ -12,6 +15,8 @@ process.env.SEND_DELAY_SECONDS = "0";
 process.env.OUTBOUND_RELAY = "null";
 process.env.MAIL_ENGINE = "demo";
 process.env.DEV_USER_ID = "";
+process.env.GSW_MCP_RESOURCE_URL = "https://api.mcp.gsw.test/resource";
+process.env.MCP_APPROVAL_PAYLOAD_KEY = Buffer.alloc(32, 7).toString("base64");
 
 type Json = Record<string, any>;
 interface ApiResult {
@@ -32,6 +37,11 @@ let ramonAccountId = "";
 let alyssaAccountId = "";
 let communityAccountId = "";
 let roAccountId = "";
+let mcpJwksServer: HttpServer | undefined;
+let mcpTokenSigningKey: KeyObject | undefined;
+const mcpClientId = "gsw-mcp-integration-client";
+const mcpAuthSubject = "auth-ramon-mcp";
+const mcpJwksKid = "mcp-integration-key";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(here, "..");
@@ -120,7 +130,119 @@ async function request(method: string, path: string, opts: { userId?: string; bo
   return { status: res.status, json };
 }
 
+async function withEnv<T>(overrides: Record<string, string | undefined>, fn: () => Promise<T>): Promise<T> {
+  const previous = new Map<string, string | undefined>();
+  for (const [key, value] of Object.entries(overrides)) {
+    previous.set(key, process.env[key]);
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    return await fn();
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+async function ensureMcpIdentityFixtures() {
+  await db.insert(schema.authUsers).values({ id: mcpAuthSubject, name: "Ramon MCP", email: "ramon-mcp@it.example.com", emailVerified: true }).onConflictDoNothing();
+  await db.update(schema.users).set({ authUserId: mcpAuthSubject }).where(eq(schema.users.id, ramonId));
+  await db.insert(schema.oauthClient).values({ id: mcpClientId, clientId: mcpClientId, disabled: false, name: "MCP integration client", redirectUris: ["https://client.mcp.test/callback"] }).onConflictDoNothing();
+  await db.insert(schema.oauthConsent).values({
+    id: `consent-${mcpClientId}`, clientId: mcpClientId, userId: mcpAuthSubject,
+    scopes: ["openid", "mail.read", "mail.write"], createdAt: new Date(), updatedAt: new Date(),
+  }).onConflictDoNothing();
+}
+
+async function mintMcpToken(options: { scope?: string; audience?: string; issuer?: string; subject?: string; clientId?: string } = {}): Promise<string> {
+  if (!mcpTokenSigningKey) throw new Error("MCP signing key unavailable");
+  return new SignJWT({ client_id: options.clientId ?? mcpClientId, scope: options.scope ?? "openid mail.read mail.write" })
+    .setProtectedHeader({ alg: "ES256", kid: mcpJwksKid })
+    .setIssuer(options.issuer ?? `${process.env.BETTER_AUTH_URL}/api/auth`)
+    .setAudience(options.audience ?? process.env.GSW_MCP_RESOURCE_URL!)
+    .setSubject(options.subject ?? mcpAuthSubject)
+    .setIssuedAt()
+    .setExpirationTime("5m")
+    .sign(mcpTokenSigningKey);
+}
+
+async function mcpRpc(payload: Record<string, unknown>, token?: string): Promise<ApiResult> {
+  const res = await fetch(`${baseUrl}/mcp`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+  const text = await res.text();
+  let json: Json = {};
+  try { json = text ? (JSON.parse(text) as Json) : {}; } catch { json = { raw: text }; }
+  if (res.status >= 400) console.log(`[mcp] ${String(payload.method)} -> ${res.status}`, JSON.stringify(json).slice(0, 300));
+  return { status: res.status, json };
+}
+
+let mcpRequestId = 0;
+function mcpRequest(method: string, params: Record<string, unknown> = {}): Record<string, unknown> {
+  mcpRequestId += 1;
+  return { jsonrpc: "2.0", id: mcpRequestId, method, params };
+}
+
+async function mcpToolCall(name: string, args: Record<string, unknown>, token: string): Promise<{ status: number; isError: boolean; body: Json }> {
+  const res = await mcpRpc(mcpRequest("tools/call", { name, arguments: args }), token);
+  const result = res.json?.result as Json | undefined;
+  const text = result?.content?.[0]?.text;
+  let body: Json = {};
+  if (typeof text === "string") {
+    try { body = JSON.parse(text) as Json; } catch { body = { text }; }
+  }
+  return { status: res.status, isError: Boolean(result?.isError), body };
+}
+
+async function decideMcpApproval(input: {
+  approvalId: string; decision: "approved" | "rejected"; digest: string;
+  origin?: string; authorization?: string;
+}): Promise<ApiResult> {
+  const res = await fetch(`${baseUrl}/product/mcp/approvals/${input.approvalId}/decision`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      cookie: "mcp_review_session=not-a-real-session",
+      "x-gsw-user-id": ramonId,
+      ...(input.origin ? { origin: input.origin } : {}),
+      ...(input.authorization ? { authorization: input.authorization } : {}),
+    },
+    body: JSON.stringify({ decision: input.decision, reviewedArgumentsDigest: input.digest }),
+  });
+  const text = await res.text();
+  let json: Json = {};
+  try { json = text ? (JSON.parse(text) as Json) : {}; } catch { json = {}; }
+  if (res.status >= 400) console.log(`[mcp-approval] ${input.decision} -> ${res.status}`, JSON.stringify(json).slice(0, 300));
+  return { status: res.status, json };
+}
+
+async function ensureMcpWriteGrants() {
+  const { grantAiScope } = await import("./ai/agentState.js");
+  await grantAiScope({ userId: ramonId, accountId: ramonAccountId, scope: "mail.read", source: "integration_test" });
+  await grantAiScope({ userId: ramonId, accountId: ramonAccountId, scope: "mail.write", source: "integration_test" });
+}
+
 before(async () => {
+  const { publicKey, privateKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
+  mcpTokenSigningKey = privateKey;
+  const publicJwk = { ...(await exportJWK(publicKey)), kid: mcpJwksKid, alg: "ES256", use: "sig" };
+  mcpJwksServer = createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ keys: [publicJwk] }));
+  });
+  await new Promise<void>((resolve) => { mcpJwksServer!.listen(0, "127.0.0.1", resolve); });
+  const jwksAddress = mcpJwksServer.address();
+  process.env.BETTER_AUTH_URL = `http://127.0.0.1:${typeof jwksAddress === "object" && jwksAddress ? jwksAddress.port : 0}`;
+
   const recent = await import("./db/client.js");
   db = recent.db;
   pool = recent.pool;
@@ -150,6 +272,7 @@ before(async () => {
 after(async () => {
   if (appInstance) await appInstance.close().catch(() => undefined);
   if (pool) await pool.end().catch(() => undefined);
+  if (mcpJwksServer) await new Promise<void>((resolve) => mcpJwksServer!.close(() => resolve()));
 });
 
 test("mailbox isolation: a private account is invisible and unreachable to outsiders", async (t) => {
@@ -406,4 +529,198 @@ test("two-user acceptance: Alyssa sends as community and Ramon can inspect the s
   const job = await queue.loadJob(String(sent.json.sendId));
   assert.equal(job?.fromAddress, "community@it.example.com");
   assert.ok(job?.attachments?.[0]?.engineAttachmentId);
+});
+
+test("mcp auth: third-party tokens are audience, issuer, consent and account-status bound", async () => {
+  await ensureMcpIdentityFixtures();
+  await withEnv({ GSW_MCP_ENABLED: "true" }, async () => {
+    const token = await mintMcpToken();
+    const init = await mcpRpc(mcpRequest("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "integration", version: "1" } }), token);
+    assert.equal(init.status, 200);
+    assert.equal(init.json.result?.serverInfo?.name, "GSW Mail");
+    assert.equal((await mcpRpc(mcpRequest("ping"))).status, 401);
+    const rejected = [
+      { label: "wrong audience", options: { audience: "https://other.example/mcp" } },
+      { label: "wrong issuer", options: { issuer: "https://attacker.example/api/auth" } },
+      { label: "missing openid scope", options: { scope: "mail.read mail.write" } },
+      { label: "scope beyond consent", options: { scope: "openid mail.read mail.send" } },
+      { label: "unknown subject mapping", options: { subject: "auth-unknown-user" } },
+      { label: "unknown client", options: { clientId: "not-a-registered-client" } },
+    ];
+    for (const item of rejected) {
+      const response = await mcpRpc(mcpRequest("ping"), await mintMcpToken(item.options));
+      assert.equal(response.status, 401, item.label);
+    }
+    await db.update(schema.oauthClient).set({ disabled: true }).where(eq(schema.oauthClient.clientId, mcpClientId));
+    assert.equal((await mcpRpc(mcpRequest("ping"), token)).status, 401, "disabled client must fail closed");
+    await db.update(schema.oauthClient).set({ disabled: false }).where(eq(schema.oauthClient.clientId, mcpClientId));
+    await db.update(schema.users).set({ status: "suspended" }).where(eq(schema.users.id, ramonId));
+    assert.equal((await mcpRpc(mcpRequest("ping"), token)).status, 401, "suspended user must fail closed");
+    await db.update(schema.users).set({ status: "active" }).where(eq(schema.users.id, ramonId));
+  });
+});
+
+test("mcp discovery: identity, account isolation and capability status reflect live permissions", async () => {
+  await ensureMcpIdentityFixtures();
+  await withEnv({ GSW_MCP_ENABLED: "true" }, async () => {
+    const token = await mintMcpToken();
+    const who = await mcpToolCall("get_current_user", {}, token);
+    assert.equal(who.status, 200);
+    assert.equal(who.body.userId, ramonId);
+    const accounts = await mcpToolCall("list_accounts", {}, token);
+    assert.equal(accounts.status, 200);
+    const listed = (accounts.body.accounts as Json[]).map((account) => account.accountId);
+    assert.ok(listed.includes(ramonAccountId));
+    assert.ok(listed.includes(communityAccountId));
+    assert.ok(!listed.includes(alyssaAccountId), "another user's mailbox must not be discoverable");
+    const catalog = await mcpToolCall("list_capabilities", { limit: 100 }, token);
+    assert.equal(catalog.status, 200);
+    assert.ok(Number(catalog.body.total) > 20);
+    const capabilities = catalog.body.capabilities as Json[];
+    const readTool = capabilities.find((entry) => entry.name === "mail__search");
+    assert.equal(readTool?.status, "available_for_read");
+    assert.deepEqual(readTool?.missingScopes, []);
+    const writeTool = capabilities.find((entry) => entry.name === "mail__create_draft");
+    assert.equal(writeTool?.status, "write_transport_disabled");
+    const listing = await mcpRpc(mcpRequest("tools/list"), token);
+    const listedTools = ((listing.json.result?.tools as Json[] | undefined) ?? []).map((tool) => tool.name);
+    assert.ok(listedTools.includes("invoke_tool"));
+    assert.ok(listedTools.includes("list_capabilities"));
+    assert.ok(listedTools.includes("mail__search"));
+    assert.ok(listedTools.includes("mail__create_draft"));
+    assert.ok(listedTools.includes("mail__send_draft"));
+    assert.ok(!listedTools.includes("prepare_action"), "draft preparation must stay disabled by default");
+  });
+});
+
+test("mcp writes: owner-only write-test mode, request IDs and persisted approval are all mandatory", async () => {
+  await ensureMcpIdentityFixtures();
+  await ensureMcpWriteGrants();
+  const token = await mintMcpToken();
+  const draftArgs = { to: ["reviewer@it.example.com"], subject: "MCP gated draft", textBody: "Held behind write-test mode." };
+  await withEnv({ GSW_MCP_ENABLED: "true" }, async () => {
+    const disabled = await mcpToolCall("mail__create_draft", { ...draftArgs, accountId: ramonAccountId, requestId: randomUUID() }, token);
+    assert.equal(disabled.body.error, "write_test_disabled");
+  });
+  await withEnv({
+    GSW_MCP_ENABLED: "true",
+    GSW_MCP_WRITE_TEST_ENABLED: "true",
+    GSW_MCP_WRITE_TEST_USER_ID: alyssaId,
+  }, async () => {
+    const notOwner = await mcpToolCall("mail__create_draft", { ...draftArgs, accountId: ramonAccountId, requestId: randomUUID() }, token);
+    assert.equal(notOwner.body.error, "write_test_disabled");
+  });
+  await withEnv({
+    GSW_MCP_ENABLED: "true",
+    GSW_MCP_WRITE_TEST_ENABLED: "true",
+    GSW_MCP_WRITE_TEST_USER_ID: ramonId,
+    GSW_MCP_PREPARE_ENABLED: undefined,
+    GSW_MCP_REQUIRE_PERSISTED_APPROVAL: "true",
+  }, async () => {
+    const noRequestId = await mcpToolCall("mail__create_draft", { ...draftArgs, accountId: ramonAccountId }, token);
+    assert.equal(noRequestId.body.error, "request_id_uuid_required");
+    const noApproval = await mcpToolCall("mail__create_draft", { ...draftArgs, accountId: ramonAccountId, requestId: randomUUID() }, token);
+    assert.equal(noApproval.body.error, "approval_required");
+    const unexternal = await mcpToolCall("mail__send_draft", { accountId: ramonAccountId, draftId: randomUUID(), requestId: randomUUID(), confirmExternal: false }, token);
+    assert.equal(unexternal.body.error, "permission_denied");
+    const prepareDisabled = await mcpToolCall("prepare_action", { accountId: ramonAccountId, toolName: "mail.create_draft", arguments: draftArgs }, token);
+    assert.equal(prepareDisabled.body.error, "preparation_disabled");
+    const unconfirmedGrant = await mcpToolCall("grant_my_scopes", { accountId: ramonAccountId, scopes: ["mail.read"], confirmGrant: false }, token);
+    assert.equal(unconfirmedGrant.body.error, "owner_grant_not_authorized");
+    const beyondConsent = await mcpToolCall("grant_my_scopes", { accountId: ramonAccountId, scopes: ["mail.send"], confirmGrant: true }, token);
+    assert.equal(beyondConsent.body.error, "scope_not_in_oauth_consent");
+    const granted = await mcpToolCall("grant_my_scopes", { accountId: ramonAccountId, scopes: ["mail.read", "mail.write"], confirmGrant: true }, token);
+    assert.equal(granted.status, 200);
+    assert.deepEqual(granted.body.granted, ["mail.read", "mail.write"]);
+    assert.equal(granted.body.status, "active");
+  });
+  await withEnv({
+    GSW_MCP_ENABLED: "true",
+    GSW_MCP_WRITE_TEST_ENABLED: "true",
+    GSW_MCP_WRITE_TEST_USER_ID: ramonId,
+    GSW_MCP_PREPARE_ENABLED: "true",
+    GSW_MCP_REQUIRE_PERSISTED_APPROVAL: "true",
+  }, async () => {
+    const preparedWithoutGrantFlag = await mcpToolCall("prepare_action", { accountId: ramonAccountId, toolName: "mail.create_draft", arguments: draftArgs }, token);
+    assert.ok(preparedWithoutGrantFlag.status === 200 && preparedWithoutGrantFlag.body.approvalId, "prepare_action records a first-party review request");
+  });
+});
+
+test("mcp approval lifecycle: pending cannot execute, first-party review approves, replays and races never double-execute", async () => {
+  await ensureMcpIdentityFixtures();
+  await ensureMcpWriteGrants();
+  const token = await mintMcpToken();
+  const draftArgs = { to: ["reviewer@it.example.com"], subject: "Exact-content review draft", textBody: "Body that must match the reviewed digest." };
+  const env = {
+    GSW_MCP_ENABLED: "true",
+    GSW_MCP_WRITE_TEST_ENABLED: "true",
+    GSW_MCP_WRITE_TEST_USER_ID: ramonId,
+    GSW_MCP_PREPARE_ENABLED: "true",
+    GSW_MCP_REQUIRE_PERSISTED_APPROVAL: "true",
+  };
+  await withEnv(env, async () => {
+    const first = await mcpToolCall("prepare_action", { accountId: ramonAccountId, toolName: "mail.create_draft", arguments: draftArgs }, token);
+    assert.equal(first.status, 200);
+    assert.equal(first.body.status, "pending");
+    assert.equal(first.body.draftCreated, false);
+    assert.equal(first.body.emailSent, false);
+    assert.equal(first.body.executionEnabled, false);
+    const approvalA = String(first.body.approvalId);
+
+    const pendingExecute = await mcpToolCall("mail__create_draft", { ...draftArgs, accountId: ramonAccountId, requestId: randomUUID(), approvalId: approvalA }, token);
+    assert.equal(pendingExecute.body.error, "approval_not_active");
+
+    const preview = await request("GET", `/product/mcp/approvals/${approvalA}/draft`, { userId: ramonId });
+    assert.equal(preview.status, 200);
+    assert.equal(preview.json.draft.status, "pending");
+    assert.deepEqual(preview.json.draft.arguments.to, draftArgs.to);
+    const digest = String(preview.json.reviewedArgumentsDigest);
+    assert.match(digest, /^[0-9a-f]{64}$/);
+
+    const listing = await request("GET", "/product/mcp/approvals", { userId: ramonId });
+    assert.equal(listing.status, 200);
+    assert.ok((listing.json.approvals as Json[]).some((entry) => entry.id === approvalA && entry.status === "pending"));
+
+    const bearerDecision = await decideMcpApproval({ approvalId: approvalA, decision: "approved", digest, authorization: `Bearer ${token}` });
+    assert.equal(bearerDecision.status, 403);
+    const noOrigin = await decideMcpApproval({ approvalId: approvalA, decision: "approved", digest });
+    assert.equal(noOrigin.status, 403);
+    const foreignOrigin = await decideMcpApproval({ approvalId: approvalA, decision: "approved", digest, origin: "https://evil.example" });
+    assert.equal(foreignOrigin.status, 403);
+    const wrongDigest = await decideMcpApproval({ approvalId: approvalA, decision: "approved", digest: "0".repeat(64), origin: "http://localhost:3000" });
+    assert.equal(wrongDigest.status, 404);
+
+    const decided = await decideMcpApproval({ approvalId: approvalA, decision: "approved", digest, origin: "http://localhost:3000" });
+    assert.equal(decided.status, 200);
+    assert.equal(decided.json.approval.status, "approved");
+
+    const replayR1 = randomUUID();
+    const executed = await mcpToolCall("mail__create_draft", { ...draftArgs, accountId: ramonAccountId, requestId: replayR1, approvalId: approvalA }, token);
+    assert.equal(executed.isError, false);
+    assert.ok(typeof executed.body.engineId === "string" && executed.body.engineId.length > 0);
+
+    const replay = await mcpToolCall("mail__create_draft", { ...draftArgs, accountId: ramonAccountId, requestId: replayR1, approvalId: approvalA }, token);
+    assert.equal(replay.body.status, "already_completed");
+    assert.equal(replay.isError, false);
+
+    const consumedAgain = await mcpToolCall("mail__create_draft", { ...draftArgs, accountId: ramonAccountId, requestId: randomUUID(), approvalId: approvalA }, token);
+    assert.equal(consumedAgain.body.error, "approval_not_active");
+
+    const second = await mcpToolCall("prepare_action", { accountId: ramonAccountId, toolName: "mail.create_draft", arguments: { ...draftArgs, subject: "Race review draft" } }, token);
+    const approvalB = String(second.body.approvalId);
+    const secondPreview = await request("GET", `/product/mcp/approvals/${approvalB}/draft`, { userId: ramonId });
+    const secondDecided = await decideMcpApproval({
+      approvalId: approvalB, decision: "approved", digest: String(secondPreview.json.reviewedArgumentsDigest), origin: "http://localhost:3000",
+    });
+    assert.equal(secondDecided.status, 200);
+
+    const raceArgs = { ...draftArgs, subject: "Race review draft" };
+    const racers = await Promise.all(Array.from({ length: 6 }, () =>
+      mcpToolCall("mail__create_draft", { ...raceArgs, accountId: ramonAccountId, requestId: randomUUID(), approvalId: approvalB }, token)));
+    const winners = racers.filter((result) => result.isError === false && typeof result.body.engineId === "string");
+    assert.equal(winners.length, 1, "exactly one concurrent caller may consume an approved action");
+    for (const loser of racers.filter((result) => !winners.includes(result))) {
+      assert.equal(loser.body.error, "approval_not_active");
+    }
+  });
 });

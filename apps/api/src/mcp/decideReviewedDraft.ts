@@ -25,7 +25,7 @@ export async function decideReviewedMcpDraft(input: {
   const review = await loadMcpDraftForReview({
     userId: input.userId, approvalId: input.approvalId,
   });
-  if (!isReviewedDraftDecisionValid(review, input.reviewedArgumentsDigest)) return null;
+  if (review === null || !isReviewedDraftDecisionValid(review, input.reviewedArgumentsDigest)) return null;
 
   // Re-check live mailbox permissions at the approval moment.
   await requireAccountPermission(input.userId, review.accountId, "send");

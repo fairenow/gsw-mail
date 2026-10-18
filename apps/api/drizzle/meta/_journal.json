@@ -96,68 +96,187 @@
     {
       "idx": 13,
       "version": "7",
+      "when": 1791591000000,
+      "tag": "0013_outbound_attachment_payloads",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791594500000,
+      "tag": "0014_domain_dns_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1791598000000,
+      "tag": "0015_scheduled_sends",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791601500000,
+      "tag": "0016_calendar_rsvps",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791605000000,
+      "tag": "0017_ai_agent_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791608500000,
+      "tag": "0018_ai_executor_idempotency",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791612000000,
+      "tag": "0019_ai_automations",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
       "when": 1791590000000,
       "tag": "0013_scheduled_send_policy",
       "breakpoints": true
     },
     {
-      "idx": 14,
+      "idx": 21,
+      "version": "7",
+      "when": 1791615500000,
+      "tag": "0020_user_settings_ai",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791619000000,
+      "tag": "0021_ai_campaigns",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791622500000,
+      "tag": "0022_ai_general_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791626000000,
+      "tag": "0022_email_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791629500000,
+      "tag": "0023_ai_task_runner",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791633000000,
+      "tag": "0023_r2_file_assets",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1791636500000,
+      "tag": "0024_template_logo_assets",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1791640000000,
+      "tag": "0025_draft_attachment_assets",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1791643500000,
+      "tag": "0026_file_workspaces",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1791647000000,
+      "tag": "0027_campaign_attachment_assets",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
       "version": "7",
       "when": 1791654000000,
       "tag": "0028_engagement_events",
       "breakpoints": true
     },
     {
-      "idx": 15,
+      "idx": 32,
       "version": "7",
       "when": 1791900000000,
       "tag": "0029_file_shares",
       "breakpoints": true
     },
     {
-      "idx": 16,
+      "idx": 33,
       "version": "7",
       "when": 1791910000000,
       "tag": "0030_file_organization_jobs",
       "breakpoints": true
     },
     {
-      "idx": 17,
+      "idx": 34,
       "version": "7",
       "when": 1792090000000,
       "tag": "0031_ai_inbox_triage_snapshots",
       "breakpoints": true
     },
     {
-      "idx": 18,
+      "idx": 35,
       "version": "7",
       "when": 1792091000000,
       "tag": "0032_ai_inbox_triage_progress",
       "breakpoints": true
     },
     {
-      "idx": 19,
+      "idx": 36,
       "version": "7",
       "when": 1792092000000,
       "tag": "0033_ai_inbox_triage_verdicts",
       "breakpoints": true
     },
     {
-      "idx": 20,
+      "idx": 37,
       "version": "7",
       "when": 1792092100000,
       "tag": "0034_prompting_hourly_quota",
       "breakpoints": true
     },
     {
-      "idx": 21,
+      "idx": 38,
       "version": "7",
       "when": 1792092200000,
       "tag": "0035_mcp_action_approvals",
       "breakpoints": true
     },
     {
-      "idx": 22,
+      "idx": 39,
       "version": "7",
       "when": 1792092300000,
       "tag": "0036_mcp_action_payloads",

@@ -187,6 +187,7 @@ export const requireUser = async (app: FastifyInstance, opts: { optional?: boole
         if (userId) {
           const user = await resolveUser(config.auth.identityProvider, userId).catch(() => null);
           req.user = user ?? { id: userId };
+          req.authUserId = userId;
           if (user && token) req.accessToken = token;
         }
       }
