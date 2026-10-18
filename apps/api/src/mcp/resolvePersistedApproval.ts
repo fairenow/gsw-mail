@@ -1,7 +1,7 @@
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { mcpActionApprovals } from "../db/schema.js";
-import { verifyPersistedMcpApproval } from "./writeApprovalPolicy.js";
+import { mcpArgumentsDigest, verifyPersistedMcpApproval } from "./writeApprovalPolicy.js";
 import type { AgentRisk } from "../ai/tools/types.js";
 
 /** Server-owned approval evidence only. Call after OAuth and mailbox policy checks. */
@@ -51,6 +51,7 @@ export async function consumeMcpPersistedApproval(input: Parameters<typeof resol
       eq(mcpActionApprovals.clientId, input.clientId),
       eq(mcpActionApprovals.accountId, input.accountId),
       eq(mcpActionApprovals.toolName, input.toolName.replaceAll("__", ".")),
+      eq(mcpActionApprovals.argumentsDigest, mcpArgumentsDigest(input.argumentsValue)),
       eq(mcpActionApprovals.status, "approved"),
       isNull(mcpActionApprovals.consumedAt),
       gt(mcpActionApprovals.expiresAt, now),
