@@ -213,7 +213,13 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
             userId: identity.userId, accountId, clientId: identity.clientId,
             toolName: policy.tool.name, argumentsValue: toolArguments,
           });
-          if (!approved.allowed) return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:approved.reason})}]});
+          if (!approved.allowed) {
+            // The durable reservation already exists, but no capability has
+            // run. Record a terminal denial instead of leaving an ambiguous
+            // in-progress action that could be mistaken for a send.
+            await failAiIdempotency(decision.key, new Error("mcp_approval_not_consumed"));
+            return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:approved.reason})}]});
+          }
           // Do not enable production writes on this flag alone: the owner-only
           // write-test restriction above continues to apply.
         }
