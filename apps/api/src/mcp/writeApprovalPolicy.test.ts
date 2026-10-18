@@ -30,3 +30,18 @@ test("argument digest is stable across object key ordering but not values", () =
   assert.notEqual(mcpArgumentsDigest({ a: 1 }), mcpArgumentsDigest({ a: 2 }));
   assert.equal(verifyPersistedMcpApproval({ ...base, approval: { ...approval, argumentsDigest: "invalid" } }).allowed, false);
 });
+
+test("persisted approval cannot authorize a different OAuth client, mailbox or payload", () => {
+  const approved = { ...approval };
+  assert.deepEqual(verifyPersistedMcpApproval({ ...base, approval: approved }), {
+    allowed: true, approvalId: approved.id,
+  });
+  for (const change of [
+    { clientId: "another-client" },
+    { accountId: "another-mailbox" },
+    { userId: "another-user" },
+    { argumentsValue: { ...args, subject: "Altered" } },
+  ]) {
+    assert.equal(verifyPersistedMcpApproval({ ...base, ...change, approval: approved }).allowed, false);
+  }
+});
