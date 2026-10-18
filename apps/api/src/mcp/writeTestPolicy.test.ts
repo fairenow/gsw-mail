@@ -77,3 +77,22 @@ test("malformed action identifiers cannot reserve writes", () => {
   });
   assert.deepEqual(decision, { allowed: false, reason: "request_id_uuid_required" });
 });
+
+test("shared confirmation classification protects always-confirm capabilities", () => {
+  const base = {
+    risk: "reversible_write" as const,
+    requiredScopes: ["browser.write"],
+    requestId: "55555555-5555-4555-8555-555555555555",
+    confirmExternal: false,
+    userId: "user-123456789",
+    clientId: "client-a",
+    accountId: "account-a",
+    toolName: "browser.write",
+    argumentsValue: {},
+  };
+  assert.deepEqual(mcpWriteCallPolicy(base), {
+    allowed: false, reason: "explicit_external_confirmation_required",
+  });
+  assert.equal(mcpWriteCallPolicy({ ...base, confirmExternal: true }).allowed, true);
+  assert.equal(mcpWriteCallPolicy({ ...base, requiredScopes: ["mail.write"] }).allowed, true);
+});
