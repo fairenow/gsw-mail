@@ -1,3 +1,4 @@
+import { firstDisabledCapabilityScope, firstMissingCapabilityGrant } from "../ai/capabilityScopePolicy.js";
 import { requiredMailboxPermission } from "./mailboxToolPermission.js";
 import { executeAuthorizedCapability } from "./authorizedCapability.js";
 import { confirmationSummaryForAction, permissionCopyForScope } from "./actionDisplay.js";
@@ -147,7 +148,7 @@ export async function executeAgentTool(input: {
   }
 
   const capabilitySettings = await getAiCapabilitySettings(input.ctx.userId);
-  const disabledScope = definition.requiredScopes.find((scope) => !isAiScopeGloballyEnabled(capabilitySettings, scope));
+  const disabledScope = firstDisabledCapabilityScope(definition.requiredScopes, scope => isAiScopeGloballyEnabled(capabilitySettings, scope));
   if (disabledScope) {
     return {
       kind: "result",
@@ -162,7 +163,7 @@ export async function executeAgentTool(input: {
 
   const activeScopes = await listActiveAiScopes(input.ctx.userId, input.ctx.accountId);
   const granted = new Set(activeScopes.map((grant) => grant.scope));
-  const missingScope = definition.requiredScopes.find((scope) => !granted.has(scope));
+  const missingScope = firstMissingCapabilityGrant(definition.requiredScopes, granted);
   const confirmationCanAuthorizeExternalSend = definition.risk === "external" && missingScope === "mail.send";
   if (missingScope && !confirmationCanAuthorizeExternalSend) {
     const scope = missingScope as AiScope;
