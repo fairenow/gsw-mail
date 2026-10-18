@@ -224,3 +224,23 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Keep scope review bounded so lengthy OAuth requests do not turn the entire consent page into a scroll list. */
+.gsw-consent-scope-list {
+  max-height: min(36dvh, 290px);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 8px;
+  border: 1px solid var(--gsw-border);
+  border-radius: 12px;
+  padding-left: 12px;
+}
+.gsw-consent-scope-list:focus-visible {
+  outline: 2px solid var(--gsw-accent);
+  outline-offset: 3px;
+}
+@media (max-width: 480px) {
+  .gsw-consent-scope-list { max-height: min(30dvh, 230px); }
+}
