@@ -19,6 +19,7 @@ export interface AgentToolResult<T = unknown> {
     code: string;
     message: string;
     retryable: boolean;
+    incidentId?: string;
   };
   audit: {
     userId: string;

@@ -5,14 +5,15 @@ import { db } from "../../db/client.js";
 import { calendarRsvps } from "../../db/schema.js";
 import { calculateFreeSlots, computeCalendarConflicts } from "./calendarAvailability.js";
 import { getUserEngine } from "../../engine/index.js";
+import { reportChatError } from "../chatSafeErrors.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
 
 const audit = (ctx: AgentExecutionContext, startedAt: string) => ({
   userId: ctx.userId, accountId: ctx.accountId, startedAt, completedAt: new Date().toISOString(),
 });
 const failed = (ctx: AgentExecutionContext, toolCallId: string, startedAt: string, error: unknown): AgentToolResult => {
-  console.error("[gsw-calendar] AI calendar tool failed", { toolCallId, errorType: error instanceof Error ? error.name : "Unknown" });
-  return { ok: false, toolCallId, error: { code: "calendar_unavailable", message: "Calendar information is unavailable. Please retry.", retryable: true }, audit: audit(ctx, startedAt) };
+  const report = reportChatError(error, { operation: "calendar.tool", category: "calendar", retryable: true });
+  return { ok: false, toolCallId, error: { code: "calendar_unavailable", message: "Calendar information is unavailable. Please retry.", retryable: true, incidentId: report.incidentId }, audit: audit(ctx, startedAt) };
 };
 const calendarEngine = (ctx: AgentExecutionContext) => getUserEngine({
   productUserId: ctx.userId, authUserId: ctx.authUserId,

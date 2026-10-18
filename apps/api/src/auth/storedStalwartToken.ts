@@ -1,10 +1,11 @@
-import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import { createRemoteJWKSet } from "jose";
 import { db } from "../db/client.js";
 import { oauthAccessToken, oauthClient, oauthRefreshToken, emailAccounts } from "../db/schema.js";
 import { config } from "../config.js";
 import { verifyStalwartMailboxJwt } from "./verifyStalwartMailboxJwt.js";
 import { selectVerifiedStoredToken } from "./selectStoredStalwartToken.js";
+import { firstPartyStalwartClientIds } from "./firstPartyClients.js";
 
 /**
  * Reuse only an existing, persisted, signed first-party mailbox credential.
@@ -35,7 +36,7 @@ export async function findStoredStalwartMailboxToken(input: {
     eq(oauthClient.disabled, false),
     or(isNull(oauthAccessToken.refreshId), and(isNull(oauthRefreshToken.revoked), gt(oauthRefreshToken.expiresAt, new Date()))),
     eq(oauthAccessToken.userId, input.authUserId),
-    eq(oauthAccessToken.clientId, config.auth.mobileClientId),
+    inArray(oauthAccessToken.clientId, firstPartyStalwartClientIds()),
     gt(oauthAccessToken.expiresAt, new Date(Date.now() + 60_000)),
   )).orderBy(desc(oauthAccessToken.expiresAt)).limit(5);
 

@@ -1,7 +1,7 @@
 # GSW Mail MCP Architecture v2
 ## Technical Architecture, Refactoring & Implementation Plan
 
-**Status:** Implemented — under production-readiness validation on `test/mcp-v2-production-readiness`  
+**Status:** Implemented — under production-readiness validation on `test/mcp-v2-production-readiness`; sessionless mailbox credential brokerage added (connect-time broker + refresh bridge) and awaiting live-host validation
 **Repository:** `fairenow/gsw-mail`  
 **Primary API:** Fastify / TypeScript  
 **Production MCP endpoint:** `https://api.guidedstepswellness.com/mcp`  
@@ -125,6 +125,13 @@ interface GswExecutionContext {
 ```
 
 External MCP bearer tokens establish the external client's identity and consent. Internal mailbox credentials must be resolved server-side for the authenticated user and account; never forward unrelated client tokens or blindly trust request headers.
+
+**Credential brokerage (implemented).** A sessionless MCP request carries no Stalwart credential, so mailbox tools fail closed (`mailbox_session_required`) rather than substituting the MCP bearer. Two server-side mechanisms close the gap:
+
+- **Connect-time broker.** A first-party product session route (`POST /product/mcp/mailbox-credential`) accepts only a browser session cookie from a trusted GSW origin; it rejects mixed `authorization`+`cookie` and any MCP bearer. While the signed-in user is present it runs a PKCE authorization-code exchange against the product's own mobile client with `scope=openid email offline_access` and `resource=stalwart`, so Better Auth persists a refreshable, account-bound mailbox authorization. The web consent screen calls this best-effort before the OAuth decision.
+- **Refresh bridge.** For a later sessionless request, `refreshStoredStalwartMailboxToken` reuses only a persisted first-party refresh token (filtered by principal, non-revoked, unexpired, enabled client) and performs a server-side `refresh_token` grant to `${issuer}/oauth2/token`. The renewed token is verified against the trusted JWKS with account/metadata binding before use, cached briefly, and skipped on any failure. No credential is ever minted from an MCP grant; the token endpoint, not the caller, is authoritative.
+
+The empty-header MCP path (`mcp/executionContext.ts`) remains; identity and mailbox authority come exclusively from the resolved product session, not from request headers.
 
 ### ADR-004 — Unified authorization policy, distinct consent
 

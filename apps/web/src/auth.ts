@@ -118,6 +118,28 @@ export function getOAuthPublicClient(clientId: string): Promise<OAuthPublicClien
   return authRequest<OAuthPublicClient>(`/oauth2/public-client?client_id=${encodeURIComponent(clientId)}`);
 }
 
+/**
+ * Best-effort: while the signed-in user is present at an OAuth connect screen,
+ * ask GSW to establish a refreshable first-party mailbox credential for each
+ * readable account. This lets a later sessionless MCP request renew mailbox
+ * access without a browser. Failures never block the authorization decision.
+ */
+export async function establishMcpMailboxCredentials(): Promise<void> {
+  const accountsResponse = await fetch("/mail/accounts", { credentials: "include", signal: AbortSignal.timeout(15000) });
+  if (!accountsResponse.ok) return;
+  const body = await accountsResponse.json() as { accounts?: { id: string; permissions?: string[] }[] };
+  for (const account of body.accounts ?? []) {
+    if (!account.permissions?.includes("read")) continue;
+    await fetch("/product/mcp/mailbox-credential", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ accountId: account.id }),
+      signal: AbortSignal.timeout(20000),
+    }).catch(() => undefined);
+  }
+}
+
 export async function submitOAuthConsent(accept: boolean, acceptedScope?: string): Promise<void> {
   const result = await authRequest<OAuthConsentResult>("/oauth2/consent", withOAuthQuery({
     accept,

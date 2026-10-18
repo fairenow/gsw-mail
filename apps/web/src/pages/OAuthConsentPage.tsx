@@ -5,6 +5,7 @@ import { AuthError } from "../components/auth/AuthError";
 import { AuthPage } from "../components/auth/AuthPage";
 import { BrandMark } from "../components/auth/BrandMark";
 import {
+  establishMcpMailboxCredentials,
   getOAuthPublicClient,
   getSession,
   submitOAuthConsent,
@@ -120,6 +121,9 @@ export function OAuthConsentPage() {
     setBusy(true);
     setError("");
     try {
+      if (accept && request.scopes.some((scope) => knownProductScopes.has(scope))) {
+        await establishMcpMailboxCredentials().catch(() => undefined);
+      }
       await submitOAuthConsent(accept, accept ? request.acceptedScope : undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not complete this authorization request.");

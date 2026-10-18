@@ -724,3 +724,112 @@ test("mcp approval lifecycle: pending cannot execute, first-party review approve
     }
   });
 });
+
+test("sessionless mailbox credential renews only an authorized first-party refresh token and fails closed", async (t) => {
+  if (!dbAvailable) return t.skip("postgres unavailable");
+  await ensureMcpIdentityFixtures();
+  const mobileClientId = "gsw-mail-mobile";
+  const refreshModule = await import("./auth/refreshStalwartMailboxToken.js");
+
+  await db.insert(schema.oauthClient).values({
+    id: mobileClientId, clientId: mobileClientId, disabled: false, name: "GSW Mail mobile",
+    redirectUris: ["https://app.gsw.test/callback"], scopes: ["openid", "email", "offline_access"],
+    grantTypes: ["authorization_code", "refresh_token"], public: true,
+  }).onConflictDoNothing();
+  const [originalAccount] = await db.select({ authSetupStatus: schema.emailAccounts.authSetupStatus })
+    .from(schema.emailAccounts).where(eq(schema.emailAccounts.id, ramonAccountId)).limit(1);
+  await db.update(schema.emailAccounts).set({ authSetupStatus: "ready" }).where(eq(schema.emailAccounts.id, ramonAccountId));
+
+  const issuer = `${process.env.BETTER_AUTH_URL}/api/auth`;
+  const sign = (overrides: { email?: string; subject?: string; scope?: string; audience?: string } = {}) =>
+    new SignJWT({ email: overrides.email ?? "ramon@it.example.com", scope: overrides.scope ?? "openid email offline_access" })
+      .setProtectedHeader({ alg: "ES256", kid: mcpJwksKid })
+      .setIssuer(issuer)
+      .setAudience(overrides.audience ?? "stalwart")
+      .setSubject(overrides.subject ?? mcpAuthSubject)
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(mcpTokenSigningKey!);
+
+  let tokenBody: unknown = { access_token: "" };
+  let tokenStatus = 200;
+  const requestStub = (async () =>
+    new Response(JSON.stringify(tokenBody), { status: tokenStatus, headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
+
+  const insertRefresh = (id: string, overrides: { expiresAt?: Date; revoked?: Date; scopes?: string[]; clientId?: string } = {}) =>
+    db.insert(schema.oauthRefreshToken).values({
+      id, token: `refresh-${id}`, clientId: overrides.clientId ?? mobileClientId, userId: mcpAuthSubject,
+      expiresAt: overrides.expiresAt ?? new Date(Date.now() + 86_400_000), createdAt: new Date(),
+      revoked: overrides.revoked ?? null, scopes: overrides.scopes ?? ["openid", "email", "offline_access"],
+    }).onConflictDoNothing();
+
+  const reset = async () => {
+    refreshModule.clearRefreshedStalwartMailboxTokenCache(mcpAuthSubject, ramonAccountId);
+    await db.delete(schema.oauthRefreshToken).where(eq(schema.oauthRefreshToken.clientId, mobileClientId));
+    tokenStatus = 200;
+  };
+  const renew = () => refreshModule.refreshStoredStalwartMailboxToken({
+    productUserId: ramonId, authUserId: mcpAuthSubject, accountId: ramonAccountId, request: requestStub,
+  });
+
+  try {
+    await reset();
+    assert.equal(await renew(), null, "no prior authorization fails closed");
+
+    await reset();
+    await insertRefresh("expired", { expiresAt: new Date(Date.now() - 1_000) });
+    tokenBody = { access_token: await sign() };
+    assert.equal(await renew(), null, "an expired refresh token is never renewed");
+
+    await reset();
+    await insertRefresh("revoked", { revoked: new Date() });
+    assert.equal(await renew(), null, "a revoked refresh token is never renewed");
+
+    await reset();
+    await insertRefresh("failing", {});
+    tokenStatus = 400;
+    tokenBody = { error: "invalid_grant" };
+    assert.equal(await renew(), null, "a rejected refresh never yields a credential");
+
+    await reset();
+    await insertRefresh("no-email-scope", { scopes: ["openid", "offline_access"] });
+    tokenBody = { access_token: await sign() };
+    assert.equal(await renew(), null, "a token without a mailbox scope is not a mailbox credential");
+
+    await reset();
+    await insertRefresh("wrong-mailbox", {});
+    tokenBody = { access_token: await sign({ email: "other@it.example.com" }) };
+    assert.equal(await renew(), null, "a credential for another mailbox is rejected");
+
+    await reset();
+    await insertRefresh("wrong-subject", {});
+    tokenBody = { access_token: await sign({ subject: "auth-someone-else" }) };
+    assert.equal(await renew(), null, "a credential for another principal is rejected");
+
+    await reset();
+    await insertRefresh("valid", {});
+    const expected = await sign();
+    tokenBody = { access_token: expected };
+    assert.equal(await renew(), expected, "an authorized first-party credential is renewed");
+
+    tokenBody = { access_token: await sign({ email: "other@it.example.com" }) };
+    assert.equal(await renew(), expected, "a fresh credential is served from cache within its lifetime");
+  } finally {
+    await db.delete(schema.oauthRefreshToken).where(eq(schema.oauthRefreshToken.clientId, mobileClientId));
+    await db.update(schema.emailAccounts)
+      .set({ authSetupStatus: originalAccount?.authSetupStatus ?? "pending" })
+      .where(eq(schema.emailAccounts.id, ramonAccountId));
+  }
+});
+
+test("first-party mailbox-credential route requires a browser session and rejects an MCP bearer", async (t) => {
+  if (!dbAvailable) return t.skip("postgres unavailable");
+  const call = (headers: Record<string, string>) => fetch(`${baseUrl}/product/mcp/mailbox-credential`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-gsw-user-id": ramonId, ...headers },
+    body: JSON.stringify({ accountId: ramonAccountId }),
+  });
+
+  assert.equal((await call({ cookie: "gsw.session_token=not-a-real-session" })).status, 403, "origin is required");
+  assert.equal((await call({ cookie: "gsw.session_token=not-a-real-session", authorization: "Bearer anything", origin: "http://localhost:3000" })).status, 403, "an MCP bearer is never converted into a mailbox credential");
+});
