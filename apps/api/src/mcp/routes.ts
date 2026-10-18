@@ -1,3 +1,4 @@
+import { executeAuthorizedCapability } from "../ai/authorizedCapability.js";
 import { randomUUID, createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { config } from "../config.js";
@@ -195,7 +196,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
           const writeContext=createMcpExecutionContext(identity,accountId,{
             toolName:policy.tool.name,reservedActionKey:decision.key,
           });
-          const result=await agentMailRegistry.execute(name,JSON.stringify(toolArguments),writeContext,randomUUID());
+          const result=await executeAuthorizedCapability({toolName:name,argumentsValue:toolArguments,context:writeContext});
           if(result.ok) {
             // Store only a completion marker; raw mail/file/contact results can be sensitive.
             await completeAiIdempotency(decision.key,{completed:true,fingerprint:actionFingerprintId});
@@ -208,7 +209,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
           return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"write_execution_failed_check_action_status_before_retrying"})}]});
         }
       }
-      const result=await agentMailRegistry.execute(name,JSON.stringify(toolArguments),context,randomUUID());
+      const result=await executeAuthorizedCapability({toolName:name,argumentsValue:toolArguments,context});
       return wrap({isError:!result.ok,content:[{type:"text",text:JSON.stringify(result.ok?result.data:result.error).slice(0,50000)}]});
     }
     return reply.code(200).send({jsonrpc:"2.0",id:input.id??null,error:{code:-32601,message:"Method not found"}});
