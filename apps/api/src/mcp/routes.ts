@@ -10,6 +10,7 @@ import { discoverMcpCapabilities } from "./capabilityDiscovery.js";
 import { mcpPrepareDraftRequest } from "./prepareDraftAction.js";
 import { storePreparedMcpDraft } from "./draftPayloadStore.js";
 import { canUseMcpWriteTestMode, mcpWriteCallPolicy } from "./writeTestPolicy.js";
+import { mcpOutboundIdempotencyKey } from "./outboundIdempotency.js";
 import { reserveAiIdempotency, completeAiIdempotency, failAiIdempotency, grantAiScope, listActiveAiScopes } from "../ai/agentState.js";
 import { requireAccountPermission } from "../auth/authorize.js";
 
@@ -191,7 +192,11 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
               :{error:same?"request_already_attempted":"request_id_reused_with_different_action"})}]});
         }
         try {
-          const result=await agentMailRegistry.execute(name,JSON.stringify(toolArguments),context,randomUUID());
+          const outboundKey=mcpOutboundIdempotencyKey(policy.tool.name,decision.key);
+          const result=await agentMailRegistry.execute(name,JSON.stringify(toolArguments),{
+            ...context,
+            ...(outboundKey ? {scheduledIdempotencyKey:outboundKey} : {}),
+          },randomUUID());
           if(result.ok) {
             // Store only a completion marker; raw mail/file/contact results can be sensitive.
             await completeAiIdempotency(decision.key,{completed:true,fingerprint:actionFingerprintId});
