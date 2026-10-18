@@ -1,21 +1,25 @@
 import { randomUUID } from "node:crypto";
-import { agentMailRegistry } from "../ai/tools/registry.js";
+import { agentMailRegistry, type AgentToolRegistry } from "../ai/tools/registry.js";
 import type { AgentExecutionContext } from "../ai/tools/types.js";
 
 /**
  * Shared capability execution boundary.
- * Authentication, account authorization and write reservations are applied
- * upstream. Both MCP and native AI can use this without transport logic.
+ * Authentication, approval, account authorization and write reservations
+ * remain upstream and must complete before calling this function.
+ * Native callers retain their original raw JSON parsing and registry.
  */
 export async function executeAuthorizedCapability(input: {
   toolName: string;
-  argumentsValue: unknown;
   context: AgentExecutionContext;
   toolCallId?: string;
-}) {
-  return agentMailRegistry.execute(
+  registry?: AgentToolRegistry;
+} & ({ rawArguments: string; argumentsValue?: never } | { argumentsValue: unknown; rawArguments?: never })) {
+  const serialized = "rawArguments" in input
+    ? input.rawArguments ?? ""
+    : JSON.stringify(input.argumentsValue);
+  return (input.registry ?? agentMailRegistry).execute(
     input.toolName,
-    JSON.stringify(input.argumentsValue),
+    serialized,
     input.context,
     input.toolCallId ?? randomUUID(),
   );
