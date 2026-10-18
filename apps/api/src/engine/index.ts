@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { decodeStalwartTokenMetadata, getStalwartAccessToken, getStalwartTokenFormat } from "../auth/stalwartToken.js";
+import { findStoredStalwartMailboxToken } from "../auth/storedStalwartToken.js";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { authUsers, emailAccounts, mailAccountMemberships } from "../db/schema.js";
@@ -106,7 +107,16 @@ async function getUserMailboxToken(input: {
     throw new Error("mailbox identity is not linked to this Better Auth session");
   }
 
-  const token = await getStalwartAccessToken({ authUserId: input.authUserId, accountId: account.id, headers: input.headers });
+  // Sessionless clients may only reuse an already-issued, verified first-party
+  // credential after this function has checked mailbox ACL and identity linkage.
+  const stored = Object.keys(input.headers).length === 0
+    ? await findStoredStalwartMailboxToken({
+        productUserId: input.productUserId,
+        authUserId: input.authUserId,
+        accountId: account.id,
+      })
+    : null;
+  const token = stored ?? await getStalwartAccessToken({ authUserId: input.authUserId, accountId: account.id, headers: input.headers });
   return { token, accountAddress: account.address };
 }
 
