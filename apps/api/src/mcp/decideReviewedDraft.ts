@@ -3,7 +3,7 @@ import { db } from "../db/client.js";
 import { mcpActionApprovals } from "../db/schema.js";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { loadMcpDraftForReview } from "./draftPayloadStore.js";
-import { mcpArgumentsDigest } from "./writeApprovalPolicy.js";
+import { isReviewedDraftDecisionValid } from "./reviewedDraftDecisionPolicy.js";
 
 /**
  * First-party approval decision service. Caller must authenticate a GSW product
@@ -25,8 +25,7 @@ export async function decideReviewedMcpDraft(input: {
   const review = await loadMcpDraftForReview({
     userId: input.userId, approvalId: input.approvalId,
   });
-  if (!review || review.toolName !== "mail.create_draft" ||
-      mcpArgumentsDigest(review.arguments) !== input.reviewedArgumentsDigest) return null;
+  if (!isReviewedDraftDecisionValid(review, input.reviewedArgumentsDigest)) return null;
 
   // Re-check live mailbox permissions at the approval moment.
   await requireAccountPermission(input.userId, review.accountId, "send");
