@@ -2,7 +2,7 @@ import { listActiveAiScopes } from "../ai/agentState.js";
 import { getAiCapabilitySettings, isAiScopeGloballyEnabled } from "../ai/capabilities.js";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { agentMailRegistry } from "../ai/tools/registry.js";
-import { requiredMailboxPermission } from "../ai/agentExecutor.js";
+import { requiredMailboxPermission } from "../ai/mailboxToolPermission.js";
 import type { AgentToolDefinition } from "../ai/tools/types.js";
 
 /** Resolve live GSW grants and settings at invocation time, not from cached MCP claims. */
