@@ -10,6 +10,11 @@ export function McpDraftApprovals() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 15_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const reload = async () => {
     setLoading(true);
@@ -46,6 +51,7 @@ export function McpDraftApprovals() {
     if (!selected || !reviewedDigest) return;
     const id = selected.approvalId;
     setBusy(id);
+    setError("");
     try {
       await api.decideMcpApproval(id, decision, reviewedDigest);
       setSelected(null);
@@ -55,13 +61,15 @@ export function McpDraftApprovals() {
         : "Draft proposal rejected. No draft was created.");
       await reload();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not record approval decision");
+      setSelected(null);
+      setReviewedDigest(null);
+      setError(cause instanceof Error ? `${cause.message}. Refresh and review the proposal again.` : "Could not record approval decision. Refresh and review again.");
     } finally {
       setBusy(null);
     }
   };
 
-  const pending = approvals.filter(a => a.status === "pending" && Date.parse(a.expiresAt) > Date.now());
+  const pending = approvals.filter(a => a.status === "pending" && Date.parse(a.expiresAt) > clock);
   return <div className="gsw-settings-card">
     <div className="gsw-settings-card-head">
       <div>
@@ -99,9 +107,10 @@ export function McpDraftApprovals() {
       </>}
       </div>
       <p>Expires {new Date(selected.expiresAt).toLocaleString()}. No draft will be created by this approval.</p>
+      {Date.parse(selected.expiresAt) <= clock && <p role="alert">This request has expired. Refresh to review current requests.</p>}
       <div style={{ display: "flex", gap: 12 }}>
-        <button type="button" className="gsw-primary-btn" disabled={busy !== null || !reviewedDigest || Date.parse(selected.expiresAt) <= Date.now()} onClick={() => void decide("approved")}>Approve proposal</button>
-        <button type="button" className="gsw-secondary-btn" disabled={busy !== null} onClick={() => void decide("rejected")}>Reject</button>
+        <button type="button" className="gsw-primary-btn" disabled={busy !== null || !reviewedDigest || Date.parse(selected.expiresAt) <= clock} onClick={() => void decide("approved")}>Approve proposal</button>
+        <button type="button" className="gsw-secondary-btn" disabled={busy !== null || Date.parse(selected.expiresAt) <= clock} onClick={() => void decide("rejected")}>Reject</button>
         <button type="button" className="gsw-secondary-btn" disabled={busy !== null} onClick={() => { setSelected(null); setReviewedDigest(null); }}>Close</button>
       </div>
     </section>}
