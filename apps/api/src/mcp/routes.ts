@@ -10,7 +10,7 @@ import { discoverMcpCapabilities } from "./capabilityDiscovery.js";
 import { mcpPrepareDraftRequest } from "./prepareDraftAction.js";
 import { storePreparedMcpDraft } from "./draftPayloadStore.js";
 import { canUseMcpWriteTestMode, mcpWriteCallPolicy } from "./writeTestPolicy.js";
-import { mcpOutboundIdempotencyKey } from "./outboundIdempotency.js";
+import { createMcpExecutionContext } from "./executionContext.js";
 import { reserveAiIdempotency, completeAiIdempotency, failAiIdempotency, grantAiScope, listActiveAiScopes } from "../ai/agentState.js";
 import { requireAccountPermission } from "../auth/authorize.js";
 
@@ -164,7 +164,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
       if(policy.tool.risk!=="read"&&!writeTestEnabled)
         return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"write_test_disabled",tool:name})}]});
       const {accountId:_,requestId,confirmExternal,...toolArguments}=params;
-      const context={userId:identity.userId,authUserId:identity.authUserId,accountId,headers:{}};
+      const context=createMcpExecutionContext(identity,accountId);
       if(policy.tool.risk!=="read") {
         const decision=mcpWriteCallPolicy({
           risk:policy.tool.risk,requestId,confirmExternal,
@@ -192,11 +192,10 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
               :{error:same?"request_already_attempted":"request_id_reused_with_different_action"})}]});
         }
         try {
-          const outboundKey=mcpOutboundIdempotencyKey(policy.tool.name,decision.key);
-          const result=await agentMailRegistry.execute(name,JSON.stringify(toolArguments),{
-            ...context,
-            ...(outboundKey ? {scheduledIdempotencyKey:outboundKey} : {}),
-          },randomUUID());
+          const writeContext=createMcpExecutionContext(identity,accountId,{
+            toolName:policy.tool.name,reservedActionKey:decision.key,
+          });
+          const result=await agentMailRegistry.execute(name,JSON.stringify(toolArguments),writeContext,randomUUID());
           if(result.ok) {
             // Store only a completion marker; raw mail/file/contact results can be sensitive.
             await completeAiIdempotency(decision.key,{completed:true,fingerprint:actionFingerprintId});
