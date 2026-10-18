@@ -207,12 +207,20 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
         // Opt-in: atomically consume approved action before invoking a capability.
         // A client-provided approvalId is only a lookup key, never evidence itself.
         if (process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL === "true") {
-          const approved = await consumeMcpPersistedApproval({
+          let approved: Awaited<ReturnType<typeof consumeMcpPersistedApproval>>;
+          try {
+            approved = await consumeMcpPersistedApproval({
             approvalId: typeof approvalId === "string" ? approvalId : "",
             risk: policy.tool.risk,
             userId: identity.userId, accountId, clientId: identity.clientId,
             toolName: policy.tool.name, argumentsValue: toolArguments,
-          });
+            });
+          } catch {
+            // No capability has started. A DB or approval-store failure must
+            // never leave an unclassified in-progress MCP request.
+            await failAiIdempotency(decision.key, new Error("mcp_approval_store_unavailable"));
+            return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"approval_verification_unavailable"})}]});
+          }
           if (!approved.allowed) {
             // The durable reservation already exists, but no capability has
             // run. Record a terminal denial instead of leaving an ambiguous
