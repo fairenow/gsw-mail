@@ -33,6 +33,11 @@ export default async function mcpApprovalsRoutes(app: FastifyInstance) {
   });
 
   app.post("/product/mcp/approvals/:id/decision", async (req, reply) => {
+    // An MCP OAuth bearer is not authority to decide first-party approvals.
+    // Require a browser session cookie and reject mixed authentication.
+    if (!req.headers.cookie || req.headers.authorization) {
+      return reply.code(403).send({ error: "first_party_session_required" });
+    }
     // Browser session approval must originate from a trusted GSW UI, not a
     // cross-site form or a third-party MCP OAuth client.
     const origin = req.headers.origin;
