@@ -158,8 +158,9 @@ export function OAuthConsentPage() {
         </section>
 
         <section className="gsw-consent-details">
-          <div className="gsw-consent-access" aria-label="Requested access">
+          <div className="gsw-consent-access">
             <h2>Requested access</h2>
+            <div className="gsw-consent-scope-list" role="region" aria-label="Requested access scopes" tabIndex={0}>
             {request?.scopes.map((scope) => {
               const detail = describeScope(scope)!;
               return <div className="gsw-consent-scope" key={scope}>
@@ -167,6 +168,7 @@ export function OAuthConsentPage() {
                 <div><strong>{detail.title}</strong><p>{detail.description}</p></div>
               </div>;
             })}
+            </div>
           </div>
 
           <div className="gsw-consent-boundary">
