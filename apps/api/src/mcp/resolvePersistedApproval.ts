@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { mcpActionApprovals } from "../db/schema.js";
 import { verifyPersistedMcpApproval } from "./writeApprovalPolicy.js";
@@ -32,4 +32,31 @@ export async function resolveMcpPersistedApproval(input: {
     eq(mcpActionApprovals.clientId, input.clientId),
   )).limit(1);
   return verifyPersistedMcpApproval({ ...input, approval: record ?? null });
+}
+
+/**
+ * Atomically claim one approved action. Concurrent requests cannot both claim it.
+ * A consumed approval is never reset on execution failure, since an external
+ * effect may have occurred even if the client did not receive a response.
+ */
+export async function consumeMcpPersistedApproval(input: Parameters<typeof resolveMcpPersistedApproval>[0]) {
+  const checked = await resolveMcpPersistedApproval(input);
+  if (!checked.allowed) return checked;
+  const now = new Date();
+  const consumed = await db.update(mcpActionApprovals)
+    .set({ status: "consumed", consumedAt: now })
+    .where(and(
+      eq(mcpActionApprovals.id, checked.approvalId),
+      eq(mcpActionApprovals.userId, input.userId),
+      eq(mcpActionApprovals.clientId, input.clientId),
+      eq(mcpActionApprovals.accountId, input.accountId),
+      eq(mcpActionApprovals.toolName, input.toolName.replaceAll("__", ".")),
+      eq(mcpActionApprovals.status, "approved"),
+      isNull(mcpActionApprovals.consumedAt),
+      gt(mcpActionApprovals.expiresAt, now),
+    ))
+    .returning({ id: mcpActionApprovals.id });
+  return consumed.length === 1
+    ? { allowed: true as const, approvalId: checked.approvalId }
+    : { allowed: false as const, reason: "approval_not_active" as const };
 }
