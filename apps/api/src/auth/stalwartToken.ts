@@ -7,6 +7,7 @@ import { db } from "../db/client.js";
 import { oauthAccessToken } from "../db/schema.js";
 import { auth } from "./better.js";
 import { canAttemptInteractiveMailboxAuthorization } from "./mailboxCredentialPolicy.js";
+import { assertMailboxSessionIdentity } from "./mailboxSessionIdentity.js";
 
 export interface StalwartTokenRequest {
   authUserId: string;
@@ -180,6 +181,7 @@ async function getStalwartAccessTokenUncached(input: StalwartTokenRequest, reque
   } catch {
     sessionBeforeAuthorize = null;
   }
+  assertMailboxSessionIdentity(input.authUserId, sessionBeforeAuthorize);
   console.info("[oauth] authorize_start", {
     authUserId: input.authUserId,
     accountId: input.accountId,
