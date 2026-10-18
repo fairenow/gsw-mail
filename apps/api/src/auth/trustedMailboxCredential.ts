@@ -13,6 +13,7 @@ export interface TrustedMailboxPrincipal {
 export interface TrustedMailboxCredentialDependencies {
   authorize: (principal: TrustedMailboxPrincipal, permission: "read" | "send") => Promise<void>;
   issue: (principal: TrustedMailboxPrincipal) => Promise<{ token: string; authUserId: string; accountId: string }>;
+  verify: (token: string, principal: TrustedMailboxPrincipal) => Promise<void>;
 }
 
 export async function resolveTrustedMailboxCredential(
@@ -28,5 +29,6 @@ export async function resolveTrustedMailboxCredential(
   if (issued.authUserId !== principal.authUserId || issued.accountId !== principal.accountId || !issued.token) {
     throw new Error("mailbox_credential_binding_mismatch");
   }
+  await dependencies.verify(issued.token, principal);
   return issued.token;
 }
