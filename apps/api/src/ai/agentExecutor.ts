@@ -11,7 +11,7 @@ import {
   requestAiConfirmation,
   reserveAiIdempotency,
 } from "./agentState.js";
-import { scopeConfirmationPolicy, type AiScope } from "./permissions/types.js";
+import { type AiScope } from "./permissions/types.js";
 import { getAiCapabilitySettings, isAiScopeGloballyEnabled } from "./capabilities.js";
 import { AgentToolRegistry } from "./tools/registry.js";
 import type { AgentExecutionContext, AgentToolResult } from "./tools/types.js";
@@ -179,11 +179,6 @@ export async function executeAgentTool(input: {
       },
     };
   }
-
-  const confirmationScope = definition.requiredScopes.find((scope) => {
-    const policy = scopeConfirmationPolicy[scope as AiScope];
-    return policy === "always" || (policy === "contextual" && definition.risk === "external");
-  });
 
   if (!input.confirmationApproved && requiresExplicitActionConfirmation(definition.risk, definition.requiredScopes)) {
     const confirmation = await requestAiConfirmation({
