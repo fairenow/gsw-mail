@@ -1,3 +1,4 @@
+import { requiresExplicitActionConfirmation } from "../ai/actionConfirmationPolicy.js";
 import { createHash } from "node:crypto";
 import type { AgentRisk } from "../ai/tools/types.js";
 import { mcpArgumentsDigest } from "./writeApprovalPolicy.js";
@@ -19,6 +20,7 @@ export function canUseMcpWriteTestMode(input: {
 
 export function mcpWriteCallPolicy(input: {
   risk: AgentRisk;
+  requiredScopes?: readonly string[];
   requestId: unknown;
   confirmExternal: unknown;
   userId: string;
@@ -34,7 +36,7 @@ export function mcpWriteCallPolicy(input: {
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.requestId)) {
     return { allowed: false, reason: "request_id_uuid_required" };
   }
-  if (input.risk === "external" && input.confirmExternal !== true) {
+  if (requiresExplicitActionConfirmation(input.risk, input.requiredScopes ?? []) && input.confirmExternal !== true) {
     return { allowed: false, reason: "explicit_external_confirmation_required" };
   }
   const key = "mcp:" + createHash("sha256")
