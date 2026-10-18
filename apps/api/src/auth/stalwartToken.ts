@@ -6,6 +6,7 @@ import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { oauthAccessToken } from "../db/schema.js";
 import { auth } from "./better.js";
+import { canAttemptInteractiveMailboxAuthorization } from "./mailboxCredentialPolicy.js";
 
 export interface StalwartTokenRequest {
   authUserId: string;
@@ -130,6 +131,9 @@ export async function getStalwartAccessToken(input: StalwartTokenRequest, reques
   if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
   const pending = inFlight.get(cacheKey);
   if (pending) return pending;
+  if (!canAttemptInteractiveMailboxAuthorization(input.headers)) {
+    throw new Error("mailbox_session_required");
+  }
   const operation = getStalwartAccessTokenUncached(input, request);
   inFlight.set(cacheKey, operation);
   try {
