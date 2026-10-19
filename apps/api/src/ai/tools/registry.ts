@@ -1,5 +1,6 @@
 import type { AgentExecutionContext, AgentToolDefinition, ProviderToolDefinition } from "./types.js";
 import { agentMailTools, readOnlyMailTools } from "./mailTools.js";
+import { mailComposeActions } from "./mailComposeActions.js";
 import { mailTriageReportTool } from "./triageReportTools.js";
 import { mailTriageClassifyTool } from "./triageClassifyTools.js";
 import { mailTriageTool, mailTriageReviewTool, mailTriageScanStepTool } from "./inboxTriageTools.js";
@@ -90,7 +91,7 @@ export class AgentToolRegistry {
   }
 }
 
-const baseAgentTools: AgentToolDefinition[] = [mailTriageReportTool, mailTriageClassifyTool, mailTriageTool, mailTriageReviewTool, mailTriageScanStepTool, ...agentMailTools, ...automationTools, ...taskTools, ...workerTools, ...integrationTools, ...browserTools, ...searchTools, ...contactTools, ...calendarTools, ...campaignTools, ...templateTools, ...domainTools, ...fileTools, ...fileManagementTools, ...fileOrganizationTools, ...durableFileOrganizationTools, ...videoTools, ...proposalTools, ...proposalConversationTools];
+const baseAgentTools: AgentToolDefinition[] = [mailTriageReportTool, mailTriageClassifyTool, mailTriageTool, mailTriageReviewTool, mailTriageScanStepTool, ...agentMailTools, ...mailComposeActions, ...automationTools, ...taskTools, ...workerTools, ...integrationTools, ...browserTools, ...searchTools, ...contactTools, ...calendarTools, ...campaignTools, ...templateTools, ...domainTools, ...fileTools, ...fileManagementTools, ...fileOrganizationTools, ...durableFileOrganizationTools, ...videoTools, ...proposalTools, ...proposalConversationTools];
 const baseAgentRegistry = new AgentToolRegistry(baseAgentTools);
 
 const capabilitySearchTool: AgentToolDefinition = {
