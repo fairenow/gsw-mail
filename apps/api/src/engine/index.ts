@@ -90,9 +90,9 @@ async function getUserMailboxToken(input: {
   try {
     account = await requireAccountPermission(input.productUserId, input.accountId, input.permission ?? "read");
     console.info("[mcp-mailbox] authorization_completed", { allowed: true });
-  } catch {
+  } catch (error) {
     console.warn("[mcp-mailbox] authorization_failed");
-    throw new Error("mailbox_authorization_failed");
+    throw error;
   }
   if (account.status !== "active" || account.authSetupStatus !== "ready") {
     console.warn("[mcp-mailbox] account_not_ready");
