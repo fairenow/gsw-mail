@@ -127,7 +127,21 @@ async function getUserMailboxToken(input: {
         accountId: account.id,
       })
     : null);
-  const token = renewed ?? await getStalwartAccessToken({ authUserId: input.authUserId, accountId: account.id, headers: input.headers });
+  // Report credential *source* only. Never log token values, claims, email addresses,
+  // account/user identifiers, request headers, or upstream exception messages.
+  if (sessionless) console.info("[mcp-mailbox] credential_resolution", {
+    stage: stored ? "stored_access_token" : renewed ? "refreshed_access_token" : "no_persisted_credential",
+  });
+  let token: string;
+  try {
+    token = renewed ?? await getStalwartAccessToken({ authUserId: input.authUserId, accountId: account.id, headers: input.headers });
+  } catch (error) {
+    if (sessionless) console.warn("[mcp-mailbox] credential_resolution_failed", {
+      stage: "interactive_fallback",
+      reason: error instanceof Error && error.message === "mailbox_session_required" ? "mailbox_session_required" : "unclassified",
+    });
+    throw error;
+  }
   return { token, accountAddress: account.address };
 }
 
