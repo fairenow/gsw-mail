@@ -1,10 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import { fromNodeHeaders } from "better-auth/node";
 import { createRemoteJWKSet } from "jose";
-import { eq } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull } from "drizzle-orm";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
-import { emailAccounts } from "../db/schema.js";
+import { emailAccounts, oauthClient, oauthRefreshToken } from "../db/schema.js";
+import { firstPartyStalwartClientIds } from "./firstPartyClients.js";
 import { auth } from "./better.js";
 import { assertMailboxSessionIdentity } from "./mailboxSessionIdentity.js";
 import { verifyStalwartMailboxJwt } from "./verifyStalwartMailboxJwt.js";
@@ -67,7 +68,10 @@ export async function establishBrokerMailboxCredential(input: {
     const result = await authorizeResponse.json() as { redirect?: boolean; url?: string };
     if (result.redirect === true && typeof result.url === "string") callbackUrl = result.url;
   }
-  if (!callbackUrl) return { established: false, reason: "mailbox_authorization_required" };
+  if (!callbackUrl) {
+    console.warn("[mcp-broker] authorization_no_callback", { status: authorizeResponse.status });
+    return { established: false, reason: "mailbox_authorization_required" };
+  }
 
   const callback = new URL(callbackUrl, config.auth.issuer);
   if (callback.searchParams.get("state") !== state) return { established: false, reason: "mailbox_authorization_state_mismatch" };
@@ -89,7 +93,10 @@ export async function establishBrokerMailboxCredential(input: {
     }),
     signal: AbortSignal.timeout(10_000),
   });
-  if (!tokenResponse.ok) return { established: false, reason: `mailbox_authorization_exchange_${tokenResponse.status}` };
+  if (!tokenResponse.ok) {
+    console.warn("[mcp-broker] exchange_failed", { status: tokenResponse.status });
+    return { established: false, reason: `mailbox_authorization_exchange_${tokenResponse.status}` };
+  }
   const token = await tokenResponse.json() as { access_token?: string };
   if (!token.access_token) return { established: false, reason: "mailbox_authorization_no_token" };
 
@@ -102,6 +109,23 @@ export async function establishBrokerMailboxCredential(input: {
     audience: config.auth.stalwartAudience,
     mailboxAddress: account.address,
   });
+  // An access token alone cannot keep sessionless MCP mailbox access working.
+  // Require a persisted, unrevoked first-party refresh authorization for the
+  // same authenticated principal. Never log or return token values.
+  const refreshRows = await db.select({
+    scopes: oauthRefreshToken.scopes,
+  }).from(oauthRefreshToken)
+    .innerJoin(oauthClient, eq(oauthRefreshToken.clientId, oauthClient.clientId))
+    .where(and(
+      eq(oauthRefreshToken.userId, input.authUserId),
+      inArray(oauthRefreshToken.clientId, firstPartyStalwartClientIds()),
+      eq(oauthClient.disabled, false),
+      isNull(oauthRefreshToken.revoked),
+      gt(oauthRefreshToken.expiresAt, new Date()),
+    )).limit(10);
+  const refreshable = refreshRows.some(row => row.scopes.includes("email"));
+  console.info("[mcp-broker] persistence_check", { refreshable, candidateCount: refreshRows.length });
+  if (!refreshable) return { established: false, reason: "mailbox_refresh_credential_not_persisted" };
   clearRefreshedStalwartMailboxTokenCache(input.authUserId, input.accountId);
   console.info("[oauth] broker_mailbox_credential_established", { authUserId: input.authUserId, accountId: input.accountId });
   return { established: true };
