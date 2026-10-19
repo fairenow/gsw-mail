@@ -121,8 +121,14 @@ export function OAuthConsentPage() {
     setBusy(true);
     setError("");
     try {
-      if (accept && request.scopes.some((scope) => knownProductScopes.has(scope))) {
-        await establishMcpMailboxCredentials().catch(() => undefined);
+      if (accept && request.scopes.some((scope) => scope.startsWith("mail."))) {
+        const brokerage = await establishMcpMailboxCredentials();
+        if (brokerage.attempted === 0) {
+          throw new Error("No readable mailbox was found. Open GSW Mail and confirm your mailbox is ready, then retry.");
+        }
+        if (brokerage.failures.length > 0) {
+          throw new Error(`Mailbox authorization could not be completed for ${brokerage.failures.length} of ${brokerage.attempted} accounts (${brokerage.failures[0]!.reason}). Sign in to GSW Mail to restore mailbox access, then retry authorization.`);
+        }
       }
       await submitOAuthConsent(accept, accept ? request.acceptedScope : undefined);
     } catch (err) {
