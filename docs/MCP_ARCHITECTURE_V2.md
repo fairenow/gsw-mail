@@ -1,7 +1,7 @@
 # GSW Mail MCP Architecture v2
 ## Technical Architecture, Refactoring & Implementation Plan
 
-**Status:** Implemented — under production-readiness validation on `test/mcp-v2-production-readiness`; sessionless mailbox credential brokerage added (connect-time broker + refresh bridge) and awaiting live-host validation
+**Status:** MCP v2 operating in production; public multi-user distribution audit in progress (see Section 13). The credential bridge is deployed, but public-release readiness is not established.
 **Repository:** `fairenow/gsw-mail`  
 **Primary API:** Fastify / TypeScript  
 **Production MCP endpoint:** `https://api.guidedstepswellness.com/mcp`  
@@ -437,3 +437,60 @@ Validate versions and compatibility at implementation time.
 - [OWASP MCP Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/MCP_Security_Cheat_Sheet.html)
 
 **Final principle: Build MCP around GSW Mail—not GSW Mail around MCP.**
+
+## 13. Public ChatGPT plugin release audit — 2026-10-18
+
+This section **extends**, rather than replaces, the internal MCP v2 architecture, ADRs and technical roadmap above. The six public-release phases below derive from the public-launch handoff. "Implemented" means code exists; it does **not** mean the feature has cleared multi-user, interoperability, security, and production acceptance testing.
+
+### Evidence and current deployment
+
+- Production Railway `gsw-mail` API deployed commit `3fa8ea662a3c755e3887bf832be56add91f599ed` (PR #185, mailbox credential broker). At audit time Railway reported deployment SUCCESS.
+- Live MCP capability discovery returned **97 registered capabilities**: **36 available_for_read**, **34 available_for_test_write**, **27 oauth_scope_missing** for the audited connected user. These labels are consent- and environment-specific, **not** multi-user release certifications. Top-level host tool counts include bootstrap functions and do not directly equal the registry count.
+- Prior real-world user tests reported mailbox reading, draft preparation, queued send, CC delivery to Gmail and forward delivery to Zoho. These demonstrate a functioning user flow; native reply threading, comprehensive parity and independent-account validation remain separate gates.
+- The current `mcp/routes.ts` uses handwritten JSON-RPC responses and `canUseMcpWriteTestMode`; the public write policy is therefore **not complete**. `mcp/capabilityDiscovery.ts` retains status vocabulary `available_for_test_write` and `write_transport_disabled`.
+- `mcp/verifyBearer.ts` validates JWT issuer/audience, live client consent, subject mapping, and scopes; `routes/mcpMailboxCredential.ts` implements first-party mailbox credential establishment. This is implementation evidence, **not** proof of two independent customer accounts or revocation behavior in all production scenarios.
+- Existing v2 roadmap checkboxes remain historical/planned tasks; evaluate them against current tests rather than treating the unchecked boxes as proof of absent code.
+
+### Six-phase public-launch readiness matrix
+
+| Public phase | Current audit | Evidence | Work needed before declaring complete |
+| --- | --- | --- | --- |
+| 1. Production architecture and tool audit | **Partial** | Single application registry, per-tool scope/risk entries, 97-item live catalog | Export full machine-readable catalog with public/internal/admin classification, missing-scope decisions, schemas, output boundaries and contract tests; establish an allowlisted public v1 catalog |
+| 2. OAuth and account isolation | **Partial; P0** | Validated MCP bearer, consent checks, account ACL enforcement, connect-time credential broker, refresh path | Replace owner-only write-test gating with explicit production per-user consent and approval; verify two unrelated accounts, independent refresh/revocation, disconnect, and cross-user/cross-resource isolation |
+| 3. Email tool reliability | **Partial; P1** | Read, draft and send paths exist; reported Gmail/Zoho delivery | Exercise full mailbox operations and failure/retry cases; decide on dedicated reply/reply-all/forward; verify `In-Reply-To`/`References`, recipients, attachments, duplicate effects, authoritative outbound state |
+| 4. Security and privacy | **Partial; P0** | Layered grant/ACL checks, approval and durable idempotency implementation, sanitized incident IDs | Security assessment of all public tools, untrusted content/prompt injection, abuse/rate limits, operational alerts, safe error audit, revocation and legal/support policy review |
+| 5. Plugin package and branding | **Unverified** | Existing private plugin package and hosted HTTPS MCP endpoint | Confirm current OpenAI submission requirements, publisher/domain verification, release package file formats, branding, legal URLs, reviewer fixtures and package scans before asserting compliance |
+| 6. Production testing and review | **Partial / release gate open** | Local agent reported 247 unit, 19 integration, 4 acceptance tests after bridge; independent production mail-delivery evidence reported | Re-run CI against release SHA, collect client-by-client and user-by-user evidence, perform controlled production canary/rollback, submit and resolve review feedback |
+
+### Public v1 capability policy (proposal; not yet enforced)
+
+Define an explicit `public-v1` allowlist rather than treating all 97 registry capabilities as approved for public use. Start with reliable mail read/search/thread, draft creation/editing, controlled send, folders, contacts read/search, basic calendar read and optional files read. Add reply/forward once native threading is demonstrated. Exclude or defer admin tools, campaigns, background automations, arbitrary browser actions, media generation, permanent deletes, and experimental functions until separately reviewed. The earlier **20–30 tool** target is a product planning guideline, not a submission requirement. Preserve full internal/native registry coverage; filtering belongs at the MCP publication boundary.
+
+### Non-negotiable public production write model
+
+- Do not globally enable owner-only test mode for all users or bypass existing approvals. Replace it with authenticated user- and client-specific OAuth grants, resource ACL checks, least privilege, explicit confirmation for consequential effects, durable request IDs, and one authoritative action status.
+- Disconnection/revocation must invalidate client authorization and broker access for that connection; access-token renewal must never broaden mailbox authority.
+- Audit reads and writes for account ownership, scope, recipient/attachment bounds, and safe error output. Never pass the external MCP bearer as a Stalwart bearer.
+- Preserve internal ChatGPT developer integration as a rollback path while introducing a separate public rollout policy.
+
+### Implementation workstreams and exit gates
+
+**A. Inventory and exposure:** Generate `docs/MCP_CAPABILITY_CATALOG.md` or a reproducible JSON export from the registry; classify every tool, choose a public allowlist, add per-tool contract coverage. **Exit:** every published tool has an audited scope/risk/schema and demonstrated behavior.
+
+**B. Public auth and credential lifecycle:** Implement production write policy independent of `GSW_MCP_WRITE_TEST_USER_ID`, with per-user approvals and revoked-client handling. Test independent real GSW users plus isolated organizations/mailboxes, expired or rotated credentials, unauthorized write attempts and disconnected clients. **Exit:** no cross-user exposure and no owner-only requirement for legitimate writes.
+
+**C. Reliable email primitives:** Add or validate native reply/reply-all/forward semantics and correct threading headers, CC/BCC, stored file attachments, send status, pagination, and retry safety. **Exit:** every public mail operation has live controlled end-to-end evidence.
+
+**D. Security and operations:** Red-team tool input and untrusted email, enforce rate/size/time limits, verify monitoring and incident IDs, and review public privacy/support/terms URLs. **Exit:** no outstanding high/critical findings and a documented rollback plan.
+
+**E. Package and review:** Verify *current* official publishing instructions and actual plugin file structure before packaging. Existing private package uses `.app.json` + `.codex-plugin/plugin.json`; do not assume a separate `mcp.json` is required without validating the target publishing workflow. **Exit:** valid package, verified publisher requirements, reviewer test credentials, five positive/three negative scenarios or the current required equivalent.
+
+**F. Release acceptance:** Validate ChatGPT and at least one other standards-compatible MCP client; test two independent user accounts, read/write authorization, disconnect/reconnect, failures, and controlled external delivery. **Exit:** CI and required security suites pass, public tools work for regular users, no duplicate effects or confirmed privilege bypasses, and rollout can be reversed safely.
+
+### Public readiness status
+
+**Not yet cleared for public publication.** The principal P0 blockers are production multi-user write authorization, independently evidenced cross-user security, and a validated public exposure/submission policy. Public launch should not depend on making all 97 capabilities public.
+
+### Documentation maintenance
+
+Update this section with PR links, release SHA, acceptance evidence, known exceptions, and current submission requirements after each gate. Do not treat manual user success reports, deploy SUCCESS, or available_for_test_write as interchangeable evidence of general availability.
