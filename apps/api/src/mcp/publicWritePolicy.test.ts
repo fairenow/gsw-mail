@@ -15,3 +15,16 @@ test("public rollout never enables send, destructive, or arbitrary tool writes",
   }
   assert.equal(publicMcpWriteDecision({ enabled: "true", toolName: "mail.create_draft", risk: "external", approvalId: id }).allowed, false);
 });
+test("rollout denial reasons keep the owner-only contract and name the missing approval", () => {
+  const draft = { toolName: "mail.create_draft", risk: "reversible_write" as const, approvalId: id };
+  for (const enabled of [undefined, "", "1", "TRUE", "false", "true "]) {
+    const decision = publicMcpWriteDecision({ ...draft, enabled });
+    assert.equal(decision.allowed, false);
+    assert.equal("reason" in decision && decision.reason, "write_test_disabled");
+  }
+  const wrongTool = publicMcpWriteDecision({ enabled: "true", toolName: "mail__send_draft", risk: "reversible_write", approvalId: id });
+  assert.equal("reason" in wrongTool && wrongTool.reason, "public_write_tool_not_approved");
+  const noApproval = publicMcpWriteDecision({ enabled: "true", toolName: "mail__create_draft", risk: "reversible_write" });
+  assert.equal("reason" in noApproval && noApproval.reason, "persisted_approval_required");
+  assert.equal(publicMcpWriteDecision({ enabled: "true", toolName: "mail__create_draft", risk: "reversible_write", approvalId: id }).allowed, true);
+});
