@@ -85,8 +85,20 @@ async function getUserMailboxToken(input: {
   headers: Record<string, string>;
   permission?: "read" | "send" | "manage";
 }): Promise<{ token: string; accountAddress: string }> {
-  const account = await requireAccountPermission(input.productUserId, input.accountId, input.permission ?? "read");
-  if (account.status !== "active" || account.authSetupStatus !== "ready") throw new Error("mailbox is not ready for mail access");
+  console.info("[mcp-mailbox] authorization_started");
+  let account: Awaited<ReturnType<typeof requireAccountPermission>>;
+  try {
+    account = await requireAccountPermission(input.productUserId, input.accountId, input.permission ?? "read");
+    console.info("[mcp-mailbox] authorization_completed", { allowed: true });
+  } catch {
+    console.warn("[mcp-mailbox] authorization_failed");
+    throw new Error("mailbox_authorization_failed");
+  }
+  if (account.status !== "active" || account.authSetupStatus !== "ready") {
+    console.warn("[mcp-mailbox] account_not_ready");
+    throw new Error("mailbox is not ready for mail access");
+  }
+  console.info("[mcp-mailbox] identity_lookup_started");
 
   const identityKey = `${input.productUserId}:${input.authUserId}:${account.id}`;
   const cachedIdentity = identityCache.get(identityKey);
@@ -103,6 +115,7 @@ async function getUserMailboxToken(input: {
     identityCache.set(identityKey, { email: identityEmail, expiresAt: Date.now() + IDENTITY_CACHE_TTL_MS });
     if (identityCache.size > 512) identityCache.delete(identityCache.keys().next().value!);
   }
+  console.info("[mcp-mailbox] identity_lookup_completed", { matched: identityEmail.toLowerCase() === account.address.toLowerCase() });
   if (identityEmail.toLowerCase() !== account.address.toLowerCase()) {
     identityCache.delete(identityKey);
     throw new Error("mailbox identity is not linked to this Better Auth session");
@@ -159,6 +172,7 @@ async function getUserMailboxToken(input: {
     });
     throw error;
   }
+  console.info("[mcp-mailbox] verified_credential_resolved");
   return { token, accountAddress: account.address };
 }
 
