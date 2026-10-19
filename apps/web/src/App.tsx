@@ -13,6 +13,7 @@ import { LandingPage } from "./pages/LandingPage";
 import { OAuthAccountChooserPage } from "./pages/OAuthAccountChooserPage";
 import { OAuthConsentPage } from "./pages/OAuthConsentPage";
 import { OAuthTestPage } from "./pages/OAuthTestPage";
+import { McpMailboxRecoveryPage } from "./pages/McpMailboxRecoveryPage";
 
 const scrollToHash = (hash: string) => {
   if (!hash) return;
@@ -73,6 +74,7 @@ export function App() {
   if (path === "/calendar/rsvp") return <CalendarRsvpPage />;
   if (path === "/oauth/select-account") return <OAuthAccountChooserPage />;
   if (path === "/oauth/consent") return <OAuthConsentPage />;
+  if (path === "/settings/mcp-mailbox-recovery") return <McpMailboxRecoveryPage />;
   if (path === "/oauth/connect" || path === "/oauth/test" || path === "/oauth/test/callback") return <OAuthTestPage />;
   if (path === "/setup") return <SetupPage />;
   if (path === "/control-center") return <ControlCenterPage />;
