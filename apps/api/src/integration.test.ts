@@ -205,14 +205,14 @@ async function mcpToolCall(name: string, args: Record<string, unknown>, token: s
 
 async function decideMcpApproval(input: {
   approvalId: string; decision: "approved" | "rejected"; digest: string;
-  origin?: string; authorization?: string;
+  origin?: string; authorization?: string; userId?: string;
 }): Promise<ApiResult> {
   const res = await fetch(`${baseUrl}/product/mcp/approvals/${input.approvalId}/decision`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       cookie: "mcp_review_session=not-a-real-session",
-      "x-gsw-user-id": ramonId,
+      "x-gsw-user-id": input.userId ?? ramonId,
       ...(input.origin ? { origin: input.origin } : {}),
       ...(input.authorization ? { authorization: input.authorization } : {}),
     },
@@ -832,4 +832,329 @@ test("first-party mailbox-credential route requires a browser session and reject
 
   assert.equal((await call({ cookie: "gsw.session_token=not-a-real-session" })).status, 403, "origin is required");
   assert.equal((await call({ cookie: "gsw.session_token=not-a-real-session", authorization: "Bearer anything", origin: "http://localhost:3000" })).status, 403, "an MCP bearer is never converted into a mailbox credential");
+});
+
+const mcpPeerSubject = "auth-alyssa-mcp";
+const mcpPeerClientId = "gsw-mcp-peer-client";
+const mcpAltClientId = "gsw-mcp-ramon-alt-client";
+const mcpSendClientId = "gsw-mcp-send-client";
+
+async function ensureMcpPeerFixtures() {
+  await db.insert(schema.authUsers).values({ id: mcpPeerSubject, name: "Alyssa MCP", email: "alyssa-mcp@it.example.com", emailVerified: true }).onConflictDoNothing();
+  await db.update(schema.users).set({ authUserId: mcpPeerSubject }).where(eq(schema.users.id, alyssaId));
+  const clients = [
+    { clientId: mcpPeerClientId, subject: mcpPeerSubject, scopes: ["openid", "mail.read", "mail.write"] },
+    { clientId: mcpAltClientId, subject: mcpAuthSubject, scopes: ["openid", "mail.read", "mail.write"] },
+    { clientId: mcpSendClientId, subject: mcpAuthSubject, scopes: ["openid", "mail.read", "mail.write", "mail.send"] },
+  ];
+  for (const client of clients) {
+    await db.insert(schema.oauthClient).values({
+      id: client.clientId, clientId: client.clientId, disabled: false,
+      name: `MCP ${client.clientId}`, redirectUris: ["https://client.mcp.test/callback"],
+    }).onConflictDoNothing();
+    await db.insert(schema.oauthConsent).values({
+      id: `consent-${client.clientId}`, clientId: client.clientId, userId: client.subject,
+      scopes: client.scopes, createdAt: new Date(), updatedAt: new Date(),
+    }).onConflictDoNothing();
+  }
+}
+
+async function grantDraftScopes(userId: string, accountId: string) {
+  const { grantAiScope } = await import("./ai/agentState.js");
+  await grantAiScope({ userId, accountId, scope: "mail.read", source: "integration_test" });
+  await grantAiScope({ userId, accountId, scope: "mail.write", source: "integration_test" });
+}
+
+const publicDraft = (subject: string) => ({
+  to: ["reviewer@it.example.com"], subject, textBody: `Reviewed rollout body for ${subject}.`,
+});
+
+async function prepareApprovedDraft(input: { userId: string; accountId: string; token: string; draft: Json }): Promise<string> {
+  const prepared = await mcpToolCall("prepare_action", {
+    accountId: input.accountId, toolName: "mail.create_draft", arguments: input.draft,
+  }, input.token);
+  assert.equal(prepared.isError, false, JSON.stringify(prepared.body));
+  const approvalId = String(prepared.body.approvalId);
+  const preview = await request("GET", `/product/mcp/approvals/${approvalId}/draft`, { userId: input.userId });
+  assert.equal(preview.status, 200);
+  const decided = await decideMcpApproval({
+    approvalId, decision: "approved", digest: String(preview.json.reviewedArgumentsDigest),
+    origin: "http://localhost:3000", userId: input.userId,
+  });
+  assert.equal(decided.status, 200);
+  return approvalId;
+}
+
+async function invokeMcpTool(input: {
+  toolName: string; accountId: string; args: Record<string, unknown>;
+  requestId?: unknown; confirmExternal?: unknown; approvalId?: unknown;
+}, token: string) {
+  return mcpToolCall("invoke_tool", {
+    toolName: input.toolName, accountId: input.accountId, arguments: input.args,
+    requestId: input.requestId, confirmExternal: input.confirmExternal, approvalId: input.approvalId,
+  }, token);
+}
+
+const publicWriteEnv = {
+  GSW_MCP_ENABLED: "true",
+  GSW_MCP_PUBLIC_WRITE_ENABLED: "true",
+  GSW_MCP_PREPARE_ENABLED: "true",
+  GSW_MCP_WRITE_TEST_ENABLED: undefined,
+  GSW_MCP_REQUIRE_PERSISTED_APPROVAL: undefined,
+};
+
+test("mcp public writes: the rollout flag is off by default and is only honored when exactly true", async () => {
+  await ensureMcpIdentityFixtures();
+  await ensureMcpPeerFixtures();
+  await grantDraftScopes(alyssaId, alyssaAccountId);
+  const peerToken = await mintMcpToken({ subject: mcpPeerSubject, clientId: mcpPeerClientId });
+  const draft = publicDraft("Blocked before rollout");
+  const base = {
+    GSW_MCP_ENABLED: "true", GSW_MCP_PREPARE_ENABLED: undefined,
+    GSW_MCP_WRITE_TEST_ENABLED: undefined, GSW_MCP_PUBLIC_WRITE_ENABLED: undefined,
+    GSW_MCP_REQUIRE_PERSISTED_APPROVAL: undefined,
+  };
+  await withEnv(base, async () => {
+    const blocked = await mcpToolCall("mail__create_draft", { ...draft, accountId: alyssaAccountId, requestId: randomUUID(), approvalId: randomUUID() }, peerToken);
+    assert.equal(blocked.isError, true);
+    assert.equal(blocked.body.error, "write_test_disabled");
+    const catalog = await mcpToolCall("list_capabilities", { limit: 100 }, peerToken);
+    const entry = (catalog.body.capabilities as Json[]).find(item => item.name === "mail__create_draft");
+    assert.equal(entry?.status, "write_transport_disabled");
+    assert.doesNotMatch(String(catalog.body.note), /approval/i);
+  });
+  for (const enabled of ["1", "TRUE", "true "]) {
+    await withEnv({ ...base, GSW_MCP_PUBLIC_WRITE_ENABLED: enabled }, async () => {
+      const stillBlocked = await mcpToolCall("mail__create_draft", { ...draft, accountId: alyssaAccountId, requestId: randomUUID(), approvalId: randomUUID() }, peerToken);
+      assert.equal(stillBlocked.body.error, "write_test_disabled", `flag value ${enabled}`);
+    });
+  }
+});
+
+test("mcp public writes: OAuth scopes, GSW grants, capability settings and mailbox ACL gate every call", async () => {
+  await ensureMcpIdentityFixtures();
+  await ensureMcpPeerFixtures();
+  const ramonToken = await mintMcpToken();
+  const peerToken = await mintMcpToken({ subject: mcpPeerSubject, clientId: mcpPeerClientId });
+  await withEnv(publicWriteEnv, async () => {
+    const draft = publicDraft("Permission layers");
+    const limitedToken = await mintMcpToken({ subject: mcpPeerSubject, clientId: mcpPeerClientId, scope: "openid mail.read" });
+    const scopeDenied = await mcpToolCall("mail__create_draft", { ...draft, accountId: alyssaAccountId, requestId: randomUUID(), approvalId: randomUUID() }, limitedToken);
+    assert.equal(scopeDenied.body.error, "permission_denied");
+    assert.equal(scopeDenied.body.reason, "oauth_scope_missing");
+
+    const grantDenied = await mcpToolCall("mail__create_draft", { ...draft, accountId: communityAccountId, requestId: randomUUID(), approvalId: randomUUID() }, ramonToken);
+    assert.equal(grantDenied.body.error, "permission_denied");
+    assert.equal(grantDenied.body.reason, "user_permission_denied");
+
+    const { grantAiScope } = await import("./ai/agentState.js");
+    await grantAiScope({ userId: alyssaId, accountId: ramonAccountId, scope: "mail.write", source: "integration_test" });
+    const aclDenied = await mcpToolCall("mail__create_draft", { ...draft, accountId: ramonAccountId, requestId: randomUUID(), approvalId: randomUUID() }, peerToken);
+    assert.equal(aclDenied.body.error, "permission_denied");
+    assert.equal(aclDenied.body.reason, "account_access_denied");
+
+    await db.insert(schema.userSettings).values({ userId: alyssaId }).onConflictDoNothing();
+    await db.update(schema.userSettings).set({ ai: { draftMutation: false } }).where(eq(schema.userSettings.userId, alyssaId));
+    const settingDenied = await mcpToolCall("mail__create_draft", { ...draft, accountId: alyssaAccountId, requestId: randomUUID(), approvalId: randomUUID() }, peerToken);
+    assert.equal(settingDenied.body.error, "permission_denied");
+    assert.equal(settingDenied.body.reason, "capability_disabled");
+    await db.update(schema.userSettings).set({ ai: {} }).where(eq(schema.userSettings.userId, alyssaId));
+  });
+});
+
+test("mcp public writes: drafts need a live first-party approval bound to the exact request", async () => {
+  await ensureMcpIdentityFixtures();
+  await ensureMcpPeerFixtures();
+  await grantDraftScopes(alyssaId, alyssaAccountId);
+  const peerToken = await mintMcpToken({ subject: mcpPeerSubject, clientId: mcpPeerClientId });
+  await withEnv(publicWriteEnv, async () => {
+    const draft = publicDraft("Approval lifecycle");
+    const noApproval = await mcpToolCall("mail__create_draft", { ...draft, accountId: alyssaAccountId, requestId: randomUUID() }, peerToken);
+    assert.equal(noApproval.body.error, "persisted_approval_required");
+
+    const unknownApproval = await mcpToolCall("mail__create_draft", { ...draft, accountId: alyssaAccountId, requestId: randomUUID(), approvalId: randomUUID() }, peerToken);
+    assert.equal(unknownApproval.body.error, "approval_required");
+
+    const prepared = await mcpToolCall("prepare_action", { accountId: alyssaAccountId, toolName: "mail.create_draft", arguments: draft }, peerToken);
+    assert.equal(prepared.isError, false, JSON.stringify(prepared.body));
+    const pendingId = String(prepared.body.approvalId);
+    const pending = await mcpToolCall("mail__create_draft", { ...draft, accountId: alyssaAccountId, requestId: randomUUID(), approvalId: pendingId }, peerToken);
+    assert.equal(pending.body.error, "approval_not_active");
+
+    const preview = await request("GET", `/product/mcp/approvals/${pendingId}/draft`, { userId: alyssaId });
+    assert.equal(preview.status, 200);
+    const digest = String(preview.json.reviewedArgumentsDigest);
+    const foreignDecision = await decideMcpApproval({ approvalId: pendingId, decision: "approved", digest, origin: "http://localhost:3000", userId: ramonId });
+    assert.equal(foreignDecision.status, 404, "another user cannot decide a first-party approval");
+
+    const expiringId = await prepareApprovedDraft({
+      userId: alyssaId, accountId: alyssaAccountId, token: peerToken, draft: draft,
+    });
+    await db.update(schema.mcpActionApprovals)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(schema.mcpActionApprovals.id, expiringId));
+    const expiredRequestId = randomUUID();
+    const expired = await mcpToolCall("mail__create_draft", { ...draft, accountId: alyssaAccountId, requestId: expiredRequestId, approvalId: expiringId }, peerToken);
+    assert.equal(expired.body.error, "approval_expired");
+
+    const retryAfterDenial = await mcpToolCall("mail__create_draft", { ...draft, accountId: alyssaAccountId, requestId: expiredRequestId, approvalId: expiringId }, peerToken);
+    assert.equal(retryAfterDenial.body.error, "request_already_attempted", "a denied request stays terminal on retry");
+
+    const mismatched = await mcpToolCall("mail__create_draft", {
+      ...publicDraft("Approval lifecycle altered"), accountId: alyssaAccountId,
+      requestId: randomUUID(), approvalId: await prepareApprovedDraft({
+        userId: alyssaId, accountId: alyssaAccountId, token: peerToken, draft: publicDraft("Approval lifecycle approved"),
+      }),
+    }, peerToken);
+    assert.equal(mismatched.body.error, "approval_mismatch");
+
+    const approvedId = await prepareApprovedDraft({
+      userId: alyssaId, accountId: alyssaAccountId, token: peerToken, draft: draft,
+    });
+    const successRequestId = randomUUID();
+    const executed = await mcpToolCall("mail__create_draft", { ...draft, accountId: alyssaAccountId, requestId: successRequestId, approvalId: approvedId }, peerToken);
+    assert.equal(executed.isError, false, JSON.stringify(executed.body));
+    assert.ok(typeof executed.body.engineId === "string" && executed.body.engineId.length > 0);
+
+    const replay = await mcpToolCall("mail__create_draft", { ...draft, accountId: alyssaAccountId, requestId: successRequestId, approvalId: approvedId }, peerToken);
+    assert.equal(replay.body.status, "already_completed");
+    assert.equal(replay.isError, false, "a safe retry must not re-execute or fail");
+
+    const consumed = await mcpToolCall("mail__create_draft", { ...draft, accountId: alyssaAccountId, requestId: randomUUID(), approvalId: approvedId }, peerToken);
+    assert.equal(consumed.body.error, "approval_not_active");
+  });
+});
+
+test("mcp public writes: approvals never cross users, OAuth clients or mailboxes", async () => {
+  await ensureMcpIdentityFixtures();
+  await ensureMcpPeerFixtures();
+  await ensureMcpWriteGrants();
+  await grantDraftScopes(alyssaId, alyssaAccountId);
+  await grantDraftScopes(ramonId, communityAccountId);
+  const ramonToken = await mintMcpToken();
+  const peerToken = await mintMcpToken({ subject: mcpPeerSubject, clientId: mcpPeerClientId });
+  await withEnv(publicWriteEnv, async () => {
+    const ramonDraft = publicDraft("Ramon approved draft");
+    const ramonApproval = await prepareApprovedDraft({
+      userId: ramonId, accountId: ramonAccountId, token: ramonToken, draft: ramonDraft,
+    });
+
+    const peerDraftArgs = publicDraft("Alyssa borrowed approval");
+    const crossUser = await mcpToolCall("mail__create_draft", {
+      ...peerDraftArgs, accountId: alyssaAccountId, requestId: randomUUID(), approvalId: ramonApproval,
+    }, peerToken);
+    assert.equal(crossUser.body.error, "approval_required");
+
+    const crossMailbox = await mcpToolCall("mail__create_draft", {
+      ...ramonDraft, accountId: communityAccountId, requestId: randomUUID(), approvalId: ramonApproval,
+    }, ramonToken);
+    assert.equal(crossMailbox.body.error, "approval_mismatch");
+
+    const altToken = await mintMcpToken({ clientId: mcpAltClientId });
+    const crossClient = await mcpToolCall("mail__create_draft", {
+      ...ramonDraft, accountId: ramonAccountId, requestId: randomUUID(), approvalId: ramonApproval,
+    }, altToken);
+    assert.equal(crossClient.body.error, "approval_required");
+
+    const owner = await mcpToolCall("mail__create_draft", {
+      ...ramonDraft, accountId: ramonAccountId, requestId: randomUUID(), approvalId: ramonApproval,
+    }, ramonToken);
+    assert.equal(owner.isError, false, JSON.stringify(owner.body));
+    assert.ok(typeof owner.body.engineId === "string" && owner.body.engineId.length > 0);
+  });
+});
+
+test("mcp public writes: invoke_tool enforces the same approval authorization as direct tools", async () => {
+  await ensureMcpIdentityFixtures();
+  await ensureMcpPeerFixtures();
+  await grantDraftScopes(alyssaId, alyssaAccountId);
+  const peerToken = await mintMcpToken({ subject: mcpPeerSubject, clientId: mcpPeerClientId });
+  await withEnv(publicWriteEnv, async () => {
+    const draft = publicDraft("Dispatcher equivalence");
+    const requestId = randomUUID();
+    const direct = await mcpToolCall("mail__create_draft", { ...draft, accountId: alyssaAccountId, requestId }, peerToken);
+    assert.equal(direct.body.error, "persisted_approval_required");
+
+    const dispatched = await invokeMcpTool({
+      toolName: "mail.create_draft", accountId: alyssaAccountId, args: draft, requestId: randomUUID(),
+    }, peerToken);
+    assert.equal(dispatched.body.error, "persisted_approval_required");
+
+    const smuggled = await invokeMcpTool({
+      toolName: "mail.create_draft", accountId: alyssaAccountId, args: { ...draft, approvalId: randomUUID() },
+      requestId: randomUUID(),
+    }, peerToken);
+    assert.equal(smuggled.body.error, "persisted_approval_required", "an approval id inside arguments is never evidence");
+
+    const approvedId = await prepareApprovedDraft({
+      userId: alyssaId, accountId: alyssaAccountId, token: peerToken, draft: draft,
+    });
+    const executed = await invokeMcpTool({
+      toolName: "mail.create_draft", accountId: alyssaAccountId, args: draft,
+      requestId: randomUUID(), approvalId: approvedId,
+    }, peerToken);
+    assert.equal(executed.isError, false, JSON.stringify(executed.body));
+    assert.ok(typeof executed.body.engineId === "string" && executed.body.engineId.length > 0);
+
+    const directSend = await mcpToolCall("mail__send_draft", {
+      accountId: alyssaAccountId, draftId: randomUUID(), requestId: randomUUID(), confirmExternal: true, approvalId: randomUUID(),
+    }, peerToken);
+    assert.equal(directSend.body.error, "permission_denied");
+    const dispatchedSend = await invokeMcpTool({
+      toolName: "mail.send_draft", accountId: alyssaAccountId, args: { draftId: randomUUID() },
+      requestId: randomUUID(), confirmExternal: true, approvalId: randomUUID(),
+    }, peerToken);
+    assert.equal(dispatchedSend.body.error, "permission_denied");
+  });
+});
+
+test("mcp public writes: send, delete and update stay restricted while owner test mode keeps working", async () => {
+  await ensureMcpIdentityFixtures();
+  await ensureMcpPeerFixtures();
+  await ensureMcpWriteGrants();
+  await grantDraftScopes(ramonId, ramonAccountId);
+  const { grantAiScope } = await import("./ai/agentState.js");
+  await grantAiScope({ userId: ramonId, accountId: ramonAccountId, scope: "mail.send", source: "integration_test" });
+  const ramonToken = await mintMcpToken();
+  const sendToken = await mintMcpToken({ clientId: mcpSendClientId, scope: "openid mail.read mail.write mail.send" });
+  await withEnv(publicWriteEnv, async () => {
+    const send = await mcpToolCall("mail__send_draft", {
+      accountId: ramonAccountId, draftId: randomUUID(), requestId: randomUUID(),
+      confirmExternal: true, approvalId: randomUUID(),
+    }, sendToken);
+    assert.equal(send.body.error, "public_write_tool_not_approved");
+
+    const trash = await mcpToolCall("mail__trash_draft", {
+      accountId: ramonAccountId, draftId: randomUUID(), requestId: randomUUID(),
+      confirmExternal: true, approvalId: randomUUID(),
+    }, ramonToken);
+    assert.equal(trash.body.error, "public_write_tool_not_approved");
+
+    const update = await mcpToolCall("mail__update_draft", {
+      accountId: ramonAccountId, draftId: randomUUID(), subject: "Updated", requestId: randomUUID(),
+      approvalId: randomUUID(),
+    }, ramonToken);
+    assert.equal(update.body.error, "public_write_tool_not_approved");
+
+    const catalog = await mcpToolCall("list_capabilities", { limit: 100 }, sendToken);
+    const capabilities = catalog.body.capabilities as Json[];
+    assert.equal(capabilities.find(item => item.name === "mail__create_draft")?.status, "available_for_approved_write");
+    assert.equal(capabilities.find(item => item.name === "mail__send_draft")?.status, "write_transport_disabled");
+    assert.equal(capabilities.find(item => item.name === "mail__trash_draft")?.status, "write_transport_disabled");
+    assert.equal(capabilities.find(item => item.name === "mail__update_draft")?.status, "write_transport_disabled");
+  });
+  await withEnv({
+    GSW_MCP_ENABLED: "true", GSW_MCP_PUBLIC_WRITE_ENABLED: undefined,
+    GSW_MCP_WRITE_TEST_ENABLED: "true", GSW_MCP_WRITE_TEST_USER_ID: ramonId,
+    GSW_MCP_PREPARE_ENABLED: undefined, GSW_MCP_REQUIRE_PERSISTED_APPROVAL: undefined,
+  }, async () => {
+    const ownerDraft = publicDraft("Owner test mode draft");
+    const owner = await mcpToolCall("mail__create_draft", { ...ownerDraft, accountId: ramonAccountId, requestId: randomUUID() }, ramonToken);
+    assert.equal(owner.isError, false, JSON.stringify(owner.body));
+    assert.ok(typeof owner.body.engineId === "string" && owner.body.engineId.length > 0);
+
+    const notOwner = await mcpToolCall("mail__create_draft", { ...ownerDraft, accountId: alyssaAccountId, requestId: randomUUID() },
+      await mintMcpToken({ subject: mcpPeerSubject, clientId: mcpPeerClientId }));
+    assert.equal(notOwner.body.error, "write_test_disabled");
+  });
 });
