@@ -124,20 +124,44 @@ export function getOAuthPublicClient(clientId: string): Promise<OAuthPublicClien
  * readable account. This lets a later sessionless MCP request renew mailbox
  * access without a browser. Failures never block the authorization decision.
  */
-export async function establishMcpMailboxCredentials(): Promise<void> {
-  const accountsResponse = await fetch("/mail/accounts", { credentials: "include", signal: AbortSignal.timeout(15000) });
-  if (!accountsResponse.ok) return;
-  const body = await accountsResponse.json() as { accounts?: { id: string; permissions?: string[] }[] };
-  for (const account of body.accounts ?? []) {
-    if (!account.permissions?.includes("read")) continue;
-    await fetch("/product/mcp/mailbox-credential", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ accountId: account.id }),
-      signal: AbortSignal.timeout(20000),
-    }).catch(() => undefined);
+export interface McpMailboxCredentialOutcome {
+  attempted: number;
+  established: number;
+  failures: Array<{ accountId: string; reason: string }>;
+}
+
+/** Requires a signed-in first-party session; never exposes a mailbox token.
+ * A missing or failed brokerage is not silently interpreted as success. */
+export async function establishMcpMailboxCredentials(): Promise<McpMailboxCredentialOutcome> {
+  const response = await fetch("/mail/accounts", { credentials: "include", signal: AbortSignal.timeout(15000) });
+  if (!response.ok) throw new Error("Could not verify readable mailboxes for this connection.");
+  const body = await response.json() as { accounts?: Array<{ id: string; permissions?: string[] }> };
+  const accounts = (body.accounts ?? []).filter(account => account.permissions?.includes("read"));
+  const outcome: McpMailboxCredentialOutcome = { attempted: 0, established: 0, failures: [] };
+  for (const account of accounts) {
+    outcome.attempted++;
+    try {
+      const result = await fetch("/product/mcp/mailbox-credential", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ accountId: account.id }),
+        signal: AbortSignal.timeout(20000),
+      });
+      if (result.ok) {
+        outcome.established++;
+      } else {
+        // Deliberately preserve only the server's fixed error code, never raw HTML or token data.
+        const data = await result.json().catch(() => ({})) as { error?: string };
+        const reason = typeof data.error === "string" && /^[a-z][a-z0-9_]{0,79}$/.test(data.error)
+          ? data.error : "mailbox_credential_unavailable";
+        outcome.failures.push({ accountId: account.id, reason });
+      }
+    } catch {
+      outcome.failures.push({ accountId: account.id, reason: "mailbox_credential_request_failed" });
+    }
   }
+  return outcome;
 }
 
 export async function submitOAuthConsent(accept: boolean, acceptedScope?: string): Promise<void> {
