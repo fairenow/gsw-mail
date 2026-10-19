@@ -9,15 +9,23 @@ export async function selectRefreshedStoredToken(
   candidates: ReadonlyArray<{ clientId: string; token: string; scopes: readonly string[] }>,
   refresh: (candidate: { clientId: string; token: string }) => Promise<string>,
   verify: (token: string) => Promise<void>,
+  onFailure?: (stage: "exchange" | "verification") => void,
 ): Promise<string | null> {
   for (const candidate of candidates) {
     if (!candidate.token || !candidate.scopes.includes("email")) continue;
+    let token: string;
     try {
-      const token = await refresh({ clientId: candidate.clientId, token: candidate.token });
+      token = await refresh({ clientId: candidate.clientId, token: candidate.token });
+    } catch {
+      onFailure?.("exchange");
+      continue;
+    }
+    try {
       await verify(token);
       return token;
     } catch {
-      // Never return an unverified or unrenewable credential.
+      onFailure?.("verification");
+      // Never return an unverified mailbox credential.
     }
   }
   return null;
