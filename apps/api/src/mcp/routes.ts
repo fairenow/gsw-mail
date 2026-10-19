@@ -12,6 +12,7 @@ import { discoverMcpCapabilities } from "./capabilityDiscovery.js";
 import { mcpPrepareDraftRequest } from "./prepareDraftAction.js";
 import { storePreparedMcpDraft } from "./draftPayloadStore.js";
 import { canUseMcpWriteTestMode, mcpWriteCallPolicy } from "./writeTestPolicy.js";
+import { publicMcpWriteDecision } from "./publicWritePolicy.js";
 import { createMcpExecutionContext } from "./executionContext.js";
 import { reserveAiIdempotency, completeAiIdempotency, failAiIdempotency, grantAiScope, listActiveAiScopes } from "../ai/agentState.js";
 import { requireAccountPermission } from "../auth/authorize.js";
@@ -163,8 +164,14 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
       const policy=await resolveMcpUserToolPermission({userId:identity.userId,accountId,oauthScopes:identity.oauthScopes,toolName:name});
       if(!policy.allowed)
         return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"permission_denied",reason:policy.reason,tool:name})}]});
-      if(policy.tool.risk!=="read"&&!writeTestEnabled)
-        return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"write_test_disabled",tool:name})}]});
+      const publicWrite = publicMcpWriteDecision({
+        enabled: process.env.GSW_MCP_PUBLIC_WRITE_ENABLED,
+        approvalId: params.approvalId,
+        toolName: policy.tool.name,
+        risk: policy.tool.risk,
+      });
+      if(policy.tool.risk!=="read"&&!writeTestEnabled&&!publicWrite.allowed)
+        return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:publicWrite.reason,tool:name})}]});
       const {accountId:_,requestId,confirmExternal,approvalId,...toolArguments}=params;
       const context=createMcpExecutionContext(identity,accountId);
       if(policy.tool.risk!=="read") {
@@ -198,7 +205,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
         // Absent, expired or mismatched approval fails the reserved request
         // terminally. No capability has started, so the reservation is completed
         // as a denial instead of an ambiguous in-progress action.
-        if (process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL === "true") {
+        if (process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL === "true" || publicWrite.allowed) {
           const preflight = await resolveMcpPersistedApproval({
             approvalId: typeof approvalId === "string" ? approvalId : "",
             risk: policy.tool.risk,
@@ -212,7 +219,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
         }
         // Opt-in: atomically consume approved action before invoking a capability.
         // A client-provided approvalId is only a lookup key, never evidence itself.
-        if (process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL === "true") {
+        if (process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL === "true" || publicWrite.allowed) {
           let approved: Awaited<ReturnType<typeof consumeMcpPersistedApproval>>;
           try {
             approved = await consumeMcpPersistedApproval({
