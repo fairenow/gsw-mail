@@ -98,6 +98,11 @@ export function buildApp() {
       app.log.warn({ method: request.method, path: request.url.split("?")[0], contentType: request.headers["content-type"] ?? "(missing)", accept: request.headers.accept ?? "(missing)" }, "unsupported content type");
       return reply.code(415).send({ error: "unsupported media type" });
     }
+    // Keep rate limiting distinguishable from unexpected server failures.
+    // Do not expose underlying request details or credentials.
+    if (typeof error === "object" && error !== null && "statusCode" in error && error.statusCode === 429) {
+      return reply.code(429).send({ error: "rate_limit_exceeded", retryable: true });
+    }
     app.log.error(error);
     return reply.code(500).send({ error: "internal server error" });
   });
