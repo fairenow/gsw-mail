@@ -105,6 +105,7 @@ async function refreshUncached(input: {
       audience: config.auth.stalwartAudience,
       mailboxAddress: account.address,
     }),
+    (stage) => console.warn("[mcp-refresh] candidate_rejected", { stage }),
   );
   console.info("[mcp-refresh] resolution", { verified: Boolean(token) });
   if (token) cache.set(`${input.authUserId}:${input.accountId}`, { token, expiresAt: tokenExpiry(token) - 30_000 });
