@@ -58,7 +58,7 @@ export function buildApp() {
   const app = Fastify({ logger: true, bodyLimit: MAIL_ATTACHMENT_BODY_LIMIT });
 
   app.register(cors, { origin: true });
-  app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
+  app.register(rateLimit, { max: config.env === "test" ? 10_000 : 120, timeWindow: "1 minute" });
   app.register(formbody);
   app.register(mcpProtectedResourceMetadata);
   app.register(mcpRoutes);

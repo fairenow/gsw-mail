@@ -12,6 +12,7 @@ import { discoverMcpCapabilities } from "./capabilityDiscovery.js";
 import { mcpPrepareDraftRequest } from "./prepareDraftAction.js";
 import { storePreparedMcpDraft } from "./draftPayloadStore.js";
 import { canUseMcpWriteTestMode, mcpWriteCallPolicy } from "./writeTestPolicy.js";
+import { publicMcpWriteDecision } from "./publicWritePolicy.js";
 import { createMcpExecutionContext } from "./executionContext.js";
 import { reserveAiIdempotency, completeAiIdempotency, failAiIdempotency, grantAiScope, listActiveAiScopes } from "../ai/agentState.js";
 import { requireAccountPermission } from "../auth/authorize.js";
@@ -60,7 +61,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
     if(input.method==="resources/list")return wrap({resources:[]});
     if(input.method==="prompts/list")return wrap({prompts:[]});
     if(input.method==="tools/list"){
-      return wrap({tools:[...mcpBootstrapTools.filter(t=>t.name!=="prepare_action" || process.env.GSW_MCP_PREPARE_ENABLED==="true"),{name:"invoke_tool",description:"Universal MCP dispatcher for every GSW Mail registry tool. Use list_capabilities to discover names, required OAuth scopes and risk. All actions enforce OAuth, GSW permissions and mailbox ACL at execution. Writes require the configured owner-only test mode and a fresh UUID requestId; external actions also require confirmExternal=true.",inputSchema:{type:"object",properties:{toolName:{type:"string",description:"Registered GSW tool name, dotted or double-underscore format"},accountId:{type:"string",description:"Authorized mailbox account UUID"},arguments:{type:"object",description:"Arguments matching the selected registered tool schema",additionalProperties:true},requestId:{type:"string",format:"uuid",description:"Required for writes; unique for each intended action"},confirmExternal:{type:"boolean",description:"Required true for explicitly authorized external effects"}},required:["toolName","accountId","arguments"],additionalProperties:false}},...agentMailRegistry.definitions().map(t=>({name:t.name.replaceAll(".","__"),description:t.description+(t.risk==="external"?" CAUTION: This action can send, publish, delete or trigger external effects. Set confirmExternal=true only after reviewing the exact intended effect.":""),inputSchema:{...t.inputSchema,properties:{...(t.inputSchema.properties as Record<string,unknown> ?? {}),accountId:{type:"string",description:"GSW mailbox account UUID to operate within"},...(t.risk!=="read"?{requestId:{type:"string",format:"uuid",description:"Fresh UUID per intended action; reuse for retries to prevent duplicate execution"},...(t.risk==="external"?{confirmExternal:{type:"boolean",description:"Set true only after explicit user authorization of this external action"}}:{})}:{})},required:[...((t.inputSchema.required as string[] | undefined) ?? []),"accountId",...(t.risk!=="read"?["requestId",...(t.risk==="external"?["confirmExternal"]:[])]:[])]}}))]});
+      return wrap({tools:[...mcpBootstrapTools.filter(t=>t.name!=="prepare_action" || process.env.GSW_MCP_PREPARE_ENABLED==="true"),{name:"invoke_tool",description:"Universal MCP dispatcher for every GSW Mail registry tool. Use list_capabilities to discover names, required OAuth scopes and risk. All actions enforce OAuth, GSW permissions and mailbox ACL at execution. Writes require the configured owner-only test mode and a fresh UUID requestId; external actions also require confirmExternal=true.",inputSchema:{type:"object",properties:{toolName:{type:"string",description:"Registered GSW tool name, dotted or double-underscore format"},accountId:{type:"string",description:"Authorized mailbox account UUID"},arguments:{type:"object",description:"Arguments matching the selected registered tool schema",additionalProperties:true},requestId:{type:"string",format:"uuid",description:"Required for writes; unique for each intended action"},confirmExternal:{type:"boolean",description:"Required true for explicitly authorized external effects"},approvalId:{type:"string",format:"uuid",description:"First-party reviewed action approval ID; required for approved public writes"}},required:["toolName","accountId","arguments"],additionalProperties:false}},...agentMailRegistry.definitions().map(t=>({name:t.name.replaceAll(".","__"),description:t.description+(t.risk==="external"?" CAUTION: This action can send, publish, delete or trigger external effects. Set confirmExternal=true only after reviewing the exact intended effect.":""),inputSchema:{...t.inputSchema,properties:{...(t.inputSchema.properties as Record<string,unknown> ?? {}),accountId:{type:"string",description:"GSW mailbox account UUID to operate within"},...(t.risk!=="read"?{requestId:{type:"string",format:"uuid",description:"Fresh UUID per intended action; reuse for retries to prevent duplicate execution"},approvalId:{type:"string",format:"uuid",description:"First-party reviewed approval ID for public writes"},...(t.risk==="external"?{confirmExternal:{type:"boolean",description:"Set true only after explicit user authorization of this external action"}}:{})}:{})},required:[...((t.inputSchema.required as string[] | undefined) ?? []),"accountId",...(t.risk!=="read"?["requestId",...(t.risk==="external"?["confirmExternal"]:[])]:[])]}}))]});
     }
     if(input.method==="tools/call"){
       let name=typeof input.params?.name==="string"?input.params.name:"";
@@ -73,7 +74,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
           return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"unknown_tool_or_invalid_arguments"})}]});
         }
         name=requestedName;
-        params={...(nested as Record<string,unknown>),accountId:params.accountId,requestId:params.requestId,confirmExternal:params.confirmExternal};
+        params={...(nested as Record<string,unknown>),accountId:params.accountId,requestId:params.requestId,confirmExternal:params.confirmExternal,approvalId:params.approvalId};
       }
       if(name==="get_current_user") {
         return wrap({content:[{type:"text",text:JSON.stringify({userId:identity.userId})}]});
@@ -88,6 +89,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
             ...(offset!==undefined?{offset}:{}),
             ...(limit!==undefined?{limit}:{}),
             writeTestEnabled,
+            publicWriteEnabled: process.env.GSW_MCP_PUBLIC_WRITE_ENABLED === "true",
           });
           return wrap({content:[{type:"text",text:JSON.stringify(catalog)}]});
         } catch {
@@ -163,8 +165,14 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
       const policy=await resolveMcpUserToolPermission({userId:identity.userId,accountId,oauthScopes:identity.oauthScopes,toolName:name});
       if(!policy.allowed)
         return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"permission_denied",reason:policy.reason,tool:name})}]});
-      if(policy.tool.risk!=="read"&&!writeTestEnabled)
-        return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"write_test_disabled",tool:name})}]});
+      const publicWrite = publicMcpWriteDecision({
+        enabled: process.env.GSW_MCP_PUBLIC_WRITE_ENABLED,
+        approvalId: params.approvalId,
+        toolName: policy.tool.name,
+        risk: policy.tool.risk,
+      });
+      if(policy.tool.risk!=="read"&&!writeTestEnabled&&!publicWrite.allowed)
+        return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:publicWrite.reason,tool:name})}]});
       const {accountId:_,requestId,confirmExternal,approvalId,...toolArguments}=params;
       const context=createMcpExecutionContext(identity,accountId);
       if(policy.tool.risk!=="read") {
@@ -198,7 +206,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
         // Absent, expired or mismatched approval fails the reserved request
         // terminally. No capability has started, so the reservation is completed
         // as a denial instead of an ambiguous in-progress action.
-        if (process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL === "true") {
+        if (process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL === "true" || publicWrite.allowed) {
           const preflight = await resolveMcpPersistedApproval({
             approvalId: typeof approvalId === "string" ? approvalId : "",
             risk: policy.tool.risk,
@@ -212,7 +220,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
         }
         // Opt-in: atomically consume approved action before invoking a capability.
         // A client-provided approvalId is only a lookup key, never evidence itself.
-        if (process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL === "true") {
+        if (process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL === "true" || publicWrite.allowed) {
           let approved: Awaited<ReturnType<typeof consumeMcpPersistedApproval>>;
           try {
             approved = await consumeMcpPersistedApproval({

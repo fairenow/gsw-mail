@@ -85,6 +85,23 @@ Every write still requires an OAuth scope, active GSW AI scope grant, globally e
 
 For a test cycle, use a dedicated mailbox and test recipients, begin with reversible actions, then confirm any external action individually. Disable `GSW_MCP_WRITE_TEST_ENABLED` after testing. Do not enable this mode for multiple users or as a substitute for the normal first-party review and approval system.
 
+## Public approved draft rollout (opt-in)
+
+`GSW_MCP_PUBLIC_WRITE_ENABLED=true` (exact string) is a second, independent write path for ordinary users. It is **off by default**, and while it is off the transport behaves exactly as before: every non-read tool call fails with `write_test_disabled` unless owner-only test mode applies.
+
+When the flag is on, the only tool that becomes executable is `mail.create_draft`, and only for a caller that already satisfies every existing check: OAuth scopes in the presented token and consent, enabled GSW capability settings, an active GSW AI scope grant, and the mailbox ACL. Execution then additionally requires a first-party persisted approval:
+
+- The approval ID is a lookup key only. Evidence is loaded from `mcp_action_approvals` and re-checked against the authenticated user, OAuth client, mailbox, tool name, and canonical argument digest.
+- Pending, expired, rejected, revoked, consumed, unknown, and cross-tenant approvals are rejected before any capability runs.
+- The approval is consumed with the same atomic compare-and-set as the owner path, so a concurrent or replayed call cannot execute twice.
+- The per user/client/request ID reservation still applies: a denied request is terminal for that `requestId`, and a completed request replays as `already_completed` instead of creating a second draft.
+
+The flag never widens the allowlist. Sending, trashing, updating, forwarding, and every other registry write stay blocked with `public_write_tool_not_approved`, `grant_my_scopes` remains owner-test only, and the flag alone cannot substitute for an approval. `list_capabilities` reports `available_for_approved_write` for `mail.create_draft` and a note describing the approval requirement, while all other writes stay `write_transport_disabled`.
+
+`invoke_tool` enforces the same rules as the directly advertised tools: the approval ID must be supplied at the dispatcher level, an approval ID nested inside `arguments` is stripped and never accepted as evidence.
+
+Coverage lives in `publicWritePolicy.test.ts`, `writeApprovalPolicy.test.ts`, `capabilityDiscovery.test.ts`, and the two-user `mcp public writes` cases in `src/integration.test.ts`, which run two identities, separate mailboxes, and separate OAuth clients against a local test database.
+
 ## Complete MCP registry access
 
 MCP `tools/list` advertises the entire GSW agent tool registry rather than hiding tools when OAuth scopes are missing or owner-only write testing is off. Discovery does **not** grant permission. Every registered tool is also reachable through the generic `invoke_tool` MCP action, even if a client limits how many individually advertised tools it displays.
