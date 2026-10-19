@@ -100,7 +100,7 @@ export function buildApp() {
     }
     // Keep rate limiting distinguishable from unexpected server failures.
     // Do not expose underlying request details or credentials.
-    if (error.statusCode === 429) {
+    if (typeof error === "object" && error !== null && "statusCode" in error && error.statusCode === 429) {
       return reply.code(429).send({ error: "rate_limit_exceeded", retryable: true });
     }
     app.log.error(error);
