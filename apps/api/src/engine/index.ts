@@ -113,20 +113,37 @@ async function getUserMailboxToken(input: {
   // An expired access token is renewed server-side from the persisted first-party
   // refresh authorization; a third-party MCP bearer is never substituted for it.
   const sessionless = Object.keys(input.headers).length === 0;
-  const stored = sessionless
-    ? await findStoredStalwartMailboxToken({
+  let stored: string | null = null;
+  let renewed: string | null = null;
+  if (sessionless) {
+    console.info("[mcp-mailbox] credential_lookup_started");
+    try {
+      stored = await findStoredStalwartMailboxToken({
         productUserId: input.productUserId,
         authUserId: input.authUserId,
         accountId: account.id,
-      })
-    : null;
-  const renewed = stored ?? (sessionless
-    ? await refreshStoredStalwartMailboxToken({
-        productUserId: input.productUserId,
-        authUserId: input.authUserId,
-        accountId: account.id,
-      })
-    : null);
+      });
+      console.info("[mcp-mailbox] stored_lookup_completed", { found: Boolean(stored) });
+    } catch {
+      // Never return an unverified access token. A failed access-token lookup
+      // must not prevent independent verification of a persisted refresh grant.
+      console.warn("[mcp-mailbox] stored_lookup_failed");
+    }
+    if (!stored) {
+      console.info("[mcp-mailbox] refresh_lookup_started");
+      try {
+        renewed = await refreshStoredStalwartMailboxToken({
+          productUserId: input.productUserId,
+          authUserId: input.authUserId,
+          accountId: account.id,
+        });
+        console.info("[mcp-mailbox] refresh_lookup_completed", { verified: Boolean(renewed) });
+      } catch {
+        console.warn("[mcp-mailbox] refresh_lookup_failed");
+      }
+    }
+  }
+  renewed ??= stored;
   // Report credential *source* only. Never log token values, claims, email addresses,
   // account/user identifiers, request headers, or upstream exception messages.
   if (sessionless) console.info("[mcp-mailbox] credential_resolution", {
