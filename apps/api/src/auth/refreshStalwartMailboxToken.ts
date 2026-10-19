@@ -68,10 +68,16 @@ async function refreshUncached(input: {
     status: emailAccounts.status,
     authSetupStatus: emailAccounts.authSetupStatus,
   }).from(emailAccounts).where(eq(emailAccounts.id, input.accountId)).limit(1);
-  if (!account || account.status !== "active" || account.authSetupStatus !== "ready") return null;
+  if (!account || account.status !== "active" || account.authSetupStatus !== "ready") {
+    console.warn("[mcp-refresh] mailbox_not_ready");
+    return null;
+  }
 
   const clientIds = firstPartyStalwartClientIds();
-  if (!clientIds.length) return null;
+  if (!clientIds.length) {
+    console.warn("[mcp-refresh] first_party_clients_missing");
+    return null;
+  }
   const candidates = await db.select({
     token: oauthRefreshToken.token,
     clientId: oauthRefreshToken.clientId,
@@ -86,6 +92,7 @@ async function refreshUncached(input: {
       gt(oauthRefreshToken.expiresAt, new Date()),
     )).orderBy(desc(oauthRefreshToken.expiresAt)).limit(5);
 
+  console.info("[mcp-refresh] candidate_lookup", { count: candidates.length, eligibleEmailScope: candidates.filter(row => row.scopes.includes("email")).length });
   const token = await selectRefreshedStoredToken(
     candidates,
     (candidate) => exchangeRefreshToken({ clientId: candidate.clientId, refreshToken: candidate.token }, input.request),
@@ -99,6 +106,7 @@ async function refreshUncached(input: {
       mailboxAddress: account.address,
     }),
   );
+  console.info("[mcp-refresh] resolution", { verified: Boolean(token) });
   if (token) cache.set(`${input.authUserId}:${input.accountId}`, { token, expiresAt: tokenExpiry(token) - 30_000 });
   return token;
 }
