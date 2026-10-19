@@ -89,6 +89,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
             ...(offset!==undefined?{offset}:{}),
             ...(limit!==undefined?{limit}:{}),
             writeTestEnabled,
+            publicWriteEnabled: process.env.GSW_MCP_PUBLIC_WRITE_ENABLED === "true",
           });
           return wrap({content:[{type:"text",text:JSON.stringify(catalog)}]});
         } catch {
