@@ -33,3 +33,24 @@ test("refreshed-token selection fails closed when every candidate is unusable", 
   );
   assert.equal(result, null);
 });
+
+test("refresh failure stages distinguish exchange from verification without exposing credentials", async () => {
+  const stages: Array<"exchange" | "verification"> = [];
+  const token = await selectRefreshedStoredToken(
+    [
+      { clientId: "first-party", token: "grant-1", scopes: ["email"] },
+      { clientId: "first-party", token: "grant-2", scopes: ["email"] },
+      { clientId: "first-party", token: "grant-3", scopes: ["email"] },
+    ],
+    async candidate => {
+      if (candidate.token === "grant-1") throw new Error("invalid_grant with sensitive detail");
+      return candidate.token === "grant-2" ? "invalid-access-token" : "valid-access-token";
+    },
+    async access => {
+      if (access === "invalid-access-token") throw new Error("invalid audience with sensitive detail");
+    },
+    stage => { stages.push(stage); },
+  );
+  assert.equal(token, "valid-access-token");
+  assert.deepEqual(stages, ["exchange", "verification"]);
+});
