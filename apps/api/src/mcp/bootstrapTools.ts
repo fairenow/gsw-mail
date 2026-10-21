@@ -66,6 +66,25 @@ export const mcpBootstrapTools = [
     requiredScopes: ["openid"],
   },
   {
+    name: "list_admin_workspaces",
+    description: "List workspaces where the authenticated GSW user has an active owner or administrator membership. Does not require a mailbox.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    requiredScopes: ["workspace.read"],
+  },
+  {
+    name: "list_admin_domains",
+    description: "List domain metadata and DNS verification status within a workspace the authenticated user administers. Does not require a mailbox.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        organizationId: { type: "string", format: "uuid", description: "Workspace UUID from list_admin_workspaces" },
+      },
+      required: ["organizationId"],
+      additionalProperties: false,
+    },
+    requiredScopes: ["domain.read"],
+  },
+  {
     name: "list_accounts",
     description: "List GSW Mail accounts this user is permitted to read. Use an accountId from this list with mail tools.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
