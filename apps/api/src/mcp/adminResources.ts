@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { requireOrgPermission } from "../auth/authorize.js";
+import { isActiveAdminMembership } from "./adminPolicy.js";
 import { db } from "../db/client.js";
 import { domains, organizationMemberships, organizations } from "../db/schema.js";
 
@@ -8,10 +9,6 @@ import { domains, organizationMemberships, organizations } from "../db/schema.js
  * not possession of an email mailbox. Never infer workspace authority from
  * the OAuth token alone: roles are loaded from the product database.
  */
-export function isActiveAdminMembership(row: {role: string; status: string}): boolean {
-  return row.status === "active" && (row.role === "owner" || row.role === "admin");
-}
-
 export async function listMcpAdminWorkspaces(userId: string) {
   return db.select({
     organizationId: organizations.id,
