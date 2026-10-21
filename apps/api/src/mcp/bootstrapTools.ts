@@ -85,6 +85,20 @@ export const mcpBootstrapTools = [
     requiredScopes: ["domain.read"],
   },
   {
+    name: "list_admin_mailboxes",
+    description: "List mailbox metadata for a specific verified or pending mail domain in a workspace administered by the caller. Does not grant access to messages.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        organizationId: { type: "string", format: "uuid" },
+        domainId: { type: "string", format: "uuid" },
+      },
+      required: ["organizationId", "domainId"],
+      additionalProperties: false,
+    },
+    requiredScopes: ["mailbox_admin.read"],
+  },
+  {
     name: "list_accounts",
     description: "List GSW Mail accounts this user is permitted to read. Use an accountId from this list with mail tools.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
