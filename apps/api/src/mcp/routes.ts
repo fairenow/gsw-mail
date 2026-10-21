@@ -18,6 +18,7 @@ import { reserveAiIdempotency, completeAiIdempotency, failAiIdempotency, grantAi
 import { requireAccountPermission } from "../auth/authorize.js";
 import { createAdminMailbox, adminMailboxCreateSchema } from "../services/adminMailboxCreation.js";
 import { audit } from "../lib/audit.js";
+import { adminMailboxWriteGate } from "./adminMailboxWritePolicy.js";
 
 /** OAuth-scoped MCP transport with owner-only, explicitly enabled write testing. */
 export async function mcpRoutes(app:FastifyInstance):Promise<void> {
@@ -191,11 +192,14 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
       }
       if(name==="create_admin_mailbox") {
         const fail=(error:string)=>wrap({isError:true,content:[{type:"text",text:JSON.stringify({error})}]});
-        if(!identity.oauthScopes.has("mailbox_admin.write"))return fail("oauth_scope_missing");
-        // Separate opt-in for workspace writes. Never enable through the mail
-        // write-test flag alone, or silently bypass persisted-approval policy.
-        if(process.env.GSW_MCP_ADMIN_WRITES_ENABLED!=="true")return fail("admin_writes_disabled");
-        if(process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL==="true")return fail("workspace_approval_not_supported");
+        // Workspace administrative actions use their own fail-closed gate,
+        // separate from the mailbox write-test mode.
+        const gate=adminMailboxWriteGate({
+          enabled:process.env.GSW_MCP_ADMIN_WRITES_ENABLED,
+          persistedApprovalRequired:process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL,
+          hasWriteScope:identity.oauthScopes.has("mailbox_admin.write"),
+        });
+        if(!gate.allowed)return fail(gate.reason);
         const parsed=adminMailboxCreateSchema.safeParse({
           organizationId:params.organizationId,domainId:params.domainId,
           localPart:params.localPart,displayName:params.displayName,
