@@ -128,7 +128,8 @@ export function OAuthConsentPage() {
         // separate account ACL and Stalwart credential requirements at execution.
         const hasAdminScope = request.scopes.some((scope) =>
           scope === "workspace.admin" ||
-          scope === "domain.write" ||
+          scope === "workspace.read" ||
+          scope.startsWith("domain.") ||
           scope.startsWith("mailbox_admin.") ||
           scope.startsWith("admin."),
         );
