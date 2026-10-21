@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 type VerifiedDomain = { id: string; name: string; status: "pending" | "verified" | "failed" };
 
@@ -7,23 +7,24 @@ type Props = {
   domains: VerifiedDomain[];
   isFirstMailbox: boolean;
   onCreated: (address: string) => Promise<void> | void;
+  selectedDomainId: string;
+  onDomainChange: (domainId: string) => void;
 };
 
 const LOCAL_PART = /^[a-z0-9._%+-]+$/i;
 
-export function MailboxCreatePanel({ organizationId, domains, isFirstMailbox, onCreated }: Props) {
-  const verifiedDomains = useMemo(() => domains.filter((domain) => domain.status === "verified"), [domains]);
-  const [domainId, setDomainId] = useState("");
+export function MailboxCreatePanel({ organizationId, domains, isFirstMailbox, onCreated, selectedDomainId, onDomainChange }: Props) {
   const [localPart, setLocalPart] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const selectedDomain = verifiedDomains.find((domain) => domain.id === domainId) ?? verifiedDomains[0] ?? null;
+  const selectedDomain = domains.find((domain) => domain.id === selectedDomainId) ?? domains[0] ?? null;
+  const domainReady = selectedDomain?.status === "verified";
   const normalizedLocalPart = localPart.trim().toLowerCase();
   const addressPreview = selectedDomain && normalizedLocalPart ? `${normalizedLocalPart}@${selectedDomain.name}` : selectedDomain ? `username@${selectedDomain.name}` : "Verify a domain first";
-  const valid = Boolean(selectedDomain && normalizedLocalPart && LOCAL_PART.test(normalizedLocalPart));
+  const valid = Boolean(domainReady && normalizedLocalPart && LOCAL_PART.test(normalizedLocalPart));
 
   const createMailbox = async () => {
     if (!selectedDomain || !valid || busy) return;
@@ -55,7 +56,7 @@ export function MailboxCreatePanel({ organizationId, domains, isFirstMailbox, on
     }
   };
 
-  if (!verifiedDomains.length) return <div className="gsw-control-alert"><strong>Verify a domain before creating a mailbox.</strong><span>The mailbox address must use a domain that has passed DNS verification.</span></div>;
+  if (!domains.length) return <div className="gsw-control-alert"><strong>Add a mail domain first.</strong><span>Then verify its DNS records before creating a mailbox.</span></div>;
 
   return <article className="gsw-control-action-card">
     <p className="gsw-setup-kicker">{isFirstMailbox ? "First mailbox" : "New mailbox"}</p>
@@ -63,7 +64,8 @@ export function MailboxCreatePanel({ organizationId, domains, isFirstMailbox, on
     <p>Create an email address on a verified domain. This mailbox is a separate identity from the workspace owner/admin account and gets its own sign-in.</p>
     <label className="gsw-auth-field">Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Ramon Williams" /></label>
     <label className="gsw-auth-field">Email username<input value={localPart} onChange={(event) => setLocalPart(event.target.value.replace(/\s+/g, "").toLowerCase())} placeholder="ramon" autoCapitalize="none" /></label>
-    {verifiedDomains.length > 1 && <label className="gsw-auth-field">Verified domain<select value={selectedDomain?.id ?? ""} onChange={(event) => setDomainId(event.target.value)}>{verifiedDomains.map((domain) => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></label>}
+    <label className="gsw-auth-field">Manage domain<select value={selectedDomain?.id ?? ""} onChange={(event) => onDomainChange(event.target.value)}>{domains.map((domain) => <option key={domain.id} value={domain.id}>{domain.name} {domain.status === "verified" ? "(Ready)" : "(DNS verification required)"}</option>)}</select></label>
+    {!domainReady && <div className="gsw-control-alert"><strong>Mailbox creation is disabled for this domain.</strong><span>Finish DNS verification for {selectedDomain?.name} in Domains, then return here.</span></div>}
     <div className="gsw-control-note"><strong>Email address</strong><br />{addressPreview}</div>
     {error && <p className="gsw-login-error">{error}</p>}
     {message && <p className="gsw-control-message">{message}</p>}
