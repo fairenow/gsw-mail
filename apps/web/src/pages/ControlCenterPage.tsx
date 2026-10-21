@@ -140,7 +140,7 @@ export function ControlCenterPage() {
         </div>
       </>}
 
-      {section === "domains" && workspace?.id && <DomainAdminPanel organizationId={workspace.id} />}
+      {section === "domains" && workspace?.id && <DomainAdminPanel organizationId={workspace.id} onChanged={refreshControlCenter} />}
 
       {section === "mailboxes" && <section className="gsw-control-section">
         <div className="gsw-control-section-head"><div><p className="gsw-setup-kicker">Mailboxes</p><h3>Mailbox administration</h3><p>Create mailboxes on verified domains. Workspace owners/admins manage them but do not become mailbox identities themselves.</p></div></div>
