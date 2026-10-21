@@ -16,7 +16,7 @@ type AdminSummary = {
     role: "owner" | "admin" | "member"; membershipStatus: string; lastLoginAt: string | null; authEmail: string | null;
     authEmailVerified: boolean | null; mailboxAccess: { accountId: string; address: string; role: string }[];
   }[];
-  mailboxes: { id: string; address: string; displayName: string | null; status: string; authSetupStatus: "pending" | "ready"; userId: string | null; usedBytes: number; quotaBytes: number | null; accessCount: number }[];
+  mailboxes: { id: string; domainId: string; address: string; displayName: string | null; status: string; authSetupStatus: "pending" | "ready"; userId: string | null; usedBytes: number; quotaBytes: number | null; accessCount: number }[];
   recoveryAdmin: { email: string; emailVerified: boolean; name: string } | null;
   recentAudit: { id: string; actorUserId: string | null; action: string; resourceType: string; resourceId: string | null; metadata: unknown; createdAt: string }[];
 };
@@ -63,10 +63,8 @@ export function ControlCenterPage() {
   const selectedDomain = admin?.domains.find((domain) => domain.id === selectedDomainId) ?? admin?.domains[0];
   // Workspace admins manage mailbox metadata independently of their own mailbox grants.
   // Filter by the domain ID represented in the authoritative workspace inventory.
-  const selectedDomainMailboxIds = new Set((admin?.mailboxes ?? [])
-    .filter((mailbox) => selectedDomain && mailbox.address.toLowerCase().endsWith(`@${selectedDomain.name.toLowerCase()}`))
-    .map((mailbox) => mailbox.id));
-  const filteredMailboxes = (admin?.mailboxes ?? []).filter((mailbox) => selectedDomainMailboxIds.has(mailbox.id));
+  const filteredMailboxes = (admin?.mailboxes ?? [])
+    .filter((mailbox) => selectedDomain ? mailbox.domainId === selectedDomain.id : false);
 
   const managedDomains = useMemo(() => {
     if (admin?.domains.length) return admin.domains.map((domain) => domain.name);
