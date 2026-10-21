@@ -66,6 +66,57 @@ export const mcpBootstrapTools = [
     requiredScopes: ["openid"],
   },
   {
+    name: "list_admin_workspaces",
+    description: "List workspaces where the authenticated GSW user has an active owner or administrator membership. Does not require a mailbox.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    requiredScopes: ["workspace.read"],
+  },
+  {
+    name: "list_admin_domains",
+    description: "List domain metadata and DNS verification status within a workspace the authenticated user administers. Does not require a mailbox.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        organizationId: { type: "string", format: "uuid", description: "Workspace UUID from list_admin_workspaces" },
+      },
+      required: ["organizationId"],
+      additionalProperties: false,
+    },
+    requiredScopes: ["domain.read"],
+  },
+  {
+    name: "list_admin_mailboxes",
+    description: "List mailbox metadata for a specific verified or pending mail domain in a workspace administered by the caller. Does not grant access to messages.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        organizationId: { type: "string", format: "uuid" },
+        domainId: { type: "string", format: "uuid" },
+      },
+      required: ["organizationId", "domainId"],
+      additionalProperties: false,
+    },
+    requiredScopes: ["mailbox_admin.read"],
+  },
+  {
+    name: "create_admin_mailbox",
+    description: "Create a mailbox on a verified domain within an authorized workspace. Requires a fresh requestId, explicit confirmation, mailbox_admin.write OAuth consent and separately enabled administrative writes. Does not grant message access.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        organizationId: { type: "string", format: "uuid" },
+        domainId: { type: "string", format: "uuid" },
+        localPart: { type: "string", maxLength: 128, pattern: "^[a-zA-Z0-9._%+-]+$" },
+        displayName: { type: "string", maxLength: 200 },
+        requestId: { type: "string", format: "uuid" },
+        confirmExternal: { type: "boolean" },
+      },
+      required: ["organizationId", "domainId", "localPart", "requestId", "confirmExternal"],
+      additionalProperties: false,
+    },
+    requiredScopes: ["mailbox_admin.write"],
+  },
+  {
     name: "list_accounts",
     description: "List GSW Mail accounts this user is permitted to read. Use an accountId from this list with mail tools.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },

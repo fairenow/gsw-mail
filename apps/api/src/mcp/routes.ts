@@ -8,6 +8,7 @@ import { agentMailRegistry } from "../ai/tools/registry.js";
 import { resolveMcpUserToolPermission } from "./resolvePermissions.js";
 import { getAccessibleAccounts } from "../auth/authorize.js";
 import { mcpBootstrapTools } from "./bootstrapTools.js";
+import { listMcpAdminDomains, listMcpAdminWorkspaces, listMcpAdminMailboxes } from "./adminResources.js";
 import { discoverMcpCapabilities } from "./capabilityDiscovery.js";
 import { mcpPrepareDraftRequest } from "./prepareDraftAction.js";
 import { storePreparedMcpDraft } from "./draftPayloadStore.js";
@@ -15,6 +16,9 @@ import { canUseMcpWriteTestMode, mcpWriteCallPolicy } from "./writeTestPolicy.js
 import { createMcpExecutionContext } from "./executionContext.js";
 import { reserveAiIdempotency, completeAiIdempotency, failAiIdempotency, grantAiScope, listActiveAiScopes } from "../ai/agentState.js";
 import { requireAccountPermission } from "../auth/authorize.js";
+import { createAdminMailbox, adminMailboxCreateSchema } from "../services/adminMailboxCreation.js";
+import { audit } from "../lib/audit.js";
+import { adminMailboxWriteGate } from "./adminMailboxWritePolicy.js";
 
 /** OAuth-scoped MCP transport with owner-only, explicitly enabled write testing. */
 export async function mcpRoutes(app:FastifyInstance):Promise<void> {
@@ -60,7 +64,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
     if(input.method==="resources/list")return wrap({resources:[]});
     if(input.method==="prompts/list")return wrap({prompts:[]});
     if(input.method==="tools/list"){
-      return wrap({tools:[...mcpBootstrapTools.filter(t=>t.name!=="prepare_action" || process.env.GSW_MCP_PREPARE_ENABLED==="true"),{name:"invoke_tool",description:"Universal MCP dispatcher for every GSW Mail registry tool. Use list_capabilities to discover names, required OAuth scopes and risk. All actions enforce OAuth, GSW permissions and mailbox ACL at execution. Writes require the configured owner-only test mode and a fresh UUID requestId; external actions also require confirmExternal=true.",inputSchema:{type:"object",properties:{toolName:{type:"string",description:"Registered GSW tool name, dotted or double-underscore format"},accountId:{type:"string",description:"Authorized mailbox account UUID"},arguments:{type:"object",description:"Arguments matching the selected registered tool schema",additionalProperties:true},requestId:{type:"string",format:"uuid",description:"Required for writes; unique for each intended action"},confirmExternal:{type:"boolean",description:"Required true for explicitly authorized external effects"}},required:["toolName","accountId","arguments"],additionalProperties:false}},...agentMailRegistry.definitions().map(t=>({name:t.name.replaceAll(".","__"),description:t.description+(t.risk==="external"?" CAUTION: This action can send, publish, delete or trigger external effects. Set confirmExternal=true only after reviewing the exact intended effect.":""),inputSchema:{...t.inputSchema,properties:{...(t.inputSchema.properties as Record<string,unknown> ?? {}),accountId:{type:"string",description:"GSW mailbox account UUID to operate within"},...(t.risk!=="read"?{requestId:{type:"string",format:"uuid",description:"Fresh UUID per intended action; reuse for retries to prevent duplicate execution"},...(t.risk==="external"?{confirmExternal:{type:"boolean",description:"Set true only after explicit user authorization of this external action"}}:{})}:{})},required:[...((t.inputSchema.required as string[] | undefined) ?? []),"accountId",...(t.risk!=="read"?["requestId",...(t.risk==="external"?["confirmExternal"]:[])]:[])]}}))]});
+      return wrap({tools:[...mcpBootstrapTools.filter(t=>(t.name!=="prepare_action" || process.env.GSW_MCP_PREPARE_ENABLED==="true") && (t.name!=="create_admin_mailbox" || process.env.GSW_MCP_ADMIN_WRITES_ENABLED==="true")),{name:"invoke_tool",description:"Universal MCP dispatcher for every GSW Mail registry tool. Use list_capabilities to discover names, required OAuth scopes and risk. All actions enforce OAuth, GSW permissions and mailbox ACL at execution. Writes require the configured owner-only test mode and a fresh UUID requestId; external actions also require confirmExternal=true.",inputSchema:{type:"object",properties:{toolName:{type:"string",description:"Registered GSW tool name, dotted or double-underscore format"},accountId:{type:"string",description:"Authorized mailbox account UUID"},arguments:{type:"object",description:"Arguments matching the selected registered tool schema",additionalProperties:true},requestId:{type:"string",format:"uuid",description:"Required for writes; unique for each intended action"},confirmExternal:{type:"boolean",description:"Required true for explicitly authorized external effects"}},required:["toolName","accountId","arguments"],additionalProperties:false}},...agentMailRegistry.definitions().map(t=>({name:t.name.replaceAll(".","__"),description:t.description+(t.risk==="external"?" CAUTION: This action can send, publish, delete or trigger external effects. Set confirmExternal=true only after reviewing the exact intended effect.":""),inputSchema:{...t.inputSchema,properties:{...(t.inputSchema.properties as Record<string,unknown> ?? {}),accountId:{type:"string",description:"GSW mailbox account UUID to operate within"},...(t.risk!=="read"?{requestId:{type:"string",format:"uuid",description:"Fresh UUID per intended action; reuse for retries to prevent duplicate execution"},...(t.risk==="external"?{confirmExternal:{type:"boolean",description:"Set true only after explicit user authorization of this external action"}}:{})}:{})},required:[...((t.inputSchema.required as string[] | undefined) ?? []),"accountId",...(t.risk!=="read"?["requestId",...(t.risk==="external"?["confirmExternal"]:[])]:[])]}}))]});
     }
     if(input.method==="tools/call"){
       let name=typeof input.params?.name==="string"?input.params.name:"";
@@ -150,6 +154,98 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
           return wrap({content:[{type:"text",text:JSON.stringify({accountId,granted:scopes.filter(scope=>active.has(scope)),status:"active"})}]});
         } catch {
           return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"owner_account_access_denied"})}]});
+        }
+      }
+      if(name==="list_admin_workspaces") {
+        if(!identity.oauthScopes.has("workspace.read"))
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"oauth_scope_missing",scope:"workspace.read"})}]});
+        const workspaces=await listMcpAdminWorkspaces(identity.userId);
+        return wrap({content:[{type:"text",text:JSON.stringify({workspaces})}]});
+      }
+      if(name==="list_admin_domains") {
+        if(!identity.oauthScopes.has("domain.read"))
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"oauth_scope_missing",scope:"domain.read"})}]});
+        const organizationId=typeof params.organizationId==="string"?params.organizationId:"";
+        if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(organizationId))
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"invalid_organization_id"})}]});
+        try {
+          const domains=await listMcpAdminDomains(identity.userId,organizationId);
+          return wrap({content:[{type:"text",text:JSON.stringify({organizationId,domains})}]});
+        } catch {
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"workspace_access_denied"})}]});
+        }
+      }
+      if(name==="list_admin_mailboxes") {
+        if(!identity.oauthScopes.has("mailbox_admin.read"))
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"oauth_scope_missing",scope:"mailbox_admin.read"})}]});
+        const organizationId=typeof params.organizationId==="string"?params.organizationId:"";
+        const domainId=typeof params.domainId==="string"?params.domainId:"";
+        const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if(!uuid.test(organizationId)||!uuid.test(domainId))
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"invalid_resource_id"})}]});
+        try {
+          const result=await listMcpAdminMailboxes(identity.userId,organizationId,domainId);
+          return wrap({content:[{type:"text",text:JSON.stringify(result)}]});
+        } catch {
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"workspace_or_domain_access_denied"})}]});
+        }
+      }
+      if(name==="create_admin_mailbox") {
+        const fail=(error:string)=>wrap({isError:true,content:[{type:"text",text:JSON.stringify({error})}]});
+        // Workspace administrative actions use their own fail-closed gate,
+        // separate from the mailbox write-test mode.
+        const gate=adminMailboxWriteGate({
+          enabled:process.env.GSW_MCP_ADMIN_WRITES_ENABLED,
+          persistedApprovalRequired:process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL,
+          hasWriteScope:identity.oauthScopes.has("mailbox_admin.write"),
+        });
+        if(!gate.allowed)return fail(gate.reason);
+        const parsed=adminMailboxCreateSchema.safeParse({
+          organizationId:params.organizationId,domainId:params.domainId,
+          localPart:params.localPart,displayName:params.displayName,
+        });
+        if(!parsed.success || parsed.data.ownerUserId || parsed.data.quotaBytes)return fail("invalid_mailbox_arguments");
+        const decision=mcpWriteCallPolicy({
+          risk:"external",requiredScopes:["mailbox_admin.write"],
+          requestId:params.requestId,confirmExternal:params.confirmExternal,
+          userId:identity.userId,clientId:identity.clientId,
+          accountId:parsed.data.organizationId,toolName:"create_admin_mailbox",
+          argumentsValue:parsed.data,
+        });
+        if(!decision.allowed)return fail(decision.reason);
+        const fingerprint=createHash("sha256").update(decision.digest).digest("hex");
+        const fingerprintId=`${fingerprint.slice(0,8)}-${fingerprint.slice(8,12)}-4${fingerprint.slice(13,16)}-8${fingerprint.slice(17,20)}-${fingerprint.slice(20,32)}`;
+        // The existing idempotency table allows account_id=NULL for
+        // workspace-scoped actions. The digest binds org, domain and mailbox.
+        const reservation=await reserveAiIdempotency({
+          key:decision.key,userId:identity.userId,toolCallId:null,
+          toolName:"create_admin_mailbox",fingerprint:fingerprintId,
+          expiresAt:new Date(Date.now()+24*60*60_000),
+        });
+        if(reservation.reused){
+          const same=reservation.reservation.userId===identity.userId &&
+            reservation.reservation.toolName==="create_admin_mailbox" &&
+            (reservation.reservation.result as {fingerprint?:string}|null)?.fingerprint===fingerprintId;
+          if(!same)return fail("request_id_reused_with_different_action");
+          return wrap({isError:reservation.reservation.status!=="completed",
+            content:[{type:"text",text:JSON.stringify(reservation.reservation.status==="completed"
+              ?{status:"already_completed",accountId:(reservation.reservation.result as {accountId?:string}|null)?.accountId}
+              :{error:"request_already_attempted"})}]});
+        }
+        try {
+          const created=await createAdminMailbox(identity.userId,parsed.data);
+          await audit({actorUserId:identity.userId,organizationId:parsed.data.organizationId,
+            action:"account.created",resourceType:"email_account",resourceId:created.id,
+            metadata:{address:created.address,source:"mcp",clientId:identity.clientId},
+            request});
+          await completeAiIdempotency(decision.key,{fingerprint:fingerprintId,accountId:created.id});
+          return wrap({content:[{type:"text",text:JSON.stringify({
+            accountId:created.id,address:created.address,authSetupStatus:created.authSetupStatus,
+            status:"created",nextStep:"Complete mailbox login setup in GSW Mail admin.",
+          })}]});
+        }catch(error){
+          await failAiIdempotency(decision.key,error);
+          return fail("mailbox_creation_failed_check_workspace_and_existing_address_before_retry");
         }
       }
       if(name==="list_accounts") {
