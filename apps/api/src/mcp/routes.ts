@@ -16,6 +16,8 @@ import { canUseMcpWriteTestMode, mcpWriteCallPolicy } from "./writeTestPolicy.js
 import { createMcpExecutionContext } from "./executionContext.js";
 import { reserveAiIdempotency, completeAiIdempotency, failAiIdempotency, grantAiScope, listActiveAiScopes } from "../ai/agentState.js";
 import { requireAccountPermission } from "../auth/authorize.js";
+import { createAdminMailbox, adminMailboxCreateSchema } from "../services/adminMailboxCreation.js";
+import { audit } from "../lib/audit.js";
 
 /** OAuth-scoped MCP transport with owner-only, explicitly enabled write testing. */
 export async function mcpRoutes(app:FastifyInstance):Promise<void> {
@@ -185,6 +187,61 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
           return wrap({content:[{type:"text",text:JSON.stringify(result)}]});
         } catch {
           return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"workspace_or_domain_access_denied"})}]});
+        }
+      }
+      if(name==="create_admin_mailbox") {
+        const fail=(error:string)=>wrap({isError:true,content:[{type:"text",text:JSON.stringify({error})}]});
+        if(!identity.oauthScopes.has("mailbox_admin.write"))return fail("oauth_scope_missing");
+        // Separate opt-in for workspace writes. Never enable through the mail
+        // write-test flag alone, or silently bypass persisted-approval policy.
+        if(process.env.GSW_MCP_ADMIN_WRITES_ENABLED!=="true")return fail("admin_writes_disabled");
+        if(process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL==="true")return fail("workspace_approval_not_supported");
+        const parsed=adminMailboxCreateSchema.safeParse({
+          organizationId:params.organizationId,domainId:params.domainId,
+          localPart:params.localPart,displayName:params.displayName,
+        });
+        if(!parsed.success || parsed.data.ownerUserId || parsed.data.quotaBytes)return fail("invalid_mailbox_arguments");
+        const decision=mcpWriteCallPolicy({
+          risk:"external",requiredScopes:["mailbox_admin.write"],
+          requestId:params.requestId,confirmExternal:params.confirmExternal,
+          userId:identity.userId,clientId:identity.clientId,
+          accountId:parsed.data.organizationId,toolName:"create_admin_mailbox",
+          argumentsValue:parsed.data,
+        });
+        if(!decision.allowed)return fail(decision.reason);
+        const fingerprint=createHash("sha256").update(decision.digest).digest("hex");
+        const fingerprintId=`${fingerprint.slice(0,8)}-${fingerprint.slice(8,12)}-4${fingerprint.slice(13,16)}-8${fingerprint.slice(17,20)}-${fingerprint.slice(20,32)}`;
+        // The existing idempotency table allows account_id=NULL for
+        // workspace-scoped actions. The digest binds org, domain and mailbox.
+        const reservation=await reserveAiIdempotency({
+          key:decision.key,userId:identity.userId,toolCallId:null,
+          toolName:"create_admin_mailbox",fingerprint:fingerprintId,
+          expiresAt:new Date(Date.now()+24*60*60_000),
+        });
+        if(reservation.reused){
+          const same=reservation.reservation.userId===identity.userId &&
+            reservation.reservation.toolName==="create_admin_mailbox" &&
+            (reservation.reservation.result as {fingerprint?:string}|null)?.fingerprint===fingerprintId;
+          if(!same)return fail("request_id_reused_with_different_action");
+          return wrap({isError:reservation.reservation.status!=="completed",
+            content:[{type:"text",text:JSON.stringify(reservation.reservation.status==="completed"
+              ?{status:"already_completed",accountId:(reservation.reservation.result as {accountId?:string}|null)?.accountId}
+              :{error:"request_already_attempted"})}]});
+        }
+        try {
+          const created=await createAdminMailbox(identity.userId,parsed.data);
+          await audit({actorUserId:identity.userId,organizationId:parsed.data.organizationId,
+            action:"account.created",resourceType:"email_account",resourceId:created.id,
+            metadata:{address:created.address,source:"mcp",clientId:identity.clientId},
+            request});
+          await completeAiIdempotency(decision.key,{fingerprint:fingerprintId,accountId:created.id});
+          return wrap({content:[{type:"text",text:JSON.stringify({
+            accountId:created.id,address:created.address,authSetupStatus:created.authSetupStatus,
+            status:"created",nextStep:"Complete mailbox login setup in GSW Mail admin.",
+          })}]});
+        }catch(error){
+          await failAiIdempotency(decision.key,error);
+          return fail("mailbox_creation_failed_check_workspace_and_existing_address_before_retry");
         }
       }
       if(name==="list_accounts") {
