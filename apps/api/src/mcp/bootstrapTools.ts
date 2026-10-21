@@ -99,6 +99,24 @@ export const mcpBootstrapTools = [
     requiredScopes: ["mailbox_admin.read"],
   },
   {
+    name: "create_admin_mailbox",
+    description: "Create a mailbox on a verified domain within an authorized workspace. Requires a fresh requestId, explicit confirmation, mailbox_admin.write OAuth consent and separately enabled administrative writes. Does not grant message access.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        organizationId: { type: "string", format: "uuid" },
+        domainId: { type: "string", format: "uuid" },
+        localPart: { type: "string", maxLength: 128, pattern: "^[a-zA-Z0-9._%+-]+$" },
+        displayName: { type: "string", maxLength: 200 },
+        requestId: { type: "string", format: "uuid" },
+        confirmExternal: { type: "boolean" },
+      },
+      required: ["organizationId", "domainId", "localPart", "requestId", "confirmExternal"],
+      additionalProperties: false,
+    },
+    requiredScopes: ["mailbox_admin.write"],
+  },
+  {
     name: "list_accounts",
     description: "List GSW Mail accounts this user is permitted to read. Use an accountId from this list with mail tools.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
