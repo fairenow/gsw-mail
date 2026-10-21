@@ -8,6 +8,7 @@ import { agentMailRegistry } from "../ai/tools/registry.js";
 import { resolveMcpUserToolPermission } from "./resolvePermissions.js";
 import { getAccessibleAccounts } from "../auth/authorize.js";
 import { mcpBootstrapTools } from "./bootstrapTools.js";
+import { listMcpAdminDomains, listMcpAdminWorkspaces, listMcpAdminMailboxes } from "./adminResources.js";
 import { discoverMcpCapabilities } from "./capabilityDiscovery.js";
 import { mcpPrepareDraftRequest } from "./prepareDraftAction.js";
 import { storePreparedMcpDraft } from "./draftPayloadStore.js";
@@ -150,6 +151,40 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
           return wrap({content:[{type:"text",text:JSON.stringify({accountId,granted:scopes.filter(scope=>active.has(scope)),status:"active"})}]});
         } catch {
           return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"owner_account_access_denied"})}]});
+        }
+      }
+      if(name==="list_admin_workspaces") {
+        if(!identity.oauthScopes.has("workspace.read"))
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"oauth_scope_missing",scope:"workspace.read"})}]});
+        const workspaces=await listMcpAdminWorkspaces(identity.userId);
+        return wrap({content:[{type:"text",text:JSON.stringify({workspaces})}]});
+      }
+      if(name==="list_admin_domains") {
+        if(!identity.oauthScopes.has("domain.read"))
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"oauth_scope_missing",scope:"domain.read"})}]});
+        const organizationId=typeof params.organizationId==="string"?params.organizationId:"";
+        if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(organizationId))
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"invalid_organization_id"})}]});
+        try {
+          const domains=await listMcpAdminDomains(identity.userId,organizationId);
+          return wrap({content:[{type:"text",text:JSON.stringify({organizationId,domains})}]});
+        } catch {
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"workspace_access_denied"})}]});
+        }
+      }
+      if(name==="list_admin_mailboxes") {
+        if(!identity.oauthScopes.has("mailbox_admin.read"))
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"oauth_scope_missing",scope:"mailbox_admin.read"})}]});
+        const organizationId=typeof params.organizationId==="string"?params.organizationId:"";
+        const domainId=typeof params.domainId==="string"?params.domainId:"";
+        const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if(!uuid.test(organizationId)||!uuid.test(domainId))
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"invalid_resource_id"})}]});
+        try {
+          const result=await listMcpAdminMailboxes(identity.userId,organizationId,domainId);
+          return wrap({content:[{type:"text",text:JSON.stringify(result)}]});
+        } catch {
+          return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"workspace_or_domain_access_denied"})}]});
         }
       }
       if(name==="list_accounts") {
