@@ -122,11 +122,21 @@ export function OAuthConsentPage() {
     setError("");
     try {
       if (accept && request.scopes.some((scope) => scope.startsWith("mail."))) {
+        // An administrator may consent to workspace-management scopes without owning
+        // a mailbox. Mailbox brokerage is still attempted, but its absence must not
+        // block administrative authorization. Mail tools continue to enforce their
+        // separate account ACL and Stalwart credential requirements at execution.
+        const hasAdminScope = request.scopes.some((scope) =>
+          scope === "workspace.admin" ||
+          scope === "domain.write" ||
+          scope.startsWith("mailbox_admin.") ||
+          scope.startsWith("admin."),
+        );
         const brokerage = await establishMcpMailboxCredentials();
-        if (brokerage.attempted === 0) {
+        if (brokerage.attempted === 0 && !hasAdminScope) {
           throw new Error("No readable mailbox was found. Open GSW Mail and confirm your mailbox is ready, then retry.");
         }
-        if (brokerage.failures.length > 0) {
+        if (brokerage.failures.length > 0 && !hasAdminScope) {
           throw new Error(`Mailbox authorization could not be completed for ${brokerage.failures.length} of ${brokerage.attempted} accounts (${brokerage.failures[0]!.reason}). Sign in to GSW Mail to restore mailbox access, then retry authorization.`);
         }
       }
