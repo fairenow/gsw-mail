@@ -38,7 +38,7 @@ function readiness(domain: DomainRow) {
   return { label: "Verifying DNS", tone: "warn" };
 }
 
-export function DomainAdminPanel({ organizationId }: { organizationId: string }) {
+export function DomainAdminPanel({ organizationId, onChanged }: { organizationId: string; onChanged?: () => Promise<void> | void }) {
   const [domains, setDomains] = useState<DomainRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -73,6 +73,7 @@ export function DomainAdminPanel({ organizationId }: { organizationId: string })
       setNewDomain("");
       setMessage(`${domain} was added. Copy the DNS records below to your DNS provider, then run Check DNS.`);
       await load();
+      await onChanged?.();
     } catch (err) { setError(err instanceof Error ? err.message : "Could not add domain."); }
     finally { setAdding(false); }
   };
