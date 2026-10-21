@@ -74,6 +74,7 @@ export default async (app: FastifyInstance) => {
       db
         .select({
           id: emailAccounts.id,
+          domainId: emailAccounts.domainId,
           address: emailAccounts.address,
           displayName: emailAccounts.displayName,
           status: emailAccounts.status,
