@@ -4,7 +4,7 @@ import { mcpBootstrapTools } from "./bootstrapTools.js";
 
 test("bootstrap tools expose discovery and narrowly scoped draft preparation", () => {
   assert.deepEqual(mcpBootstrapTools.map(tool => tool.name), [
-    "get_current_user", "list_capabilities", "prepare_action", "grant_my_scopes", "list_admin_workspaces", "list_admin_domains", "list_accounts",
+    "get_current_user", "list_capabilities", "prepare_action", "grant_my_scopes", "list_admin_workspaces", "list_admin_domains", "list_admin_mailboxes", "list_accounts",
   ]);
   const toolsByName = new Map(mcpBootstrapTools.map(tool => [tool.name, tool]));
   assert.deepEqual(toolsByName.get("get_current_user")?.requiredScopes, ["openid"]);
@@ -12,6 +12,8 @@ test("bootstrap tools expose discovery and narrowly scoped draft preparation", (
   assert.deepEqual(toolsByName.get("list_accounts")?.requiredScopes, ["mail.read"]);
   assert.deepEqual(toolsByName.get("list_admin_workspaces")?.requiredScopes, ["workspace.read"]);
   assert.deepEqual(toolsByName.get("list_admin_domains")?.requiredScopes, ["domain.read"]);
+  assert.deepEqual(toolsByName.get("list_admin_mailboxes")?.requiredScopes, ["mailbox_admin.read"]);
+  assert.ok("domainId" in toolsByName.get("list_admin_mailboxes")!.inputSchema.properties);
   assert.ok("organizationId" in toolsByName.get("list_admin_domains")!.inputSchema.properties);
   assert.deepEqual(toolsByName.get("prepare_action")?.requiredScopes, ["mail.write"]);
   assert.deepEqual(toolsByName.get("grant_my_scopes")?.requiredScopes, ["openid"]);
@@ -19,7 +21,7 @@ test("bootstrap tools expose discovery and narrowly scoped draft preparation", (
   for (const tool of mcpBootstrapTools) {
     assert.equal(tool.inputSchema.additionalProperties, false);
   }
-  for (const name of ["get_current_user", "list_capabilities", "list_admin_workspaces", "list_admin_domains", "list_accounts"] as const) {
+  for (const name of ["get_current_user", "list_capabilities", "list_admin_workspaces", "list_admin_domains", "list_admin_mailboxes", "list_accounts"] as const) {
     assert.ok(!("accountId" in toolsByName.get(name)!.inputSchema.properties));
   }
   const grant = toolsByName.get("grant_my_scopes")!;
