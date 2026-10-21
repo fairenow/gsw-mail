@@ -61,7 +61,12 @@ export function ControlCenterPage() {
   }, [workspace?.id]);
 
   const selectedDomain = admin?.domains.find((domain) => domain.id === selectedDomainId) ?? admin?.domains[0];
-  const filteredMailboxes = context?.managedMailboxes.filter((mailbox) => !selectedDomain || mailbox.address.toLowerCase().endsWith(`@${selectedDomain.name.toLowerCase()}`)) ?? [];
+  // Workspace admins manage mailbox metadata independently of their own mailbox grants.
+  // Filter by the domain ID represented in the authoritative workspace inventory.
+  const selectedDomainMailboxIds = new Set((admin?.mailboxes ?? [])
+    .filter((mailbox) => selectedDomain && mailbox.address.toLowerCase().endsWith(`@${selectedDomain.name.toLowerCase()}`))
+    .map((mailbox) => mailbox.id));
+  const filteredMailboxes = (admin?.mailboxes ?? []).filter((mailbox) => selectedDomainMailboxIds.has(mailbox.id));
 
   const managedDomains = useMemo(() => {
     if (admin?.domains.length) return admin.domains.map((domain) => domain.name);
@@ -146,7 +151,7 @@ export function ControlCenterPage() {
         <div className="gsw-control-section-head"><div><p className="gsw-setup-kicker">Mailboxes</p><h3>Mailbox administration</h3><p>Create mailboxes on verified domains. Workspace owners/admins manage them but do not become mailbox identities themselves.</p></div></div>
         {workspace?.id && admin && <MailboxCreatePanel organizationId={workspace.id} domains={admin.domains} isFirstMailbox={context.managedMailboxes.length === 0} selectedDomainId={selectedDomain?.id ?? ""} onDomainChange={setSelectedDomainId} onCreated={refreshControlCenter} />}
         <div className="gsw-admin-list">
-          {filteredMailboxes.length ? filteredMailboxes.map((mailbox) => { const details = admin?.mailboxes.find((item) => item.id === mailbox.id); return <article className="gsw-admin-list-row" key={mailbox.id}><div className="gsw-admin-primary"><strong>{mailbox.address}</strong><span>{mailbox.displayName ?? "Mailbox"}</span></div><div className="gsw-admin-meta"><span className={`gsw-status-pill tone-${statusTone(mailbox.authSetupStatus)}`}>{mailbox.authSetupStatus === "ready" ? "Login ready" : "Setup required"}</span><small>{details?.accessCount ?? 0} user{(details?.accessCount ?? 0) === 1 ? "" : "s"} with access</small>{details ? <small>{formatBytes(details.usedBytes)} used{details.quotaBytes ? ` of ${formatBytes(details.quotaBytes)}` : ""}</small> : null}</div><button className="gsw-btn gsw-btn-quiet" disabled={setupBusy} onClick={() => void startMailboxSetup(mailbox)}>{mailbox.authSetupStatus === "ready" ? "Reset login" : "Set up login"}</button></article>; }) : <div className="gsw-control-empty">No mailboxes for the selected domain. Create one above after DNS verification.</div>}
+          {filteredMailboxes.length ? filteredMailboxes.map((mailbox) => { const details = mailbox; return <article className="gsw-admin-list-row" key={mailbox.id}><div className="gsw-admin-primary"><strong>{mailbox.address}</strong><span>{mailbox.displayName ?? "Mailbox"}</span></div><div className="gsw-admin-meta"><span className={`gsw-status-pill tone-${statusTone(mailbox.authSetupStatus)}`}>{mailbox.authSetupStatus === "ready" ? "Login ready" : "Setup required"}</span><small>{details?.accessCount ?? 0} user{(details?.accessCount ?? 0) === 1 ? "" : "s"} with access</small>{details ? <small>{formatBytes(details.usedBytes)} used{details.quotaBytes ? ` of ${formatBytes(details.quotaBytes)}` : ""}</small> : null}</div><button className="gsw-btn gsw-btn-quiet" disabled={setupBusy} onClick={() => void startMailboxSetup({ ...mailbox, workspaceId: workspace!.id, authUserId: null })}>{mailbox.authSetupStatus === "ready" ? "Reset login" : "Set up login"}</button></article>; }) : <div className="gsw-control-empty">No mailboxes for the selected domain. Create one above after DNS verification.</div>}
         </div>
       </section>}
 
