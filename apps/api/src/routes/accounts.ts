@@ -1,3 +1,4 @@
+import { createAdminMailbox } from "../services/adminMailboxCreation.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -94,84 +95,9 @@ export default async (app: FastifyInstance) => {
 
   app.post("/mail/accounts", async (req, reply) => {
     const input = createAccountSchema.parse(req.body);
+    const account = await createAdminMailbox(req.user!.id, input);
     const orgId = input.organizationId;
-    await requireOrgPermission(req.user!.id, orgId, ["owner", "admin"]);
-    const domainRow = await db
-      .select({ id: domains.id, name: domains.name, organizationId: domains.organizationId, status: domains.status })
-      .from(domains)
-      .where(eq(domains.id, input.domainId))
-      .limit(1);
-    const domain = domainRow[0];
-    if (!domain) throw notFound("domain not found");
-    if (domain.organizationId !== orgId) throw badRequest("domain does not belong to your organization");
-    if (domain.status !== "verified") throw badRequest("domain must be verified before creating a mailbox");
-    const address = `${input.localPart.toLowerCase()}@${domain.name}`;
-
-    const account = await db.transaction(async (tx) => {
-      let ownerUserId = input.ownerUserId;
-      let ownerAuthUserId: string | null = null;
-
-      if (ownerUserId) {
-        const [owner] = await tx.select({ id: users.id, authUserId: users.authUserId }).from(users).where(eq(users.id, ownerUserId)).limit(1);
-        if (!owner) throw badRequest("ownerUserId must reference an existing user");
-        const [membership] = await tx
-          .select({ role: organizationMemberships.role })
-          .from(organizationMemberships)
-          .where(and(eq(organizationMemberships.organizationId, orgId), eq(organizationMemberships.userId, ownerUserId)))
-          .limit(1);
-        if (membership?.role === "owner" || membership?.role === "admin") {
-          throw badRequest("workspace owner/admin identities cannot be used as mailbox identities");
-        }
-        ownerAuthUserId = owner.authUserId;
-      } else {
-        ownerUserId = `mailbox-user-${randomUUID()}`;
-        await tx.insert(users).values({
-          id: ownerUserId,
-          identityProvider: "gsw-mailbox-pending",
-          identitySubject: ownerUserId,
-          email: address,
-          emailVerified: false,
-          name: input.displayName || input.localPart,
-          status: "active",
-        });
-        await tx.insert(organizationMemberships).values({
-          organizationId: orgId,
-          userId: ownerUserId,
-          role: "member",
-          status: "active",
-        });
-      }
-
-      const [created] = await tx
-        .insert(emailAccounts)
-        .values({
-          workspaceId: domain.organizationId,
-          domainId: input.domainId,
-          userId: ownerUserId,
-          localPart: input.localPart.toLowerCase(),
-          address,
-          displayName: input.displayName,
-          quotaBytes: input.quotaBytes,
-        })
-        .returning();
-      if (!created) throw new Error("failed to create account");
-      await tx.insert(mailboxes).values([
-        { accountId: created.id, role: "inbox", engineName: "Inbox" },
-        { accountId: created.id, role: "sent", engineName: "Sent" },
-        { accountId: created.id, role: "drafts", engineName: "Drafts" },
-        { accountId: created.id, role: "spam", engineName: "Spam" },
-        { accountId: created.id, role: "trash", engineName: "Trash" },
-        { accountId: created.id, role: "archive", engineName: "Archive" },
-      ]);
-      await tx.insert(mailAccountMemberships).values({
-        accountId: created.id,
-        userId: ownerUserId,
-        ...(ownerAuthUserId ? { authUserId: ownerAuthUserId } : {}),
-        role: "owner",
-      });
-      return created;
-    });
-
+    const address = account.address;
     await audit({
       actorUserId: req.user!.id,
       organizationId: orgId,
