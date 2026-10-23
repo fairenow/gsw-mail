@@ -46,6 +46,8 @@ import files from "./routes/files.js";
 import fileSharing from "./routes/fileSharing.js";
 import analytics from "./routes/analytics.js";
 import { auth as betterAuth } from "./auth/better.js";
+import { firstPartyStalwartClientIds } from "./auth/firstPartyClients.js";
+import { requireFreshExternalMcpConsent } from "./auth/mcpOAuthConsentPrompt.js";
 import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } from "@better-auth/oauth-provider";
 import { config } from "./config.js";
 import { JmapError } from "./engine/jmap.js";
@@ -72,7 +74,10 @@ export function buildApp() {
   app.get("/api/auth/.well-known/oauth-authorization-server", async (req, reply) => metadataResponse(oauthProviderAuthServerMetadata(betterAuth), req, reply));
   app.all("/api/auth/*", async (req, reply) => {
     const body = betterAuthBody(req);
-    const request = new Request(`${config.auth.baseUrl}${req.url}`, {
+    const authorizeUrl = req.method === "GET"
+      ? requireFreshExternalMcpConsent(`${config.auth.baseUrl}${req.url}`, new Set(firstPartyStalwartClientIds()))
+      : `${config.auth.baseUrl}${req.url}`;
+    const request = new Request(authorizeUrl, {
       method: req.method,
       headers: req.headers as Record<string, string>,
       ...(body !== undefined ? { body } : {}),
