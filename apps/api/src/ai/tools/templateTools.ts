@@ -156,7 +156,14 @@ export const templatesCreateTool: AgentToolDefinition = {
     const startedAt = new Date().toISOString();
     try {
       const input = z.object({ name: z.string().trim().min(1).max(120), subject: z.string().max(300).optional(), preheader: z.string().max(500).optional(), bodyText: z.string().max(50000).optional(), ...themeSchema, logoAssetId: z.string().uuid().optional() }).parse(rawInput);
-      const template = await createCustomEmailTemplate(ctx.userId, input);
+      const { subject, preheader, bodyText, logoAssetId, ...required } = input;
+      const template = await createCustomEmailTemplate(ctx.userId, {
+        ...required,
+        ...(subject !== undefined ? { subject } : {}),
+        ...(preheader !== undefined ? { preheader } : {}),
+        ...(bodyText !== undefined ? { bodyText } : {}),
+        ...(logoAssetId !== undefined ? { logoAssetId } : {}),
+      });
       return success(ctx, toolCallId, startedAt, template);
     } catch (error) {
       return failure(ctx, toolCallId, startedAt, error);
@@ -198,7 +205,18 @@ export const templatesUpdateTool: AgentToolDefinition = {
         backgroundColor: themeSchema.backgroundColor.optional(),
       }).parse(rawInput);
       const { templateId, ...patch } = input;
-      const template = await updateCustomEmailTemplate(ctx.userId, templateId, patch);
+      const cleanPatch = {
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.subject !== undefined ? { subject: patch.subject } : {}),
+        ...(patch.preheader !== undefined ? { preheader: patch.preheader } : {}),
+        ...(patch.bodyText !== undefined ? { bodyText: patch.bodyText } : {}),
+        ...(patch.logoAssetId !== undefined ? { logoAssetId: patch.logoAssetId } : {}),
+        ...(patch.borderColor !== undefined ? { borderColor: patch.borderColor } : {}),
+        ...(patch.fontColor !== undefined ? { fontColor: patch.fontColor } : {}),
+        ...(patch.buttonColor !== undefined ? { buttonColor: patch.buttonColor } : {}),
+        ...(patch.backgroundColor !== undefined ? { backgroundColor: patch.backgroundColor } : {}),
+      };
+      const template = await updateCustomEmailTemplate(ctx.userId, templateId, cleanPatch);
       return success(ctx, toolCallId, startedAt, template);
     } catch (error) {
       return failure(ctx, toolCallId, startedAt, error);
