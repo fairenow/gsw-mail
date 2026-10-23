@@ -4,6 +4,7 @@ import { db } from "../../db/client.js";
 import { userSettings } from "../../db/schema.js";
 import {
   createCustomEmailTemplate,
+  getCustomEmailTemplate,
   listCustomEmailTemplates,
   updateCustomEmailTemplate,
 } from "../../mail/templateService.js";
@@ -61,9 +62,73 @@ export const templatesListTool: AgentToolDefinition = {
   },
 };
 
+export const templatesGetTool: AgentToolDefinition = {
+  name: "templates.get",
+  description: "Read one custom email template's name, brand colors, and logo asset reference by template ID or custom key. Does not expose other users' templates.",
+  inputSchema: {
+    type: "object",
+    properties: { templateId: { type: "string", description: "UUID or custom:<uuid> key" } },
+    required: ["templateId"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["templates.read"],
+  risk: "read",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const { templateId } = z.object({ templateId: z.string().regex(/^(?:custom:)?[0-9a-f]{8}-[0-9a-f-]{27,}$/i) }).parse(rawInput);
+      const template = await getCustomEmailTemplate(ctx.userId, templateId);
+      return success(ctx, toolCallId, startedAt, {
+        id: template.id, key: template.key, name: template.name,
+        borderColor: template.borderColor, fontColor: template.fontColor,
+        buttonColor: template.buttonColor, backgroundColor: template.backgroundColor,
+        logoAssetId: template.logoAssetId, logoFilename: template.logoFilename,
+        updatedAt: template.updatedAt,
+      });
+    } catch (error) {
+      return failure(ctx, toolCallId, startedAt, error);
+    }
+  },
+};
+
+export const templatesDuplicateTool: AgentToolDefinition = {
+  name: "templates.duplicate",
+  description: "Duplicate a custom GSW Mail template's branding into a new independent template. Copies colors and owned logo asset reference, not arbitrary HTML.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      templateId: { type: "string" },
+      name: { type: "string" },
+      logoAssetId: { type: "string", description: "Owned existing logo asset UUID; null to clear" },
+    },
+    required: ["templateId", "name"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["templates.write"],
+  risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const { templateId, name } = z.object({
+        templateId: z.string().uuid(),
+        name: z.string().trim().min(1).max(120),
+      }).parse(rawInput);
+      const source = await getCustomEmailTemplate(ctx.userId, templateId);
+      const duplicate = await createCustomEmailTemplate(ctx.userId, {
+        name, borderColor: source.borderColor, fontColor: source.fontColor,
+        buttonColor: source.buttonColor, backgroundColor: source.backgroundColor,
+        logoAssetId: source.logoAssetId, logoFilename: source.logoFilename,
+      });
+      return success(ctx, toolCallId, startedAt, { ...duplicate, sourceTemplateId: source.id });
+    } catch (error) {
+      return failure(ctx, toolCallId, startedAt, error);
+    }
+  },
+};
+
 export const templatesCreateTool: AgentToolDefinition = {
   name: "templates.create",
-  description: "Create a custom GSW Mail email template with a name and simple brand colors. Logo upload remains a user-driven Settings action.",
+  description: "Create a custom GSW Mail template with a name, brand colors and optional existing owned logo asset ID. Full HTML import is not supported.",
   inputSchema: {
     type: "object",
     properties: {
@@ -72,6 +137,7 @@ export const templatesCreateTool: AgentToolDefinition = {
       fontColor: { type: "string" },
       buttonColor: { type: "string" },
       backgroundColor: { type: "string" },
+      logoAssetId: { type: "string", description: "Optional already-uploaded owned image asset UUID" },
     },
     required: ["name", "borderColor", "fontColor", "buttonColor", "backgroundColor"],
     additionalProperties: false,
@@ -81,7 +147,7 @@ export const templatesCreateTool: AgentToolDefinition = {
   async execute(ctx, rawInput, toolCallId) {
     const startedAt = new Date().toISOString();
     try {
-      const input = z.object({ name: z.string().trim().min(1).max(120), ...themeSchema }).parse(rawInput);
+      const input = z.object({ name: z.string().trim().min(1).max(120), ...themeSchema, logoAssetId: z.string().uuid().optional() }).parse(rawInput);
       const template = await createCustomEmailTemplate(ctx.userId, input);
       return success(ctx, toolCallId, startedAt, template);
     } catch (error) {
@@ -92,7 +158,7 @@ export const templatesCreateTool: AgentToolDefinition = {
 
 export const templatesUpdateTool: AgentToolDefinition = {
   name: "templates.update",
-  description: "Rename or change the simple brand colors of an existing user-created email template.",
+  description: "Rename, recolor or replace the existing owned logo asset of a custom GSW Mail email template.",
   inputSchema: {
     type: "object",
     properties: {
@@ -114,6 +180,7 @@ export const templatesUpdateTool: AgentToolDefinition = {
       const input = z.object({
         templateId: z.string().uuid(),
         name: z.string().trim().min(1).max(120).optional(),
+        logoAssetId: z.string().uuid().nullable().optional(),
         borderColor: themeSchema.borderColor.optional(),
         fontColor: themeSchema.fontColor.optional(),
         buttonColor: themeSchema.buttonColor.optional(),
@@ -164,7 +231,9 @@ export const templatesSelectTool: AgentToolDefinition = {
 
 export const templateTools: AgentToolDefinition[] = [
   templatesListTool,
+  templatesGetTool,
   templatesCreateTool,
+  templatesDuplicateTool,
   templatesUpdateTool,
   templatesSelectTool,
 ];
