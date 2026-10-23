@@ -183,7 +183,17 @@ const escapeHtml = (value: string) => value
   .replaceAll('"', "&quot;")
   .replaceAll("'", "&#39;");
 
-const textToHtml = (value: string) => escapeHtml(value).replaceAll("\n", "<br />");
+const textToHtml = (value: string) => {
+  return value.replace(/\r\n/g, "\n").trim().split(/\n\s*\n/).map(paragraph => {
+    const lines = paragraph.split("\n").map(line => line.trim()).filter(Boolean);
+    if (lines.length && lines.every(line => /^(?:[-*•] |\d+\. )/.test(line))) {
+      const tag = lines.every(line => /^\d+\. /.test(line)) ? "ol" : "ul";
+      const items = lines.map(line => '<li style="margin-bottom:8px">' + escapeHtml(line.replace(/^(?:[-*•] |\d+\. )/, "")) + '</li>').join("");
+      return '<' + tag + ' style="margin:8px 0 20px;padding-left:24px">' + items + '</' + tag + '>';
+    }
+    return '<p style="margin:0 0 16px;line-height:1.6">' + lines.map(escapeHtml).join("<br>") + '</p>';
+  }).join("");
+};
 
 function styleBodyLinks(html: string, buttonColor: string) {
   return html.replace(/<a\b([^>]*)>/gi, (match, attrs: string) => {
