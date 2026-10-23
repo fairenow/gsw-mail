@@ -281,6 +281,13 @@
       "when": 1792092300000,
       "tag": "0036_mcp_action_payloads",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792750000000,
+      "tag": "0037_email_template_native_content",
+      "breakpoints": true
     }
   ]
 }

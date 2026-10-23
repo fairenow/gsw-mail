@@ -4,6 +4,7 @@ import { db } from "../../db/client.js";
 import { userSettings } from "../../db/schema.js";
 import {
   createCustomEmailTemplate,
+  getCustomEmailTemplate,
   listCustomEmailTemplates,
   updateCustomEmailTemplate,
 } from "../../mail/templateService.js";
@@ -61,17 +62,90 @@ export const templatesListTool: AgentToolDefinition = {
   },
 };
 
+export const templatesGetTool: AgentToolDefinition = {
+  name: "templates.get",
+  description: "Read one custom email template's name, brand colors, and logo asset reference by template ID or custom key. Does not expose other users' templates.",
+  inputSchema: {
+    type: "object",
+    properties: { templateId: { type: "string", description: "UUID or custom:<uuid> key" } },
+    required: ["templateId"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["templates.read"],
+  risk: "read",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const { templateId } = z.object({ templateId: z.string().regex(/^(?:custom:)?[0-9a-f]{8}-[0-9a-f-]{27,}$/i) }).parse(rawInput);
+      const template = await getCustomEmailTemplate(ctx.userId, templateId);
+      return success(ctx, toolCallId, startedAt, {
+        id: template.id, key: template.key, name: template.name,
+        subject: template.subject, preheader: template.preheader, bodyText: template.bodyText,
+        borderColor: template.borderColor, fontColor: template.fontColor,
+        buttonColor: template.buttonColor, backgroundColor: template.backgroundColor,
+        logoAssetId: template.logoAssetId, logoFilename: template.logoFilename,
+        updatedAt: template.updatedAt,
+      });
+    } catch (error) {
+      return failure(ctx, toolCallId, startedAt, error);
+    }
+  },
+};
+
+export const templatesDuplicateTool: AgentToolDefinition = {
+  name: "templates.duplicate",
+  description: "Duplicate a custom GSW Mail template's branding into a new independent template. Copies colors and owned logo asset reference, not arbitrary HTML.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      templateId: { type: "string" },
+      name: { type: "string" },
+      subject: { type: "string", maxLength: 300 },
+      preheader: { type: "string", maxLength: 500 },
+      bodyText: { type: "string", maxLength: 50000 },
+      logoAssetId: { type: "string", description: "Owned existing logo asset UUID; null to clear" },
+    },
+    required: ["templateId", "name"],
+    additionalProperties: false,
+  },
+  requiredScopes: ["templates.write"],
+  risk: "reversible_write",
+  async execute(ctx, rawInput, toolCallId) {
+    const startedAt = new Date().toISOString();
+    try {
+      const { templateId, name } = z.object({
+        templateId: z.string().uuid(),
+        name: z.string().trim().min(1).max(120),
+      }).parse(rawInput);
+      const source = await getCustomEmailTemplate(ctx.userId, templateId);
+      const duplicate = await createCustomEmailTemplate(ctx.userId, {
+        name, subject: source.subject, preheader: source.preheader, bodyText: source.bodyText,
+        borderColor: source.borderColor, fontColor: source.fontColor,
+        buttonColor: source.buttonColor, backgroundColor: source.backgroundColor,
+        logoAssetId: source.logoAssetId, logoFilename: source.logoFilename,
+      });
+      return success(ctx, toolCallId, startedAt, { ...duplicate, sourceTemplateId: source.id });
+    } catch (error) {
+      return failure(ctx, toolCallId, startedAt, error);
+    }
+  },
+};
+
 export const templatesCreateTool: AgentToolDefinition = {
   name: "templates.create",
-  description: "Create a custom GSW Mail email template with a name and simple brand colors. Logo upload remains a user-driven Settings action.",
+  description: "Create a native branded email template with editable subject, preheader, body text, colors and an optional owned logo.",
   inputSchema: {
     type: "object",
     properties: {
       name: { type: "string" },
+      subject: { type: "string", maxLength: 300 },
+      preheader: { type: "string", maxLength: 500 },
+      bodyText: { type: "string", maxLength: 50000 },
       borderColor: { type: "string" },
       fontColor: { type: "string" },
       buttonColor: { type: "string" },
       backgroundColor: { type: "string" },
+      logoAssetId: { type: "string", description: "Optional already-uploaded owned image asset UUID" },
     },
     required: ["name", "borderColor", "fontColor", "buttonColor", "backgroundColor"],
     additionalProperties: false,
@@ -81,8 +155,15 @@ export const templatesCreateTool: AgentToolDefinition = {
   async execute(ctx, rawInput, toolCallId) {
     const startedAt = new Date().toISOString();
     try {
-      const input = z.object({ name: z.string().trim().min(1).max(120), ...themeSchema }).parse(rawInput);
-      const template = await createCustomEmailTemplate(ctx.userId, input);
+      const input = z.object({ name: z.string().trim().min(1).max(120), subject: z.string().max(300).optional(), preheader: z.string().max(500).optional(), bodyText: z.string().max(50000).optional(), ...themeSchema, logoAssetId: z.string().uuid().optional() }).parse(rawInput);
+      const { subject, preheader, bodyText, logoAssetId, ...required } = input;
+      const template = await createCustomEmailTemplate(ctx.userId, {
+        ...required,
+        ...(subject !== undefined ? { subject } : {}),
+        ...(preheader !== undefined ? { preheader } : {}),
+        ...(bodyText !== undefined ? { bodyText } : {}),
+        ...(logoAssetId !== undefined ? { logoAssetId } : {}),
+      });
       return success(ctx, toolCallId, startedAt, template);
     } catch (error) {
       return failure(ctx, toolCallId, startedAt, error);
@@ -92,7 +173,7 @@ export const templatesCreateTool: AgentToolDefinition = {
 
 export const templatesUpdateTool: AgentToolDefinition = {
   name: "templates.update",
-  description: "Rename or change the simple brand colors of an existing user-created email template.",
+  description: "Edit a native email template subject, preheader, body text, brand colors or owned logo.",
   inputSchema: {
     type: "object",
     properties: {
@@ -114,13 +195,28 @@ export const templatesUpdateTool: AgentToolDefinition = {
       const input = z.object({
         templateId: z.string().uuid(),
         name: z.string().trim().min(1).max(120).optional(),
+        subject: z.string().max(300).nullable().optional(),
+        preheader: z.string().max(500).nullable().optional(),
+        bodyText: z.string().max(50000).nullable().optional(),
+        logoAssetId: z.string().uuid().nullable().optional(),
         borderColor: themeSchema.borderColor.optional(),
         fontColor: themeSchema.fontColor.optional(),
         buttonColor: themeSchema.buttonColor.optional(),
         backgroundColor: themeSchema.backgroundColor.optional(),
       }).parse(rawInput);
       const { templateId, ...patch } = input;
-      const template = await updateCustomEmailTemplate(ctx.userId, templateId, patch);
+      const cleanPatch = {
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.subject !== undefined ? { subject: patch.subject } : {}),
+        ...(patch.preheader !== undefined ? { preheader: patch.preheader } : {}),
+        ...(patch.bodyText !== undefined ? { bodyText: patch.bodyText } : {}),
+        ...(patch.logoAssetId !== undefined ? { logoAssetId: patch.logoAssetId } : {}),
+        ...(patch.borderColor !== undefined ? { borderColor: patch.borderColor } : {}),
+        ...(patch.fontColor !== undefined ? { fontColor: patch.fontColor } : {}),
+        ...(patch.buttonColor !== undefined ? { buttonColor: patch.buttonColor } : {}),
+        ...(patch.backgroundColor !== undefined ? { backgroundColor: patch.backgroundColor } : {}),
+      };
+      const template = await updateCustomEmailTemplate(ctx.userId, templateId, cleanPatch);
       return success(ctx, toolCallId, startedAt, template);
     } catch (error) {
       return failure(ctx, toolCallId, startedAt, error);
@@ -164,7 +260,9 @@ export const templatesSelectTool: AgentToolDefinition = {
 
 export const templateTools: AgentToolDefinition[] = [
   templatesListTool,
+  templatesGetTool,
   templatesCreateTool,
+  templatesDuplicateTool,
   templatesUpdateTool,
   templatesSelectTool,
 ];

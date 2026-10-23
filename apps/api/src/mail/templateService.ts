@@ -17,6 +17,9 @@ export interface CustomEmailTemplateRecord extends EmailTemplateTheme {
   id: string;
   key: string;
   name: string;
+  subject: string | null;
+  preheader: string | null;
+  bodyText: string | null;
   logoUrl: string | null;
   logoFilename: string | null;
   logoAssetId: string | null;
@@ -26,12 +29,18 @@ export interface CustomEmailTemplateRecord extends EmailTemplateTheme {
 
 export interface CustomEmailTemplateInput extends EmailTemplateTheme {
   name: string;
+  subject?: string | null;
+  preheader?: string | null;
+  bodyText?: string | null;
   logoDataUrl?: string | null | undefined;
   logoFilename?: string | null | undefined;
   logoAssetId?: string | null | undefined;
 }
 
 export interface CustomEmailTemplatePatch {
+  subject?: string | null;
+  preheader?: string | null;
+  bodyText?: string | null;
   name?: string | undefined;
   borderColor?: string | undefined;
   fontColor?: string | undefined;
@@ -55,6 +64,9 @@ const present = (row: typeof emailTemplates.$inferSelect): CustomEmailTemplateRe
   id: row.id,
   key: row.key,
   name: row.name,
+  subject: row.subject,
+  preheader: row.preheader,
+  bodyText: row.bodyText,
   borderColor: row.borderColor,
   fontColor: row.fontColor,
   buttonColor: row.buttonColor,
@@ -118,6 +130,9 @@ export async function createCustomEmailTemplate(userId: string, input: CustomEma
     userId,
     key: `custom:${id}`,
     name,
+    subject: input.subject?.trim().slice(0, 300) || null,
+    preheader: input.preheader?.trim().slice(0, 500) || null,
+    bodyText: input.bodyText?.slice(0, 50000) || null,
     borderColor: normalizeColor(input.borderColor, "border color"),
     fontColor: normalizeColor(input.fontColor, "font color"),
     buttonColor: normalizeColor(input.buttonColor, "button color"),
@@ -136,6 +151,9 @@ export async function updateCustomEmailTemplate(userId: string, id: string, inpu
   const logoAsset = input.logoAssetId === undefined ? {} : { logoAssetId: await validateLogoAsset(userId, input.logoAssetId) };
   const [row] = await db.update(emailTemplates).set({
     ...(input.name !== undefined ? { name: input.name.trim().slice(0, 120) } : {}),
+    ...(input.subject !== undefined ? { subject: input.subject?.trim().slice(0, 300) || null } : {}),
+    ...(input.preheader !== undefined ? { preheader: input.preheader?.trim().slice(0, 500) || null } : {}),
+    ...(input.bodyText !== undefined ? { bodyText: input.bodyText?.slice(0, 50000) || null } : {}),
     ...(input.borderColor !== undefined ? { borderColor: normalizeColor(input.borderColor, "border color") } : {}),
     ...(input.fontColor !== undefined ? { fontColor: normalizeColor(input.fontColor, "font color") } : {}),
     ...(input.buttonColor !== undefined ? { buttonColor: normalizeColor(input.buttonColor, "button color") } : {}),
@@ -165,7 +183,17 @@ const escapeHtml = (value: string) => value
   .replaceAll('"', "&quot;")
   .replaceAll("'", "&#39;");
 
-const textToHtml = (value: string) => escapeHtml(value).replaceAll("\n", "<br />");
+const textToHtml = (value: string) => {
+  return value.replace(/\r\n/g, "\n").trim().split(/\n\s*\n/).map(paragraph => {
+    const lines = paragraph.split("\n").map(line => line.trim()).filter(Boolean);
+    if (lines.length && lines.every(line => /^(?:[-*•] |\d+\. )/.test(line))) {
+      const tag = lines.every(line => /^\d+\. /.test(line)) ? "ol" : "ul";
+      const items = lines.map(line => '<li style="margin-bottom:8px">' + escapeHtml(line.replace(/^(?:[-*•] |\d+\. )/, "")) + '</li>').join("");
+      return '<' + tag + ' style="margin:8px 0 20px;padding-left:24px">' + items + '</' + tag + '>';
+    }
+    return '<p style="margin:0 0 16px;line-height:1.6">' + lines.map(escapeHtml).join("<br>") + '</p>';
+  }).join("");
+};
 
 function styleBodyLinks(html: string, buttonColor: string) {
   return html.replace(/<a\b([^>]*)>/gi, (match, attrs: string) => {
@@ -175,15 +203,16 @@ function styleBodyLinks(html: string, buttonColor: string) {
 }
 
 export function renderCustomEmailTemplate(
-  template: Pick<typeof emailTemplates.$inferSelect, "id" | "name" | "borderColor" | "fontColor" | "buttonColor" | "backgroundColor" | "logoBase64" | "logoAssetId">,
+  template: Pick<typeof emailTemplates.$inferSelect, "id" | "name" | "subject" | "preheader" | "bodyText" | "borderColor" | "fontColor" | "buttonColor" | "backgroundColor" | "logoBase64" | "logoAssetId">,
   input: MailTemplateInput,
 ): RenderedMailTemplate {
-  const text = input.bodyText ?? "";
+  const text = input.bodyText ?? template.bodyText ?? "";
   const body = styleBodyLinks(input.bodyHtml ?? textToHtml(text), template.buttonColor);
+  const preheader = template.preheader ? `<span style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden">${escapeHtml(template.preheader)}</span>` : "";
   const logo = template.logoAssetId || template.logoBase64
     ? `<img src="${assetUrl(template.id)}" alt="${escapeHtml(template.name)}" width="52" height="52" style="display:block;width:52px;height:52px;object-fit:contain;margin-bottom:12px;border:0" />`
     : "";
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body style="margin:0"><div style="margin:0;background:${template.backgroundColor};color:${template.fontColor};font-family:Arial,sans-serif;line-height:1.6;width:100%;padding:32px 16px;box-sizing:border-box"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid ${template.borderColor};border-radius:12px;overflow:hidden"><div style="padding:18px 24px;border-bottom:2px solid ${template.borderColor}">${logo}<div style="color:${template.fontColor};font-size:16px;font-weight:700">${escapeHtml(template.name)}</div></div><div style="padding:28px 24px;font-size:15px;color:${template.fontColor}">${body}</div></div></div></body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body style="margin:0">${preheader}<div style="margin:0;background:${template.backgroundColor};color:${template.fontColor};font-family:Arial,sans-serif;line-height:1.6;width:100%;padding:32px 16px;box-sizing:border-box"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid ${template.borderColor};border-radius:12px;overflow:hidden"><div style="padding:18px 24px;border-bottom:2px solid ${template.borderColor}">${logo}<div style="color:${template.fontColor};font-size:16px;font-weight:700">${escapeHtml(template.name)}</div></div><div style="padding:28px 24px;font-size:15px;color:${template.fontColor}">${body}</div></div></div></body></html>`;
   return { text, html };
 }
 
