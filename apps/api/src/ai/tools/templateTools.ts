@@ -80,6 +80,7 @@ export const templatesGetTool: AgentToolDefinition = {
       const template = await getCustomEmailTemplate(ctx.userId, templateId);
       return success(ctx, toolCallId, startedAt, {
         id: template.id, key: template.key, name: template.name,
+        subject: template.subject, preheader: template.preheader, bodyText: template.bodyText,
         borderColor: template.borderColor, fontColor: template.fontColor,
         buttonColor: template.buttonColor, backgroundColor: template.backgroundColor,
         logoAssetId: template.logoAssetId, logoFilename: template.logoFilename,
@@ -99,6 +100,9 @@ export const templatesDuplicateTool: AgentToolDefinition = {
     properties: {
       templateId: { type: "string" },
       name: { type: "string" },
+      subject: { type: "string", maxLength: 300 },
+      preheader: { type: "string", maxLength: 500 },
+      bodyText: { type: "string", maxLength: 50000 },
       logoAssetId: { type: "string", description: "Owned existing logo asset UUID; null to clear" },
     },
     required: ["templateId", "name"],
@@ -115,7 +119,8 @@ export const templatesDuplicateTool: AgentToolDefinition = {
       }).parse(rawInput);
       const source = await getCustomEmailTemplate(ctx.userId, templateId);
       const duplicate = await createCustomEmailTemplate(ctx.userId, {
-        name, borderColor: source.borderColor, fontColor: source.fontColor,
+        name, subject: source.subject, preheader: source.preheader, bodyText: source.bodyText,
+        borderColor: source.borderColor, fontColor: source.fontColor,
         buttonColor: source.buttonColor, backgroundColor: source.backgroundColor,
         logoAssetId: source.logoAssetId, logoFilename: source.logoFilename,
       });
@@ -128,11 +133,14 @@ export const templatesDuplicateTool: AgentToolDefinition = {
 
 export const templatesCreateTool: AgentToolDefinition = {
   name: "templates.create",
-  description: "Create a custom GSW Mail template with a name, brand colors and optional existing owned logo asset ID. Full HTML import is not supported.",
+  description: "Create a native branded email template with editable subject, preheader, body text, colors and an optional owned logo.",
   inputSchema: {
     type: "object",
     properties: {
       name: { type: "string" },
+      subject: { type: "string", maxLength: 300 },
+      preheader: { type: "string", maxLength: 500 },
+      bodyText: { type: "string", maxLength: 50000 },
       borderColor: { type: "string" },
       fontColor: { type: "string" },
       buttonColor: { type: "string" },
@@ -147,7 +155,7 @@ export const templatesCreateTool: AgentToolDefinition = {
   async execute(ctx, rawInput, toolCallId) {
     const startedAt = new Date().toISOString();
     try {
-      const input = z.object({ name: z.string().trim().min(1).max(120), ...themeSchema, logoAssetId: z.string().uuid().optional() }).parse(rawInput);
+      const input = z.object({ name: z.string().trim().min(1).max(120), subject: z.string().max(300).optional(), preheader: z.string().max(500).optional(), bodyText: z.string().max(50000).optional(), ...themeSchema, logoAssetId: z.string().uuid().optional() }).parse(rawInput);
       const template = await createCustomEmailTemplate(ctx.userId, input);
       return success(ctx, toolCallId, startedAt, template);
     } catch (error) {
@@ -158,7 +166,7 @@ export const templatesCreateTool: AgentToolDefinition = {
 
 export const templatesUpdateTool: AgentToolDefinition = {
   name: "templates.update",
-  description: "Rename, recolor or replace the existing owned logo asset of a custom GSW Mail email template.",
+  description: "Edit a native email template subject, preheader, body text, brand colors or owned logo.",
   inputSchema: {
     type: "object",
     properties: {
@@ -180,6 +188,9 @@ export const templatesUpdateTool: AgentToolDefinition = {
       const input = z.object({
         templateId: z.string().uuid(),
         name: z.string().trim().min(1).max(120).optional(),
+        subject: z.string().max(300).nullable().optional(),
+        preheader: z.string().max(500).nullable().optional(),
+        bodyText: z.string().max(50000).nullable().optional(),
         logoAssetId: z.string().uuid().nullable().optional(),
         borderColor: themeSchema.borderColor.optional(),
         fontColor: themeSchema.fontColor.optional(),
