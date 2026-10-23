@@ -103,7 +103,11 @@ export const auth = betterAuth({
       consentPage: GSW_OAUTH_CONSENT_PAGE,
       selectAccount: {
         page: "/oauth/select-account",
-        shouldRedirect: async () => false,
+        // Require deliberate account selection on each new OAuth authorization.
+        // Users with no active session still enter /sign-in and return to
+        // this chooser after authentication. This prevents an existing browser
+        // session from silently selecting the wrong GSW account.
+        shouldRedirect: async () => true,
       },
       scopes: [...GSW_OIDC_SUPPORTED_SCOPES, ...aiScopes, ...legacyMcpOAuthScopes],
       validAudiences: [config.auth.stalwartAudience, process.env.GSW_MCP_RESOURCE_URL ?? `${config.auth.baseUrl.replace(/\/$/, "")}/mcp`],
