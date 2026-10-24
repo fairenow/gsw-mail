@@ -10,6 +10,7 @@ import { CampaignReviewPage } from "./pages/CampaignReviewPage";
 import { CalendarRsvpPage } from "./pages/CalendarRsvpPage";
 import { AccountDeletedPage, LegalPage } from "./pages/LegalPage";
 import { LandingPage } from "./pages/LandingPage";
+import { SupportPage } from "./pages/SupportPage";
 import { OAuthAccountChooserPage } from "./pages/OAuthAccountChooserPage";
 import { OAuthConsentPage } from "./pages/OAuthConsentPage";
 import { OAuthTestPage } from "./pages/OAuthTestPage";
@@ -70,6 +71,7 @@ export function App() {
   if (path === "/") return <LandingPage />;
   if (path === "/privacy") return <LegalPage kind="privacy" />;
   if (path === "/terms") return <LegalPage kind="terms" />;
+  if (path === "/support") return <SupportPage />;
   if (path === "/account-deleted") return <AccountDeletedPage />;
   if (path === "/calendar/rsvp") return <CalendarRsvpPage />;
   if (path === "/oauth/select-account") return <OAuthAccountChooserPage />;

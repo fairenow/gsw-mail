@@ -112,6 +112,48 @@
   place-items: center;
 }
 
+.gsw-support-contact {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 28px 0;
+}
+
+.gsw-support-button {
+  display: inline-flex;
+  padding: 13px 20px;
+  border-radius: 12px;
+  background: #805309;
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.gsw-support-button:hover {
+  background: #674207;
+}
+
+.gsw-support-page a:focus-visible {
+  outline: 3px solid #805309;
+  outline-offset: 4px;
+}
+
+.gsw-support-address {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.gsw-support-address,
+.gsw-support-page section a {
+  color: #805309;
+}
+
+.gsw-support-page h3 {
+  margin: 24px 0 8px;
+  font-size: 1rem;
+}
+
 .gsw-account-deleted .gsw-legal-card {
   max-width: 620px;
   text-align: center;

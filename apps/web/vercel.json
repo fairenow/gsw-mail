@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/support",
+      "destination": "/index.html"
+    },
+    {
       "source": "/mail",
       "destination": "/index.html"
     },

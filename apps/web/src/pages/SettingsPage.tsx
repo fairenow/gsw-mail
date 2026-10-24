@@ -153,7 +153,7 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
         onReload={() => loadTemplates()}
         onNotice={setNotice}
       />}
-      <footer className="gsw-settings-legal-footer"><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><button type="button" className="gsw-settings-text-button danger" onClick={() => setShowDeleteConfirm((value) => !value)}>Delete account</button></footer>
+      <footer className="gsw-settings-legal-footer"><a href="/support">Support</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><button type="button" className="gsw-settings-text-button danger" onClick={() => setShowDeleteConfirm((value) => !value)}>Delete account</button></footer>
       {showDeleteConfirm && <div className="gsw-delete-confirm"><p><strong>Delete your GSW Mail account?</strong></p><p>This removes your sign-in profile and personal GSW Mail settings. Organization-owned mailbox data or records may be retained as described in the Privacy Policy. This action cannot be undone.</p><div className="gsw-delete-confirm-actions"><button className="gsw-danger-btn" disabled={deleteBusy} onClick={() => void deleteAccount()}>{deleteBusy ? "Starting deletion…" : "Yes, delete my account"}</button><button className="gsw-secondary-btn" disabled={deleteBusy} onClick={() => setShowDeleteConfirm(false)}>Cancel</button></div></div>}
     </section></main>);
 }
