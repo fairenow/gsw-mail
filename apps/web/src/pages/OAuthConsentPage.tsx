@@ -121,35 +121,14 @@ export function OAuthConsentPage() {
     setBusy(true);
     setError("");
     try {
+      // Mailbox credential brokerage is separate from OAuth consent.
+      // Failure to provision a mailbox credential must not reject requested
+      // OAuth scopes. Mail operations still fail closed at execution.
       if (accept && request.scopes.some((scope) => scope.startsWith("mail."))) {
-        // An administrator may consent to workspace-management scopes without owning
-        // a mailbox. Mailbox brokerage is still attempted, but its absence must not
-        // block administrative authorization. Mail tools continue to enforce their
-        // separate account ACL and Stalwart credential requirements at execution.
-        const hasAdminScope = request.scopes.some((scope) =>
-          scope === "workspace.admin" ||
-          scope === "workspace.read" ||
-          scope.startsWith("domain.") ||
-          scope.startsWith("mailbox_admin.") ||
-          scope.startsWith("admin."),
-        );
-        // Best-effort brokerage for administrative requests: a missing or
-        // unavailable Stalwart credential must not block workspace-only tools.
-        // Mail-only requests retain the existing fail-closed behavior.
-        if (hasAdminScope) {
-          try {
-            await establishMcpMailboxCredentials();
-          } catch {
-            // Mail operations still require their own authorized account credential.
-          }
-        } else {
-          const brokerage = await establishMcpMailboxCredentials();
-          if (brokerage.attempted === 0) {
-            throw new Error("No readable mailbox was found. Open GSW Mail and confirm your mailbox is ready, then retry.");
-          }
-          if (brokerage.failures.length > 0) {
-            throw new Error(`Mailbox authorization could not be completed for ${brokerage.failures.length} of ${brokerage.attempted} accounts (${brokerage.failures[0]!.reason}). Sign in to GSW Mail to restore mailbox access, then retry authorization.`);
-          }
+        try {
+          await establishMcpMailboxCredentials();
+        } catch {
+          // An unavailable first-party mailbox credential is not consent denial.
         }
       }
       await submitOAuthConsent(accept, accept ? request.acceptedScope : undefined);
