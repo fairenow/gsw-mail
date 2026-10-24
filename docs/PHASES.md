@@ -55,6 +55,7 @@ Tracking map across the Guided Steps Wellness Mail Platform spec.
 - [ ] **Done:** message from Gmail arrives → Ramon reads → replies → Gmail user receives it
 
 ## Phase 5 — Basic mail application
+- [x] Public `/support` page with support email, sign-in and connected-app guidance, and links from landing, settings, and legal pages (production acceptance pending).
 - [x] Web shell scaffold (folders + message list pane)
 - [x] Inbox, Compose, Reply, Reply all, Forward
 - [x] Sent, Drafts, Spam, Trash

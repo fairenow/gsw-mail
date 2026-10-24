@@ -186,7 +186,7 @@ export function LegalPage({ kind }: { kind: LegalKind }) {
   return <main className="gsw-legal-page">
     <header className="gsw-legal-header">
       <a href="/" className="gsw-legal-brand" aria-label="Guided Steps Wellness Mail home"><BrandMark size={52} /><span>GSW Mail</span></a>
-      <nav><a href="/privacy" aria-current={isPrivacy ? "page" : undefined}>Privacy</a><a href="/terms" aria-current={!isPrivacy ? "page" : undefined}>Terms</a></nav>
+      <nav><a href="/support">Support</a><a href="/privacy" aria-current={isPrivacy ? "page" : undefined}>Privacy</a><a href="/terms" aria-current={!isPrivacy ? "page" : undefined}>Terms</a></nav>
     </header>
     <article className="gsw-legal-card">
       <p className="gsw-legal-kicker">Guided Steps Wellness</p>
@@ -195,7 +195,7 @@ export function LegalPage({ kind }: { kind: LegalKind }) {
       <p className="gsw-legal-intro">{isPrivacy ? "We believe privacy should be understandable. This policy describes the information GSW Mail handles, why we use it, and the choices available to you." : "These terms explain the rules for using GSW Mail and the responsibilities that come with an account."}</p>
       {sections.map((section) => <section key={section.title}><h2>{section.title}</h2>{section.paragraphs?.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}{section.bullets && <ul>{section.bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}</ul>}</section>)}
     </article>
-    <footer className="gsw-legal-footer"><span>© 2026 Guided Steps Wellness</span><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="/sign-in">GSW Mail</a></footer>
+    <footer className="gsw-legal-footer"><a href="/support">Support</a><span>© 2026 Guided Steps Wellness</span><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="/sign-in">GSW Mail</a></footer>
   </main>;
 }
 
