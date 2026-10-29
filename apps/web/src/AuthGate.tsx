@@ -1,6 +1,7 @@
+import { restoreOriginalDeviceSession } from "./lib/restoreOriginalDeviceSession";
 import { PasswordInput } from "./components/auth/PasswordInput";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { getSession, logout, requestOneTimeCode, requestPasswordResetCode, resetPasswordWithCode, resolveAccountContext, setPassword, signInWithCode, signInWithPassword, type AuthSession } from "./auth";
+import { getSession, listDeviceSessions, setActiveDeviceSession, logout, requestOneTimeCode, requestPasswordResetCode, resetPasswordWithCode, resolveAccountContext, setPassword, signInWithCode, signInWithPassword, type AuthSession } from "./auth";
 import { AuthCard } from "./components/auth/AuthCard";
 import { AuthError } from "./components/auth/AuthError";
 import { AuthPage } from "./components/auth/AuthPage";
@@ -14,6 +15,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const forceAccountSignIn = window.location.pathname === "/sign-in" && window.location.hash === "#use-another-account";
   const [session, setSession] = useState<AuthSession | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionChanged, setSessionChanged] = useState(false);
+  const [restoringSession, setRestoringSession] = useState(false);
+  const [sessionError, setSessionError] = useState("");
   const [mode, setMode] = useState<Mode>(window.location.pathname === "/sign-up" ? "sign-up" : "sign-in");
   const [email, setEmail] = useState(() => consumeAuthPrefillEmail());
   const [name, setName] = useState("");
@@ -81,10 +85,59 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return () => { generation.current++; window.removeEventListener("gsw-auth-change", change); window.removeEventListener("gsw-account-error", failed); };
   }, []);
 
+  useEffect(() => {
+    if (!session || loading || window.location.pathname.startsWith("/oauth/")) return;
+    let active = true;
+    let checking = false;
+    const check = async () => {
+      if (checking || document.visibilityState === "hidden") return;
+      checking = true;
+      try {
+        const current = await getSession();
+        if (active) setSessionChanged(current?.user.id !== session.user.id);
+      } catch {
+      } finally {
+        checking = false;
+      }
+    };
+    const onFocus = () => { void check(); };
+    const timer = window.setInterval(onFocus, 15_000);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [session?.user.id, loading]);
+
+  const restoreSession = async () => {
+    if (!session) return;
+    setRestoringSession(true);
+    setSessionError("");
+    try {
+      await restoreOriginalDeviceSession(session.user.id, { list: listDeviceSessions, activate: setActiveDeviceSession, current: getSession });
+      setSessionChanged(false);
+    } catch (err) {
+      setSessionError(err instanceof Error ? err.message : "Could not restore this account.");
+    } finally {
+      setRestoringSession(false);
+    }
+  };
+
   if (resolutionError) return <AuthPage><AuthCard><BrandMark size={96} /><h1 className="gsw-login-title">We're finishing your account setup.</h1><AuthError>{resolutionError}</AuthError><button className="gsw-btn gsw-btn-primary gsw-btn-block" onClick={() => void refresh()}>Try again</button><button className="gsw-btn gsw-btn-quiet gsw-btn-block" onClick={() => void logout()}>Sign out</button></AuthCard></AuthPage>;
   if (loading) return <AuthPage><AuthCard><AccountResolutionLoader state={resolution} /></AuthCard></AuthPage>;
   if (session && window.location.pathname === "/create-password") return <PasswordSetup session={session} onComplete={() => window.location.assign("/setup")} />;
-  if (session) return children;
+  if (session) return <>
+    {sessionChanged && <div role="alert" className="gsw-session-change">
+      <strong>Your active account changed in another tab.</strong>
+      <p>This tab is still showing {session.user.email}. Return to this account to load mail and sync your draft.</p>
+      <button className="gsw-btn gsw-btn-primary" disabled={restoringSession} onClick={() => void restoreSession()}>{restoringSession ? "Returning…" : "Return to this account"}</button>
+      {sessionError && <p role="alert">{sessionError}</p>}
+    </div>}
+    {children}
+  </>;
 
   const requestCode = async () => {
     setBusy(true); setError("");
