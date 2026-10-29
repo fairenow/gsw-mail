@@ -36,6 +36,8 @@ test("MCP returns OAuth resource metadata challenge for unauthenticated POST",as
 test("admin scope upgrades use OAuth challenges and full admin discovery stays separate",async()=>{
   const previous=process.env.GSW_MCP_ENABLED;
   const previousWrites=process.env.GSW_MCP_ADMIN_WRITES_ENABLED;
+  const previousResource=process.env.GSW_MCP_RESOURCE_URL;
+  process.env.GSW_MCP_RESOURCE_URL="https://api.guidedstepswellness.com/mcp";
   process.env.GSW_MCP_ENABLED="true";
   process.env.GSW_MCP_ADMIN_WRITES_ENABLED="true";
   const {adminScopes}=await import("./accessProfile.js");
@@ -51,6 +53,7 @@ test("admin scope upgrades use OAuth challenges and full admin discovery stays s
     const missing=await call("tools/list");
     assert.equal(missing.statusCode,403);
     assert.match(String(missing.headers["www-authenticate"]),/insufficient_scope/);
+    assert.ok(String(missing.headers["www-authenticate"]).includes('resource_metadata="https://api.guidedstepswellness.com/.well-known/oauth-protected-resource/mcp"'));
     assert.match(String(missing.headers["www-authenticate"]),/workspace.read/);
     assert.match(String(missing.headers["www-authenticate"]),/domain.write/);
     grants=new Set(["openid",...adminScopes]);
@@ -75,5 +78,6 @@ test("admin scope upgrades use OAuth challenges and full admin discovery stays s
     await app.close();
     if(previous===undefined)delete process.env.GSW_MCP_ENABLED;else process.env.GSW_MCP_ENABLED=previous;
     if(previousWrites===undefined)delete process.env.GSW_MCP_ADMIN_WRITES_ENABLED;else process.env.GSW_MCP_ADMIN_WRITES_ENABLED=previousWrites;
+    if(previousResource===undefined)delete process.env.GSW_MCP_RESOURCE_URL;else process.env.GSW_MCP_RESOURCE_URL=previousResource;
   }
 });
