@@ -125,3 +125,8 @@ Mail and calendar requests reuse a verified persisted first-party mailbox creden
 Interactive session failures return `mailbox_reconnect_required` with a reconnect instruction. Unexpected failures include the request ID and route in server logs. A failed mailbox load is displayed as unavailable rather than claiming the folder is empty. Production acceptance requires testing messages, folders, statistics and calendars with the same browser session after deployment; local checks alone cannot establish the cause of the reported production 500s.
 
 The reported web regression was traced to unconditional OAuth account selection: Railway logged “Better Auth OAuth authorization did not return a code” after a JSON redirect. Internal authorization now invokes the local Better Auth handler in an async-local identity context, established only after the existing session identity assertion. The chooser is skipped only if the OAuth session user matches that context. External HTTP requests cannot set this context, and concurrent requests remain isolated. Both browser mail access and first-party credential brokerage use this path.
+
+
+## Settings and template schema recovery
+
+The template startup schema repair adds the nullable subject, preheader and body_text fields from migration 0037 to existing tables. Production template listing failed when these columns were absent. General settings and template catalog requests load independently so a template failure does not hide all preferences. Initial settings failures display an error and retry control.

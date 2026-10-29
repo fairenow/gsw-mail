@@ -19,6 +19,10 @@ export async function ensureEmailTemplateSchema(): Promise<void> {
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     );
   `);
+  await pool.query(`ALTER TABLE "email_templates"
+    ADD COLUMN IF NOT EXISTS "subject" text,
+    ADD COLUMN IF NOT EXISTS "preheader" text,
+    ADD COLUMN IF NOT EXISTS "body_text" text;`);
   await pool.query(`ALTER TABLE "email_templates" ADD COLUMN IF NOT EXISTS "logo_asset_id" uuid REFERENCES "assets"("id") ON DELETE SET NULL;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "email_templates_key_idx" ON "email_templates" ("key");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "email_templates_user_idx" ON "email_templates" ("user_id", "created_at");`);

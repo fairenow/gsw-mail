@@ -35,19 +35,32 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
     setTemplateChoice(catalog.selectedTemplateKey || "none");
   };
 
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [settingsError, setSettingsError] = useState("");
+
   useEffect(() => {
-    void Promise.all([api.settings(), api.templates()])
-      .then(([value, catalog]) => {
-        setSettings(value);
-        setSignature(value.signature);
-        setTemplates(catalog.templates);
-        setTemplateChoice(catalog.selectedTemplateKey || "none");
-      })
-      .catch((err) => setNotice(err instanceof Error ? err.message : String(err)));
-  }, []);
+    let active = true;
+    setSettingsError("");
+    void api.settings().then(value => {
+      if (!active) return;
+      setSettings(value);
+      setSignature(value.signature);
+    }).catch(err => {
+      if (active) setSettingsError(err instanceof Error ? err.message : String(err));
+    });
+    void api.templates().then(catalog => {
+      if (!active) return;
+      setTemplates(catalog.templates);
+      setTemplateChoice(catalog.selectedTemplateKey || "none");
+    }).catch(err => {
+      if (active) setNotice(`Templates could not load: ${err instanceof Error ? err.message : String(err)}`);
+    });
+    return () => { active = false; };
+  }, [loadAttempt]);
   useEffect(() => { if (!embedded) configureTopBar({ search: "", searchPlaceholder: "Search settings", onSearchChange: () => undefined, onSearch: () => undefined, searchDisabled: true }); }, [configureTopBar, embedded]);
 
   const wrap = (node: ReactNode) => embedded ? <div className="gsw-embedded-workspace">{node}</div> : <MailWorkspace section="settings">{node}</MailWorkspace>;
+  if (settingsError && (!settings || !signature)) return wrap(<div className="gsw-product-loading gsw-product-loading-inline"><p role="alert">Settings could not load: {settingsError}</p><button className="gsw-btn" onClick={() => setLoadAttempt(value => value + 1)}>Retry</button></div>);
   if (!settings || !signature) return wrap(<div className="gsw-product-loading gsw-product-loading-inline">Loading settings...</div>);
 
   const saveSignature = async () => {
