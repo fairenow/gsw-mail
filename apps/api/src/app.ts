@@ -98,6 +98,11 @@ export function buildApp() {
     if (error instanceof JmapError && error.type === "mail_identity_rejected") {
       return reply.code(401).send({ error: "mail_identity_rejected" });
     }
+    const mailboxReconnectErrors = new Set(["mailbox_session_required", "mailbox_session_identity_mismatch", "oauth_interaction_required"]);
+    if (error instanceof Error && mailboxReconnectErrors.has(error.message)) {
+      request.log.warn({ reason: error.message, path: request.url.split("?")[0] }, "mailbox authorization requires attention");
+      return reply.code(401).send({ error: "mailbox_reconnect_required", message: "Your mailbox connection needs attention. Sign out and sign in again to reconnect." });
+    }
     if ((error as { code?: string }).code === "FST_ERR_CTP_INVALID_MEDIA_TYPE") {
       // Record request metadata only; never log OAuth credentials or MCP payloads.
       app.log.warn({ method: request.method, path: request.url.split("?")[0], contentType: request.headers["content-type"] ?? "(missing)", accept: request.headers.accept ?? "(missing)" }, "unsupported content type");
@@ -108,7 +113,7 @@ export function buildApp() {
     if (typeof error === "object" && error !== null && "statusCode" in error && error.statusCode === 429) {
       return reply.code(429).send({ error: "rate_limit_exceeded", retryable: true });
     }
-    app.log.error(error);
+    request.log.error({ err: error, method: request.method, path: request.url.split("?")[0] }, "request failed");
     return reply.code(500).send({ error: "internal server error" });
   });
 

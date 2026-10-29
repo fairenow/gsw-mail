@@ -116,3 +116,12 @@ Use independent vertical scroll areas inside a viewport-sized mail shell. Keep p
 - When the account menu is used from a legacy standalone page, it returns to `/mail` and restores the requested workspace panel instead of navigating to another standalone route.
 - AI email drafts are explicitly tagged by the server-side writing assistant and rendered as nested copy-ready email cards inside the assistant response.
 - Each email draft card has its own copy control, while the overall assistant response retains a separate copy control with internal draft tags removed.
+
+
+## Browser mailbox credential recovery
+
+Mail and calendar requests reuse a verified persisted first-party mailbox credential and then try its verified refresh grant before falling back to interactive OAuth. This applies to browser sessions as well as sessionless callers; mailbox ACL and identity linkage checks run before credential selection. Native bearer fallback remains available. External MCP bearers are never substituted for mailbox credentials. This avoids making a cold browser request depend on a new authorization-code exchange through the public host when an existing grant is usable.
+
+Interactive session failures return `mailbox_reconnect_required` with a reconnect instruction. Unexpected failures include the request ID and route in server logs. A failed mailbox load is displayed as unavailable rather than claiming the folder is empty. Production acceptance requires testing messages, folders, statistics and calendars with the same browser session after deployment; local checks alone cannot establish the cause of the reported production 500s.
+
+The reported web regression was traced to unconditional OAuth account selection: Railway logged “Better Auth OAuth authorization did not return a code” after a JSON redirect. Internal authorization now invokes the local Better Auth handler in an async-local identity context, established only after the existing session identity assertion. The chooser is skipped only if the OAuth session user matches that context. External HTTP requests cannot set this context, and concurrent requests remain isolated. Both browser mail access and first-party credential brokerage use this path.

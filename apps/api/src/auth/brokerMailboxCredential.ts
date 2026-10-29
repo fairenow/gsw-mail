@@ -1,3 +1,4 @@
+import { withInternalMailboxIdentity } from "./internalMailboxAuthorization.js";
 import { createHash, randomBytes } from "node:crypto";
 import { fromNodeHeaders } from "better-auth/node";
 import { createRemoteJWKSet } from "jose";
@@ -58,7 +59,10 @@ export async function establishBrokerMailboxCredential(input: {
     code_challenge_method: "S256",
   }).toString();
 
-  const authorizeResponse = await request(authorize, {
+  const authorizeRequest: typeof fetch = request === fetch
+    ? async (url, init) => withInternalMailboxIdentity(input.authUserId, () => auth.handler(new Request(String(url), init)))
+    : request;
+  const authorizeResponse = await authorizeRequest(authorize, {
     redirect: "manual",
     headers: { cookie, accept: "application/json" },
     signal: AbortSignal.timeout(10_000),

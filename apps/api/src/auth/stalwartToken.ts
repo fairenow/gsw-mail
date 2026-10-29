@@ -1,3 +1,4 @@
+import { withInternalMailboxIdentity } from "./internalMailboxAuthorization.js";
 import { createHash, randomBytes } from "node:crypto";
 import { fromNodeHeaders } from "better-auth/node";
 import { and, eq, gt } from "drizzle-orm";
@@ -194,7 +195,10 @@ async function getStalwartAccessTokenUncached(input: StalwartTokenRequest, reque
   });
 
   const startedAt = Date.now();
-  const authorizeResponse = await request(authorize, {
+  const authorizeRequest: typeof fetch = request === fetch
+    ? async (url, init) => withInternalMailboxIdentity(input.authUserId, () => auth.handler(new Request(String(url), init)))
+    : request;
+  const authorizeResponse = await authorizeRequest(authorize, {
     redirect: "manual",
     headers: authorizeHeaders,
     signal: AbortSignal.timeout(10_000),
@@ -246,7 +250,7 @@ async function getStalwartAccessTokenUncached(input: StalwartTokenRequest, reque
   const error = callback.searchParams.get("error");
   if (error) throw new Error(`Better Auth OAuth authorization denied: ${error}`);
   const code = callback.searchParams.get("code");
-  if (!code) throw new Error("Better Auth OAuth authorization did not return a code");
+  if (!code) throw new Error("oauth_interaction_required");
   console.info("[oauth] authorization_code_received", { authUserId: input.authUserId, accountId: input.accountId });
 
   console.info("[oauth] token_exchange_start", { authUserId: input.authUserId, accountId: input.accountId });

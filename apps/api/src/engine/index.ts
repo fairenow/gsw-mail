@@ -3,6 +3,7 @@ import { requireAccountPermission } from "../auth/authorize.js";
 import { decodeStalwartTokenMetadata, getStalwartAccessToken, getStalwartTokenFormat } from "../auth/stalwartToken.js";
 import { findStoredStalwartMailboxToken } from "../auth/storedStalwartToken.js";
 import { refreshStoredStalwartMailboxToken } from "../auth/refreshStalwartMailboxToken.js";
+import { resolveMailboxCredential } from "../auth/resolveMailboxCredential.js";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { authUsers, emailAccounts, mailAccountMemberships } from "../db/schema.js";
@@ -121,57 +122,12 @@ async function getUserMailboxToken(input: {
     throw new Error("mailbox identity is not linked to this Better Auth session");
   }
 
-  // Sessionless clients may only reuse an already-issued, verified first-party
-  // credential after this function has checked mailbox ACL and identity linkage.
-  // An expired access token is renewed server-side from the persisted first-party
-  // refresh authorization; a third-party MCP bearer is never substituted for it.
-  const sessionless = Object.keys(input.headers).length === 0;
-  let stored: string | null = null;
-  let renewed: string | null = null;
-  if (sessionless) {
-    console.info("[mcp-mailbox] credential_lookup_started");
-    try {
-      stored = await findStoredStalwartMailboxToken({
-        productUserId: input.productUserId,
-        authUserId: input.authUserId,
-        accountId: account.id,
-      });
-      console.info("[mcp-mailbox] stored_lookup_completed", { found: Boolean(stored) });
-    } catch {
-      // Never return an unverified access token. A failed access-token lookup
-      // must not prevent independent verification of a persisted refresh grant.
-      console.warn("[mcp-mailbox] stored_lookup_failed");
-    }
-    if (!stored) {
-      console.info("[mcp-mailbox] refresh_lookup_started");
-      try {
-        renewed = await refreshStoredStalwartMailboxToken({
-          productUserId: input.productUserId,
-          authUserId: input.authUserId,
-          accountId: account.id,
-        });
-        console.info("[mcp-mailbox] refresh_lookup_completed", { verified: Boolean(renewed) });
-      } catch {
-        console.warn("[mcp-mailbox] refresh_lookup_failed");
-      }
-    }
-  }
-  renewed ??= stored;
-  // Report credential *source* only. Never log token values, claims, email addresses,
-  // account/user identifiers, request headers, or upstream exception messages.
-  if (sessionless) console.info("[mcp-mailbox] credential_resolution", {
-    stage: stored ? "stored_access_token" : renewed ? "refreshed_access_token" : "no_persisted_credential",
+  const token = await resolveMailboxCredential({
+    stored: () => findStoredStalwartMailboxToken({ productUserId: input.productUserId, authUserId: input.authUserId, accountId: account.id }),
+    refresh: () => refreshStoredStalwartMailboxToken({ productUserId: input.productUserId, authUserId: input.authUserId, accountId: account.id }),
+    interactive: () => getStalwartAccessToken({ authUserId: input.authUserId, accountId: account.id, headers: input.headers }),
+    report: (stage) => console.info("[mailbox] credential_resolution", { stage }),
   });
-  let token: string;
-  try {
-    token = renewed ?? await getStalwartAccessToken({ authUserId: input.authUserId, accountId: account.id, headers: input.headers });
-  } catch (error) {
-    if (sessionless) console.warn("[mcp-mailbox] credential_resolution_failed", {
-      stage: "interactive_fallback",
-      reason: error instanceof Error && error.message === "mailbox_session_required" ? "mailbox_session_required" : "unclassified",
-    });
-    throw error;
-  }
   console.info("[mcp-mailbox] verified_credential_resolved");
   return { token, accountAddress: account.address };
 }

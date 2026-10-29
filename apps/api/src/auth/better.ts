@@ -13,6 +13,8 @@ import { aiScopes } from "../ai/permissions/types.js";
 import { legacyMcpOAuthScopes } from "../mcp/scopeAliases.js";
 import { GSW_OAUTH_CONSENT_PAGE, GSW_OIDC_SUPPORTED_SCOPES, legacyInternalUserInfoClaims, oidcClientIdFromJwt } from "./oidcContract.js";
 
+import { requiresMailboxAccountSelection } from "./internalMailboxAuthorization.js";
+
 const AUTH_SENDER = "admin@team.guidedstepswellness.com";
 
 /** Transactional login and security messages use only our Stalwart mailbox. */
@@ -103,11 +105,7 @@ export const auth = betterAuth({
       consentPage: GSW_OAUTH_CONSENT_PAGE,
       selectAccount: {
         page: "/oauth/select-account",
-        // Require deliberate account selection on each new OAuth authorization.
-        // Users with no active session still enter /sign-in and return to
-        // this chooser after authentication. This prevents an existing browser
-        // session from silently selecting the wrong GSW account.
-        shouldRedirect: async () => true,
+        shouldRedirect: async ({ user }) => requiresMailboxAccountSelection(user.id),
       },
       scopes: [...GSW_OIDC_SUPPORTED_SCOPES, ...aiScopes, ...legacyMcpOAuthScopes],
       validAudiences: [config.auth.stalwartAudience, process.env.GSW_MCP_RESOURCE_URL ?? `${config.auth.baseUrl.replace(/\/$/, "")}/mcp`],
