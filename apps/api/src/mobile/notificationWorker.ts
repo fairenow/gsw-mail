@@ -9,13 +9,13 @@ export const mobileCalendarDiscoverySql=`
     INSERT INTO mobile_calendar_events(user_id,account_id,event_id,event_title,event_start)
     SELECT DISTINCT ON(a.user_id,r.account_id,r.event_id) a.user_id,r.account_id,r.event_id,r.event_title,r.event_start
     FROM calendar_email_reminders r JOIN email_accounts a ON a.id=r.account_id
-    WHERE a.user_id IS NOT NULL AND a.status='active' AND r.event_start>now() AND r.status IN ('pending','sending','sent')
+    WHERE a.user_id IS NOT NULL AND a.account_status='active' AND r.event_start>now() AND r.status IN ('pending','sending','sent')
     ORDER BY a.user_id,r.account_id,r.event_id,r.event_start DESC ON CONFLICT DO NOTHING;
     INSERT INTO mobile_notification_outbox(id,user_id,account_id,expo_push_token,category,title,body,data,expires_at)
     SELECT 'calendar:'||c.user_id||':'||c.account_id||':'||c.event_id||':'||extract(epoch FROM c.event_start)||':'||d.calendar_reminder_minutes||':'||md5(d.expo_push_token),
       c.user_id,c.account_id,d.expo_push_token,'calendar','Upcoming calendar event',left(c.event_title,180),
       jsonb_build_object('route','calendar','kind','calendar-reminder','eventId',c.event_id,'accountId',c.account_id,'userId',c.user_id,'eventStart',c.event_start,'reminderMinutes',d.calendar_reminder_minutes),CASE WHEN d.calendar_reminder_minutes=0 THEN c.event_start+interval '5 minutes' ELSE c.event_start END
-    FROM mobile_calendar_events c JOIN mobile_push_devices d ON d.user_id=c.user_id JOIN users u ON u.id=c.user_id AND u.status='active'
+    FROM mobile_calendar_events c JOIN mobile_push_devices d ON d.user_id=c.user_id JOIN users u ON u.id=c.user_id AND u.user_status='active'
     WHERE d.calendar_enabled=true AND c.cancelled=false AND c.event_start>=now()-interval '5 minutes' AND c.event_start-make_interval(mins=>d.calendar_reminder_minutes)<=now()
       AND c.event_start-make_interval(mins=>d.calendar_reminder_minutes)>=now()-interval '5 minutes'
     ON CONFLICT(id) DO NOTHING;
@@ -44,7 +44,7 @@ export const mobileCompletionDiscoverySql=`
     )
     INSERT INTO mobile_notification_outbox(id,user_id,account_id,expo_push_token,category,title,body,data,expires_at)
     SELECT s.source_id||':'||s.user_id||':'||md5(d.expo_push_token),s.user_id,s.account_id,d.expo_push_token,s.category,s.title,s.body,s.data,s.occurred_at+interval '24 hours'
-    FROM source s JOIN mobile_push_devices d ON d.user_id=s.user_id JOIN users u ON u.id=s.user_id AND u.status='active' CROSS JOIN mobile_notification_rollout rollout
+    FROM source s JOIN mobile_push_devices d ON d.user_id=s.user_id JOIN users u ON u.id=s.user_id AND u.user_status='active' CROSS JOIN mobile_notification_rollout rollout
     WHERE s.occurred_at>=greatest(d.created_at,rollout.started_at,now()-interval '24 hours')
       AND CASE s.category WHEN 'chat' THEN d.chat_enabled WHEN 'scheduledWork' THEN d.scheduled_work_enabled ELSE d.work_attention_enabled END
     ON CONFLICT(id) DO NOTHING;
@@ -114,7 +114,7 @@ export function createMobileNotificationWorker(options:{send?:typeof sendPushToU
         UPDATE mobile_notification_outbox o SET status='sending',claimed_at=now(),attempts=attempts+1 FROM due WHERE o.id=due.id RETURNING o.*`);
       for(const job of jobs.rows) {
         try {
-          const user=await pool.query("SELECT id FROM users WHERE id=$1 AND status='active'",[job.user_id]);
+          const user=await pool.query("SELECT id FROM users WHERE id=$1 AND user_status='active'",[job.user_id]);
           let allowed=Boolean(user.rowCount);
           if(job.account_id) {
             try { await requireAccountPermission(job.user_id,job.account_id,"read"); }

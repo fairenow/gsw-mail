@@ -6,7 +6,7 @@ import { mobileCalendarDiscoverySql, mobileCompletionDiscoverySql, mobileNotific
 test("notification discovery durably deduplicates, isolates users, honors preferences, and schedules at-start reminders",async()=>{
   const db=new PGlite();
   try {
-    await db.exec(`CREATE TABLE users(id text PRIMARY KEY,status text);CREATE TABLE email_accounts(id uuid PRIMARY KEY,user_id text,status text);
+    await db.exec(`CREATE TABLE users(id text PRIMARY KEY,user_status text);CREATE TABLE email_accounts(id uuid PRIMARY KEY,user_id text,account_status text);
       CREATE TABLE mobile_push_devices(user_id text,expo_push_token text,created_at timestamptz DEFAULT now()-interval '1 minute',calendar_enabled boolean DEFAULT true,chat_enabled boolean DEFAULT true,scheduled_work_enabled boolean DEFAULT true,work_attention_enabled boolean DEFAULT true,calendar_reminder_minutes integer DEFAULT 15);
       CREATE TABLE ai_idempotency_keys(id uuid DEFAULT gen_random_uuid(),user_id text,account_id uuid,tool_name text,status text,result jsonb,completed_at timestamptz,updated_at timestamptz);
       CREATE TABLE ai_automations(id uuid PRIMARY KEY,user_id text,account_id uuid,title text);

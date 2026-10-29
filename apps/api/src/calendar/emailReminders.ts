@@ -63,7 +63,7 @@ export async function replaceEventEmailReminders(input: {
 }
 
 export async function getEventEmailReminderMinutes(accountId:string,eventId:string):Promise<number[]> {
-  const result=await pool.query<{minutes_before:number}>("SELECT minutes_before FROM calendar_email_reminders WHERE account_id=$1 AND event_id=$2 AND status IN ('pending','sending','sent') ORDER BY minutes_before DESC",[accountId,eventId]);
+  const result=await pool.query<{minutes_before:number}>("SELECT minutes_before FROM calendar_email_reminders WHERE account_id=$1 AND event_id=$2 AND status IN ('pending','sending','sent','failed') ORDER BY minutes_before DESC",[accountId,eventId]);
   return result.rows.map(row=>row.minutes_before);
 }
 
@@ -85,7 +85,7 @@ export async function deliverDueCalendarEmailReminders(): Promise<number> {
       SELECT r.id,r.account_id,a.address,r.event_title,r.event_start,r.minutes_before
       FROM calendar_email_reminders r JOIN email_accounts a ON a.id=r.account_id
       LEFT JOIN user_notification_preferences p ON p.user_id=a.user_id
-      WHERE r.status='pending' AND r.due_at<=now() AND a.status='active' AND coalesce(p.calendar_email_enabled,true)=true AND r.event_start>now()
+      WHERE r.status='pending' AND r.due_at<=now() AND a.account_status='active' AND coalesce(p.calendar_email_enabled,true)=true AND r.event_start>now()
       ORDER BY r.due_at LIMIT 10 FOR UPDATE OF r SKIP LOCKED`);
     rows=result.rows;
     for(const row of rows) await client.query("UPDATE calendar_email_reminders SET status='sending',claimed_at=now(),attempts=attempts+1 WHERE id=$1",[row.id]);
