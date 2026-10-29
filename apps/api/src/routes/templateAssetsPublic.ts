@@ -1,3 +1,4 @@
+import { signedAssetEdgeUrl } from "../files/edgeDelivery.js";
 import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
@@ -19,8 +20,8 @@ export default async function templateAssetsPublic(app: FastifyInstance) {
         status: assets.status,
       }).from(assets).where(eq(assets.id, template.assetId)).limit(1);
       if (asset?.status === "ready") {
-        reply.header("cache-control", "public, max-age=300, stale-while-revalidate=3600");
-        return reply.redirect(createR2PresignedUrl({ method: "GET", key: asset.r2Key, expiresSeconds: 900 }));
+        reply.header("cache-control", "public, max-age=60");
+        return reply.redirect(signedAssetEdgeUrl({ key: asset.r2Key, width: 512 }) ?? createR2PresignedUrl({ method: "GET", key: asset.r2Key, expiresSeconds: 900 }));
       }
     }
 

@@ -130,3 +130,8 @@ The reported web regression was traced to unconditional OAuth account selection:
 ## Settings and template schema recovery
 
 The template startup schema repair adds the nullable subject, preheader and body_text fields from migration 0037 to existing tables. Production template listing failed when these columns were absent. General settings and template catalog requests load independently so a template failure does not hide all preferences. Initial settings failures display an error and retry control.
+
+
+## Signed Cloudflare asset delivery
+
+GSW-owned R2 file downloads use the asset Worker when ASSET_EDGE_URL and ASSET_EDGE_SIGNING_SECRET are configured. Authorization remains in the API; the Worker verifies a short-lived signature before reading any cache or R2 object. Avatar and template logo routes request bounded WebP variants, and image previews request width 1600 while retaining original downloads. All original asset types can use edge caching; no mailbox data is put in a public CDN cache. See services/asset-edge/README.md for expiry, invalidation, range handling and fallback behavior. Vite content-hashed assets receive immutable caching headers.

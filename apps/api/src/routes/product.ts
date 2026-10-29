@@ -52,7 +52,7 @@ export default async function productRoutes(app: FastifyInstance) {
     const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, req.user!.id)).limit(1);
     const [signature] = await db.select().from(emailSignatures).where(eq(emailSignatures.userId, req.user!.id)).limit(1);
     return {
-      general: settings?.general ?? { timezone: "America/Detroit", language: "en-US" },
+      general: settings?.general ? { ...settings.general, ...(settings.general.profileImageAssetId ? { profileImageUrl: `/product/files/${settings.general.profileImageAssetId}/content?width=128` } : {}) } : { timezone: "America/Detroit", language: "en-US" },
       compose: settings?.compose ?? { defaultFormat: "rich" },
       contacts: settings?.contacts ?? { autoCreateFromSent: true },
       ai: {
@@ -106,7 +106,7 @@ export default async function productRoutes(app: FastifyInstance) {
         nextGeneral = {
           ...nextGeneral,
           profileImageAssetId: asset.id,
-          profileImageUrl: `/product/files/${asset.id}/content`,
+          profileImageUrl: `/product/files/${asset.id}/content?width=128`,
         };
       } else {
         nextGeneral = { ...nextGeneral, profileImageAssetId: null, profileImageUrl: "", profileImagePublic: false };

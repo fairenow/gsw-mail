@@ -1,3 +1,4 @@
+import { signedAssetEdgeUrl } from "../files/edgeDelivery.js";
 import type { FastifyInstance } from "fastify";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -25,7 +26,7 @@ export async function publicAvatars(app: FastifyInstance) {
     if (!asset || !["image/png", "image/jpeg", "image/webp", "image/gif"].includes(asset.mimeType))
       throw notFound("Avatar not published");
     reply.header("cache-control", "public, max-age=60");
-    return reply.redirect(createR2PresignedUrl({ method: "GET", key: asset.r2Key, expiresSeconds: 300 }));
+    return reply.redirect(signedAssetEdgeUrl({ key: asset.r2Key, width: 128 }) ?? createR2PresignedUrl({ method: "GET", key: asset.r2Key, expiresSeconds: 300 }));
   });
 }
 

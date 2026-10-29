@@ -91,10 +91,12 @@ export default async function fileRoutes(app: FastifyInstance) {
   }));
 
   app.get<{ Params: { id: string } }>("/product/files/:id/download", async (req) =>
-    createDownloadUrl(req.user!.id, req.params.id));
+    createDownloadUrl(req.user!.id, req.params.id, Number((req.query as { width?: string }).width)));
 
   app.get<{ Params: { id: string } }>("/product/files/:id/content", async (req, reply) => {
-    const download = await createDownloadUrl(req.user!.id, req.params.id);
+    const width = Number((req.query as { width?: string }).width);
+    const download = await createDownloadUrl(req.user!.id, req.params.id, width);
+    reply.header("cache-control", "private, max-age=60");
     return reply.redirect(download.url);
   });
 

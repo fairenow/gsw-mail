@@ -44,9 +44,12 @@ export function SenderAvatar({ name, email, imageUrl, size = "normal" }: { name?
     void lookup(email).then(value => { if (mounted) setDiscovered(value); });
     return () => { mounted = false; };
   }, [email, imageUrl]);
-  const effective = imageUrl || discovered;
+  const source = imageUrl || discovered;
+  const effective = source?.startsWith("/product/files/") && source.includes("/content")
+    ? `${source.split("?")[0]}?width=128` : source;
+  useEffect(() => { setImageFailed(false); }, [effective]);
   const label = (name || email || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase();
   return <span className={`gsw-avatar ${size === "large" ? "gsw-avatar-large" : ""}`} aria-hidden="true">
-    {effective && !imageFailed ? <img src={effective} alt="" onError={() => setImageFailed(true)} /> : label}
+    {effective && !imageFailed ? <img src={effective} alt="" width={size === "large" ? 64 : 40} height={size === "large" ? 64 : 40} decoding="async" loading="lazy" onError={() => setImageFailed(true)} /> : label}
   </span>;
 }

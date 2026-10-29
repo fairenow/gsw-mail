@@ -696,7 +696,7 @@ export const api = {
     post<{ share: { id: string; scope: string; recipientEmail: string | null }; path?: string }>(`/product/files/${encodeURIComponent(assetId)}/shares`, data),
   revokeFileShare: (assetId: string, shareId: string) => request(`/product/files/${encodeURIComponent(assetId)}/shares/${encodeURIComponent(shareId)}`, { method: "DELETE" }).then(res => json<{ revoked: boolean }>(res)),
   sharedWithMe: () => get<{ files: Array<{ shareId: string; filename: string; mimeType: string; sizeBytes: number }> }>("/product/files/shared-with-me"),
-    fileDownload: (assetId: string) => get<{ assetId: string; filename: string; mimeType: string; sizeBytes: number; url: string; expiresInSeconds: number }>(`/product/files/${encodeURIComponent(assetId)}/download`),
+    fileDownload: (assetId: string, width?: number) => get<{ assetId: string; filename: string; mimeType: string; sizeBytes: number; url: string; expiresInSeconds: number }>(`/product/files/${encodeURIComponent(assetId)}/download${width ? `?width=${width}` : ""}`),
   deleteFile: (assetId: string) => request(`/product/files/${encodeURIComponent(assetId)}`, { method: "DELETE" }).then((res) => json<{ id: string; deleted: boolean }>(res)),
   uploadFile: async (file: File, options?: { source?: string; kind?: string; parentId?: string | null }) => {
     const intent = await post<FileUploadIntent>("/product/files/uploads", {

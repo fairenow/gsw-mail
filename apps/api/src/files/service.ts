@@ -1,3 +1,4 @@
+import { signedAssetEdgeUrl } from "./edgeDelivery.js";
 import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { config } from "../config.js";
@@ -206,15 +207,15 @@ export async function getAssetForUser(userId: string, assetId: string) {
   return asset;
 }
 
-export async function createDownloadUrl(userId: string, assetId: string) {
+export async function createDownloadUrl(userId: string, assetId: string, width?: number) {
   const asset = await getAssetForUser(userId, assetId);
   return {
     assetId: asset.id,
     filename: asset.filename,
     mimeType: asset.mimeType,
     sizeBytes: Number(asset.sizeBytes),
-    url: createR2PresignedUrl({ method: "GET", key: asset.r2Key, expiresSeconds: config.r2.presignTtlSeconds }),
-    expiresInSeconds: config.r2.presignTtlSeconds,
+    url: signedAssetEdgeUrl({ key: asset.r2Key, ...(asset.mimeType.startsWith("image/") && width ? { width } : {}) }) ?? createR2PresignedUrl({ method: "GET", key: asset.r2Key, expiresSeconds: config.r2.presignTtlSeconds }),
+    expiresInSeconds: process.env.ASSET_EDGE_URL && process.env.ASSET_EDGE_SIGNING_SECRET ? 600 : config.r2.presignTtlSeconds,
   };
 }
 

@@ -33,7 +33,7 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [notice, setNotice] = useState("");
   const [menuId, setMenuId] = useState<string | null>(null);
   const [shareItem, setShareItem] = useState<FileNode | null>(null);
-  const [preview, setPreview] = useState<{ name: string; url: string; kind: string } | null>(null);
+  const [preview, setPreview] = useState<{ name: string; url: string; downloadUrl?: string; kind: string } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [shareEmail, setShareEmail] = useState("");
   const [shareGrants, setShareGrants] = useState<Array<{ id: string; scope: "anyone" | "email"; recipientEmail: string | null; revokedAt: string | null }>>([]);
@@ -198,10 +198,10 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
     if (!item.assetId) return;
     setPreviewLoading(true);
     try {
-      const result = await api.fileDownload(item.assetId);
+      const result = await api.fileDownload(item.assetId, 1600);
       const url = new URL(result.url);
       if (url.protocol !== "https:" && !(url.protocol === "http:" && url.hostname === "localhost")) throw new Error("Invalid file preview URL");
-      setPreview({ name: item.name, url: url.href, kind: item.kind || "" });
+      setPreview({ name: item.name, url: url.href, downloadUrl: `/product/files/${encodeURIComponent(item.assetId)}/content`, kind: item.kind || "" });
     } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to preview this file."); }
     finally { setPreviewLoading(false); }
   };
@@ -332,13 +332,13 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
       {previewLoading && <p role="status" className="gsw-files-notice">Loading preview…</p>}
       {preview && <div role="presentation" onClick={() => setPreview(null)} style={{position:"fixed",inset:0,zIndex:2100,background:"rgba(0,0,0,.68)",display:"grid",placeItems:"center",padding:20}}>
         <section role="dialog" aria-modal="true" aria-label={`Preview ${preview.name}`} onClick={event => event.stopPropagation()} style={{width:"min(100%, 1050px)",height:"min(90vh, 900px)",background:"#fff",borderRadius:18,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,.3)"}}>
-          <header style={{display:"flex",alignItems:"center",gap:12,padding:"14px 18px",borderBottom:"1px solid #eee"}}><strong style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{preview.name}</strong><a className="gsw-secondary-btn" href={preview.url} target="_blank" rel="noopener noreferrer"><Download size={15}/> Download</a><button className="gsw-secondary-btn" onClick={() => setPreview(null)} aria-label="Close preview">Close</button></header>
+          <header style={{display:"flex",alignItems:"center",gap:12,padding:"14px 18px",borderBottom:"1px solid #eee"}}><strong style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{preview.name}</strong><a className="gsw-secondary-btn" href={preview.downloadUrl || preview.url} target="_blank" rel="noopener noreferrer"><Download size={15}/> Download</a><button className="gsw-secondary-btn" onClick={() => setPreview(null)} aria-label="Close preview">Close</button></header>
           <div style={{flex:1,minHeight:0,display:"grid",placeItems:"center",background:"#f8f7f4",overflow:"auto"}}>
-            {(/\\.(png|jpe?g|webp|gif|svg|avif)$/i.test(preview.name) || preview.kind.startsWith("image")) ? <img src={preview.url} alt={preview.name} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain"}} />
+            {(/\\.(png|jpe?g|webp|gif|svg|avif)$/i.test(preview.name) || preview.kind.startsWith("image")) ? <img src={preview.url} alt={preview.name} decoding="async" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain"}} />
             : (/\\.pdf$/i.test(preview.name) || preview.kind === "pdf" || preview.kind === "application/pdf" || /\\.(txt|csv|json|html?)$/i.test(preview.name) || preview.kind.startsWith("text/")) ? <iframe src={preview.url} title={preview.name} sandbox="allow-scripts allow-same-origin" style={{width:"100%",height:"100%",border:0,background:"#fff"}} />
             : (/\\.(mp4|webm|mov)$/i.test(preview.name) || preview.kind.startsWith("video")) ? <video controls src={preview.url} style={{maxWidth:"100%",maxHeight:"100%"}} />
             : (/\\.(mp3|wav|ogg|m4a)$/i.test(preview.name) || preview.kind.startsWith("audio")) ? <audio controls src={preview.url} />
-            : <div style={{padding:24,textAlign:"center"}}><FileText size={38}/><p>Preview is not available for this file format.</p><a href={preview.url} target="_blank" rel="noopener noreferrer">Open or download file</a></div>}
+            : <div style={{padding:24,textAlign:"center"}}><FileText size={38}/><p>Preview is not available for this file format.</p><a href={preview.downloadUrl || preview.url} target="_blank" rel="noopener noreferrer">Open or download file</a></div>}
           </div>
         </section>
       </div>}
