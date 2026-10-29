@@ -22,10 +22,10 @@ export function MessageRow({ message, active, selected, folder, onOpen, onPrefet
   const sender = message.from?.name || message.from?.email || "Unknown sender";
   const prefetch = () => { api.prefetchActiveMessage(message.engineId); onPrefetch?.(); };
   return (
-    <article className={`gsw-message-row ${message.read ? "read" : "unread"} ${active ? "open" : ""} ${selected ? "selected" : ""}`} onClick={onOpen} onPointerEnter={prefetch} onFocus={prefetch} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onOpen(); }}>
+    <article className={`gsw-message-row ${message.read ? "read" : "unread"} ${active ? "open" : ""} ${selected ? "selected" : ""}`} onClick={onOpen} onFocus={(event) => { if (event.target === event.currentTarget) prefetch(); }} tabIndex={0} onKeyDown={(event) => { if (event.target !== event.currentTarget || event.repeat) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(); } }}>
       <input className="gsw-message-select" type="checkbox" checked={selected} onChange={onSelect} onClick={(event) => event.stopPropagation()} aria-label={`Select ${message.subject || "message"}`} />
       <SenderAvatar name={message.from?.name} email={message.from?.email} />
-      <div className="gsw-message-row-content">
+      <div className="gsw-message-row-content" onPointerEnter={prefetch}>
         <div className="gsw-message-row-head"><strong>{sender}</strong><time dateTime={message.date}>{rowDate(message.date)}</time></div>
         <div className="gsw-message-row-meta">{message.subject || "(no subject)"}</div>
         <div className="gsw-message-row-preview">{message.snippet || "No preview available"}</div>
