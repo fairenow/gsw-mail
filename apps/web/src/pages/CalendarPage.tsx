@@ -83,7 +83,6 @@ export function CalendarPage({ embedded = false, active = true }: { embedded?: b
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<EventForm>(blankForm);
   const [saving, setSaving] = useState(false);
-  const [mailTemplateKey, setMailTemplateKey] = useState<"none" | "gsw_default" | "bible_reader">("none");
   const [emailEvent, setEmailEvent] = useState<CalendarEvent | null>(null);
   const [emailRecipients, setEmailRecipients] = useState<string[]>([]);
   const [emailDraft, setEmailDraft] = useState("");
@@ -96,15 +95,6 @@ export function CalendarPage({ embedded = false, active = true }: { embedded?: b
   const calendarTitle = (account?.displayName || account?.address?.split("@")[0] || "Your").replace(/^stalwart\s+/i, "").trim() || "Your";
 
   useEffect(() => { if (!embedded) configureTopBar({ search: "", searchPlaceholder: "Search mail", searchDisabled: true }); }, [configureTopBar, embedded]);
-  useEffect(() => {
-    void api.settings().then((settings) => {
-      const selected = String(settings.general.templateKey ?? "none");
-      const supportsBrandedTemplate = account?.address.toLowerCase().endsWith("@team.guidedstepswellness.com") === true;
-      if (supportsBrandedTemplate && (selected === "gsw_default" || selected === "bible_reader")) setMailTemplateKey(selected);
-      else if (supportsBrandedTemplate) setMailTemplateKey("gsw_default");
-      else setMailTemplateKey("none");
-    }).catch(() => undefined);
-  }, [account?.address]);
   useEffect(() => { void api.contacts("").then(setContactOptions).catch(() => undefined); }, []);
   useEffect(() => {
     if (!account || !selectedEvent || selectedEvent.attendees.length === 0) {
@@ -200,14 +190,14 @@ export function CalendarPage({ embedded = false, active = true }: { embedded?: b
   };
   const removeAttendee = (email: string) => setForm((current) => ({ ...current, attendees: current.attendees.filter((item) => item !== email) }));
   const eventEmailHtml = (event: CalendarEvent, mode: "invite" | "update", rsvp: CalendarRsvpLink) => {
-    const accent = mailTemplateKey === "bible_reader" ? "#b98a45" : "#e89a12";
+    const accent = "#e89a12";
     const start = new Date(event.start);
     const heading = mode === "invite" ? "You’re invited" : "Meeting update";
     const details = [
       start.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" }),
       event.allDay ? "All day" : formatEventTime(event),
     ].join(" · ");
-    const brandMark = mailTemplateKey === "none" ? `<img src="https://mail.guidedstepswellness.com/guided_steps_logo.png" alt="GSW Mail" width="44" height="44" style="display:block;width:44px;height:44px;object-fit:contain;border:0" />` : "";
+    const brandMark = `<img src="https://mail.guidedstepswellness.com/favicon.png" alt="GSW Mail" width="44" height="44" style="display:block;width:44px;height:44px;object-fit:contain;border:0" />`;
     const rsvpButtons = `<div style="margin-top:24px;padding-top:20px;border-top:1px solid #eee8dd"><div style="margin-bottom:10px;font-size:13px;font-weight:700">Will you attend?</div><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding-right:8px"><a href="${htmlEscape(rsvp.acceptedUrl)}" style="display:inline-block;padding:10px 16px;border-radius:7px;background:${accent};color:#fff;text-decoration:none;font-size:13px;font-weight:700">Yes</a></td><td style="padding-right:8px"><a href="${htmlEscape(rsvp.declinedUrl)}" style="display:inline-block;padding:10px 16px;border-radius:7px;border:1px solid #d9d1c5;color:#4b473f;text-decoration:none;font-size:13px;font-weight:700">No</a></td><td><a href="${htmlEscape(rsvp.tentativeUrl)}" style="display:inline-block;padding:10px 16px;border-radius:7px;border:1px solid #d9d1c5;color:#4b473f;text-decoration:none;font-size:13px;font-weight:700">Maybe</a></td></tr></table><div style="margin-top:10px;font-size:11px;color:#837e75">Or <a href="${htmlEscape(rsvp.pageUrl)}" style="color:#8d6b37">open the GSW RSVP page</a> to review the meeting first.</div></div>`;
     return `<div style="margin:0 auto;max-width:620px;font-family:Arial,sans-serif;color:#383631"><div style="display:flex;align-items:center;gap:12px;margin-bottom:22px">${brandMark}<div><div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:${accent};font-weight:700">${heading}</div><div style="font-size:21px;font-weight:700">${htmlEscape(event.title)}</div></div></div><div style="border:1px solid #e8e1d4;border-radius:12px;overflow:hidden"><div style="padding:22px 24px;border-top:4px solid ${accent}"><div style="font-size:14px;font-weight:700;margin-bottom:6px">When</div><div style="font-size:14px;margin-bottom:18px">${htmlEscape(details)}</div>${event.location ? `<div style="font-size:14px;font-weight:700;margin-bottom:6px">Location</div><div style="font-size:14px;margin-bottom:18px">${htmlEscape(event.location)}</div>` : ""}${event.description ? `<div style="font-size:14px;font-weight:700;margin-bottom:6px">Details</div><div style="font-size:14px;line-height:1.6;margin-bottom:18px">${htmlEscape(event.description).replaceAll("\n", "<br />")}</div>` : ""}${event.meetingLink ? `<a href="${htmlEscape(event.meetingLink)}" style="display:inline-block;padding:11px 18px;border-radius:7px;background:${accent};color:#fff;text-decoration:none;font-size:14px;font-weight:700">Join meeting</a>` : ""}${rsvpButtons}</div></div><div style="margin-top:14px;color:#77756f;font-size:12px;line-height:1.5">This invitation was sent through GSW Mail at mail.guidedstepswellness.com. The attached calendar file can also be opened in your calendar app.</div></div>`;
   };
@@ -243,7 +233,7 @@ export function CalendarPage({ embedded = false, active = true }: { embedded?: b
         subject: mode === "invite" ? `Invitation: ${event.title}` : `Meeting update: ${event.title}`,
         textBody: text,
         htmlBody: eventEmailHtml(event, mode, rsvp),
-        templateKey: mailTemplateKey,
+        templateKey: "none",
         attachments: [eventAttachment(event, account.address)],
         clientRequestId: `calendar:${event.engineId}:${mode}:${rsvp.email}:${crypto.randomUUID()}`,
       });
