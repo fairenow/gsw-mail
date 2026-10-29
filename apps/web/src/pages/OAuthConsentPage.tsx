@@ -183,10 +183,11 @@ export function OAuthConsentPage() {
         </section>
 
         <section className="gsw-consent-details">
+          <div className="gsw-consent-scope-list" role="region" aria-label="Permissions and tool access" tabIndex={0}>
           <div className="gsw-consent-access">
             <h2>{accessProfile?.mode === "admin" ? "Workspace administration permissions" : accessProfile?.mode === "mailbox" ? "Mailbox permissions" : "Identity permissions"}</h2>
             {request?.scopes.some(scope => !accessProfile?.allowedScopes.includes(scope) && !(accessProfile?.mode === "mailbox" && ["automation.read","automation.write"].includes(scope))) && <p role="status">The application also requested permissions for another account type. Those permissions are excluded from this connection.</p>}
-            <div className="gsw-consent-scope-list" role="region" aria-label="Requested access scopes" tabIndex={0}>
+            <div>
             {request?.scopes.filter(scope => accessProfile?.allowedScopes.includes(scope) || (accessProfile?.mode === "mailbox" && ["automation.read","automation.write"].includes(scope))).map((scope) => {
               const detail = describeScope(scope)!;
               const permission = accessProfile?.permissions.find(item => item.scope === scope.replace(/^automation\./,"automations."));
@@ -198,21 +199,24 @@ export function OAuthConsentPage() {
             </div>
           </div>
 
-          {needsAdminUpgrade && <p role="status">This application’s saved request is missing administration permissions. Choose Review full administration access to start a new authorization request with all administration permissions. You will review the complete tool list before approving. Nothing is granted until you approve that review.</p>}
           <details><summary>Other {accessProfile?.mode === "admin" ? "administration" : "mailbox"} permissions not requested</summary><p>These are not granted to this application. It must request them in a new authorization flow.</p>{accessProfile?.permissions.filter(permission => permission.allowed && !request?.scopes.includes(permission.scope)).map(permission => <p key={permission.scope}><strong>{permission.scope}</strong>: {permission.description}</p>)}</details>
+          </div>
+
+          {needsAdminUpgrade && <p className="gsw-consent-next-step" role="status">For full admin access, select the colored “Review all admin access” button below, then approve on the next screen.</p>}
+
 
           <div className="gsw-consent-boundary">
-            <strong>{request?.scopes.some((scope) => knownProductScopes.has(scope)) ? "This application may access only the permissions listed above for this account type." : "Only identity access is requested."}</strong>
-            <p>Access is limited to the permissions you approve and your existing GSW Mail account rights. Additional GSW capability grants, write controls and action confirmations still apply. Disconnect the app at any time under Settings → Security → Connected Apps.</p>
+            <strong>{request?.scopes.some((scope) => knownProductScopes.has(scope)) ? "Access stays within your account permissions." : "Only identity access is requested."}</strong>
+            <p>Action confirmations still apply. You can disconnect this app in Settings → Security → Connected Apps.</p>
           </div>
 
           {error && <AuthError>{error}</AuthError>}
           <div className="gsw-consent-actions">
             <button className="gsw-btn gsw-btn-quiet" disabled={busy} onClick={() => void decide(false)}>Cancel</button>
-            {needsAdminUpgrade && <button className="gsw-btn gsw-btn-quiet" disabled={busy} onClick={() => void decide(true,false)}>Continue with requested access only</button>}
-            <button className="gsw-btn gsw-btn-primary" disabled={busy || !accessProfile} onClick={() => void decide(true)}>{busy ? "Continuing…" : needsAdminUpgrade ? "Review full administration access" : "Continue"}</button>
+            {needsAdminUpgrade && <button className="gsw-btn gsw-btn-quiet" disabled={busy} onClick={() => void decide(true,false)}>Use limited access</button>}
+            <button className="gsw-btn gsw-btn-primary" disabled={busy || !accessProfile} onClick={() => void decide(true)}>{busy ? "Continuing…" : needsAdminUpgrade ? "Review all admin access" : accessProfile?.mode === "admin" ? "Approve all admin access" : "Approve access"}</button>
           </div>
-          <p className="gsw-login-hint">Only continue if you recognize this application and want to share the access listed above.</p>
+          <p className="gsw-login-hint">Approve only if you trust this application.</p>
         </section>
       </div>}
     </AuthCard>
