@@ -61,7 +61,7 @@ export function CalendarRsvpPage() {
   return <main className="gsw-rsvp-page">
     <section className="gsw-rsvp-card">
       <header className="gsw-rsvp-brand">
-        <img src="/guided_steps_logo.png" alt="GSW Mail" />
+        <img src="/favicon.png" alt="GSW Mail" />
         <div><strong>GSW Mail</strong><span>Calendar invitation</span></div>
       </header>
 
