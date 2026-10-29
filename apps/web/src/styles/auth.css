@@ -268,3 +268,13 @@
   .gsw-setup-steps { gap: 4px; }
   .gsw-setup-steps span { font-size: 10px; }
 }
+
+.gsw-session-change {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 10000;
+  padding: 16px 24px;
+  background: #fff4d8;
+  border-bottom: 1px solid #d58c00;
+  box-shadow: 0 4px 20px #0002;
+}
