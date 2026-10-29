@@ -1,3 +1,4 @@
+import { resolveMcpAccessProfile } from "../mcp/accessProfile.js";
 import { and, eq, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { conflict } from "../lib/errors.js";
@@ -65,7 +66,8 @@ export default async function accountRoutes(app: FastifyInstance) {
         inArray(organizationMemberships.role, ["owner", "admin"]),
         eq(organizationMemberships.status, "active")));
     const memberIds = new Set(memberships.map(item => item.userId));
-    return { admins: linkedUsers.filter(item => memberIds.has(item.userId)).map(item => item.authUserId) };
+    const profiles = await Promise.all(linkedUsers.filter(item => item.authUserId).map(async item => [item.authUserId!, (await resolveMcpAccessProfile(item.userId, item.authUserId!)).mode] as const));
+    return { admins: linkedUsers.filter(item => memberIds.has(item.userId)).map(item => item.authUserId), accountTypes: Object.fromEntries(profiles) };
   });
 
   app.get("/api/account/context", async (req) => {

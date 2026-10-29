@@ -39,6 +39,7 @@ function signInPath(): string {
 
 export function OAuthAccountChooserPage() {
   const clientId = useMemo(readClientId, []);
+  const [accountTypes, setAccountTypes] = useState<Record<string,string>>({});
   const [client, setClient] = useState<OAuthPublicClient | null>(null);
   const [rows, setRows] = useState<ChooserRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,15 +55,17 @@ export function OAuthAccountChooserPage() {
         return;
       }
       try {
-        const [current, publicClient, deviceSessions] = await Promise.all([
+        const [current, publicClient, deviceSessions, roles] = await Promise.all([
           getSession(),
           getOAuthPublicClient(clientId),
           listDeviceSessions(),
+          fetch("/api/account/device-session-roles", {credentials:"include"}).then(async response => response.ok ? response.json() : {accountTypes:{}}),
         ]);
         if (!active) return;
         if (!current) throw new Error("Your GSW session is no longer active. Please sign in again.");
         if (!publicClient?.client_id || publicClient.client_id !== clientId) throw new Error("This application is not registered with GSW.");
 
+        setAccountTypes(roles.accountTypes ?? {});
         const liveById = new Map<string, DeviceSession>();
         for (const item of deviceSessions) {
           if (!item?.user?.id || !item?.session?.token) continue;
@@ -152,7 +155,7 @@ export function OAuthAccountChooserPage() {
           <span className="gsw-account-choice-avatar">
             {row.image ? <img src={row.image} alt="" referrerPolicy="no-referrer" /> : initials(row.name, row.email)}
           </span>
-          <span className="gsw-account-choice-copy"><strong>{row.name || row.email}</strong><small>{row.email}</small></span>
+          <span className="gsw-account-choice-copy"><strong>{row.name || row.email}</strong><small>{row.email}</small><small>{accountTypes[row.id] === "admin" ? "Workspace administration tools" : accountTypes[row.id] === "mailbox" ? "Mailbox tools only" : row.signedIn ? "Identity access; permissions verified next" : "Sign in to verify account type"}</small></span>
           <span className="gsw-account-choice-status">{busyId === row.id ? "Continuing…" : row.signedIn ? (row.active ? "Current" : "Signed in") : "Signed out"}</span>
         </button>)}
 

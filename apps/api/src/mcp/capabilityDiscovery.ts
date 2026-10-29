@@ -14,7 +14,7 @@ export interface McpCapabilityEntry {
  * callable. Actual read authorization is still checked per invocation.
  */
 export function discoverMcpCapabilities(
-  tools: readonly AgentToolDefinition[],
+  tools: readonly Pick<AgentToolDefinition, "name" | "description" | "requiredScopes" | "risk">[],
   oauthScopes: ReadonlySet<string>,
   options: { query?: string; offset?: number; limit?: number; writeTestEnabled?: boolean } = {},
 ) {

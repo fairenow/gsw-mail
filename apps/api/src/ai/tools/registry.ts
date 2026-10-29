@@ -1,3 +1,4 @@
+import { toolWithinBoundary } from "../toolBoundary.js";
 import type { AgentExecutionContext, AgentToolDefinition, ProviderToolDefinition } from "./types.js";
 import { agentMailTools, readOnlyMailTools } from "./mailTools.js";
 import { mailComposeActions } from "./mailComposeActions.js";
@@ -35,7 +36,7 @@ export class AgentToolRegistry {
   }
 
   definitions(): AgentToolDefinition[] {
-    return [...this.tools.values()];
+    return [...this.tools.values()].filter(toolWithinBoundary);
   }
 
   search(query: string, limit = 12): AgentToolDefinition[] {
@@ -54,7 +55,7 @@ export class AgentToolRegistry {
   }
 
   providerDefinitions(include?: (tool: AgentToolDefinition) => boolean): ProviderToolDefinition[] {
-    return [...this.tools.values()].filter((tool) => include ? include(tool) : true).map((tool) => ({
+    return [...this.tools.values()].filter(toolWithinBoundary).filter((tool) => include ? include(tool) : true).map((tool) => ({
       type: "function" as const,
       function: {
         name: tool.name.replaceAll(".", "__"),
@@ -75,6 +76,8 @@ export class AgentToolRegistry {
         audit: { userId: ctx.userId, accountId: ctx.accountId, startedAt: new Date().toISOString(), completedAt: new Date().toISOString() },
       };
     }
+
+    if (!toolWithinBoundary(tool)) return {ok:false,toolCallId,error:{code:"permission_denied",message:"Tool is outside this connection's account type or OAuth permissions",retryable:false},audit:{userId:ctx.userId,accountId:ctx.accountId,startedAt:new Date().toISOString(),completedAt:new Date().toISOString()}};
 
     let parsed: unknown;
     try {

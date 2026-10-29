@@ -1,3 +1,5 @@
+import { withToolBoundary } from "../ai/toolBoundary.js";
+import { resolveMcpAccessProfile, toolAllowedForMode, scopeAllowedForMode } from "./accessProfile.js";
 import { consumeMcpPersistedApproval, resolveMcpPersistedApproval } from "./resolvePersistedApproval.js";
 import { executeAuthorizedCapability } from "../ai/authorizedCapability.js";
 import { randomUUID, createHash } from "node:crypto";
@@ -63,8 +65,13 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
     if(input.method==="ping")return wrap({});
     if(input.method==="resources/list")return wrap({resources:[]});
     if(input.method==="prompts/list")return wrap({prompts:[]});
+    const accessProfile = await resolveMcpAccessProfile(identity.userId, identity.authUserId);
+    identity.oauthScopes = new Set([...identity.oauthScopes].filter(scope => scopeAllowedForMode(accessProfile.mode, scope)));
+    const modeDefinitions = agentMailRegistry.definitions().filter(tool => toolAllowedForMode(accessProfile.mode, tool.name, tool.requiredScopes)).map(tool => tool.name.startsWith("workers.") ? {...tool,description:"Run a bounded helper within this mailbox connection's approved permissions. Workspace administration is excluded.",inputSchema:JSON.parse(JSON.stringify(tool.inputSchema, (key,value) => key === "enum" && Array.isArray(value) ? value.filter(item => item !== "admin") : value))} : tool);
+    const adminDefinitions = mcpBootstrapTools.filter(tool => tool.name.includes("admin_")).map(tool => ({ ...tool, requiredScopes: [...tool.requiredScopes], risk: tool.name === "create_admin_mailbox" ? "external" as const : "read" as const }));
     if(input.method==="tools/list"){
-      return wrap({tools:[...mcpBootstrapTools.filter(t=>(t.name!=="prepare_action" || process.env.GSW_MCP_PREPARE_ENABLED==="true") && (t.name!=="create_admin_mailbox" || process.env.GSW_MCP_ADMIN_WRITES_ENABLED==="true")),{name:"invoke_tool",description:"Universal MCP dispatcher for every GSW Mail registry tool. Use list_capabilities to discover names, required OAuth scopes and risk. All actions enforce OAuth, GSW permissions and mailbox ACL at execution. Writes require the configured owner-only test mode and a fresh UUID requestId; external actions also require confirmExternal=true.",inputSchema:{type:"object",properties:{toolName:{type:"string",description:"Registered GSW tool name, dotted or double-underscore format"},accountId:{type:"string",description:"Authorized mailbox account UUID"},arguments:{type:"object",description:"Arguments matching the selected registered tool schema",additionalProperties:true},requestId:{type:"string",format:"uuid",description:"Required for writes; unique for each intended action"},confirmExternal:{type:"boolean",description:"Required true for explicitly authorized external effects"}},required:["toolName","accountId","arguments"],additionalProperties:false}},...agentMailRegistry.definitions().map(t=>({name:t.name.replaceAll(".","__"),description:t.description+(t.risk==="external"?" CAUTION: This action can send, publish, delete or trigger external effects. Set confirmExternal=true only after reviewing the exact intended effect.":""),inputSchema:{...t.inputSchema,properties:{...(t.inputSchema.properties as Record<string,unknown> ?? {}),accountId:{type:"string",description:"GSW mailbox account UUID to operate within"},...(t.risk!=="read"?{requestId:{type:"string",format:"uuid",description:"Fresh UUID per intended action; reuse for retries to prevent duplicate execution"},...(t.risk==="external"?{confirmExternal:{type:"boolean",description:"Set true only after explicit user authorization of this external action"}}:{})}:{})},required:[...((t.inputSchema.required as string[] | undefined) ?? []),"accountId",...(t.risk!=="read"?["requestId",...(t.risk==="external"?["confirmExternal"]:[])]:[])]}}))]});
+      const advertised = [...mcpBootstrapTools.filter(t=>(t.name!=="prepare_action" || process.env.GSW_MCP_PREPARE_ENABLED==="true") && (t.name!=="create_admin_mailbox" || process.env.GSW_MCP_ADMIN_WRITES_ENABLED==="true")),{name:"invoke_tool",description:"Universal MCP dispatcher for every GSW Mail registry tool. Use list_capabilities to discover names, required OAuth scopes and risk. All actions enforce OAuth, GSW permissions and mailbox ACL at execution. Writes require the configured owner-only test mode and a fresh UUID requestId; external actions also require confirmExternal=true.",inputSchema:{type:"object",properties:{toolName:{type:"string",description:"Registered GSW tool name, dotted or double-underscore format"},accountId:{type:"string",description:"Authorized mailbox account UUID"},arguments:{type:"object",description:"Arguments matching the selected registered tool schema",additionalProperties:true},requestId:{type:"string",format:"uuid",description:"Required for writes; unique for each intended action"},confirmExternal:{type:"boolean",description:"Required true for explicitly authorized external effects"}},required:["toolName","accountId","arguments"],additionalProperties:false}},...modeDefinitions.map(t=>({name:t.name.replaceAll(".","__"),description:t.description+(t.risk==="external"?" CAUTION: This action can send, publish, delete or trigger external effects. Set confirmExternal=true only after reviewing the exact intended effect.":""),inputSchema:{...t.inputSchema,properties:{...(t.inputSchema.properties as Record<string,unknown> ?? {}),accountId:{type:"string",description:"GSW mailbox account UUID to operate within"},...(t.risk!=="read"?{requestId:{type:"string",format:"uuid",description:"Fresh UUID per intended action; reuse for retries to prevent duplicate execution"},...(t.risk==="external"?{confirmExternal:{type:"boolean",description:"Set true only after explicit user authorization of this external action"}}:{})}:{})},required:[...((t.inputSchema.required as string[] | undefined) ?? []),"accountId",...(t.risk!=="read"?["requestId",...(t.risk==="external"?["confirmExternal"]:[])]:[])]}}))];
+      return wrap({tools: advertised.filter(tool => { const definition = agentMailRegistry.definition(tool.name); const required = "requiredScopes" in tool ? tool.requiredScopes as readonly string[] : definition?.requiredScopes ?? []; return toolAllowedForMode(accessProfile.mode, tool.name, required) && required.every(scope => identity.oauthScopes.has(scope)); })});
     }
     if(input.method==="tools/call"){
       let name=typeof input.params?.name==="string"?input.params.name:"";
@@ -79,21 +86,29 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
         name=requestedName;
         params={...(nested as Record<string,unknown>),accountId:params.accountId,requestId:params.requestId,confirmExternal:params.confirmExternal};
       }
+      const invokedDefinition = agentMailRegistry.definition(name);
+      const bootstrapDefinition = mcpBootstrapTools.find(tool => tool.name === name);
+      if (!toolAllowedForMode(accessProfile.mode, name, invokedDefinition?.requiredScopes ?? bootstrapDefinition?.requiredScopes ?? [])) return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"account_type_not_allowed",accountType:accessProfile.mode,tool:name})}]});
+      if (accessProfile.mode === "mailbox" && name.replaceAll("__", ".").startsWith("workers.") && (params.worker === "admin" || (Array.isArray(params.tasks) && params.tasks.some(task => task && typeof task === "object" && (task as {worker?:unknown}).worker === "admin")))) return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"admin_worker_not_allowed_for_mailbox_connection"})}]});
+      if (name === "capabilities__search" || name === "capabilities.search") {
+        const catalog = discoverMcpCapabilities(modeDefinitions, identity.oauthScopes, {query: typeof params.query === "string" ? params.query : "", limit: typeof params.limit === "number" ? params.limit : 12, writeTestEnabled});
+        return wrap({content:[{type:"text",text:JSON.stringify({ok:true,data:{query:params.query,tools:catalog.capabilities}})}]});
+      }
       if(name==="get_current_user") {
-        return wrap({content:[{type:"text",text:JSON.stringify({userId:identity.userId})}]});
+        return wrap({content:[{type:"text",text:JSON.stringify({userId:identity.userId,accountType:accessProfile.mode,allowedScopes:accessProfile.allowedScopes,grantedScopes:[...identity.oauthScopes]})}]});
       }
       if(name==="list_capabilities") {
         try {
           const query=typeof params.query==="string"?params.query:undefined;
           const offset=typeof params.offset==="number"?params.offset:undefined;
           const limit=typeof params.limit==="number"?params.limit:undefined;
-          const catalog=discoverMcpCapabilities(agentMailRegistry.definitions(),identity.oauthScopes,{
+          const catalog=discoverMcpCapabilities(accessProfile.mode === "admin" ? adminDefinitions : modeDefinitions,identity.oauthScopes,{
             ...(query!==undefined?{query}:{}),
             ...(offset!==undefined?{offset}:{}),
             ...(limit!==undefined?{limit}:{}),
-            writeTestEnabled,
+            writeTestEnabled: accessProfile.mode === "admin" ? process.env.GSW_MCP_ADMIN_WRITES_ENABLED === "true" && writeTestEnabled : writeTestEnabled,
           });
-          return wrap({content:[{type:"text",text:JSON.stringify(catalog)}]});
+          return wrap({content:[{type:"text",text:JSON.stringify({...catalog,accountType:accessProfile.mode,note:accessProfile.mode === "admin" ? "Workspace administration only. Mailbox messages and mailbox tools are not included. Administrative writes require the separate server write gate and explicit confirmation." : catalog.note})}]});
         } catch {
           return wrap({isError:true,content:[{type:"text",text:"Invalid capability discovery parameters"}]});
         }
@@ -337,7 +352,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
           const writeContext=createMcpExecutionContext(identity,accountId,{
             toolName:policy.tool.name,reservedActionKey:decision.key,
           });
-          const result=await executeAuthorizedCapability({toolName:name,argumentsValue:toolArguments,context:writeContext});
+          const result=await withToolBoundary(tool => toolAllowedForMode(accessProfile.mode,tool.name,tool.requiredScopes) && tool.requiredScopes.every(scope => identity.oauthScopes.has(scope)), () => executeAuthorizedCapability({toolName:name,argumentsValue:toolArguments,context:writeContext}));
           if(result.ok) {
             // Store only a completion marker; raw mail/file/contact results can be sensitive.
             await completeAiIdempotency(decision.key,{completed:true,fingerprint:actionFingerprintId});
@@ -350,7 +365,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
           return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"write_execution_failed_check_action_status_before_retrying"})}]});
         }
       }
-      const result=await executeAuthorizedCapability({toolName:name,argumentsValue:toolArguments,context});
+      const result=await withToolBoundary(tool => toolAllowedForMode(accessProfile.mode,tool.name,tool.requiredScopes) && tool.requiredScopes.every(scope => identity.oauthScopes.has(scope)), () => executeAuthorizedCapability({toolName:name,argumentsValue:toolArguments,context}));
       return wrap({isError:!result.ok,content:[{type:"text",text:JSON.stringify(result.ok?result.data:result.error).slice(0,50000)}]});
     }
     return reply.code(200).send({jsonrpc:"2.0",id:input.id??null,error:{code:-32601,message:"Method not found"}});

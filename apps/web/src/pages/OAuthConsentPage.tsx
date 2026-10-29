@@ -83,6 +83,7 @@ function initials(name: string | undefined, email: string): string {
 
 export function OAuthConsentPage() {
   const request = useMemo(readConsentRequest, []);
+  const [accessProfile, setAccessProfile] = useState<{ mode: "admin" | "mailbox" | "identity"; allowedScopes: string[]; permissions: {scope:string;description:string;allowed:boolean;group:string;tools:{name:string;description:string;requiredScopes:string[];risk:string}[]}[] } | null>(null);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [client, setClient] = useState<OAuthPublicClient | null>(null);
   const [loading, setLoading] = useState(true);
@@ -104,6 +105,11 @@ export function OAuthConsentPage() {
         if (!publicClient?.client_id || publicClient.client_id !== request.clientId) {
           throw new Error("This application is not registered with GSW.");
         }
+        const profileResponse = await fetch("/product/mcp/access-profile", {credentials:"include"});
+        if (!profileResponse.ok) throw new Error("Could not verify this account's MCP permissions.");
+        const profile = await profileResponse.json();
+        if (!active) return;
+        setAccessProfile(profile);
         setSession(current);
         setClient(publicClient);
       } catch (err) {
@@ -117,21 +123,22 @@ export function OAuthConsentPage() {
   }, [request]);
 
   const decide = async (accept: boolean) => {
-    if (!request || !client || !session) return;
+    if (!request || !client || !session || !accessProfile) return;
+    const acceptedScopes = request.scopes.filter(scope => accessProfile.allowedScopes.includes(scope) || (accessProfile.mode === "mailbox" && ["automation.read", "automation.write"].includes(scope)));
     setBusy(true);
     setError("");
     try {
       // Mailbox credential brokerage is separate from OAuth consent.
       // Failure to provision a mailbox credential must not reject requested
       // OAuth scopes. Mail operations still fail closed at execution.
-      if (accept && request.scopes.some((scope) => scope.startsWith("mail."))) {
+      if (accept && accessProfile.mode === "mailbox" && acceptedScopes.some((scope) => /^(mail|calendar)\./.test(scope))) {
         try {
           await establishMcpMailboxCredentials();
         } catch {
           // An unavailable first-party mailbox credential is not consent denial.
         }
       }
-      await submitOAuthConsent(accept, accept ? request.acceptedScope : undefined);
+      await submitOAuthConsent(accept, accept ? acceptedScopes.join(" ") : undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not complete this authorization request.");
       setBusy(false);
@@ -154,7 +161,7 @@ export function OAuthConsentPage() {
           <BrandMark size={64} className="gsw-intro-logo" />
           <p className="gsw-setup-kicker">GSW Account · Authorization</p>
           <h1 className="gsw-login-title">{client?.client_name || "An application"} wants to use your GSW Account</h1>
-          <p className="gsw-login-sub">Review what this application is asking GSW to share.</p>
+          <p className="gsw-login-sub">{accessProfile?.mode === "admin" ? "Workspace administration connection. Mailbox messages, drafts and sending tools are excluded." : accessProfile?.mode === "mailbox" ? "Mailbox connection. Workspace administration tools are excluded, even if this mailbox has a legacy owner role." : "Identity connection only. No workspace or mailbox tools are available."}</p>
 
           <div className="gsw-consent-account">
             <div className="gsw-consent-avatar" aria-hidden="true">
@@ -170,27 +177,31 @@ export function OAuthConsentPage() {
 
         <section className="gsw-consent-details">
           <div className="gsw-consent-access">
-            <h2>Requested access</h2>
+            <h2>{accessProfile?.mode === "admin" ? "Workspace administration permissions" : accessProfile?.mode === "mailbox" ? "Mailbox permissions" : "Identity permissions"}</h2>
+            {request?.scopes.some(scope => !accessProfile?.allowedScopes.includes(scope) && !(accessProfile?.mode === "mailbox" && ["automation.read","automation.write"].includes(scope))) && <p role="status">The application also requested permissions for another account type. Those permissions are excluded from this connection.</p>}
             <div className="gsw-consent-scope-list" role="region" aria-label="Requested access scopes" tabIndex={0}>
-            {request?.scopes.map((scope) => {
+            {request?.scopes.filter(scope => accessProfile?.allowedScopes.includes(scope) || (accessProfile?.mode === "mailbox" && ["automation.read","automation.write"].includes(scope))).map((scope) => {
               const detail = describeScope(scope)!;
+              const permission = accessProfile?.permissions.find(item => item.scope === scope.replace(/^automation\./,"automations."));
               return <div className="gsw-consent-scope" key={scope}>
                 <ShieldCheck size={20} aria-hidden="true" />
-                <div><strong>{detail.title}</strong><p>{detail.description}</p></div>
+                <div><strong>{permission ? scope : detail.title}</strong><p>{permission?.description ?? detail.description}</p>{permission && <details><summary>Tools requiring this permission ({permission.tools.length})</summary>{permission.tools.length ? <ul>{permission.tools.map(tool => <li key={tool.name}><strong>{tool.name}</strong>: {tool.description}<br />Required permissions: {tool.requiredScopes.join(", ")}{tool.risk !== "read" ? " · Changes data or has external effects; execution approvals still apply." : ""}</li>)}</ul> : <p>No MCP tools are currently exposed for this permission.</p>}</details>}</div>
               </div>;
             })}
             </div>
           </div>
 
+          <details><summary>Other {accessProfile?.mode === "admin" ? "administration" : "mailbox"} permissions not requested</summary><p>These are not granted to this application. It must request them in a new authorization flow.</p>{accessProfile?.permissions.filter(permission => permission.allowed && !request?.scopes.includes(permission.scope)).map(permission => <p key={permission.scope}><strong>{permission.scope}</strong>: {permission.description}</p>)}</details>
+
           <div className="gsw-consent-boundary">
-            <strong>{request?.scopes.some((scope) => knownProductScopes.has(scope)) ? "This application may access the GSW Mail features listed above." : "Only identity access is requested."}</strong>
-            <p>Access is limited to the permissions you approve and your existing GSW Mail account rights. Disconnect the app at any time under Settings → Security → Connected Apps.</p>
+            <strong>{request?.scopes.some((scope) => knownProductScopes.has(scope)) ? "This application may access only the permissions listed above for this account type." : "Only identity access is requested."}</strong>
+            <p>Access is limited to the permissions you approve and your existing GSW Mail account rights. Additional GSW capability grants, write controls and action confirmations still apply. Disconnect the app at any time under Settings → Security → Connected Apps.</p>
           </div>
 
           {error && <AuthError>{error}</AuthError>}
           <div className="gsw-consent-actions">
             <button className="gsw-btn gsw-btn-quiet" disabled={busy} onClick={() => void decide(false)}>Cancel</button>
-            <button className="gsw-btn gsw-btn-primary" disabled={busy} onClick={() => void decide(true)}>{busy ? "Continuing…" : "Continue"}</button>
+            <button className="gsw-btn gsw-btn-primary" disabled={busy || !accessProfile} onClick={() => void decide(true)}>{busy ? "Continuing…" : "Continue"}</button>
           </div>
           <p className="gsw-login-hint">Only continue if you recognize this application and want to share the access listed above.</p>
         </section>

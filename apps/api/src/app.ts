@@ -1,3 +1,9 @@
+import mcpAccessProfile from "./routes/mcpAccessProfile.js";
+import { resolveMcpAccessProfile, scopeAllowedForMode } from "./mcp/accessProfile.js";
+import { fromNodeHeaders } from "better-auth/node";
+import { db } from "./db/client.js";
+import { users } from "./db/schema.js";
+import { eq } from "drizzle-orm";
 import adminDeletion from "./routes/adminDeletion.js";
 import cors from "@fastify/cors";
 import formbody from "@fastify/formbody";
@@ -65,6 +71,7 @@ export function buildApp() {
   app.register(formbody);
   app.register(mcpProtectedResourceMetadata);
   app.register(mcpRoutes);
+  app.register(mcpAccessProfile);
   const metadataResponse = async (handler: (request: Request) => Promise<Response>, req: { url: string; headers: Record<string, string | string[] | undefined> }, reply: { code: (status: number) => { header: (name: string, value: string) => unknown; send: (body: Buffer) => unknown } }) => {
     const response = await handler(new Request(`${config.auth.baseUrl}${req.url}`, { headers: req.headers as Record<string, string> }));
     const target = reply.code(response.status);
@@ -74,6 +81,16 @@ export function buildApp() {
   app.get("/api/auth/.well-known/openid-configuration", async (req, reply) => metadataResponse(oauthProviderOpenIdConfigMetadata(betterAuth), req, reply));
   app.get("/api/auth/.well-known/oauth-authorization-server", async (req, reply) => metadataResponse(oauthProviderAuthServerMetadata(betterAuth), req, reply));
   app.all("/api/auth/*", async (req, reply) => {
+    if (req.method === "POST" && req.url.split("?")[0] === "/api/auth/oauth2/consent" && [true, "true"].includes((req.body as {accept?:boolean|string})?.accept ?? false)) {
+      const consent = req.body as {scope?:string};
+      if (typeof consent.scope !== "string" || !consent.scope.trim()) return reply.code(400).send({error:"explicit_consent_scopes_required"});
+      const session = await betterAuth.api.getSession({headers:fromNodeHeaders(req.headers),query:{disableCookieCache:true}});
+      if (!session) return reply.code(401).send({error:"session_required"});
+      const [user] = await db.select({id:users.id}).from(users).where(eq(users.authUserId,session.user.id)).limit(1);
+      if (!user) return reply.code(403).send({error:"account_not_linked"});
+      const profile = await resolveMcpAccessProfile(user.id,session.user.id);
+      if (consent.scope.trim().split(/\s+/).some(scope => !scopeAllowedForMode(profile.mode,scope))) return reply.code(403).send({error:"scope_not_allowed_for_account_type",accountType:profile.mode});
+    }
     const body = betterAuthBody(req);
     const authorizeUrl = req.method === "GET"
       ? requireFreshExternalMcpConsent(`${config.auth.baseUrl}${req.url}`, new Set(firstPartyStalwartClientIds()))
