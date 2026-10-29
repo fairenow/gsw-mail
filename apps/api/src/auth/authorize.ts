@@ -40,6 +40,13 @@ interface CachedAccessibleAccount {
 
 const permissionCache = new Map<string, CachedAccessibleAccount>();
 const permissionInFlight = new Map<string, Promise<AccessibleAccount>>();
+let permissionCacheEpoch = 0;
+export function invalidateAccountPermissions(): void {
+  permissionCacheEpoch++;
+  permissionCache.clear();
+  permissionInFlight.clear();
+}
+
 const PERMISSION_CACHE_TTL_MS = 60_000;
 
 const permissionCacheKey = (userId: string, accountId: string) => `${userId}:${accountId}`;
@@ -148,6 +155,7 @@ export async function requireAccountPermission(
   accountId: string,
   permission: AccountPermission,
 ): Promise<AccessibleAccount> {
+  const epoch = permissionCacheEpoch;
   const key = permissionCacheKey(userId, accountId);
   const cached = permissionCache.get(key);
   let account: AccessibleAccount;
@@ -160,12 +168,13 @@ export async function requireAccountPermission(
     if (!existing) permissionInFlight.set(key, pending);
     try {
       account = await pending;
-      permissionCache.set(key, { account, expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS });
+      if (epoch === permissionCacheEpoch) permissionCache.set(key, { account, expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS });
       trimPermissionCache();
     } finally {
       if (permissionInFlight.get(key) === pending) permissionInFlight.delete(key);
     }
   }
+  if (account.status === "disabled") throw forbidden("mailbox is disabled");
   if (!account.permissions.includes(permission)) throw forbidden();
   return account;
 }

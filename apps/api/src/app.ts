@@ -1,3 +1,4 @@
+import adminDeletion from "./routes/adminDeletion.js";
 import cors from "@fastify/cors";
 import formbody from "@fastify/formbody";
 import rateLimit from "@fastify/rate-limit";
@@ -132,6 +133,7 @@ export function buildApp() {
   app.register(send);
   app.register(sends);
   app.register(drafts);
+  app.register(adminDeletion);
   app.register(admin);
   app.register(domainAdmin);
   app.register(files);

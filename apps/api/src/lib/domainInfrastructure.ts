@@ -69,7 +69,7 @@ function stalwartMethodError(methodResponses: any[]): string | null {
   return null;
 }
 
-async function stalwartCall(methodCalls: unknown[]): Promise<any[]> {
+export async function stalwartCall(methodCalls: unknown[]): Promise<any[]> {
   const endpoint = await managementUrl();
   const response = await fetch(endpoint, {
     method: "POST",

@@ -36,6 +36,11 @@ export function ControlCenterPage() {
   const [admin, setAdmin] = useState<AdminSummary | null>(null);
   const [adminError, setAdminError] = useState("");
   const [selectedDomainId, setSelectedDomainId] = useState("");
+  const [mailboxDomainFilter, setMailboxDomainFilter] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<{ type: "mailboxes" | "users"; id: string; label: string } | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [section, setSection] = useState<ControlSection>(() => sectionFromHash());
   const [setupMailbox, setSetupMailbox] = useState<AccountContext["managedMailboxes"][number] | null>(null);
   const [setupAction, setSetupAction] = useState<"setup" | "reset">("setup");
@@ -61,10 +66,11 @@ export function ControlCenterPage() {
   }, [workspace?.id]);
 
   const selectedDomain = admin?.domains.find((domain) => domain.id === selectedDomainId) ?? admin?.domains[0];
-  // Workspace admins manage mailbox metadata independently of their own mailbox grants.
-  // Filter by the domain ID represented in the authoritative workspace inventory.
-  const filteredMailboxes = (admin?.mailboxes ?? [])
-    .filter((mailbox) => selectedDomain ? mailbox.domainId === selectedDomain.id : false);
+  const filteredMailboxes = (admin?.mailboxes ?? []).filter(mailbox => !mailboxDomainFilter || mailbox.domainId === mailboxDomainFilter);
+  const filterDomainName = admin?.domains.find(domain => domain.id === mailboxDomainFilter)?.name;
+  const filteredUsers = (admin?.users ?? []).filter(user => !mailboxDomainFilter || user.email.toLowerCase().endsWith(`@${filterDomainName?.toLowerCase()}`) || user.mailboxAccess.some(access => filteredMailboxes.some(mailbox => mailbox.id === access.accountId)));
+
+
 
   const managedDomains = useMemo(() => {
     if (admin?.domains.length) return admin.domains.map((domain) => domain.name);
@@ -85,6 +91,25 @@ export function ControlCenterPage() {
   const refreshControlCenter = async () => {
     setContext(await getAccountContext());
     await reloadAdmin().catch(() => undefined);
+  };
+
+  const requestDelete = (target: { type: "mailboxes" | "users"; id: string; label: string }) => {
+    setDeleteTarget(target); setDeleteConfirmation(""); setDeleteError("");
+  };
+  const confirmDelete = async () => {
+    if (!deleteTarget || !workspace || deleteBusy || deleteConfirmation !== deleteTarget.label) return;
+    setDeleteBusy(true); setDeleteError("");
+    try {
+      const response = await fetch(`/admin/${deleteTarget.type}/${encodeURIComponent(deleteTarget.id)}`, {
+        method: "DELETE", credentials: "include", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ organizationId: workspace.id, confirmation: deleteConfirmation }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Deletion failed");
+      setDeleteTarget(null);
+      await refreshControlCenter();
+    } catch (error) { setDeleteError(error instanceof Error ? error.message : "Deletion failed"); }
+    finally { setDeleteBusy(false); }
   };
 
   const startMailboxSetup = async (mailbox: AccountContext["managedMailboxes"][number]) => {
@@ -148,14 +173,18 @@ export function ControlCenterPage() {
       {section === "mailboxes" && <section className="gsw-control-section">
         <div className="gsw-control-section-head"><div><p className="gsw-setup-kicker">Mailboxes</p><h3>Mailbox administration</h3><p>Create mailboxes on verified domains. Workspace owners/admins manage them but do not become mailbox identities themselves.</p></div></div>
         {workspace?.id && admin && <MailboxCreatePanel organizationId={workspace.id} domains={admin.domains} isFirstMailbox={context.managedMailboxes.length === 0} selectedDomainId={selectedDomain?.id ?? ""} onDomainChange={setSelectedDomainId} onCreated={refreshControlCenter} />}
+        <label className="gsw-auth-field">Filter mailboxes by domain<select value={mailboxDomainFilter} onChange={event => setMailboxDomainFilter(event.target.value)}><option value="">All domains</option>{admin?.domains.map(domain => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></label>
+        <p>{filteredMailboxes.length} mailbox{filteredMailboxes.length === 1 ? "" : "es"}</p>
         <div className="gsw-admin-list">
-          {filteredMailboxes.length ? filteredMailboxes.map((mailbox) => { const details = mailbox; return <article className="gsw-admin-list-row" key={mailbox.id}><div className="gsw-admin-primary"><strong>{mailbox.address}</strong><span>{mailbox.displayName ?? "Mailbox"}</span></div><div className="gsw-admin-meta"><span className={`gsw-status-pill tone-${statusTone(mailbox.authSetupStatus)}`}>{mailbox.authSetupStatus === "ready" ? "Login ready" : "Setup required"}</span><small>{details?.accessCount ?? 0} user{(details?.accessCount ?? 0) === 1 ? "" : "s"} with access</small>{details ? <small>{formatBytes(details.usedBytes)} used{details.quotaBytes ? ` of ${formatBytes(details.quotaBytes)}` : ""}</small> : null}</div><button className="gsw-btn gsw-btn-quiet" disabled={setupBusy} onClick={() => void startMailboxSetup({ ...mailbox, workspaceId: workspace!.id, authUserId: null })}>{mailbox.authSetupStatus === "ready" ? "Reset login" : "Set up login"}</button></article>; }) : <div className="gsw-control-empty">No mailboxes for the selected domain. Create one above after DNS verification.</div>}
+          {filteredMailboxes.length ? filteredMailboxes.map((mailbox) => { const details = mailbox; return <article className="gsw-admin-list-row" key={mailbox.id}><div className="gsw-admin-primary"><strong>{mailbox.address}</strong><span>{mailbox.displayName ?? "Mailbox"}</span></div><div className="gsw-admin-meta"><span className={`gsw-status-pill tone-${statusTone(mailbox.status === "disabled" ? "disabled" : mailbox.authSetupStatus)}`}>{mailbox.status === "disabled" ? "Disabled" : mailbox.authSetupStatus === "ready" ? "Login ready" : "Setup required"}</span><small>{details?.accessCount ?? 0} user{(details?.accessCount ?? 0) === 1 ? "" : "s"} with access</small>{details ? <small>{formatBytes(details.usedBytes)} used{details.quotaBytes ? ` of ${formatBytes(details.quotaBytes)}` : ""}</small> : null}</div><button className="gsw-btn gsw-btn-quiet" disabled={setupBusy} onClick={() => void startMailboxSetup({ ...mailbox, workspaceId: workspace!.id, authUserId: null })}>{mailbox.authSetupStatus === "ready" ? "Reset login" : "Set up login"}</button><button className="gsw-btn gsw-btn-ghost" disabled={deleteBusy} onClick={() => requestDelete({ type: "mailboxes", id: mailbox.id, label: mailbox.address })}>Delete mailbox</button></article>; }) : <div className="gsw-control-empty">No mailboxes match this view. Create one above after DNS verification.</div>}
         </div>
       </section>}
 
       {section === "users" && <section className="gsw-control-section">
         <div className="gsw-control-section-head"><div><p className="gsw-setup-kicker">Users</p><h3>People & mailbox access</h3><p>Admins are workspace identities; mailbox identities are created separately from verified-domain addresses.</p></div></div>
-        {admin ? <div className="gsw-user-grid">{admin.users.map((user) => <article className="gsw-user-card" key={user.membershipId}><div className="gsw-control-row-head"><div><h4>{user.name || user.email}</h4><p>{user.authEmail || user.email}</p></div><span className={`gsw-role-pill role-${user.role}`}>{humanStatus(user.role)}</span></div><div className="gsw-user-facts"><span><strong>Status</strong>{humanStatus(user.membershipStatus)}</span><span><strong>Verified</strong>{user.authEmailVerified || user.emailVerified ? "Yes" : "No"}</span><span><strong>Last login</strong>{formatDate(user.lastLoginAt)}</span></div><div className="gsw-access-block"><strong>Mailbox access</strong>{user.mailboxAccess.length ? user.mailboxAccess.map((access) => <div key={`${user.userId}-${access.accountId}`}><span>{access.address}</span><small>{humanStatus(access.role)}</small></div>) : <p>No mailbox access assigned.</p>}</div></article>)}</div> : <div className="gsw-control-empty">Loading workspace users…</div>}
+        <label className="gsw-auth-field">Filter users by domain<select value={mailboxDomainFilter} onChange={event => setMailboxDomainFilter(event.target.value)}><option value="">All domains</option>{admin?.domains.map(domain => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></label>
+        <p>{filteredUsers.length} user{filteredUsers.length === 1 ? "" : "s"}</p>
+        {admin ? <div className="gsw-user-grid">{filteredUsers.map((user) => <article className="gsw-user-card" key={user.membershipId}><div className="gsw-control-row-head"><div><h4>{user.name || user.email}</h4><p>{user.authEmail || user.email}</p></div><span className={`gsw-role-pill role-${user.role}`}>{humanStatus(user.role)}</span></div><div className="gsw-user-facts"><span><strong>Status</strong>{humanStatus(user.membershipStatus)}</span><span><strong>Verified</strong>{user.authEmailVerified || user.emailVerified ? "Yes" : "No"}</span><span><strong>Last login</strong>{formatDate(user.lastLoginAt)}</span></div><div className="gsw-access-block"><strong>Mailbox access</strong>{user.mailboxAccess.length ? user.mailboxAccess.map((access) => <div key={`${user.userId}-${access.accountId}`}><span>{access.address}</span><small>{humanStatus(access.role)}</small></div>) : <p>No mailbox access assigned.</p>}</div>{user.role !== "owner" && <button className="gsw-btn gsw-btn-ghost" disabled={deleteBusy} onClick={() => requestDelete({ type: "users", id: user.userId, label: user.email })}>Delete user from workspace</button>}</article>)}</div> : <div className="gsw-control-empty">Loading workspace users…</div>}
       </section>}
 
       {section === "delivery" && <section className="gsw-control-section">
@@ -178,6 +207,7 @@ export function ControlCenterPage() {
         <div className="gsw-audit-card"><div className="gsw-control-row-head"><div><h4>Recent security & admin activity</h4><p>Most recent workspace audit events.</p></div></div>{admin?.recentAudit.length ? admin.recentAudit.map((event) => <div className="gsw-audit-row" key={event.id}><div><strong>{humanStatus(event.action)}</strong><span>{humanStatus(event.resourceType)}{event.resourceId ? ` · ${event.resourceId.slice(0, 8)}` : ""}</span></div><time>{formatDate(event.createdAt)}</time></div>) : <p className="gsw-control-note">No recent audit events are available yet.</p>}</div>
       </section>}
 
+      {deleteTarget && <div className="gsw-modal-backdrop"><div className="gsw-control-modal" role="dialog" aria-modal="true" aria-labelledby="delete-admin-title"><h3 id="delete-admin-title">Delete {deleteTarget.type === "mailboxes" ? "mailbox" : "workspace user"}</h3><p>{deleteTarget.type === "mailboxes" ? "This deletes the mailbox on the mail server, including its messages, and removes its app records and access grants. Mail server retention settings may retain an archive." : "This removes the user and their mailbox access from this workspace. Delete or reassign their owned mailboxes first. Membership in other workspaces is preserved."}</p><label className="gsw-auth-field">Type {deleteTarget.label} to confirm<input autoFocus value={deleteConfirmation} onChange={event => setDeleteConfirmation(event.target.value)} disabled={deleteBusy} /></label>{deleteError && <p role="alert">{deleteError}</p>}<div className="gsw-control-modal-actions"><button className="gsw-btn gsw-btn-primary" disabled={deleteBusy || deleteConfirmation !== deleteTarget.label} onClick={() => void confirmDelete()}>{deleteBusy ? "Deleting…" : "Delete"}</button><button className="gsw-btn gsw-btn-ghost" disabled={deleteBusy} onClick={() => setDeleteTarget(null)}>Cancel</button></div></div></div>}
       {setupMessage && <p className="gsw-control-message">{setupMessage}</p>}
       {setupMailbox && <div className="gsw-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !setupBusy) setSetupMailbox(null); }}><div className="gsw-control-modal" role="dialog" aria-modal="true" aria-labelledby="mailbox-setup-title"><p className="gsw-setup-kicker">Admin verified mailbox access</p><h3 id="mailbox-setup-title">{setupAction === "reset" ? "Reset" : "Set up"} {setupMailbox.address}</h3><p className="gsw-login-hint">Enter the 6-digit code sent to the workspace admin email, then choose the password this mailbox will use to sign in.</p><label className="gsw-auth-field">Verification code<input autoComplete="one-time-code" inputMode="numeric" maxLength={6} value={setupCode} onChange={(event) => setSetupCode(event.target.value.replace(/\D/g, "").slice(0, 6))} /></label><label className="gsw-auth-field">New password<input autoComplete="new-password" type="password" value={setupPassword} onChange={(event) => setSetupPassword(event.target.value)} /></label><label className="gsw-auth-field">Confirm password<input autoComplete="new-password" type="password" value={setupConfirm} onChange={(event) => setSetupConfirm(event.target.value)} /></label><div className="gsw-control-modal-actions"><button className="gsw-btn gsw-btn-primary" disabled={setupBusy} onClick={() => void finishMailboxSetup()}>{setupBusy ? "Saving…" : setupAction === "reset" ? "Reset mailbox login" : "Finish setup"}</button><button className="gsw-btn gsw-btn-ghost" disabled={setupBusy} onClick={() => void startMailboxSetup(setupMailbox)}>Send a new code</button><button className="gsw-btn gsw-btn-ghost" disabled={setupBusy} onClick={() => setSetupMailbox(null)}>Cancel</button></div></div></div>}
     </section>

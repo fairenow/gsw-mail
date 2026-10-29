@@ -135,3 +135,10 @@ The template startup schema repair adds the nullable subject, preheader and body
 ## Signed Cloudflare asset delivery
 
 GSW-owned R2 file downloads use the asset Worker when ASSET_EDGE_URL and ASSET_EDGE_SIGNING_SECRET are configured. Authorization remains in the API; the Worker verifies a short-lived signature before reading any cache or R2 object. Avatar and template logo routes request bounded WebP variants, and image previews request width 1600 while retaining original downloads. All original asset types can use edge caching; no mailbox data is put in a public CDN cache. See services/asset-edge/README.md for expiry, invalidation, range handling and fallback behavior. Vite content-hashed assets receive immutable caching headers.
+
+
+## Workspace mailbox and user deletion
+
+The Control Center mailbox list defaults to all domains and has a domain filter independent of the create-mailbox domain selection. Admin deletion requires an exact typed address/email confirmation and validates workspace authorization on the server. Workspace owners and the current actor are protected. Removing a workspace user removes that workspace membership and mailbox grants only; owned mailboxes must first be removed or reassigned, and memberships elsewhere are preserved.
+
+Mailbox deletion first disables the app mailbox, verifies the exact local part, domain and User account type through the management engine, and requires Stalwart destruction confirmation before removing the mailbox and outbound app records. Server retention may preserve an archive. If server deletion fails, the mailbox stays disabled and can be retried; the address record is not silently removed. Deleting an isolated mailbox login also removes its auth identity unless it still has other mailbox grants or workspace administration roles. No live mailbox/user deletions are performed as deployment tests.
