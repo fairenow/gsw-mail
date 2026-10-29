@@ -125,13 +125,13 @@ export function OAuthConsentPage() {
 
   const needsAdminUpgrade = accessProfile?.mode === "admin" && accessProfile.allowedScopes.some(scope => !scopeDescriptions[scope] && !request?.scopes.includes(scope));
 
-  const decide = async (accept: boolean) => {
+  const decide = async (accept: boolean, upgradeAdmin = true) => {
     if (!request || !client || !session || !accessProfile) return;
     const acceptedScopes = request.scopes.filter(scope => accessProfile.allowedScopes.includes(scope) || (accessProfile.mode === "mailbox" && ["automation.read", "automation.write"].includes(scope)));
     setBusy(true);
     setError("");
     try {
-      if (accept && needsAdminUpgrade) {
+      if (accept && needsAdminUpgrade && upgradeAdmin) {
         window.location.assign(adminOAuthUpgradeUrl(window.location.search,accessProfile.allowedScopes));
         return;
       }
@@ -209,6 +209,7 @@ export function OAuthConsentPage() {
           {error && <AuthError>{error}</AuthError>}
           <div className="gsw-consent-actions">
             <button className="gsw-btn gsw-btn-quiet" disabled={busy} onClick={() => void decide(false)}>Cancel</button>
+            {needsAdminUpgrade && <button className="gsw-btn gsw-btn-quiet" disabled={busy} onClick={() => void decide(true,false)}>Continue with requested access only</button>}
             <button className="gsw-btn gsw-btn-primary" disabled={busy || !accessProfile} onClick={() => void decide(true)}>{busy ? "Continuing…" : needsAdminUpgrade ? "Review full administration access" : "Continue"}</button>
           </div>
           <p className="gsw-login-hint">Only continue if you recognize this application and want to share the access listed above.</p>
