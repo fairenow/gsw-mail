@@ -1,3 +1,4 @@
+import { adminOAuthUpgradeUrl } from "../adminOAuthUpgrade";
 import { useEffect, useMemo, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { AuthCard } from "../components/auth/AuthCard";
@@ -122,12 +123,18 @@ export function OAuthConsentPage() {
     return () => { active = false; };
   }, [request]);
 
+  const needsAdminUpgrade = accessProfile?.mode === "admin" && accessProfile.allowedScopes.some(scope => !scopeDescriptions[scope] && !request?.scopes.includes(scope));
+
   const decide = async (accept: boolean) => {
     if (!request || !client || !session || !accessProfile) return;
     const acceptedScopes = request.scopes.filter(scope => accessProfile.allowedScopes.includes(scope) || (accessProfile.mode === "mailbox" && ["automation.read", "automation.write"].includes(scope)));
     setBusy(true);
     setError("");
     try {
+      if (accept && needsAdminUpgrade) {
+        window.location.assign(adminOAuthUpgradeUrl(window.location.search,accessProfile.allowedScopes));
+        return;
+      }
       // Mailbox credential brokerage is separate from OAuth consent.
       // Failure to provision a mailbox credential must not reject requested
       // OAuth scopes. Mail operations still fail closed at execution.
@@ -191,6 +198,7 @@ export function OAuthConsentPage() {
             </div>
           </div>
 
+          {needsAdminUpgrade && <p role="status">This application’s saved request is missing administration permissions. Choose Review full administration access to start a new authorization request with all administration permissions. You will review the complete tool list before approving. Nothing is granted until you approve that review.</p>}
           <details><summary>Other {accessProfile?.mode === "admin" ? "administration" : "mailbox"} permissions not requested</summary><p>These are not granted to this application. It must request them in a new authorization flow.</p>{accessProfile?.permissions.filter(permission => permission.allowed && !request?.scopes.includes(permission.scope)).map(permission => <p key={permission.scope}><strong>{permission.scope}</strong>: {permission.description}</p>)}</details>
 
           <div className="gsw-consent-boundary">
@@ -201,7 +209,7 @@ export function OAuthConsentPage() {
           {error && <AuthError>{error}</AuthError>}
           <div className="gsw-consent-actions">
             <button className="gsw-btn gsw-btn-quiet" disabled={busy} onClick={() => void decide(false)}>Cancel</button>
-            <button className="gsw-btn gsw-btn-primary" disabled={busy || !accessProfile} onClick={() => void decide(true)}>{busy ? "Continuing…" : "Continue"}</button>
+            <button className="gsw-btn gsw-btn-primary" disabled={busy || !accessProfile} onClick={() => void decide(true)}>{busy ? "Continuing…" : needsAdminUpgrade ? "Review full administration access" : "Continue"}</button>
           </div>
           <p className="gsw-login-hint">Only continue if you recognize this application and want to share the access listed above.</p>
         </section>
