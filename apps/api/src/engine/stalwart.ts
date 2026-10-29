@@ -98,6 +98,7 @@ const calendarEventToEngine = (event: JmapCalendarEvent): EngineCalendarEvent =>
     title: event.title ?? "Untitled event",
     ...(event.description ? { description: event.description } : {}),
     start: event.start ?? "",
+    ...(event.timeZone ? {timeZone:event.timeZone}:{}),
     ...(event.duration ? { end: addDuration(event.start, event.duration) } : {}),
     ...(location ? { location } : {}),
     ...(meetingLink ? { meetingLink } : {}),
@@ -944,7 +945,7 @@ export class StalwartEngine implements MailEngine {
     const fetchEvents = async (filter: Record<string, unknown> | undefined, suffix: string): Promise<EngineCalendarEvent[]> => {
       const responses = await this.client.call([
         ["CalendarEvent/query", { accountId, ...(filter ? { filter } : {}), position: 0, limit: 200, sort: [{ property: "start", isAscending: true }] }, `ceq${suffix}`],
-        ["CalendarEvent/get", { accountId, "#ids": { resultOf: `ceq${suffix}`, name: "CalendarEvent/query", path: "/ids" }, properties: ["id", "calendarIds", "title", "description", "start", "duration", "locations", "virtualLocations", "participants", "organizerCalendarAddress", "showWithoutTime"] }, `ceg${suffix}`],
+        ["CalendarEvent/get", { accountId, "#ids": { resultOf: `ceq${suffix}`, name: "CalendarEvent/query", path: "/ids" }, properties: ["id", "calendarIds", "title", "description", "start", "timeZone", "duration", "locations", "virtualLocations", "participants", "organizerCalendarAddress", "showWithoutTime"] }, `ceg${suffix}`],
       ]);
       const payload = responses[1]![1] as { list?: JmapCalendarEvent[] };
       return (payload.list ?? []).map(calendarEventToEngine);
@@ -996,7 +997,7 @@ export class StalwartEngine implements MailEngine {
 
   private async getCalendarEvent(engineAccountId: EngineAccountId, eventId: string): Promise<EngineCalendarEvent | null> {
     const { accountId } = await this.accountIdOf(engineAccountId);
-    const responses = await this.client.call([["CalendarEvent/get", { accountId, ids: [eventId], properties: ["id", "calendarIds", "title", "description", "start", "duration", "locations", "virtualLocations", "participants", "organizerCalendarAddress", "showWithoutTime"] }, "ceg2"]]);
+    const responses = await this.client.call([["CalendarEvent/get", { accountId, ids: [eventId], properties: ["id", "calendarIds", "title", "description", "start", "timeZone", "duration", "locations", "virtualLocations", "participants", "organizerCalendarAddress", "showWithoutTime"] }, "ceg2"]]);
     const payload = responses[0]![1] as { list?: JmapCalendarEvent[] };
     return payload.list?.[0] ? calendarEventToEngine(payload.list[0]) : null;
   }

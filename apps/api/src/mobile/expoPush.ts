@@ -1,3 +1,4 @@
+import { pushCategoryEnabled, type PushCategory } from "./notificationPolicy.js";
 import { listMobilePushDevices, removeMobilePushDevice } from "./pushDevices.js";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
@@ -8,7 +9,6 @@ const LEGACY_MAIL_CHANNEL = "mail-gong";
 const HARMONY_MAIL_CHANNEL = "mail-harmony";
 
 type PushData = Record<string, string | number | boolean | null>;
-type PushCategory = "mail" | "calendar" | "general";
 type ExpoPushResponse = { status?: "ok" | "error"; id?: string; message?: string; details?: { error?: string } };
 
 export type PushDiagnostic = {
@@ -44,6 +44,7 @@ async function fetchReceipts(ids: string[]) {
     method: "POST",
     headers: { Accept: "application/json", "Accept-Encoding": "gzip, deflate", "Content-Type": "application/json" },
     body: JSON.stringify({ ids }),
+    signal: AbortSignal.timeout(15000),
   });
   if (!response.ok) throw new Error(`Expo push receipt request failed: HTTP ${response.status}`);
   const payload = await response.json() as { data?: Record<string, ExpoPushResponse> };
@@ -79,10 +80,11 @@ export async function sendPushToUser(input: {
   category?: PushCategory;
   checkReceipts?: boolean;
   traceId?: string;
+  targetToken?: string;
 }): Promise<PushDeliveryResult> {
   const category = input.category ?? "general";
   const allDevices = await listMobilePushDevices(input.userId);
-  const devices = allDevices.filter((device) => category === "mail" ? device.mailEnabled : category === "calendar" ? device.calendarEnabled : true);
+  const devices = allDevices.filter((device) => pushCategoryEnabled(device,category) && (!input.targetToken || device.expoPushToken === input.targetToken));
 
   logPush("PUSH_PREFERENCE_CHECKED", {
     traceId: input.traceId,
@@ -124,6 +126,7 @@ export async function sendPushToUser(input: {
       method: "POST",
       headers: { Accept: "application/json", "Accept-Encoding": "gzip, deflate", "Content-Type": "application/json" },
       body: JSON.stringify(messages),
+      signal: AbortSignal.timeout(15000),
     });
   } catch (error) {
     warnPush("PUSH_FAILED", { traceId: input.traceId, userId: input.userId, category, stage: "expo_request", error: error instanceof Error ? error.message : String(error) });

@@ -18,6 +18,7 @@ export interface EngineCalendar {
 }
 
 export interface EngineCalendarEvent {
+  timeZone?: string | undefined;
   engineId: string;
   calendarIds: string[];
   title: string;

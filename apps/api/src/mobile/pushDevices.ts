@@ -10,6 +10,9 @@ const mobilePushDevices = pgTable("mobile_push_devices", {
   appVersion: text("app_version"),
   mailEnabled: boolean("mail_enabled").default(true).notNull(),
   calendarEnabled: boolean("calendar_enabled").default(true).notNull(),
+  chatEnabled: boolean("chat_enabled").default(true).notNull(),
+  scheduledWorkEnabled: boolean("scheduled_work_enabled").default(true).notNull(),
+  workAttentionEnabled: boolean("work_attention_enabled").default(true).notNull(),
   calendarReminderMinutes: integer("calendar_reminder_minutes").default(15).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -18,7 +21,7 @@ const mobilePushDevices = pgTable("mobile_push_devices", {
 }));
 
 let ensureTablePromise: Promise<unknown> | undefined;
-async function ensureTable(): Promise<void> {
+export async function ensureMobilePushDeviceSchema(): Promise<void> {
   ensureTablePromise ??= db.execute(sql`
     CREATE TABLE IF NOT EXISTS "mobile_push_devices" (
       "expo_push_token" text NOT NULL,
@@ -36,6 +39,11 @@ async function ensureTable(): Promise<void> {
     ALTER TABLE "mobile_push_devices" ADD COLUMN IF NOT EXISTS "mail_enabled" boolean DEFAULT true NOT NULL;
     ALTER TABLE "mobile_push_devices" ADD COLUMN IF NOT EXISTS "calendar_enabled" boolean DEFAULT true NOT NULL;
     ALTER TABLE "mobile_push_devices" ADD COLUMN IF NOT EXISTS "calendar_reminder_minutes" integer DEFAULT 15 NOT NULL;
+
+    ALTER TABLE "mobile_push_devices" ADD COLUMN IF NOT EXISTS "chat_enabled" boolean DEFAULT true NOT NULL;
+    ALTER TABLE "mobile_push_devices" ADD COLUMN IF NOT EXISTS "scheduled_work_enabled" boolean DEFAULT true NOT NULL;
+    ALTER TABLE "mobile_push_devices" ADD COLUMN IF NOT EXISTS "work_attention_enabled" boolean DEFAULT true NOT NULL;
+    CREATE TABLE IF NOT EXISTS user_notification_preferences (user_id text PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, calendar_email_enabled boolean NOT NULL DEFAULT true);
 
     DO $$
     DECLARE
@@ -70,11 +78,14 @@ export type MobilePushDevice = {
   appVersion?: string | undefined;
   mailEnabled: boolean;
   calendarEnabled: boolean;
+  chatEnabled: boolean;
+  scheduledWorkEnabled: boolean;
+  workAttentionEnabled: boolean;
   calendarReminderMinutes: number;
   updatedAt: string;
 };
 
-export type MobileNotificationPreferences = Pick<MobilePushDevice, "mailEnabled" | "calendarEnabled" | "calendarReminderMinutes">;
+export type MobileNotificationPreferences = Pick<MobilePushDevice, "mailEnabled" | "calendarEnabled" | "calendarReminderMinutes" | "chatEnabled" | "scheduledWorkEnabled" | "workAttentionEnabled">;
 
 export async function upsertMobilePushDevice(input: {
   userId: string;
@@ -84,9 +95,12 @@ export async function upsertMobilePushDevice(input: {
   appVersion?: string | undefined;
   mailEnabled?: boolean | undefined;
   calendarEnabled?: boolean | undefined;
+  chatEnabled?: boolean | undefined;
+  scheduledWorkEnabled?: boolean | undefined;
+  workAttentionEnabled?: boolean | undefined;
   calendarReminderMinutes?: number | undefined;
 }): Promise<void> {
-  await ensureTable();
+  await ensureMobilePushDeviceSchema();
   await db.insert(mobilePushDevices).values({
     expoPushToken: input.expoPushToken,
     userId: input.userId,
@@ -95,6 +109,9 @@ export async function upsertMobilePushDevice(input: {
     appVersion: input.appVersion ?? null,
     mailEnabled: input.mailEnabled ?? true,
     calendarEnabled: input.calendarEnabled ?? true,
+    chatEnabled: input.chatEnabled ?? true,
+    scheduledWorkEnabled: input.scheduledWorkEnabled ?? true,
+    workAttentionEnabled: input.workAttentionEnabled ?? true,
     calendarReminderMinutes: input.calendarReminderMinutes ?? 15,
     updatedAt: new Date(),
   }).onConflictDoUpdate({
@@ -104,6 +121,9 @@ export async function upsertMobilePushDevice(input: {
       deviceName: input.deviceName ?? null,
       appVersion: input.appVersion ?? null,
       ...(input.mailEnabled !== undefined ? { mailEnabled: input.mailEnabled } : {}),
+      ...(input.chatEnabled !== undefined ? {chatEnabled:input.chatEnabled}:{}),
+      ...(input.scheduledWorkEnabled !== undefined ? {scheduledWorkEnabled:input.scheduledWorkEnabled}:{}),
+      ...(input.workAttentionEnabled !== undefined ? {workAttentionEnabled:input.workAttentionEnabled}:{}),
       ...(input.calendarEnabled !== undefined ? { calendarEnabled: input.calendarEnabled } : {}),
       ...(input.calendarReminderMinutes !== undefined ? { calendarReminderMinutes: input.calendarReminderMinutes } : {}),
       updatedAt: new Date(),
@@ -112,17 +132,17 @@ export async function upsertMobilePushDevice(input: {
 }
 
 export async function updateMobilePushDevicePreferences(userId: string, expoPushToken: string, preferences: Partial<MobileNotificationPreferences>): Promise<void> {
-  await ensureTable();
+  await ensureMobilePushDeviceSchema();
   await db.update(mobilePushDevices).set({ ...preferences, updatedAt: new Date() }).where(and(eq(mobilePushDevices.userId, userId), eq(mobilePushDevices.expoPushToken, expoPushToken)));
 }
 
 export async function removeMobilePushDevice(userId: string, expoPushToken: string): Promise<void> {
-  await ensureTable();
+  await ensureMobilePushDeviceSchema();
   await db.delete(mobilePushDevices).where(and(eq(mobilePushDevices.userId, userId), eq(mobilePushDevices.expoPushToken, expoPushToken)));
 }
 
 export async function listMobilePushDevices(userId: string): Promise<MobilePushDevice[]> {
-  await ensureTable();
+  await ensureMobilePushDeviceSchema();
   const rows = await db.select().from(mobilePushDevices).where(eq(mobilePushDevices.userId, userId)).orderBy(desc(mobilePushDevices.updatedAt));
   return rows.map((row) => ({
     expoPushToken: row.expoPushToken,
@@ -131,6 +151,9 @@ export async function listMobilePushDevices(userId: string): Promise<MobilePushD
     ...(row.appVersion ? { appVersion: row.appVersion } : {}),
     mailEnabled: row.mailEnabled,
     calendarEnabled: row.calendarEnabled,
+    chatEnabled: row.chatEnabled,
+    scheduledWorkEnabled: row.scheduledWorkEnabled,
+    workAttentionEnabled: row.workAttentionEnabled,
     calendarReminderMinutes: row.calendarReminderMinutes,
     updatedAt: row.updatedAt.toISOString(),
   }));

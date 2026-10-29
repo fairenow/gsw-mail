@@ -1,4 +1,6 @@
 import type { FastifyInstance } from "fastify";
+import { pool } from "../db/client.js";
+import { ensureMobilePushDeviceSchema } from "../mobile/pushDevices.js";
 import { z } from "zod";
 import { requireUser } from "../auth/middleware.js";
 import { sendPushToUser } from "../mobile/expoPush.js";
@@ -7,6 +9,9 @@ import { listMobilePushDevices, removeMobilePushDevice, updateMobilePushDevicePr
 const preferenceSchema = z.object({
   mailEnabled: z.boolean().optional(),
   calendarEnabled: z.boolean().optional(),
+  chatEnabled: z.boolean().optional(),
+  scheduledWorkEnabled: z.boolean().optional(),
+  workAttentionEnabled: z.boolean().optional(),
   calendarReminderMinutes: z.number().int().min(0).max(1440).optional(),
 });
 
@@ -19,6 +24,18 @@ const pushDeviceSchema = z.object({
 
 export default async (app: FastifyInstance) => {
   await requireUser(app, { optional: false });
+
+  app.get("/product/notification-preferences", async req => {
+    await ensureMobilePushDeviceSchema();
+    const result=await pool.query<{calendar_email_enabled:boolean}>("SELECT calendar_email_enabled FROM user_notification_preferences WHERE user_id=$1",[req.user!.id]);
+    return {calendarEmailEnabled:result.rows[0]?.calendar_email_enabled ?? true};
+  });
+  app.patch("/product/notification-preferences", async req => {
+    const input=z.object({calendarEmailEnabled:z.boolean()}).strict().parse(req.body);
+    await ensureMobilePushDeviceSchema();
+    await pool.query("INSERT INTO user_notification_preferences(user_id,calendar_email_enabled) VALUES($1,$2) ON CONFLICT(user_id) DO UPDATE SET calendar_email_enabled=EXCLUDED.calendar_email_enabled",[req.user!.id,input.calendarEmailEnabled]);
+    return input;
+  });
 
   app.get("/product/push-devices", async (req) => ({
     devices: await listMobilePushDevices(req.user!.id),
@@ -34,6 +51,9 @@ export default async (app: FastifyInstance) => {
   app.patch<{ Params: { token: string } }>("/product/push-devices/:token/preferences", async (req) => {
     const input = preferenceSchema.parse(req.body);
     const preferences = {
+      ...(input.chatEnabled !== undefined ? {chatEnabled:input.chatEnabled}:{}),
+      ...(input.scheduledWorkEnabled !== undefined ? {scheduledWorkEnabled:input.scheduledWorkEnabled}:{}),
+      ...(input.workAttentionEnabled !== undefined ? {workAttentionEnabled:input.workAttentionEnabled}:{}),
       ...(input.mailEnabled !== undefined ? { mailEnabled: input.mailEnabled } : {}),
       ...(input.calendarEnabled !== undefined ? { calendarEnabled: input.calendarEnabled } : {}),
       ...(input.calendarReminderMinutes !== undefined ? { calendarReminderMinutes: input.calendarReminderMinutes } : {}),
@@ -43,8 +63,10 @@ export default async (app: FastifyInstance) => {
   });
 
   app.post("/product/push-devices/test", async (req) => {
+    const input=z.object({expoPushToken:z.string().min(10).max(512).optional()}).parse(req.body??{});
     return sendPushToUser({
       userId: req.user!.id,
+      ...(input.expoPushToken?{targetToken:input.expoPushToken}:{}),
       title: "GSW Mail notifications are ready",
       body: "This device is connected for native notifications.",
       data: { route: "mail", kind: "push-test" },

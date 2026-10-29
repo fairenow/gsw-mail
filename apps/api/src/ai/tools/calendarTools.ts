@@ -126,7 +126,7 @@ export const calendarEventCreateTool: AgentToolDefinition = {
       const conflicts = computeCalendarConflicts(existing, input.start, conflictEnd);
       if (conflicts.length) return { ok:false, toolCallId, error:{code:"calendar_conflict",message:"This time overlaps an existing event. Review the schedule before creating it.",retryable:false},audit:audit(ctx,startedAt) };
       const event = await engine.createCalendarEvent(ctx.accountId, input);
-      await replaceEventEmailReminders({ accountId: ctx.accountId, eventId: event.engineId, title: event.title, start: event.start, minutes: input.emailReminderMinutes });
+      await replaceEventEmailReminders({ accountId: ctx.accountId, eventId: event.engineId, title: event.title, start: event.start, minutes: input.emailReminderMinutes,userId:ctx.userId,timeZone:event.timeZone??input.timeZone });
       return success(ctx, toolCallId, startedAt, { event, invitedAttendees: input.sendSchedulingMessages, requiresReview: false });
     } catch (error) { return failed(ctx, toolCallId, startedAt, error); }
   },
@@ -166,7 +166,7 @@ export const calendarEventUpdateTool: AgentToolDefinition = {
       const conflicts = computeCalendarConflicts(existing, patch.start, conflictEnd, eventId);
       if (conflicts.length) return { ok:false, toolCallId, error:{code:"calendar_conflict",message:"This time overlaps an existing event. Review the schedule before changing it.",retryable:false},audit:audit(ctx,startedAt) };
       const event = await engine.updateCalendarEvent(ctx.accountId, eventId, patch);
-      await replaceEventEmailReminders({ accountId: ctx.accountId, eventId, title: event.title, start: event.start, minutes: input.emailReminderMinutes });
+      await replaceEventEmailReminders({ accountId: ctx.accountId, eventId, title: event.title, start: event.start, minutes: input.emailReminderMinutes,userId:ctx.userId,timeZone:event.timeZone??input.timeZone });
       return success(ctx, toolCallId, startedAt, { event });
     } catch (error) { return failed(ctx, toolCallId, startedAt, error); }
   },

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { queueNotificationEmail } from "../outbound/notificationEmail.js";
 import { pool } from "../db/client.js";
 import { getRelay } from "../outbound/relay.js";
 
@@ -50,14 +50,11 @@ export async function deliverAutomationSummaryEmail(input:{
     if(!claimed.rowCount)return "already_attempted";
   }catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}
   try {
-    const result=await relay.send({
-      id:randomUUID(),accountId:input.accountId,fromAddress:address,to:[address],
-      subject:`GSW inbox summary: ${input.title}`.slice(0,200),
-      textBody:input.summary.slice(0,50_000)
+    const sendId=await queueNotificationEmail({
+      key:`automation-summary:${input.runId}`,accountId:input.accountId,address,
+      subject:`GSW scheduled work: ${input.title}`.slice(0,200),textBody:input.summary.slice(0,50_000)
     });
-    if(!result.accepted)throw new Error(result.message??"Relay rejected scheduled summary");
-    await pool.query("UPDATE automation_summary_email_deliveries SET status='accepted',delivery_id=$2,updated_at=now() WHERE run_id=$1",
-      [input.runId,result.deliveryId??null]);
+    await pool.query("UPDATE automation_summary_email_deliveries SET status='accepted',delivery_id=$2,updated_at=now() WHERE run_id=$1",[input.runId,sendId]);
     return "accepted";
   }catch(error){
     await pool.query("UPDATE automation_summary_email_deliveries SET status='failed',error=$2,updated_at=now() WHERE run_id=$1",

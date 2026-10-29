@@ -1,3 +1,4 @@
+import { syncCalendarPushEvents } from "../mobile/notificationWorker.js";
 import { replaceEventEmailReminders, cancelEventEmailReminders, getEventEmailReminderMinutes } from "../calendar/emailReminders.js";
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -157,7 +158,9 @@ export default async function productRoutes(app: FastifyInstance) {
     const after = typeof params.after === "string" ? params.after : new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     const before = typeof params.before === "string" ? params.before : new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
     const engineContext = await getCalendarEngineContext(req.user?.id, req.authUserId, req.headers as Record<string, string>, req.query);
-    return { events: engineContext ? await engineContext.engine.listCalendarEvents(engineContext.accountId, after, before) : [] };
+    const events=engineContext ? await engineContext.engine.listCalendarEvents(engineContext.accountId,after,before):[];
+    if(engineContext && req.user) await syncCalendarPushEvents(req.user.id,engineContext.accountId,events,{after,before}).catch(error=>req.log.warn({err:error},"Could not sync calendar push reminders"));
+    return {events};
   });
 
   app.get<{ Params: { id: string }; Querystring: { accountId?: string } }>("/product/calendar-events/:id/reminders", async (req) => {
@@ -171,7 +174,7 @@ export default async function productRoutes(app: FastifyInstance) {
     const engineContext = await getCalendarEngineContext(req.user?.id, req.authUserId, req.headers as Record<string, string>, input);
     if (!engineContext) throw notFound("mail account not found");
     const event = await engineContext.engine.createCalendarEvent(engineContext.accountId, input);
-    await replaceEventEmailReminders({accountId:engineContext.accountId,eventId:event.engineId,title:event.title,start:event.start,minutes:input.emailReminderMinutes});
+    await replaceEventEmailReminders({accountId:engineContext.accountId,eventId:event.engineId,title:event.title,start:event.start,minutes:input.emailReminderMinutes,userId:req.user!.id,timeZone:event.timeZone??input.timeZone});
     reply.code(201);
     return event;
   });
@@ -181,7 +184,7 @@ export default async function productRoutes(app: FastifyInstance) {
     const engineContext = await getCalendarEngineContext(req.user?.id, req.authUserId, req.headers as Record<string, string>, input);
     if (!engineContext) throw notFound("mail account not found");
     const event = await engineContext.engine.updateCalendarEvent(engineContext.accountId, req.params.id, input);
-    await replaceEventEmailReminders({accountId:engineContext.accountId,eventId:event.engineId,title:event.title,start:event.start,minutes:input.emailReminderMinutes});
+    await replaceEventEmailReminders({accountId:engineContext.accountId,eventId:event.engineId,title:event.title,start:event.start,minutes:input.emailReminderMinutes,userId:req.user!.id,timeZone:event.timeZone??input.timeZone});
     return event;
   });
 

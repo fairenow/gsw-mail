@@ -1,3 +1,4 @@
+import { createMobileNotificationWorker, ensureMobileNotificationSchema } from "./mobile/notificationWorker.js";
 import { ensureAutomationSummaryEmailSchema } from "./ai/automationSummaryEmail.js";
 import { ensureCalendarEmailReminderSchema, deliverDueCalendarEmailReminders } from "./calendar/emailReminders.js";
 import { buildApp } from "./app.js";
@@ -29,6 +30,7 @@ const app = buildApp();
 const worker = getOutboundWorker();
 const automationWorker = getAutomationWorker();
 const agentTaskRunner = getAgentTaskRunner();
+const mobileNotificationWorker=createMobileNotificationWorker({onError:error=>app.log.error(error,"mobile notification delivery failed")});
 let stopChatWorker: (()=>void)|null=null;
 let stopFileOrganizer: (() => void) | null = null;
 let stopProposalNotifier: (() => void) | null = null;
@@ -38,6 +40,7 @@ async function main() {
   await ensureScheduledSendSchema();
   await ensureCalendarRsvpSchema();
   await ensureCalendarEmailReminderSchema();
+  await ensureMobileNotificationSchema();
   await ensureAutomationSummaryEmailSchema();
   await ensureAiAgentSchema();
   await ensureInboxTriageSchema();
@@ -60,6 +63,7 @@ async function main() {
   const reminderTimer = setInterval(() => { void deliverDueCalendarEmailReminders().catch(error => app.log.error(error, "calendar reminder worker failed")); }, 60_000);
   reminderTimer.unref();
   void deliverDueCalendarEmailReminders().catch(error => app.log.error(error, "calendar reminder worker failed"));
+  mobileNotificationWorker.start();
   automationWorker.start();
   agentTaskRunner.start();
   stopChatWorker=startChatExecutionWorker();
@@ -72,6 +76,7 @@ const shutdown = async (signal: string) => {
   worker.stop();
   stopProposalNotifier?.();
   stopMcpPayloadRetention?.();
+  mobileNotificationWorker.stop();
   automationWorker.stop();
   agentTaskRunner.stop();
   stopChatWorker?.();
