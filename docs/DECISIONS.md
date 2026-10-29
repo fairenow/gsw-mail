@@ -178,3 +178,12 @@ Production diagnostics found three calendar-disabled push registrations and four
 Schema changes follow the API's existing idempotent startup-schema pattern. Validation includes embedded PostgreSQL discovery tests and independent notification category/time-zone tests. Physical iOS/Android delivery and third-party invitation receipt require device/provider acceptance tests after the mobile app is updated.
 
 Production acceptance checks also verify raw worker SQL against the mapped user_status/account_status columns. Failed email reminder schedules remain visible in event editing so a delivery failure does not silently erase the configured reminder choices.
+## 2026-10-29: Consent review and cross-tab account recovery
+
+Admin consent uses a full-width primary action: Review all admin access when scopes are missing, then Approve all admin access on the complete review. Limited access remains an explicit secondary choice. All expandable permission and tool details live inside one fixed-height scrolling region, keeping the actions stationary.
+
+The web auth gate checks the active identity on focus, visibility changes, and every 15 seconds while visible. If another tab changes the shared session, it explains the mismatch and lets the user explicitly restore the original saved device session without unmounting the open compose window. Missing or expired saved sessions require signing in again; workspace administration never grants mailbox content access.
+
+## 2026-10-29: Calendar invitation branding
+
+Calendar invitation and update emails use the GSW Mail favicon and their own layout rather than the sender's community or Bible template. The public RSVP page uses the same GSW Mail favicon. Existing email messages retain their previously rendered content.
