@@ -227,7 +227,8 @@
 
 /* Keep scope review bounded so lengthy OAuth requests do not turn the entire consent page into a scroll list. */
 .gsw-consent-scope-list {
-  max-height: min(36dvh, 290px);
+  height: min(42dvh, 340px);
+  max-height: min(42dvh, 340px);
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -242,5 +243,30 @@
   outline-offset: 3px;
 }
 @media (max-width: 480px) {
-  .gsw-consent-scope-list { max-height: min(30dvh, 230px); }
+  .gsw-consent-scope-list { height: min(35dvh, 260px); max-height: min(35dvh, 260px); }
+}
+
+.gsw-consent-actions .gsw-btn-primary {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-height: 48px;
+  padding: 12px 18px;
+  line-height: 1.3;
+}
+
+.gsw-consent-next-step {
+  margin: 12px 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.gsw-consent-scope-list details {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.gsw-consent-scope-list summary {
+  cursor: pointer;
+  padding: 8px 0;
 }
