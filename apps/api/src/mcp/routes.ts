@@ -1,3 +1,5 @@
+import { additionalAdminTools, adminToolRisk, executeAdditionalAdminTool } from "./adminTools.js";
+import { adminScopes } from "./accessProfile.js";
 import { withToolBoundary } from "../ai/toolBoundary.js";
 import { resolveMcpAccessProfile, toolAllowedForMode, scopeAllowedForMode } from "./accessProfile.js";
 import { consumeMcpPersistedApproval, resolveMcpPersistedApproval } from "./resolvePersistedApproval.js";
@@ -23,7 +25,7 @@ import { audit } from "../lib/audit.js";
 import { adminMailboxWriteGate } from "./adminMailboxWritePolicy.js";
 
 /** OAuth-scoped MCP transport with owner-only, explicitly enabled write testing. */
-export async function mcpRoutes(app:FastifyInstance):Promise<void> {
+export async function mcpRoutes(app:FastifyInstance, dependencies: {verifyBearer?: typeof verifyMcpBearer; resolveProfile?: typeof resolveMcpAccessProfile} = {}):Promise<void> {
   // Scope fallback parsing to MCP. Clients can probe with nonstandard media types before OAuth.
   app.addContentTypeParser("*", { parseAs: "string", bodyLimit: 1024 * 1024 }, (_request, body, done) => {
     try { done(null, JSON.parse(body as string)); }
@@ -33,7 +35,7 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
     if(process.env.GSW_MCP_ENABLED!=="true")return reply.code(503).send({error:"mcp_disabled"});
     const authorization=request.headers.authorization;
     const identity=authorization?.startsWith("Bearer ")?
-      await verifyMcpBearer(authorization.slice(7)):null;
+      await (dependencies.verifyBearer ?? verifyMcpBearer)(authorization.slice(7)):null;
     if(!identity){
       const metadataUrl = new URL("/.well-known/oauth-protected-resource/mcp", process.env.GSW_MCP_RESOURCE_URL ?? `${config.auth.baseUrl.replace(/\/$/, "")}/mcp`).toString();
       return reply.code(401)
@@ -65,10 +67,12 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
     if(input.method==="ping")return wrap({});
     if(input.method==="resources/list")return wrap({resources:[]});
     if(input.method==="prompts/list")return wrap({prompts:[]});
-    const accessProfile = await resolveMcpAccessProfile(identity.userId, identity.authUserId);
+    const accessProfile = await (dependencies.resolveProfile ?? resolveMcpAccessProfile)(identity.userId, identity.authUserId);
     identity.oauthScopes = new Set([...identity.oauthScopes].filter(scope => scopeAllowedForMode(accessProfile.mode, scope)));
     const modeDefinitions = agentMailRegistry.definitions().filter(tool => toolAllowedForMode(accessProfile.mode, tool.name, tool.requiredScopes)).map(tool => tool.name.startsWith("workers.") ? {...tool,description:"Run a bounded helper within this mailbox connection's approved permissions. Workspace administration is excluded.",inputSchema:JSON.parse(JSON.stringify(tool.inputSchema, (key,value) => key === "enum" && Array.isArray(value) ? value.filter(item => item !== "admin") : value))} : tool);
-    const adminDefinitions = mcpBootstrapTools.filter(tool => tool.name.includes("admin_")).map(tool => ({ ...tool, requiredScopes: [...tool.requiredScopes], risk: tool.name === "create_admin_mailbox" ? "external" as const : "read" as const }));
+    const adminDefinitions = mcpBootstrapTools.filter(tool => tool.name.includes("admin_")).map(tool => ({ ...tool, requiredScopes: [...tool.requiredScopes], risk: adminToolRisk(tool.name) }));
+    const requireScopes = (scopes: readonly string[]) => reply.code(403).header("WWW-Authenticate", `Bearer error="insufficient_scope", scope="${scopes.join(" ")}", resource_metadata="${new URL("/.well-known/oauth-protected-resource/mcp", config.auth.baseUrl)}"`).send({error:"insufficient_scope",requiredScopes:scopes,accountType:accessProfile.mode});
+    if (accessProfile.mode === "admin" && input.method === "tools/list" && !identity.oauthScopes.has("workspace.read")) return requireScopes([...adminScopes]);
     if(input.method==="tools/list"){
       const advertised = [...mcpBootstrapTools.filter(t=>(t.name!=="prepare_action" || process.env.GSW_MCP_PREPARE_ENABLED==="true") && (t.name!=="create_admin_mailbox" || process.env.GSW_MCP_ADMIN_WRITES_ENABLED==="true")),{name:"invoke_tool",description:"Universal MCP dispatcher for every GSW Mail registry tool. Use list_capabilities to discover names, required OAuth scopes and risk. All actions enforce OAuth, GSW permissions and mailbox ACL at execution. Writes require the configured owner-only test mode and a fresh UUID requestId; external actions also require confirmExternal=true.",inputSchema:{type:"object",properties:{toolName:{type:"string",description:"Registered GSW tool name, dotted or double-underscore format"},accountId:{type:"string",description:"Authorized mailbox account UUID"},arguments:{type:"object",description:"Arguments matching the selected registered tool schema",additionalProperties:true},requestId:{type:"string",format:"uuid",description:"Required for writes; unique for each intended action"},confirmExternal:{type:"boolean",description:"Required true for explicitly authorized external effects"}},required:["toolName","accountId","arguments"],additionalProperties:false}},...modeDefinitions.map(t=>({name:t.name.replaceAll(".","__"),description:t.description+(t.risk==="external"?" CAUTION: This action can send, publish, delete or trigger external effects. Set confirmExternal=true only after reviewing the exact intended effect.":""),inputSchema:{...t.inputSchema,properties:{...(t.inputSchema.properties as Record<string,unknown> ?? {}),accountId:{type:"string",description:"GSW mailbox account UUID to operate within"},...(t.risk!=="read"?{requestId:{type:"string",format:"uuid",description:"Fresh UUID per intended action; reuse for retries to prevent duplicate execution"},...(t.risk==="external"?{confirmExternal:{type:"boolean",description:"Set true only after explicit user authorization of this external action"}}:{})}:{})},required:[...((t.inputSchema.required as string[] | undefined) ?? []),"accountId",...(t.risk!=="read"?["requestId",...(t.risk==="external"?["confirmExternal"]:[])]:[])]}}))];
       return wrap({tools: advertised.filter(tool => { const definition = agentMailRegistry.definition(tool.name); const required = "requiredScopes" in tool ? tool.requiredScopes as readonly string[] : definition?.requiredScopes ?? []; return toolAllowedForMode(accessProfile.mode, tool.name, required) && required.every(scope => identity.oauthScopes.has(scope)); })});
@@ -89,6 +93,42 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
       const invokedDefinition = agentMailRegistry.definition(name);
       const bootstrapDefinition = mcpBootstrapTools.find(tool => tool.name === name);
       if (!toolAllowedForMode(accessProfile.mode, name, invokedDefinition?.requiredScopes ?? bootstrapDefinition?.requiredScopes ?? [])) return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"account_type_not_allowed",accountType:accessProfile.mode,tool:name})}]});
+      if (accessProfile.mode === "admin" && bootstrapDefinition) {
+        const missing = bootstrapDefinition.requiredScopes.filter(scope => !identity.oauthScopes.has(scope));
+        if (missing.length) return requireScopes(missing);
+      }
+      if (additionalAdminTools.some(tool => tool.name === name)) {
+        const definition = additionalAdminTools.find(tool => tool.name === name)!;
+        const fail = (error:string) => wrap({isError:true,content:[{type:"text",text:JSON.stringify({error})}]});
+        const run = () => executeAdditionalAdminTool(name,params,{userId:identity.userId,authUserId:identity.authUserId,request});
+        if (adminToolRisk(name) === "read") {
+          try { return wrap({content:[{type:"text",text:JSON.stringify(await run())}]}); }
+          catch (error) { request.log.warn({err:error,tool:name},"admin MCP read failed"); return fail("admin_resource_access_failed"); }
+        }
+        const gate = adminMailboxWriteGate({enabled:process.env.GSW_MCP_ADMIN_WRITES_ENABLED,persistedApprovalRequired:process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL,hasWriteScope:definition.requiredScopes.every(scope => identity.oauthScopes.has(scope))});
+        if (!gate.allowed) return fail(gate.reason);
+        if (typeof params.organizationId !== "string" || !/^[0-9a-f-]{36}$/i.test(params.organizationId)) return fail("invalid_organization_id");
+        const {requestId,confirmExternal,...actionArguments} = params;
+        const decision = mcpWriteCallPolicy({risk:"external",requiredScopes:definition.requiredScopes,requestId,confirmExternal,userId:identity.userId,clientId:identity.clientId,accountId:params.organizationId,toolName:name,argumentsValue:actionArguments});
+        if (!decision.allowed) return fail(decision.reason);
+        const hash = createHash("sha256").update(decision.digest).digest("hex");
+        const fingerprint = `${hash.slice(0,8)}-${hash.slice(8,12)}-4${hash.slice(13,16)}-8${hash.slice(17,20)}-${hash.slice(20,32)}`;
+        const reservation = await reserveAiIdempotency({key:decision.key,userId:identity.userId,toolCallId:null,toolName:name,fingerprint,expiresAt:new Date(Date.now()+86400000)});
+        if (reservation.reused) {
+          const result = reservation.reservation.result as {fingerprint?:string;data?:unknown}|null;
+          if (reservation.reservation.userId !== identity.userId || reservation.reservation.toolName !== name || result?.fingerprint !== fingerprint) return fail("request_id_reused_with_different_action");
+          return reservation.reservation.status === "completed" ? wrap({content:[{type:"text",text:JSON.stringify({status:"already_completed",data:result.data})}]}) : fail("request_already_attempted");
+        }
+        try {
+          const data = await run();
+          await completeAiIdempotency(decision.key,{fingerprint,data});
+          return wrap({content:[{type:"text",text:JSON.stringify(data)}]});
+        } catch (error) {
+          await failAiIdempotency(decision.key,error);
+          request.log.warn({err:error,tool:name},"admin MCP write failed");
+          return fail("admin_action_failed_check_current_state_before_retry");
+        }
+      }
       if (accessProfile.mode === "mailbox" && name.replaceAll("__", ".").startsWith("workers.") && (params.worker === "admin" || (Array.isArray(params.tasks) && params.tasks.some(task => task && typeof task === "object" && (task as {worker?:unknown}).worker === "admin")))) return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"admin_worker_not_allowed_for_mailbox_connection"})}]});
       if (name === "capabilities__search" || name === "capabilities.search") {
         const catalog = discoverMcpCapabilities(modeDefinitions, identity.oauthScopes, {query: typeof params.query === "string" ? params.query : "", limit: typeof params.limit === "number" ? params.limit : 12, writeTestEnabled});
@@ -106,9 +146,9 @@ export async function mcpRoutes(app:FastifyInstance):Promise<void> {
             ...(query!==undefined?{query}:{}),
             ...(offset!==undefined?{offset}:{}),
             ...(limit!==undefined?{limit}:{}),
-            writeTestEnabled: accessProfile.mode === "admin" ? process.env.GSW_MCP_ADMIN_WRITES_ENABLED === "true" && writeTestEnabled : writeTestEnabled,
+            writeTestEnabled: accessProfile.mode === "admin" ? process.env.GSW_MCP_ADMIN_WRITES_ENABLED === "true" && process.env.GSW_MCP_REQUIRE_PERSISTED_APPROVAL !== "true" : writeTestEnabled,
           });
-          return wrap({content:[{type:"text",text:JSON.stringify({...catalog,accountType:accessProfile.mode,note:accessProfile.mode === "admin" ? "Workspace administration only. Mailbox messages and mailbox tools are not included. Administrative writes require the separate server write gate and explicit confirmation." : catalog.note})}]});
+          return wrap({content:[{type:"text",text:JSON.stringify({...catalog,capabilities:catalog.capabilities.map(tool => accessProfile.mode === "admin" && tool.status === "available_for_test_write" ? {...tool,status:"available_for_write"} : tool),accountType:accessProfile.mode,note:accessProfile.mode === "admin" ? "Workspace administration only. Mailbox messages and mailbox tools are not included. Administrative writes require the separate server write gate and explicit confirmation." : catalog.note})}]});
         } catch {
           return wrap({isError:true,content:[{type:"text",text:"Invalid capability discovery parameters"}]});
         }

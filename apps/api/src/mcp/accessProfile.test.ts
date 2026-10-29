@@ -1,3 +1,5 @@
+import { additionalAdminTools, adminToolRisk } from "./adminTools.js";
+import { mcpBootstrapTools } from "./bootstrapTools.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { aiScopes } from "../ai/permissions/types.js";
@@ -29,4 +31,18 @@ test("baseline identity and legacy automation permissions are classified explici
   assert.equal(scopeAllowedForMode("admin","automation.write"),false);
   assert.equal(scopeAllowedForMode("mailbox","automation.write"),true);
   assert.equal(scopeAllowedForMode("mailbox","unknown.write"),false);
+});
+
+test("every admin scope has exposed tools and all reject mailbox connections",()=>{
+  const tools=mcpBootstrapTools.filter(tool=>tool.name.includes("admin_"));
+  for(const scope of adminScopes) assert.ok(tools.some(tool=> (tool.requiredScopes as readonly string[]).includes(scope)),scope);
+  for(const tool of tools) {
+    assert.equal(toolAllowedForMode("admin",tool.name,tool.requiredScopes),true,tool.name);
+    assert.equal(toolAllowedForMode("mailbox",tool.name,tool.requiredScopes),false,tool.name);
+    if(adminToolRisk(tool.name)!=="read") {
+      assert.ok("required" in tool.inputSchema && (tool.inputSchema.required as readonly string[]).includes("requestId"),tool.name);
+      assert.ok("required" in tool.inputSchema && (tool.inputSchema.required as readonly string[]).includes("confirmExternal"),tool.name);
+    }
+  }
+  assert.ok(additionalAdminTools.length>=10);
 });

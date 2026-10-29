@@ -1,3 +1,4 @@
+import { additionalAdminTools } from "./adminTools.js";
 import { and, eq, or, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { authUsers, emailAccounts, mailAccountMemberships, organizationMemberships } from "../db/schema.js";
@@ -23,6 +24,6 @@ export async function resolveMcpAccessProfile(userId: string, authUserId: string
 }
 export function toolAllowedForMode(mode: McpAccountMode, name: string, scopes: readonly string[] = []): boolean {
   if (["get_current_user", "list_capabilities"].includes(name)) return true;
-  if (["list_admin_workspaces", "list_admin_domains", "list_admin_mailboxes", "create_admin_mailbox"].includes(name)) return mode === "admin" && scopes.every(scope => scopeAllowedForMode(mode, scope));
+  if (["list_admin_workspaces", "list_admin_domains", "list_admin_mailboxes", "create_admin_mailbox", ...additionalAdminTools.map(tool => tool.name)].includes(name)) return mode === "admin" && scopes.every(scope => scopeAllowedForMode(mode, scope));
   return mode === "mailbox" && scopes.every(scope => scopeAllowedForMode(mode, scope));
 }

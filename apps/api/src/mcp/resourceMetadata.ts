@@ -2,13 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { config } from "../config.js";
 import { aiScopes } from "../ai/permissions/types.js";
 
-export const mcpAdvertisedScopes = [
-  "mail.read","mail.write","mail.send",
-  "contacts.read","contacts.write",
-  "calendar.read","calendar.write",
-  "files.read","files.write",
-  "automations.read","automations.write",
-] as const;
+export const mcpAdvertisedScopes = [...aiScopes];
 
 // Never advertise a scope that the authorization server will reject.
 const validOAuthScopes = new Set<string>(aiScopes);

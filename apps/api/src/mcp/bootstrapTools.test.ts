@@ -4,6 +4,7 @@ import { mcpBootstrapTools } from "./bootstrapTools.js";
 
 test("bootstrap tools expose discovery and narrowly scoped draft preparation", () => {
   assert.deepEqual(mcpBootstrapTools.map(tool => tool.name), [
+    "list_admin_users", "get_admin_health", "list_admin_audit", "create_admin_domain", "verify_admin_domain", "list_admin_aliases", "create_admin_alias", "delete_admin_alias", "delete_admin_mailbox", "delete_admin_user",
     "get_current_user", "list_capabilities", "prepare_action", "grant_my_scopes", "list_admin_workspaces", "list_admin_domains", "list_admin_mailboxes", "create_admin_mailbox", "list_accounts",
   ]);
   const toolsByName = new Map(mcpBootstrapTools.map(tool => [tool.name, tool]));

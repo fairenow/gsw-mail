@@ -1,3 +1,4 @@
+import { domainDnsState } from "../db/domainDnsSchema.js";
 import { and, eq } from "drizzle-orm";
 import { requireOrgPermission } from "../auth/authorize.js";
 import { isActiveAdminMembership } from "./adminPolicy.js";
@@ -35,7 +36,10 @@ export async function listMcpAdminDomains(userId: string, organizationId: string
     spfStatus: domains.spfStatus,
     dkimStatus: domains.dkimStatus,
     dmarcStatus: domains.dmarcStatus,
-  }).from(domains).where(eq(domains.organizationId, organizationId));
+    expectedRecords: domainDnsState.expectedRecords,
+    observedRecords: domainDnsState.observedRecords,
+    lastCheckedAt: domainDnsState.lastCheckedAt,
+  }).from(domains).leftJoin(domainDnsState,eq(domainDnsState.domainId,domains.id)).where(eq(domains.organizationId, organizationId));
 }
 
 /** Inventory only: admin list never returns message bodies or mailbox credentials. */

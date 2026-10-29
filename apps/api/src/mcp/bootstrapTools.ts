@@ -1,5 +1,7 @@
+import { additionalAdminTools } from "./adminTools.js";
 /** Minimal read-only bootstrap tools, independent of mailbox account selection. */
 export const mcpBootstrapTools = [
+  ...additionalAdminTools,
   {
     name: "get_current_user",
     description: "Identify the authenticated GSW user without accessing any mailbox.",
@@ -8,7 +10,7 @@ export const mcpBootstrapTools = [
   },
   {
     name: "list_capabilities",
-    description: "Paginated inventory of every registered GSW Mail tool with required scopes, risk, OAuth gaps, and write-mode availability. All registered tools can be invoked through invoke_tool; authorization and test-mode restrictions are checked at call time.",
+    description: "Paginated inventory of tools for this connection type with required scopes, risk, OAuth gaps, and write availability. Invoke administration tools by their listed names; mailbox registry tools also support invoke_tool. Authorization is checked on every call.",
     inputSchema: {
       type: "object",
       properties: {
