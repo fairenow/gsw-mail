@@ -201,3 +201,23 @@ Connections are to be workspace-owned and managed by current authorized admins; 
 ## October 30, 2026 — Full-mailbox operation interface and Kimi
 
 Implement the approved mailbox access model by exposing the existing registry through discovery and operation endpoints under a mailbox-only execution boundary. Do not broaden the existing product bearer trust rule. Keep API context server-derived; reject caller identity/resource overrides and admin-worker selection. Reuse durable idempotency reservations for mutation operations and cache only resource references, not full mailbox/file bodies. Existing pilot key/recipient columns are legacy storage and no longer select permissions. Kimi joins the existing provider adapter interface, selected through saved mailbox settings with server-only credentials; preserve provider reasoning metadata for tool continuations without returning it to users. Deployment of these code changes still requires live acceptance.
+
+
+## Public developer documentation and live diagnostics (2026-10-30)
+
+The public documentation is served from `apps/web/public/docs` on
+`mail-docs.guidedstepswellness.com` through a host-specific Vercel rewrite;
+`/docs` on the mail host is a fallback. API traffic remains on the mail host.
+The old authenticated docs endpoint redirects to the docs subdomain.
+`GET /integrations/v1` provides public connection guidance, and `/reference`
+exposes static mailbox operation schemas only. Private capabilities and all
+mailbox execution still require a bearer key.
+
+Control Center API includes an administrator-authorized, workspace-bound live
+service diagnostic. It reads at most one message without returning its contents
+and calls the selected AI provider plus Kimi when needed. It issues no API key
+and sends no email. It is explicitly distinct from bearer-key acceptance and
+recipient delivery checks. Diagnostic use is rate limited and audited.
+
+DNS for the docs host must be configured at the authoritative DNS provider.
+A successful build or deployment does not establish DNS, TLS or live acceptance.

@@ -1,6 +1,20 @@
 {
   "rewrites": [
     {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "mail-docs.guidedstepswellness.com"
+        }
+      ],
+      "destination": "/docs/index.html"
+    },
+    {
+      "source": "/docs",
+      "destination": "/docs/index.html"
+    },
+    {
       "source": "/integrations/:path*",
       "destination": "https://gsw-mail-production.up.railway.app/integrations/:path*"
     },

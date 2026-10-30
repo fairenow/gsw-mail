@@ -160,3 +160,23 @@ Documentation aligned to admin-managed API keys with one full-mailbox grant. Req
 ## Unified mailbox API and Kimi implementation — October 30, 2026
 
 Implemented full-mailbox keys without recipient allowlists, workspace-owned runtime connections, registry capability discovery/execution with nested admin denial and write idempotency, selected-model AI generation, and admin API/docs/service-activity controls. Kimi is selectable and uses `KIMI_API_KEY`, preserving reasoning metadata during tool continuations. Startup now ensures integration schema before workers. Isolated tests do not establish real mailbox/provider or browser acceptance; mailbox-token reconnection and capability coverage gaps remain explicit in [the reference](integrations/email-api-pilot.md).
+
+
+## Public developer documentation and live diagnostics (2026-10-30)
+
+The public documentation is served from `apps/web/public/docs` on
+`mail-docs.guidedstepswellness.com` through a host-specific Vercel rewrite;
+`/docs` on the mail host is a fallback. API traffic remains on the mail host.
+The old authenticated docs endpoint redirects to the docs subdomain.
+`GET /integrations/v1` provides public connection guidance, and `/reference`
+exposes static mailbox operation schemas only. Private capabilities and all
+mailbox execution still require a bearer key.
+
+Control Center API includes an administrator-authorized, workspace-bound live
+service diagnostic. It reads at most one message without returning its contents
+and calls the selected AI provider plus Kimi when needed. It issues no API key
+and sends no email. It is explicitly distinct from bearer-key acceptance and
+recipient delivery checks. Diagnostic use is rate limited and audited.
+
+DNS for the docs host must be configured at the authoritative DNS provider.
+A successful build or deployment does not establish DNS, TLS or live acceptance.

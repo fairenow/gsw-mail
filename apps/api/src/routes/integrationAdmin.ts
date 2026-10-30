@@ -1,4 +1,7 @@
-import { mailboxApiDocumentation } from "../integrations/documentation.js";
+import { getUserEngine } from "../engine/index.js";
+import { getAiCapabilitySettings } from "../ai/capabilities.js";
+import { getAiProvider } from "../ai/providers/index.js";
+import { HttpError } from "../lib/errors.js";
 import { integrationService } from "../integrations/service.js";
 import { findStoredStalwartMailboxToken } from "../auth/storedStalwartToken.js";
 import { refreshStoredStalwartMailboxToken } from "../auth/refreshStalwartMailboxToken.js";
@@ -23,7 +26,41 @@ export default async function integrationAdmin(app: FastifyInstance) {
     await requireOrgPermission(userId, row.organizationId, ["owner", "admin"]);
     return row;
   }
-  app.get("/api/admin/integrations/docs", async (_req, reply) => reply.type("text/plain; charset=utf-8").send(mailboxApiDocumentation));
+  app.get("/api/admin/integrations/docs", async (_req, reply) => reply.redirect("https://mail-docs.guidedstepswellness.com"));
+  app.post("/api/admin/integrations/diagnostics", { config: { rateLimit: { max: 3, timeWindow: "1 minute" } } }, async req => {
+    const input = z.object({ organizationId: uuid, accountId: uuid }).strict().parse(req.body);
+    await requireOrgPermission(req.user!.id, input.organizationId, ["owner", "admin"]);
+    const [account] = await db.select().from(emailAccounts).where(and(eq(emailAccounts.id, input.accountId), eq(emailAccounts.workspaceId, input.organizationId))).limit(1);
+    if (!account) throw notFound("mailbox not found in this workspace");
+    const checks: { name: string; ok: boolean; detail: string }[] = [];
+    let ctx: Awaited<ReturnType<typeof integrationService.mailboxContext>> | undefined;
+    try {
+      ctx = await integrationService.mailboxContext(account.id);
+      const engine = await getUserEngine({ productUserId: ctx.userId, authUserId: ctx.authUserId, accountId: account.id, headers: {}, permission: "read" });
+      const messages = await engine.listMessages(account.id, { limit: 1 });
+      checks.push({ name: "Live mailbox read", ok: true, detail: `Read succeeded (${messages.length} sample records); message content is not included.` });
+    } catch {
+      checks.push({ name: "Live mailbox read", ok: false, detail: "Mailbox authorization or read failed. Reconnect the mailbox and review server logs." });
+    }
+    const verifyProvider = async (provider: string, name: string) => {
+      try {
+        const result = await getAiProvider(provider).run({ messages: [{ role: "user", content: "Reply with OK. This is a service connectivity check. Do not use tools." }] });
+        checks.push({ name, ok: Boolean(result.content), detail: result.content ? `Provider responded using ${result.model}.` : "Provider returned no text." });
+      } catch (error) {
+        checks.push({ name, ok: false, detail: error instanceof HttpError ? `Provider check failed (HTTP ${error.status}). Check its configuration and account availability.` : "Provider check failed. Review server logs." });
+      }
+    };
+    let selectedProvider: string | undefined;
+    if (ctx) {
+      const settings = await getAiCapabilitySettings(ctx.userId);
+      selectedProvider = settings.modelProvider;
+      if (settings.enabled) await verifyProvider(selectedProvider, "Selected mailbox AI");
+      else checks.push({ name: "Selected mailbox AI", ok: false, detail: "AI is disabled for this mailbox." });
+    }
+    if (selectedProvider !== "kimi" || !checks.some(check => check.name === "Selected mailbox AI" && check.ok)) await verifyProvider("kimi", "Kimi provider");
+    await db.insert(auditEvents).values({ organizationId: input.organizationId, actorUserId: req.user!.id, action: "integration.diagnostics", resourceType: "email_account", resourceId: account.id });
+    return { checkedAt: new Date().toISOString(), accountId: account.id, checks, coverage: "Live service diagnostics only. No external key created, no email sent. Bearer-key requests and recipient delivery need separate verification." };
+  });
   app.get<{ Params: { id: string } }>("/api/admin/integrations/:id/service", async req => {
     const row = await requireInstallation(req.user!.id, req.params.id);
     let health = row.active ? "ready" : "paused";

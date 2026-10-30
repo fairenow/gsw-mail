@@ -15,6 +15,7 @@ export async function integrationApi(app: FastifyInstance, options: { service?: 
     const status = error instanceof IntegrationError ? error.status : error instanceof ZodError ? 400 : error instanceof HttpError ? error.status : (error as { statusCode?: number }).statusCode ?? 500;
     const code = error instanceof IntegrationError ? error.code : status === 400 ? "invalid_request" : status === 413 ? "payload_too_large" : status === 415 ? "unsupported_media_type" : status === 429 ? "rate_limit_exceeded" : "service_unavailable";
     if (status >= 500) req.log.error({ requestId: req.id, code }, "integration request failed");
+    if (status === 401) reply.header("WWW-Authenticate", 'Bearer realm="GSW Mailbox API"').header("Link", '<https://mail-docs.guidedstepswellness.com/#authentication>; rel="help"');
     if (status === 429) reply.header("Retry-After", code === "daily_limit_reached" ? String(Math.ceil((Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate() + 1) - Date.now()) / 1000)) : "60");
     return reply.code(status).send({ error: { code, requestId: req.id, retryable: error instanceof IntegrationError ? error.retryable : status >= 500 || status === 429 } });
   });

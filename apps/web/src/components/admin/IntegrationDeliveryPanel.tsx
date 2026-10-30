@@ -21,6 +21,7 @@ export function IntegrationDeliveryPanel({ organizationId, mailboxes }: { organi
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [diagnostics, setDiagnostics] = useState<{ checks: { name: string; ok: boolean; detail: string }[]; coverage: string } | null>(null);
   const [secret, setSecret] = useState("");
   const readyMailboxes = mailboxes.filter(m => m.status === "active" && m.authSetupStatus === "ready");
   const senderId = accountId || readyMailboxes[0]?.id || "";
@@ -50,7 +51,7 @@ export function IntegrationDeliveryPanel({ organizationId, mailboxes }: { organi
   return <section className="gsw-control-section">
     <div className="gsw-control-section-head"><div><p className="gsw-setup-kicker">GSW Mailbox API</p><h3>API keys and connections</h3><p>Connect an application to a mailbox with full access to its available mail, calendar, contacts, files and AI functions. Workspace and domain administration are excluded.</p></div></div>
     <p>The sending mailbox must be ready and its domain verified. Live sending also requires verified SPF, DKIM and DMARC, plus an existing mailbox authorization. Keep API keys on your application server.</p>
-    <p><a className="gsw-btn gsw-btn-quiet" href="/api/admin/integrations/docs" target="_blank" rel="noreferrer">Open API documentation</a></p>
+    <p><a className="gsw-btn gsw-btn-quiet" href="https://mail-docs.guidedstepswellness.com" target="_blank" rel="noreferrer">Open API documentation</a></p>
     <p>Base URL: <code>{window.location.origin}/integrations/v1</code> · Discover available functions at <code>GET /capabilities</code>.</p>
     {error && <p role="alert">{error}</p>}
     {secret && <div className="gsw-audit-card" role="status"><h4>Save your API key</h4><p>This key is shown once. Copy it into your server’s secret settings before dismissing.</p><label className="gsw-auth-field">New API key<input readOnly value={secret} onFocus={event => event.currentTarget.select()} autoComplete="off" spellCheck={false} /></label><button className="gsw-btn gsw-btn-quiet" onClick={() => setSecret("")}>I’ve saved the key</button></div>}
@@ -64,6 +65,10 @@ export function IntegrationDeliveryPanel({ organizationId, mailboxes }: { organi
       {!testMode && <p>Live mode enables real mailbox actions using this key.</p>}
       <div><button className="gsw-btn gsw-btn-primary" disabled={busy || loading || !senderId} type="submit">{busy ? "Working…" : "Create connection"}</button></div>
     </form>
+    <div className="gsw-audit-card"><h4>Live service checks</h4><p>Check the selected mailbox and AI providers using its existing authorization. This reads at most one message without returning its contents, makes a small AI connectivity request, creates no API key and sends no email.</p><button className="gsw-btn gsw-btn-quiet" disabled={busy || loading || !senderId} onClick={() => void perform(async () => {
+      setDiagnostics(null);
+      setDiagnostics(await request(`${base}/diagnostics`, "POST", { organizationId, accountId: senderId }, AbortSignal.timeout(180000)));
+    })}>{busy ? "Working…" : "Run mailbox and AI checks"}</button>{diagnostics && <div role="status">{diagnostics.checks.map(check => <p key={check.name}><strong>{check.name}: {check.ok ? "Passed" : "Needs attention"}</strong> — {check.detail}</p>)}<p>{diagnostics.coverage}</p></div>}</div>
     <h4>Your connections</h4>
     {loading ? <p role="status">Loading connections…</p> : installations.length === 0 ? <p>No website connections yet.</p> : installations.map(installation => <article className="gsw-audit-card" key={installation.id}>
       <h4>{installation.name}</h4><p>{installation.testMode ? "Test" : "Live"} · {installation.active ? "Active" : "Paused"} · {installation.dailyLimit} direct email submissions per UTC day</p>
