@@ -1,33 +1,39 @@
-# GSW Delivery — service boundary and staged extraction
+# GSW Delivery and the unified mailbox API
+
+Updated October 30, 2026. The [mailbox API service plan](GSW_MAIL_API_SERVICE_PLAN.md) is authoritative for the current API direction. This document records the delivery boundary underneath it.
 
 ## Product position
-GSW Mail is customer zero. GSW Delivery is an emerging multi-tenant email delivery and marketing infrastructure product backed by Stalwart, with a controlled own-app API pilot implemented in code. The service must be proved against internal authentication, onboarding, and small opted-in campaigns before opening a developer API.
+
+GSW Mail is the first customer of the shared delivery infrastructure. External applications should use one mailbox API, managed with server keys in the customer's GSW admin portal. That API must eventually expose every supported mailbox capability, including sending; delivery is one part of the API rather than a separately permissioned customer product.
+
+The current API branch implements only the narrower email pilot. [Its reference](integrations/email-api-pilot.md) documents exact routes and restrictions. Full mailbox access is the approved direction and has not shipped simply because it is documented.
 
 ## Architecture decisions
-- Keep Stalwart as transport/storage; GSW Delivery owns product APIs, tenant identity, job status, idempotency, quotas, sender domains and marketing compliance.
-- Define an internal DeliveryClient interface now so GSW Mail does not directly depend on an external public HTTP API. Introduce HTTP endpoints and SDK only after internal contracts stabilize.
-- Every delivery operation must carry organizationId, projectId (nullable for legacy internal requests), senderIdentityId, requestId, purpose (transactional|marketing), and caller authorization. All persistent reads/writes must be tenant-scoped.
-- Use transactional outbox + worker: accept and validate => persist => enqueue => deliver through Stalwart => reconcile terminal status. Prefer at-least-once worker execution with idempotent submission and dedupe, not misleading exactly-once claims.
-- Never give external developers Stalwart admin credentials or direct JMAP superuser access. Scoped credentials and permission policy live in the GSW service.
-- Public API candidate (not yet exposed): POST /v1/emails, GET /v1/emails/:id, POST /v1/domains, GET /v1/domains/:id, GET /v1/usage, webhook configuration. Avoid exposing campaigns until consent and suppression infrastructure is complete.
-- Use one shared sending core for transactional and marketing emails, but separate sender reputation, content rules, consent requirements, opt-outs, quotas and default policies.
 
-## Milestones and acceptance criteria
-1. **Transactional parity**: Authenticate through existing GSW flows, deliver verification/reset/welcome from admin@team.guidedstepswellness.com through Stalwart; inspect sender alignment, inbound reachability and delivery status; confirm repeated requests cannot cause accidental duplicate dispatch.
-2. **Sender isolation**: Verify domain/identity ownership; outbound requests from one tenant must not access another tenant's sender, recipient logs, or templates. Add cross-tenant negative tests.
-3. **Durable delivery contracts**: Persist request IDs, immutable payload versions, provider submission IDs and delivery events; test replay, crash recovery, retries, bounces and non-duplicating requests.
-4. **Marketing compliance foundation**: Explicit opt-in, durable consent audit, unsubscribe tokens and one-click headers, hard-bounce/complaint suppression, per-tenant and global limits, human approval and opt-out rechecks at send time. Do not send promotional campaigns until done.
-5. **Pilot**: Send limited internal and subscribed campaigns, verify complaint/bounce trends and DNS before scaling. Require an operator kill switch.
-6. **External developer beta**: Project-scoped keys, domain verification, safe HTTP endpoints, SDK examples, documentation, usage metering, quotas, monitoring and abuse screening. Pricing and billing follow proven stability.
+- Keep Stalwart behind MailEngine and the existing relay. Shared GSW services own tenant/mailbox authorization, request tracking, idempotency, delivery status and capacity accounting.
+- Use one full-mailbox grant for external keys. Do not require per-feature scopes, fixed recipient lists, separate developer OAuth registration or workflow-specific keys in the customer setup. The pilot's narrower controls are implementation gaps to replace.
+- Keep admin control separate: the customer creates/revokes keys and manages service access in the admin portal. No mailbox API key may manage domains/DNS, provision mailbox accounts, change admin membership or create API credentials. Earlier suggestions for public domain-management routes are outside this mailbox API.
+- A connection is workspace-owned, binds an explicit mailbox and can be managed by current authorized admins. The creator is recorded for audit; continued creator membership should not be the sole service authority.
+- Never give external developers Stalwart admin credentials or JMAP superuser access. Implement durable authorized mailbox service access without substituting an admin identity for the mailbox.
+- Continue to queue outbound sends. Persist acceptance atomically, deduplicate request retries, reconcile uncertain submissions and retain status evidence. Do not claim exactly-once delivery.
+- Use the same shared sending core and existing consent, unsubscribe, suppression and sender validity behavior for mailbox operations. Broad API coverage does not bypass those product rules.
 
 ## Admin experience
-The Control Center Email Delivery panel manages the controlled pilot: installations, explicit sender/recipient grants, test/live mode at creation, pause/resume, and server key creation/revocation. Customer webhooks, public OAuth onboarding and marketing remain future work. Do not advertise deployment acceptance or public availability until verified.
 
-## Cutover safeguards
-- Deploy with OUTBOUND_RELAY=stalwart only; check Stalwart submissions and OTP inbox arrival before deleting RESEND_API_KEY or package-lock dependencies.
-- Keep marketing launches disabled until suppression/unsubscribe and sender-domain audits pass.
-- Admin email is for authentication and notifications. Prefer a separately provisioned marketing identity/domain with a monitored reply mailbox once campaigns grow.
+Target **Admin → API**: select a mailbox, create a full-access server key, inspect key metadata, rotate/revoke keys, pause/resume the connection, review health/activity/usage and open linked documentation/examples. No granular capability builder is required.
 
-## October 30, 2026 pilot update
+The current **Control Center → Email Delivery** panel implements pilot connections, narrow scopes/recipient grants, key creation/revocation and pause/resume. The consolidated API information/documentation experience remains outstanding. Customer guide: [mailbox API](integrations/mailbox-api.md).
 
-A controlled own-app API pilot is now implemented in code, with a Control Center Email Delivery panel replacing the coming-soon placeholder. It uses installation-scoped server keys, fixed sender/recipient grants, test simulations, queued live acceptance, status polling and quotas. Production migration and real-host delivery acceptance remain required. This is not the broader external developer beta or marketing launch. The concrete contract and customer process are in [email API pilot](integrations/email-api-pilot.md); remaining service work is in [GSW Mail API service plan](GSW_MAIL_API_SERVICE_PLAN.md).
+## Delivery readiness
+
+Before production acceptance, verify sender/domain alignment, actual mailbox authorization and real delivery. Validate delivery events, suppression, duplicate retries, outage recovery and unknown-submission reconciliation. Apply the pilot migration before deploying the changed worker. The configured database was unavailable during implementation; isolated database tests passed, but no production migration or real send was established.
+
+The target mailbox API should cover reading and organizing mail, drafts, replies, cc/bcc, templates/signatures, attachments, supported scheduling, contacts, calendars, files, campaigns and other available mailbox functions. Maintain a concrete parity inventory rather than assuming existing MCP exposure means HTTP coverage exists.
+
+Signed customer webhooks, usage/activity/health screens, recovery tools, retention policies and pricing remain work. Future workflow/catalog features use these same mailbox services without another registration or permission tier. Optional OAuth or more granular APIs can be reconsidered later.
+
+## Existing transport cutover safeguards
+
+- Deploy with `OUTBOUND_RELAY=stalwart`; check actual submissions and inbox arrival before removing old relay dependencies.
+- Preserve existing marketing consent, unsubscribe, suppression and sender-domain behavior when exposing campaign operations.
+- Keep administrative notification identity separate from customer mailbox ownership and sender reputation.

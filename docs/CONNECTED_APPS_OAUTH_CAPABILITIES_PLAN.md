@@ -1,5 +1,8 @@
 # GSW Mail Connected Apps — OAuth Capabilities & User-Controlled Sharing
 
+> API product clarification (October 30, 2026): this document concerns the separate delegated OAuth/Connected Apps proposal. Its granular consent categories and application-registration steps are not requirements for the admin-issued mailbox API key product. That product now targets one full-mailbox grant, with key/service management and docs in the admin portal. See [mailbox API plan](GSW_MAIL_API_SERVICE_PLAN.md) and [customer guide](integrations/mailbox-api.md). This note does not change existing OAuth or MCP runtime authorization.
+
+
 **Status:** Draft / living design document  
 **Last revised:** 2026-10-14  
 **Scope:** GSW Mail web, mobile, API, OAuth provider, AI inference, and third-party integrations  

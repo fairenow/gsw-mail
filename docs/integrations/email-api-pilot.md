@@ -1,8 +1,10 @@
 # GSW Mail email API pilot
 
-Status: implemented pilot; deployment and live-host acceptance still required. This implements the first email API milestone from [the service plan](../GSW_MAIL_API_SERVICE_PLAN.md). Public OAuth integration registration, signed customer webhooks, billing, templates, attachments, unrestricted visitor acknowledgments, and marketplace workflows are not part of this release.
+Status: current implementation reference for the API pilot branch; deployment and live-host acceptance still required. Only connection inspection, transactional email submission/status and admin key/connection management are implemented here.
 
-## Customer setup
+**Product direction has changed:** the target is one full-mailbox API key managed in the admin portal, with no per-feature scope or recipient-selection flow. See [mailbox API customer guide](mailbox-api.md) and [the updated service plan](../GSW_MAIL_API_SERVICE_PLAN.md). The scopes, allowlist, single-email payload and original-authorizer dependency below describe existing code, not the final product requirements. Documentation changes do not remove these restrictions from runtime behavior. External OAuth registration is not a prerequisite for the approved key-based API.
+
+## Current pilot setup (temporary restrictions)
 
 1. Sign in as a GSW workspace owner or administrator. Create/verify the workspace domain and create a separate sending mailbox. Complete its mailbox login setup. Admin identities remain control-plane identities and are not turned into mailboxes.
 2. Open **Control Center → Email Delivery**. Create a named website connection, choose its sending mailbox, and list exact approved recipients. Test mode is enabled by default. It persists simulated requests but never creates an outbound job or sends mail.
@@ -13,9 +15,9 @@ Status: implemented pilot; deployment and live-host acceptance still required. T
 7. Create a separate live connection with a small approved recipient list, initially ministry staff. The mailbox must be active, ready, and on the same workspace's verified domain. The server must use the Stalwart mail engine and relay; a demo/null transport cannot accept live integration sends.
 8. Test one staff notification and confirm the real mailbox received it. Inspect submitted versus delivered status. Verify retries do not create another request; pause the connection and verify new work is blocked. Only then configure the website's production outbox.
 
-Safe Place's first live use is **owner notification of a persisted inquiry**, to a fixed approved ministry address. Dynamic visitor acknowledgments wait for broader recipient policy, abuse handling, and production acceptance. An inquiry does not grant newsletter consent.
+The current pilot supports **owner notification of a persisted inquiry** to an approved ministry address. Full mailbox sending, including dynamic visitor recipients, is the approved next implementation direction; it does not require a new customer permission-selection system. Until that change ships, the existing allowlist still applies. An inquiry does not grant newsletter consent.
 
-## Public pilot endpoints
+## Implemented pilot endpoints
 
 All routes require `Authorization: Bearer <server-key>`. Browser session cookies and mobile/MCP OAuth tokens do not authenticate these endpoints. Errors use `{ "error": { "code", "requestId", "retryable" } }`; responses are `Cache-Control: no-store`.
 
@@ -66,7 +68,7 @@ Status returns the request ID, test flag, processing status, deliveryStatus, fai
 - Integration sends whose dispatch lease expires are quarantined with `submission_unknown`. Ambiguous transport outcomes are also quarantined. Ordinary mailbox retry cannot requeue integration failures. An operator must inspect submission records and reconcile before deciding to make a new send. Never promise exactly-once delivery.
 - Temporary failures before submission can retry through the existing worker. Failed policy checks surface a stable failure code. Raw failure details and private message bodies are not returned by the public API.
 
-## Admin API
+## Existing admin management API (not callable with mailbox API keys)
 
 These endpoints require the existing GSW signed-in product session and workspace owner/admin permission, not an integration key. They live behind the Control Center panel.
 
@@ -79,7 +81,7 @@ These endpoints require the existing GSW signed-in product session and workspace
 | `GET /api/admin/integrations/:id/keys` | Metadata only: ID, name, prefix, scopes, expiry, revocation and creation dates |
 | `DELETE /api/admin/integrations/:id/keys/:keyId` | Revoke rather than delete the credential |
 
-Rotate by creating a new key, updating the website's server secret, checking connection health, letting existing work settle, then revoking the previous key. To change a sender, recipient grant, or test/live mode in the pilot, create a new installation. Pause the old installation after cutover. The UI intentionally does not provide arbitrary grant editing.
+Rotate by creating a new key, updating the website's server secret, checking connection health, letting existing work settle, then revoking the previous key. To change a sender, recipient grant, or test/live mode in the pilot, create a new installation. Pause the old installation after cutover. This is a current pilot limitation. The target grants full mailbox functionality and does not add a granular permission editor.
 
 ## Deployment and acceptance
 
@@ -91,6 +93,8 @@ Rotate by creating a new key, updating the website's server secret, checking con
 
 Implemented tests use Fastify injection and a PostgreSQL-compatible database: migration execution, durable simulated acceptance, duplicate/reordered requests, changed-payload conflicts, installation isolation, strict validation, scope/expiry/revocation, pause/suspended grants, quotas, suppression, atomic rollback, live enqueue without network send, dispatch-time policy rechecks, and stale-lease quarantine. API and web typechecks/build are part of validation. These do not substitute for live mailbox acceptance.
 
-## Next releases
+## Next implementation work
 
-Add a reusable application identity and resource-bound OAuth installation flow; customer signed webhooks and usage/status UI; broader recipient permissions with abuse and suppression operations; then templates, attachments and subscriber workflows. Use the existing service plan for the remaining roadmap. Keep future API contracts labeled proposed until implemented and accepted.
+Replace narrow pilot scopes and mandatory recipient allowlists with one full-mailbox grant; keep the explicit mailbox/workspace boundary. Make connections workspace-owned and manageable by existing admins without runtime dependence on the original creator. Complete durable mailbox service authorization and consolidate API keys, service information and documentation in the admin portal. Expose all available mailbox functions through the same API, then add health/activity/usage, signed webhooks and recovery tools. No external OAuth app registration or per-feature permission builder is required for this key-based product.
+
+The [mailbox API guide](mailbox-api.md) owns the customer-facing direction; this document remains the exact existing pilot contract until implementation changes.

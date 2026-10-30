@@ -115,4 +115,4 @@ website, and third-party integrations must be able to be down without stopping m
 
 ## External application email API
 
-The controlled email API pilot and customer onboarding process are documented in [docs/integrations/email-api-pilot.md](docs/integrations/email-api-pilot.md). The broader roadmap is in [docs/GSW_MAIL_API_SERVICE_PLAN.md](docs/GSW_MAIL_API_SERVICE_PLAN.md).
+The approved product is one full-mailbox API with keys and service management in the admin portal. Start with the [mailbox API customer guide](docs/integrations/mailbox-api.md) and [service plan](docs/GSW_MAIL_API_SERVICE_PLAN.md). The [email pilot reference](docs/integrations/email-api-pilot.md) describes the narrower code currently implemented; full mailbox coverage and the consolidated API/docs portal remain to be built.

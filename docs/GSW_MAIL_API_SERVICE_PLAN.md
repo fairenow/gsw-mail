@@ -1,181 +1,116 @@
-# GSW Mail API service and customer onboarding
+# GSW Mail mailbox API service plan
 
-Proposed specification • October 30, 2026 • First customer: Safe Place Ministries
+Updated October 30, 2026. First customer: Safe Place Ministries.
 
-## Purpose and status
+## Product decision
 
-Turn GSW Mail’s existing communication capabilities into a supported service that external applications can connect to. Start with transactional email, prove the customer installation model, and extend the same model to contacts, calendars, files, and configurable workflows.
+Provide one mailbox API, managed from the customer's GSW admin portal. The administrator creates a connection for a mailbox and issues a server API key. That key grants the mailbox's complete supported product capability set. There is no customer-facing checklist of individual tools, read/write scopes, workflows, or recipient addresses in the target design.
 
-This document is the original proposed roadmap. The controlled own-app email API pilot is now implemented in code; see [the implementation contract and customer onboarding guide](integrations/email-api-pilot.md) for the routes and screens that exist. Public OAuth onboarding and later milestones remain proposed. Production enablement requires migration, deployment and live-host acceptance.
+The admin portal manages the service; the external key operates the mailbox. This is the same administrative-versus-mailbox separation used by the MCP access profiles. It is not a promise that every MCP tool is already available over HTTP.
 
-Verified foundation: GSW exposes MCP tools for sending and for templates, contacts, and campaigns. The current product API middleware explicitly restricts OAuth bearer authentication to the first-party mobile client. This prevents treating an arbitrary external app’s OAuth token as product API authorization. Source inspected October 30, 2026: https://github.com/fairenow/gsw-mail/blob/main/apps/api/src/auth/middleware.ts
+This decision supersedes the earlier proposals for granular API permissions, per-action installation grants, mandatory application registration, and OAuth-first external customer onboarding. More granular API products can be considered later; they are not prerequisites for this release. Existing OAuth, mobile, MCP and their authorization rules remain separate.
 
-Other delivery, billing, webhook, and developer-access capabilities need an implementation audit before reuse. Tool exposure alone does not establish a production-ready external API.
+## Implemented versus intended
 
-## Service boundary
+| Area | Implemented on the API pilot branch | Approved target; remaining work |
+|---|---|---|
+| Management | Workspace owner/admin can create connections and keys, list keys, revoke them, pause/resume connections | Consolidated API management and linked API documentation in the admin portal |
+| Mailbox binding | Each installation names one mailbox in the workspace | Keep an explicit mailbox boundary; broad access inside that mailbox |
+| Runtime API | Connection inspection, transactional email submission, message status | Expose all supported mailbox capabilities through one versioned API |
+| Permissions | Three email/connection scopes; fixed recipient allowlist | One full-mailbox access grant; remove feature-scope and recipient selection requirements |
+| Sending | Atomic queue acceptance, idempotency, test simulations, quotas, suppression checks | Use the same mailbox sending abilities as the product, including dynamic recipients, replies, templates and attachments |
+| Ownership | Connections depend on the original authorizing administrator retaining active access | Workspace-owned connections managed by current authorized admins; creator is audit attribution |
+| Mailbox credentials | Worker requires an existing authorized mailbox OAuth credential | Durable service access managed through the connection lifecycle, without unrelated browser-session dependence |
+| Operations | Status polling; uncertain sends quarantined | Activity, connection health, usage, recovery and signed customer webhooks |
+| Deployment | Code and automated checks passed on the pilot; no live acceptance established | Migrate, deploy, verify a real mailbox, then connect Safe Place |
 
-| Layer | Responsibility |
+The current code is not yet the full-mailbox service described here. [The pilot reference](integrations/email-api-pilot.md) is authoritative for requests accepted by the current branch. [The mailbox API guide](integrations/mailbox-api.md) describes the approved customer experience and remaining implementation.
+
+## Administration and mailbox boundary
+
+| Admin account / portal | External mailbox API key |
 |---|---|
-| External web app | Visitor experience, local business records, consent capture, server-side API calls, customer-facing status |
-| GSW integration API | Authenticate connections, enforce scopes and resources, validate requests, accept durable work, report status |
-| Shared GSW services | Send messages, manage templates and contacts, enforce suppression and sender rules, execute supported actions |
-| Delivery workers | Process accepted work, retry temporary failures, record provider results |
-| Event delivery | Send signed status notifications to registered customer endpoints |
-| MCP | Let authorized assistants manage the same services and workflows |
+| Select a mailbox owned by the workspace | Operate only that connected mailbox and its associated product resources |
+| Create, view metadata for, rotate and revoke keys | Read/search mail, compose, send, reply, forward, organize and delete messages |
+| Pause/resume a connection | Use the mailbox's calendars, contacts, files, templates, settings and other available mailbox functions |
+| Inspect usage, activity, errors and service health | Receive supported events and run authorized mailbox operations without an open chat |
+| Read API docs, onboarding and examples | No workspace, domain, DNS, provisioning, billing or credential administration |
 
-Website → website backend → GSW integration API → durable job → shared sending service → delivery infrastructure.
+Creating a mailbox API key must not create a mailbox for the administrator. Workspace administration remains authenticated through the existing admin account. A mailbox key must never manage API keys, create/delete mailbox accounts, change other users' access, reset account credentials or administer domains. Deleting an email is a mailbox operation; deleting the mailbox account is administration.
 
-Delivery results → GSW status records → signed webhook → website backend.
+One API means one base URL, one authentication method and one broad mailbox capability model. It can have many routes and multiple separately revocable keys. One key does not gain access to every mailbox in the workspace. A customer can connect additional mailboxes through the same API model.
 
-MCP calls the same shared service layer. A website does not need an AI provider or an open chat to send a confirmation.
+## Capability coverage
 
-## Identity and ownership model
+The implementation backlog is parity with the current mailbox product/MCP capability inventory, excluding the admin profile. These categories describe coverage, not selectable permission tiers.
 
-| Object | Meaning | Lifecycle |
-|---|---|---|
-| Customer workspace | Organization responsible for usage and resources | Owns installations, senders, usage, and billing |
-| Integration application | Identity of the software connecting to GSW | Registered once per independently operated integration |
-| Installation | One customer’s grant to that application | Connect, restrict, rotate credentials, pause, revoke |
-| Credential | Server-side authority for an installation | Expiring or rotatable; independently revocable |
-| Workflow | Owned configuration using approved capabilities | Create and version within an installation |
-| Message/job | One accepted unit of work | Queued, processed, result recorded |
+| Mailbox area | Target coverage |
+|---|---|
+| Inbox and messages | List, retrieve, search, threads, attachment download, read/unread, flags, move/archive/trash/delete |
+| Compose and sending | Drafts, send, reply/reply-all, forward, cc/bcc, reply-to, templates, signatures, attachments, supported scheduled/recurring sends and status |
+| Organization and preferences | Folders and supported mailbox rules/settings/preferences |
+| Contacts and audiences | Contacts, address books, groups/subscriber records and supported consent/suppression behavior |
+| Calendar | Calendars, events, availability where supported, invitations, RSVP and reminders |
+| Files and media | Mailbox-owned files/folders, uploads/downloads, supported sharing and media operations |
+| Campaigns | Mailbox campaigns/newsletters, preparation, scheduling, sending and results where supported |
+| Tasks, AI and automations | Existing mailbox-owned task/chat, research, generation and automation abilities where supported by the product |
+| Events and status | Connection health, operation status, mailbox activity and supported webhook subscriptions |
 
-A reusable connector can serve many websites through isolated installations. Each customer still authorizes its own resources. New workflows do not create new OAuth applications. An independently operated developer registers its own application rather than borrowing another developer’s identity.
+Inventory every existing mailbox function before declaring parity. Record the function, shared implementation, HTTP operation, test coverage and delivery status. Reuse the service behind a function; do not make the HTTP API imitate an MCP conversation or bypass execution rules. Missing underlying product abilities, such as public media publishing or booking conflict prevention, still require implementation before exposure can be described as complete.
 
-Effective access is the intersection of the authorizing user’s access, application permissions, installation resources, credential scopes, and any workflow restrictions. No prompt or request field can enlarge that grant.
+All mailbox functions belong to the same grant. Extending the API to another mailbox function is coverage work, not another customer permission-selection flow. Keep the API version and capability documentation explicit when adding behavior.
 
-## Authentication products
+## Authentication and customer onboarding
 
-Offer two deliberate paths, using a common authorization model underneath:
+The initial customer path uses an admin-issued server API key. No external developer OAuth application registration or per-tool consent wizard is required to use this product. A future optional OAuth connection experience is a separate decision, not a dependency.
 
-1. **Own application:** a workspace administrator creates an installation and a scoped server API key. Suitable when the website and GSW account have the same owner. Store only a hash of the key; show the secret once; support overlap during rotation, expiration, and immediate revocation.
-2. **Connect customers:** a registered integration uses an OAuth authorization-code flow with PKCE. Each customer selects a workspace and resources at consent. Store client credentials and tokens server-side; support refresh, revocation, and reconnect behavior.
+1. Customer signs into its GSW admin account and selects its workspace.
+2. Customer finishes domain verification and creates a separate mailbox if needed.
+3. In the planned **Admin → API** area, customer selects the mailbox, names its connection and creates a key. The key grants full mailbox access.
+4. Customer saves the secret once in its website's backend secret settings. GSW stores a hash and display metadata.
+5. Customer follows the linked API documentation, checks its connection and tests operations using that mailbox.
+6. Customer enables production after deployment and mailbox service checks pass, then monitors activity and manages keys from the same portal.
 
-API keys are an MVP option, not an existing verified capability. OAuth is required before offering a third-party “Connect GSW” experience. Never work around the current restriction by pretending to be the mobile client or allowing all OAuth clients into existing product routes.
+The current UI is **Control Center → Email Delivery** and implements only the narrower pilot. Renaming/consolidating it and adding documentation/health/usage links is outstanding. Do not present the planned API screen as deployed.
 
-Tokens must be issued for the integration API’s audience. Validate audience, issuer, expiry, scopes, installation state, and ownership at the resource boundary. Disconnect must block queued actions when they reach execution, not merely prevent new submissions.
+The website calls GSW from its backend. Public forms do not receive keys or get to choose arbitrary actions through an exposed proxy. The admin-authorized key is the authority for supported mailbox operations; do not introduce a per-request approval requirement merely because a website uses the API.
 
-## First API contract — proposed, not implemented
+## Ownership and service continuity
 
-Use a versioned surface, initially `/integrations/v1`. Exact public base URL is a deployment decision.
+The workspace owns the connection. Any currently authorized owner/admin can manage it under existing workspace rules. Store who created, changed and revoked it for audit, but do not make the original creator's continued employment or membership the sole runtime authority.
 
-| Operation | Example route | Purpose |
-|---|---|---|
-| Inspect connection | `GET /connection` | Installation status, effective scopes, permitted resources |
-| Discover senders | `GET /senders` | Approved sender identities available to this installation |
-| Send message | `POST /emails` | Validate and durably queue transactional email |
-| Inspect result | `GET /emails/{id}` | Acceptance, processing, and delivery history |
-| List templates | `GET /templates` | Accessible published templates and versions |
-| Inspect usage | `GET /usage` | Current usage and applicable limits |
-| Manage webhook endpoint | `/webhook-endpoints` | Register, verify, rotate signing secrets, pause |
+Changing workspace administrators should not require a new website integration when the workspace and mailbox remain the same. No separate transfer wizard is required initially; current admin membership should control management. Key revocation, connection pause, mailbox disablement and loss of valid mailbox ownership must still take effect.
 
-An email request contains a permitted sender ID, recipients, subject and text/HTML or a template version with variables, optional reply-to, approved attachment IDs, and customer correlation metadata. Require an `Idempotency-Key` for sends. Do not accept arbitrary remote attachment URLs in the first version.
+Mailbox service access must not rely on an unrelated admin browser session remaining open. The implementation must support a durable, explicitly authorized mailbox connection through the MailEngine boundary, and surface reconnect-required health if its underlying authorization becomes invalid. Do not substitute the administrator's identity or give the external application mail-server admin credentials. The pilot's original-authorizer check and stored-mailbox-token dependency remain known gaps until changed in code.
 
-Example request body:
+## Shared architecture and operational behavior
 
-```json
-{
-  "senderId": "sender_example",
-  "to": [{"email": "visitor@example.org"}],
-  "templateId": "inquiry_acknowledgment",
-  "templateVersion": 1,
-  "variables": {"firstName": "Jordan"},
-  "metadata": {"externalRecordId": "inquiry_example"}
-}
-```
+Website backend → unified mailbox API → authenticated mailbox context → existing shared product services → mailbox engine, storage and durable workers.
 
-Return `202 Accepted` only after durable persistence, with a GSW message ID and `queued` status. Accepted does not mean delivered. A successful downstream handoff is distinct from recipient-server delivery, and neither proves inbox placement or that a person read it.
+MCP and the website API can use the same service implementations, while retaining their own authentication paths. The API does not require an AI provider in the middle.
 
-Use a stable error envelope: code, safe explanation, request ID, and whether retry is appropriate. Distinguish invalid input, authentication failure, insufficient permissions, conflicting idempotency reuse, rate limit, and temporary unavailability. Document retry headers and backoff behavior.
+Retain ordinary service protections: mailbox/workspace isolation, secret hashing and revocation, input validation, verified sender identity, suppression/unsubscribe behavior, capacity limits, durable acceptance, duplicate prevention and auditable results. These are platform behavior, not customer-facing granular capability choices. The pilot's hardcoded limits are current implementation values, not final commercial plan decisions.
 
-Idempotency is scoped to the installation and operation. Store a request fingerprint: the same key and payload returns the original result; changed payload with the same key is a conflict. Publish the retention window. Guard against duplicate worker execution as well as duplicate HTTP requests. Reconcile ambiguous downstream send outcomes before retrying; do not promise exactly-once email delivery.
+Keep transactional and marketing behavior consistent with the existing product. An inquiry is not newsletter consent. Templates, files and audiences stay owned by their mailbox/workspace; broad mailbox access does not authorize access to someone else's resources.
 
-## Sending rules and operations
+Use stable operation IDs, status and idempotency for supported writes. Accepted does not mean delivered. Keep uncertain sends quarantined until reconciled rather than automatically sending them again. Customer webhooks need signatures, retries and duplicate/out-of-order handling; they are not implemented yet. Ordinary webhooks are separate from provider-specific MCP event delivery.
 
-- Verify sender/domain ownership and required email authentication before production sending. The customer may select only authorized senders; inbound contact-form addresses belong in reply-to, not a spoofed from field.
-- Separate transactional and marketing purpose. An inquiry or booking does not grant newsletter consent. Marketing must honor recorded consent, unsubscribe, and suppression.
-- Enforce recipient, message-size, attachment, concurrency, and usage limits on the server. Avoid logging bodies, secrets, or ministry inquiry details by default.
-- Track queued, processing, submitted, delivered, bounced, failed, and suppressed outcomes where supported by delivery evidence. Track complaints when the delivery provider supplies them.
-- Reuse existing queue and delivery infrastructure only after auditing it. Add reconciliation for uncertain outcomes and an operator path for failed jobs.
-- Provide isolated test mode. It must not accidentally send to unrestricted real recipients; use simulated events or an explicit verified-recipient allowlist.
-- Attribute usage to customer, installation, and credential. Define billable units, quotas, overage behavior, abuse response, retention, and support ownership before production launch. Pricing amounts remain undecided.
+## Delivery sequence
 
-## Webhooks and synchronization
+1. **Align the API foundation:** one full-mailbox grant, remove pilot-only recipient/feature selections, workspace-owned administration, durable service authorization, admin API/docs entry point. Preserve test mode and existing isolation/reliability behavior.
+2. **Complete mail parity:** reading, search, threads, drafts, replies, message actions, templates, signatures, attachments and supported scheduling. Add operation tests and capability inventory as routes are implemented.
+3. **Complete mailbox product parity:** contacts, calendars, files, campaigns, tasks/AI/automation and associated mailbox preferences through the same key. Do not add per-feature API plans or consent choices.
+4. **Finish customer operations:** health, usage, activity, signed webhooks, recovery, retention/deletion and key-expiration visibility. Define pricing separately from permission tiers.
+5. **Prove Safe Place end to end:** persist inquiry and website outbox → owner notification → visitor acknowledgment → status in its admin. Then connect subscribers, calendars and media using the same API.
+6. **Build owned workflows and the catalog:** versioned configurations and run history above existing mailbox services. Workflows organize behavior; they do not force a new API registration or feature-scope system.
 
-Start with email accepted, submitted, delivered, bounced, and failed events as supported by the delivery infrastructure. Include a unique event ID, schema version, timestamp, installation ID, message ID, and customer correlation ID.
+Deploy only after the required migration and acceptance checks. The pilot has automated evidence, but no production migration, real mailbox send or complete browser acceptance was established by that work. Service parity requires a test for every implemented mailbox operation, cross-mailbox denial and explicit denial of admin operations with a mailbox key.
 
-Sign the raw payload with an endpoint-specific secret and timestamp. Customers verify the signature and replay window before processing. Retry temporary failures with bounded backoff; expose attempts and controlled replay. Delivery is at least once and may arrive out of order: receivers deduplicate by event ID and use status history rather than blindly replacing newer states.
+## Documentation ownership
 
-Validate callback destinations and restrict outbound access to prevent internal network requests. Verify endpoint ownership. Keep personal content out of event payloads when an authorized API read can retrieve it instead.
+- This plan is the product direction and supersedes earlier API scope/registration proposals.
+- [Mailbox API guide](integrations/mailbox-api.md) describes customer onboarding, portal management, capability coverage and current gaps.
+- [Email API pilot reference](integrations/email-api-pilot.md) documents the existing routes, exact payloads, temporary restrictions and deployment prerequisites.
+- Existing MCP and OAuth documents describe their own products. They must not be interpreted as requiring granular OAuth permissions for this admin-issued mailbox-key API.
 
-Ordinary customer webhooks are separate from any provider-specific MCP Events adapter. Provider event support requires its own current specification check and implementation; it is not a dependency for the first email API.
-
-## External web app customer guide
-
-This section describes the target onboarding experience after implementation.
-
-| Step | What the customer/developer does | What GSW provides or validates |
-|---|---|---|
-| 1. Establish ownership | Create a GSW organization/workspace; choose its administrator and usage owner | Workspace and customer identity |
-| 2. Choose connection type | Select own-app API access or register a reusable OAuth integration | Installation or application registration |
-| 3. Register software | Supply app name, owner contact, website, exact redirect URIs for OAuth, and intended capabilities | App identity, approved configuration, test access |
-| 4. Configure sender | Add and verify domain/sender and required DNS records | Verification status and permitted sender IDs |
-| 5. Grant access | Select mailbox/sender and minimum scopes; for OAuth, each customer consents separately | Installation with explicit resource bindings |
-| 6. Configure backend | Store secrets in the hosting secret store; implement connection checks and token refresh where relevant | Credential lifecycle and documented API contract |
-| 7. Implement requests | Save business data first; queue sends with stable idempotency keys; retain GSW IDs | Durable acceptance and status lookup |
-| 8. Receive results | Register HTTPS callback; verify signatures; deduplicate and reconcile events | Signing secret, test events, retry history |
-| 9. Pass testing | Test successful sends, duplicate requests, revocation, failures, and reconnect | Test checklist and visible results |
-| 10. Enable production | Select plan/limits and complete required sender and abuse checks | Production access, usage reporting, support route |
-| 11. Operate | Monitor failures, rotate keys, honor consent, manage usage | Logs, incident visibility, replay and revocation controls |
-
-No API secret or refresh token goes into a browser bundle. A public form calls the website backend; the backend validates and limits submissions, saves the record, then calls GSW. Do not allow an unauthenticated form to choose arbitrary recipients or arbitrary email content.
-
-For OAuth onboarding, bind the callback to the initiating administrator with state validation and PKCE. Validate exact redirect URIs. A successful GSW login does not itself grant administration rights to the website.
-
-The production approval policy should be published: what is automatic, what needs review, why access might be restricted, and how customers resolve it. Do not require manual review for every workflow or template.
-
-## Safe Place Ministries reference installation
-
-**Owner setup:** select the ministry workspace, verified sending identity, owner notification destination, reply-to policy, and approved acknowledgment template. Confirm who owns billing and operational alerts.
-
-**First complete flow:**
-
-1. Visitor submits an inquiry to Safe Place.
-2. Safe Place validates the form and persists the inquiry plus an outbox job in one reliable operation.
-3. A backend worker sends the owner notification through GSW using a key derived from the inquiry ID and action, such as `inquiry:{id}:owner-notification:v1`.
-4. GSW validates the installation and sender, persists the message, and returns its ID.
-5. Safe Place records that ID and shows queued status. Signed results update delivery status; polling/reconciliation handles missing callbacks.
-6. An optional visitor acknowledgment uses its own action/key and an approved template. A contextual reply draft is a separate later workflow.
-
-Keep sensitive inquiry text out of routine notification emails when an authenticated admin link suffices. Let the ministry choose approved context and retention; do not automatically copy all ministry records into GSW.
-
-Safe Place’s admin needs a small Integrations panel: connection state, selected resources, last success, recent failures, reconnect, and disconnect. GSW Settings needs API connections/credentials, usage, webhook status, and later Mine/Available workflows. A visual workflow builder is unnecessary for the initial release.
-
-After inquiry notifications work, add explicit subscriber synchronization and welcome email; then bookings and reminders; then media and campaigns. Each adds scopes and contracts only when its implementation is ready.
-
-## Implementation milestones and acceptance
-
-| Milestone | GSW work | Safe Place work | Completion evidence |
-|---|---|---|---|
-| 0. Audit | Trace auth, sender verification, queue, delivery events, suppression, usage | Trace forms, persistence, jobs, admin auth | Capability map with reusable code and gaps |
-| 1. Own-app email API | Installation, scoped keys, send/status, idempotency, test mode | Backend connection and inquiry outbox | One real authorized notification; duplicate retry produces one accepted message |
-| 2. Production operations | Signed webhooks, reconciliation, usage limits, rotation/revocation | Status handling, retries, failure UI | Outage recovery, webhook replay, revocation and tenant isolation checks pass |
-| 3. Reusable customer onboarding | Registered applications, resource-bound OAuth, refresh/reconnect, developer guide | Connect GSW flow | Second independent customer connects without custom server changes |
-| 4. Workflow foundation | Versioned configurations, stable actions, run history, templates | Bind approved ministry context and actions | One GSW template and one owned variation use the same services |
-| 5. Additional services | Contacts, booking rules, files/media, campaign contracts | Integrate each customer workflow | Separate end-to-end acceptance per capability |
-
-Milestone 1 makes Safe Place a controlled first API customer. Milestones 2–3 make the offering suitable for repeatable external onboarding. The marketplace follows proven installations.
-
-Required checks include cross-workspace resource denial; revoked credentials and paused installations; expired OAuth and refresh failure; duplicate HTTP and worker execution; persistence before acceptance; provider timeout after possible acceptance; forged/replayed/out-of-order callbacks; unauthorized sender; suppression; limits; credential rotation; and accidental production sends from test mode.
-
-## Data and maintainability
-
-Use shared tables for applications, installations, credential metadata, resource grants, messages, idempotency records, webhook endpoints/deliveries, and usage. Add workflows, versions, runs, and actions only as the workflow feature is built. Audit existing schema first; these are logical entities, not instructions to duplicate existing tables.
-
-All records carry tenant ownership enforced by service code and queries. Tags organize records; they do not authorize access. Reference existing mailboxes, contacts, templates, and files instead of copying them. Keep credentials separate from workflow definitions; exports and marketplace templates contain no private IDs or secrets. Document retention and deletion behavior for payloads, logs, and webhook history.
-
-## Decisions before implementation
-
-Recommended defaults: own-app scoped keys for the controlled pilot; OAuth for reusable customer connections; transactional email first; private workflows before marketplace publishing; fixed backend delivery with optional AI judgment above it.
-
-Resolve during the audit: public API hostname, existing queue/provider capabilities, sender verification readiness, quota and retention values, billing approach, production approval policy, and which existing permission names can be reused. No particular quota, price, delivery guarantee, or launch date is committed here.
+Keep implemented contracts and intended behavior separate. Update both the API reference and parity inventory when implementation changes; never document an unimplemented route as available.
