@@ -1,3 +1,5 @@
+import { assertIntegrationDispatch, prepareIntegrationDispatch } from "../integrations/dispatch.js";
+import { IntegrationError } from "../integrations/contract.js";
 import { eq } from "drizzle-orm";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
@@ -9,6 +11,8 @@ import { claimDueJobs, loadJob, markAccepted, markFailed, markTransportRetry } f
 import { scheduleNextRecurringOccurrence, scheduledMetadata } from "./schedule.js";
 import { moveScheduledEmailToSent } from "./scheduledStalwart.js";
 import type { RelayAttachment } from "./types.js";
+
+const errorIsIntegrationPolicy = (error: unknown): error is IntegrationError => error instanceof IntegrationError;
 
 export interface OutboundWorker {
   start(): void;
@@ -43,8 +47,16 @@ export function createOutboundWorker(intervalMs = 5_000): OutboundWorker {
         processed += 1;
         const job = await loadJob(jobId.id);
         if (!job) continue;
+        let integrationJob = false;
+        let submissionStarted = false;
         try {
+          integrationJob = await assertIntegrationDispatch(job);
+          if (integrationJob) {
+            await prepareIntegrationDispatch(job);
+            await assertIntegrationDispatch(job);
+          }
           const relayAttachments = await resolveRelayAttachments(job);
+          submissionStarted = true;
           const result = await relay.send(job, relayAttachments);
           console.info("[outbound:worker] relay result", {
             sendId: job.id,
@@ -52,7 +64,7 @@ export function createOutboundWorker(intervalMs = 5_000): OutboundWorker {
             accepted: result.accepted,
             permanent: result.permanent ?? false,
             deliveryId: result.deliveryId,
-            message: result.message,
+            message: integrationJob ? undefined : result.message,
           });
           if (result.accepted) {
             const schedule = await scheduledMetadata(job.id);
@@ -96,6 +108,8 @@ export function createOutboundWorker(intervalMs = 5_000): OutboundWorker {
               }
             }
             await clearOutboundAttachmentPayloads(job.id);
+          } else if (integrationJob && !result.permanent) {
+            await markFailed(job.id, "submission_unknown", "Submission outcome requires reconciliation before another send");
           } else if (result.permanent) {
             await markFailed(job.id, "relay_rejected", result.message ?? "relay rejected permanently");
           } else {
@@ -104,14 +118,18 @@ export function createOutboundWorker(intervalMs = 5_000): OutboundWorker {
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           console.warn("[outbound:worker] delivery failed", {
-            error: message,
+            error: integrationJob ? "integration_dispatch_failed" : message,
             accountId: job.accountId,
             sendId: job.id,
-            recipients: { to: job.to, cc: job.cc ?? [], bccCount: job.bcc?.length ?? 0 },
-            subject: job.subject ?? "",
-            threading: { hasInReplyTo: Boolean(job.inReplyTo), hasReferences: Boolean(job.references) },
+            ...(integrationJob ? {} : {
+              recipients: { to: job.to, cc: job.cc ?? [], bccCount: job.bcc?.length ?? 0 },
+              subject: job.subject ?? "",
+              threading: { hasInReplyTo: Boolean(job.inReplyTo), hasReferences: Boolean(job.references) },
+            }),
           });
-          if (isInvalidHeaderError(message)) await markFailed(job.id, "invalid_header", message);
+          if (errorIsIntegrationPolicy(err)) await markFailed(job.id, err.code, "Integration authorization or sender policy prevented dispatch");
+          else if (integrationJob && submissionStarted) await markFailed(job.id, "submission_unknown", "Submission outcome requires reconciliation before another send");
+          else if (isInvalidHeaderError(message)) await markFailed(job.id, "invalid_header", message);
           else await markTransportRetry(job.id, message);
         }
       }

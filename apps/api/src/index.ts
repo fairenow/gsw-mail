@@ -1,3 +1,4 @@
+import { ensureIntegrationSchema } from "./integrations/ensureSchema.js";
 import { createMobileNotificationWorker, ensureMobileNotificationSchema } from "./mobile/notificationWorker.js";
 import { ensureAutomationSummaryEmailSchema } from "./ai/automationSummaryEmail.js";
 import { ensureCalendarEmailReminderSchema, deliverDueCalendarEmailReminders } from "./calendar/emailReminders.js";
@@ -37,6 +38,7 @@ let stopProposalNotifier: (() => void) | null = null;
 let stopMcpPayloadRetention: (() => void) | null = null;
 
 async function main() {
+  await ensureIntegrationSchema();
   await ensureScheduledSendSchema();
   await ensureCalendarRsvpSchema();
   await ensureCalendarEmailReminderSchema();

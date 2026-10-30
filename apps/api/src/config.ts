@@ -69,6 +69,9 @@ const config = {
   },
   ai: {
     provider: env("AI_PROVIDER", "qwen"),
+    kimiApiKey: process.env.KIMI_API_KEY,
+    kimiBaseUrl: env("KIMI_BASE_URL", "https://api.moonshot.ai/v1"),
+    kimiModel: env("KIMI_MODEL", "kimi-k3.1-pro"),
     modalProxyToken: process.env.MODAL_PROXY_TOKEN,
     gptOssVllmBaseUrl: process.env.GPT_OSS_VLLM_BASE_URL,
     qwen36BaseUrl: process.env.QWEN36_BASE_URL,

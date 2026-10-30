@@ -1,3 +1,5 @@
+import integrationApi from "./routes/integrationApi.js";
+import integrationAdmin from "./routes/integrationAdmin.js";
 import mcpAccessProfile from "./routes/mcpAccessProfile.js";
 import { resolveMcpAccessProfile, scopeAllowedForMode } from "./mcp/accessProfile.js";
 import { fromNodeHeaders } from "better-auth/node";
@@ -139,6 +141,8 @@ export function buildApp() {
     anon.get("/health", async () => ({ ok: true, service: "gsw-mail-api" }));
   });
 
+  app.register(integrationApi);
+  app.register(integrationAdmin);
   app.register(accounts);
   app.register(aliases);
   app.register(messages);

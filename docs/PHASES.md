@@ -146,3 +146,17 @@ Mailbox access is now staged behind Better Auth OAuth Provider interoperability.
 - [x] Overlay folder navigation on phone/tablet list and reader views.
 - [x] Expand phone/tablet search from an icon across the header.
 - [x] Bound compose height and scroll long content; full-screen compose on phones.
+
+## External email API pilot — October 30, 2026
+
+Implemented scoped, expiring/revocable server keys, exact sender/recipient installation grants, transactional acceptance, installation-bound idempotency, status polling, daily quotas, test simulations, and Control Center connection/key management. Queue dispatch rechecks access and suppressions; stale or uncertain submissions require operator reconciliation. Customer onboarding and deployment steps: [email API pilot](integrations/email-api-pilot.md).
+
+Status: code and isolated database validation; production migration, deployment and real mailbox delivery acceptance remain outstanding. This is the narrower email implementation, not full mailbox API coverage, customer webhook delivery or the marketplace release.
+
+## Mailbox API direction revision — October 30, 2026
+
+Documentation aligned to admin-managed API keys with one full-mailbox grant. Required next code work: remove pilot-only feature/recipient selections; make service ownership independent of the original admin; complete durable mailbox service access; expose all available mailbox functions without admin operations; add the admin API/docs/health experience. External OAuth app registration and granular permission tiers are no longer launch requirements. This entry records a product decision and documentation changes, not implementation or deployment of those capabilities. See [customer guide](integrations/mailbox-api.md).
+
+## Unified mailbox API and Kimi implementation — October 30, 2026
+
+Implemented full-mailbox keys without recipient allowlists, workspace-owned runtime connections, registry capability discovery/execution with nested admin denial and write idempotency, selected-model AI generation, and admin API/docs/service-activity controls. Kimi is selectable and uses `KIMI_API_KEY`, preserving reasoning metadata during tool continuations. Startup now ensures integration schema before workers. Isolated tests do not establish real mailbox/provider or browser acceptance; mailbox-token reconnection and capability coverage gaps remain explicit in [the reference](integrations/email-api-pilot.md).

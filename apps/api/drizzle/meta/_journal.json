@@ -288,6 +288,13 @@
       "when": 1792750000000,
       "tag": "0037_email_template_native_content",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1793375517360,
+      "tag": "0041_integration_email_api",
+      "breakpoints": true
     }
   ]
 }

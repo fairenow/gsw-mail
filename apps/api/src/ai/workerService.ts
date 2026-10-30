@@ -75,6 +75,7 @@ export async function runReadOnlyWorker(input: {
       role: "assistant",
       content: result.content,
       tool_calls: result.toolCalls,
+        ...(result.reasoningContent !== undefined ? { reasoning_content: result.reasoningContent } : {}),
     });
 
     for (const call of result.toolCalls.slice(0, 4)) {

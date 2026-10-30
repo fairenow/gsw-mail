@@ -1,4 +1,5 @@
 import { and, asc, eq, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { integrationEmails } from "../db/integrationSchema.js";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { outboundAttachments, outboundDeliveryEvents, outboundMessages, outboundRecipients, recipientType } from "../db/schema.js";
@@ -159,8 +160,10 @@ export async function failSendPreparation(id: string, code: string, detail: stri
 const reclaimWindow = sql`now() - interval '5 minutes'`;
 const backoffSteps = [30, 60, 120, 240];
 
-export async function claimDueJobs(limit: number): Promise<{ id: string; accountId: string }[]> {
-  return db.transaction(async (tx) => {
+export async function claimDueJobs(limit: number, database = db): Promise<{ id: string; accountId: string }[]> {
+  return database.transaction(async (tx) => {
+    await tx.update(outboundMessages).set({ transportStatus: "failed", failureCode: "submission_unknown", failureDetail: "Dispatch lease expired; reconcile before sending again" })
+      .where(and(eq(outboundMessages.transportStatus, "sending"), lte(outboundMessages.updatedAt, reclaimWindow), sql`exists (select 1 from ${integrationEmails} where ${integrationEmails.outboundMessageId} = ${outboundMessages.id})`));
     const due = await tx
       .select({ id: outboundMessages.id, accountId: outboundMessages.accountId })
       .from(outboundMessages)
@@ -292,8 +295,8 @@ export async function cancelSend(id: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-export async function retrySend(id: string): Promise<boolean> {
-  const rows = await db
+export async function retrySend(id: string, database = db): Promise<boolean> {
+  const rows = await database
     .update(outboundMessages)
     .set({
       transportStatus: "queued",
@@ -303,7 +306,7 @@ export async function retrySend(id: string): Promise<boolean> {
       failureDetail: null,
       lastError: null,
     })
-    .where(and(eq(outboundMessages.id, id), eq(outboundMessages.transportStatus, "failed")))
+    .where(and(eq(outboundMessages.id, id), eq(outboundMessages.transportStatus, "failed"), sql`not exists (select 1 from ${integrationEmails} where ${integrationEmails.outboundMessageId} = ${outboundMessages.id})`))
     .returning({ id: outboundMessages.id });
   return rows.length > 0;
 }

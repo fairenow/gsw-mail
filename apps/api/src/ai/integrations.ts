@@ -11,6 +11,7 @@ export interface AgentIntegrationDescriptor {
 
 export function listAgentIntegrations(): AgentIntegrationDescriptor[] {
   return [
+    { id: "kimi", name: "Kimi", category: "inference", configured: Boolean(config.ai.kimiApiKey), capabilities: ["chat", "tool-calling", "reasoning"], notes: config.ai.kimiModel },
     {
       id: "gsw-mail",
       name: "GSW Mail / JMAP",

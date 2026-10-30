@@ -112,3 +112,7 @@ administer without Google Workspace. Outbound may still ride an SMTP relay.
 
 Mail delivery and storage are infrastructure-critical. The API, AI, Convex, the
 website, and third-party integrations must be able to be down without stopping mail.
+
+## External application email API
+
+The approved product is one full-mailbox API with keys and service management in the admin portal. Start with the [mailbox API customer guide](docs/integrations/mailbox-api.md) and [service plan](docs/GSW_MAIL_API_SERVICE_PLAN.md). The [email pilot reference](docs/integrations/email-api-pilot.md) describes the implemented mailbox operation interface, API/docs portal, current coverage and remaining live-acceptance work. Kimi configuration is documented in [docs/integrations/kimi.md](docs/integrations/kimi.md).

@@ -59,7 +59,7 @@ export default async function productRoutes(app: FastifyInstance) {
       ai: {
         ...(settings?.ai ?? {}),
         enabled: settings?.ai?.enabled !== false,
-        modelProvider: settings?.ai?.modelProvider === "openai" || settings?.ai?.modelProvider === "claude" || settings?.ai?.modelProvider === "qwen" || settings?.ai?.modelProvider === "gpt-oss-120b" || settings?.ai?.modelProvider === "deepseek-v4.1-flash"
+        modelProvider: settings?.ai?.modelProvider === "kimi" || settings?.ai?.modelProvider === "openai" || settings?.ai?.modelProvider === "claude" || settings?.ai?.modelProvider === "qwen" || settings?.ai?.modelProvider === "gpt-oss-120b" || settings?.ai?.modelProvider === "deepseek-v4.1-flash"
           ? settings.ai.modelProvider
           : "qwen",
         mailRead: settings?.ai?.mailRead !== false,
@@ -78,9 +78,10 @@ export default async function productRoutes(app: FastifyInstance) {
     const input = settingsSchema.parse(req.body);
     const requestedModelProvider = input.ai?.modelProvider;
     if (requestedModelProvider !== undefined) {
-      if (requestedModelProvider !== "qwen" && requestedModelProvider !== "openai" && requestedModelProvider !== "claude" && requestedModelProvider !== "gpt-oss-120b" && requestedModelProvider !== "deepseek-v4.1-flash") {
-        throw badRequest("AI model must be Qwen, GPT-OSS 120B, DeepSeek, OpenAI, or Claude.");
+      if (requestedModelProvider !== "kimi" && requestedModelProvider !== "qwen" && requestedModelProvider !== "openai" && requestedModelProvider !== "claude" && requestedModelProvider !== "gpt-oss-120b" && requestedModelProvider !== "deepseek-v4.1-flash") {
+        throw badRequest("AI model must be Kimi, Qwen, GPT-OSS 120B, DeepSeek, OpenAI, or Claude.");
       }
+      if (requestedModelProvider === "kimi" && !config.ai.kimiApiKey) throw badRequest("Kimi is not configured for this GSW Mail deployment.");
       if (requestedModelProvider === "qwen" && !config.ai.hetznerApiKey) {
         throw badRequest("Qwen is not configured for this GSW Mail deployment.");
       }

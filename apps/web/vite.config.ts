@@ -6,6 +6,7 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
+      "/integrations": "http://localhost:4000",
       "/mail": "http://localhost:4000",
       "/admin": "http://localhost:4000",
       "/auth": "http://localhost:4000",
