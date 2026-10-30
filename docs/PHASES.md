@@ -165,7 +165,7 @@ Implemented full-mailbox keys without recipient allowlists, workspace-owned runt
 ## Public developer documentation and live diagnostics (2026-10-30)
 
 The public documentation is served from `apps/web/public/docs` on
-`mail-docs.guidedstepswellness.com` through a host-specific Vercel rewrite;
+`mail-docs.guidedstepswellness.com` through host-specific Vercel Routing Middleware;
 `/docs` on the mail host is a fallback. API traffic remains on the mail host.
 The old authenticated docs endpoint redirects to the docs subdomain.
 `GET /integrations/v1` provides public connection guidance, and `/reference`
