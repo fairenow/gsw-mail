@@ -14,17 +14,17 @@ This decision supersedes the earlier proposals for granular API permissions, per
 
 | Area | Implemented on the API pilot branch | Approved target; remaining work |
 |---|---|---|
-| Management | Workspace owner/admin can create connections and keys, list keys, revoke them, pause/resume connections | Consolidated API management and linked API documentation in the admin portal |
+| Management | Workspace owner/admin can create connections and keys, list keys, revoke them, pause/resume connections | API portal now links docs and service/activity checks; richer metering and recovery remain |
 | Mailbox binding | Each installation names one mailbox in the workspace | Keep an explicit mailbox boundary; broad access inside that mailbox |
-| Runtime API | Connection inspection, transactional email submission, message status | Expose all supported mailbox capabilities through one versioned API |
-| Permissions | Three email/connection scopes; fixed recipient allowlist | One full-mailbox access grant; remove feature-scope and recipient selection requirements |
+| Runtime API | Connection/capability discovery, mailbox operations, direct email/status and selected-model AI chat | Registry functions are exposed; inventory any UI-only capabilities still missing |
+| Permissions | Full-mailbox keys; no recipient allowlist | Implemented; retain mailbox isolation and existing product rules |
 | Sending | Atomic queue acceptance, idempotency, test simulations, quotas, suppression checks | Use the same mailbox sending abilities as the product, including dynamic recipients, replies, templates and attachments |
-| Ownership | Connections depend on the original authorizing administrator retaining active access | Workspace-owned connections managed by current authorized admins; creator is audit attribution |
+| Ownership | Connections remain usable after original administrator membership changes | Implemented; creator retained for audit |
 | Mailbox credentials | Worker requires an existing authorized mailbox OAuth credential | Durable service access managed through the connection lifecycle, without unrelated browser-session dependence |
-| Operations | Status polling; uncertain sends quarantined | Activity, connection health, usage, recovery and signed customer webhooks |
+| Operations | Status polling, admin service health/activity, email counts and write reservations; uncertain sends quarantined | Activity, connection health, usage, recovery and signed customer webhooks |
 | Deployment | Code and automated checks passed on the pilot; no live acceptance established | Migrate, deploy, verify a real mailbox, then connect Safe Place |
 
-The current code is not yet the full-mailbox service described here. [The pilot reference](integrations/email-api-pilot.md) is authoritative for requests accepted by the current branch. [The mailbox API guide](integrations/mailbox-api.md) describes the approved customer experience and remaining implementation.
+The current code implements the full-mailbox key and registry operation interface; live-host acceptance and complete UI-to-API coverage are not yet established. [The pilot reference](integrations/email-api-pilot.md) is authoritative for requests accepted by the current branch. [The mailbox API guide](integrations/mailbox-api.md) describes the approved customer experience and remaining implementation.
 
 ## Administration and mailbox boundary
 
@@ -71,7 +71,7 @@ The initial customer path uses an admin-issued server API key. No external devel
 5. Customer follows the linked API documentation, checks its connection and tests operations using that mailbox.
 6. Customer enables production after deployment and mailbox service checks pass, then monitors activity and manages keys from the same portal.
 
-The current UI is **Control Center → Email Delivery** and implements only the narrower pilot. Renaming/consolidating it and adding documentation/health/usage links is outstanding. Do not present the planned API screen as deployed.
+The UI is now **Control Center → API**, with mailbox connections, keys, documentation and service/activity checks. Its deployment and browser acceptance must be verified separately.
 
 The website calls GSW from its backend. Public forms do not receive keys or get to choose arbitrary actions through an exposed proxy. The admin-authorized key is the authority for supported mailbox operations; do not introduce a per-request approval requirement merely because a website uses the API.
 
@@ -81,7 +81,7 @@ The workspace owns the connection. Any currently authorized owner/admin can mana
 
 Changing workspace administrators should not require a new website integration when the workspace and mailbox remain the same. No separate transfer wizard is required initially; current admin membership should control management. Key revocation, connection pause, mailbox disablement and loss of valid mailbox ownership must still take effect.
 
-Mailbox service access must not rely on an unrelated admin browser session remaining open. The implementation must support a durable, explicitly authorized mailbox connection through the MailEngine boundary, and surface reconnect-required health if its underlying authorization becomes invalid. Do not substitute the administrator's identity or give the external application mail-server admin credentials. The pilot's original-authorizer check and stored-mailbox-token dependency remain known gaps until changed in code.
+Mailbox service access must not rely on an unrelated admin browser session remaining open. The implementation must support a durable, explicitly authorized mailbox connection through the MailEngine boundary, and surface reconnect-required health if its underlying authorization becomes invalid. Do not substitute the administrator's identity or give the external application mail-server admin credentials. The original-authorizer runtime dependency has been removed. The stored/refreshable mailbox-token dependency remains and is surfaced by the service check.
 
 ## Shared architecture and operational behavior
 
@@ -97,7 +97,7 @@ Use stable operation IDs, status and idempotency for supported writes. Accepted 
 
 ## Delivery sequence
 
-1. **Align the API foundation:** one full-mailbox grant, remove pilot-only recipient/feature selections, workspace-owned administration, durable service authorization, admin API/docs entry point. Preserve test mode and existing isolation/reliability behavior.
+1. **API foundation implemented, live acceptance pending:** one full-mailbox grant, remove pilot-only recipient/feature selections, workspace-owned administration, durable service authorization, admin API/docs entry point. Preserve test mode and existing isolation/reliability behavior.
 2. **Complete mail parity:** reading, search, threads, drafts, replies, message actions, templates, signatures, attachments and supported scheduling. Add operation tests and capability inventory as routes are implemented.
 3. **Complete mailbox product parity:** contacts, calendars, files, campaigns, tasks/AI/automation and associated mailbox preferences through the same key. Do not add per-feature API plans or consent choices.
 4. **Finish customer operations:** health, usage, activity, signed webhooks, recovery, retention/deletion and key-expiration visibility. Define pricing separately from permission tiers.

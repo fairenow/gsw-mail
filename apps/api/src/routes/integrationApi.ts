@@ -1,3 +1,6 @@
+import { createMailboxOperations, mailboxOperations, operationSchema } from "../integrations/operations.js";
+import { getAiCapabilitySettings } from "../ai/capabilities.js";
+import { getAiProvider } from "../ai/providers/index.js";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z, ZodError } from "zod";
 import { HttpError } from "../lib/errors.js";
@@ -5,7 +8,7 @@ import { idempotencySchema, integrationSendSchema, IntegrationError } from "../i
 import { integrationService } from "../integrations/service.js";
 import type { IntegrationPrincipal } from "../integrations/service.js";
 
-export async function integrationApi(app: FastifyInstance, options: { service?: typeof integrationService } = {}) {
+export async function integrationApi(app: FastifyInstance, options: { service?: typeof integrationService; operations?: typeof mailboxOperations } = {}) {
   const service = options.service ?? integrationService;
   const principals = new WeakMap<FastifyRequest, IntegrationPrincipal>();
   app.setErrorHandler((error, req, reply) => {
@@ -18,6 +21,23 @@ export async function integrationApi(app: FastifyInstance, options: { service?: 
   app.addHook("onRequest", async (req, reply) => {
     reply.header("Cache-Control", "no-store");
     principals.set(req, await service.authenticate(req.headers.authorization));
+  });
+  const operations = options.operations ?? createMailboxOperations({ service });
+  app.get("/integrations/v1/capabilities", async () => ({ access: "mailbox.full", operations: operations.capabilities() }));
+  app.post("/integrations/v1/operations", { bodyLimit: 1024 * 1024 }, async (req) => {
+    const key = req.headers["idempotency-key"] === undefined ? undefined : idempotencySchema.parse(req.headers["idempotency-key"]);
+    return operations.execute(principals.get(req)!, operationSchema.parse(req.body), key);
+  });
+  app.post("/integrations/v1/ai/chat", { bodyLimit: 256 * 1024 }, async req => {
+    const input = z.object({ messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(50000) }).strict()).min(1).max(50) }).strict().parse(req.body);
+    const principal = principals.get(req)!;
+    const row = await service.installation(principal.installationId);
+    if (row.installation.testMode) return { simulated: true, content: null, model: null };
+    const ctx = await service.context(principal);
+    const settings = await getAiCapabilitySettings(ctx.userId);
+    if (!settings.enabled) throw new IntegrationError(403, "mailbox_ai_disabled");
+    const result = await getAiProvider(settings.modelProvider).run({ messages: input.messages });
+    return { content: result.content, model: result.model };
   });
   app.get("/integrations/v1/connection", async req => service.connection(principals.get(req)!));
   app.post("/integrations/v1/emails", { bodyLimit: 256 * 1024 }, async (req, reply) => {

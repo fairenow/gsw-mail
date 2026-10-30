@@ -1,11 +1,15 @@
-import { and, desc, eq } from "drizzle-orm";
+import { mailboxApiDocumentation } from "../integrations/documentation.js";
+import { integrationService } from "../integrations/service.js";
+import { findStoredStalwartMailboxToken } from "../auth/storedStalwartToken.js";
+import { refreshStoredStalwartMailboxToken } from "../auth/refreshStalwartMailboxToken.js";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireOrgPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
-import { integrationInstallations, integrationKeys } from "../db/integrationSchema.js";
-import { auditEvents, domains, emailAccounts } from "../db/schema.js";
+import { integrationEmails, integrationInstallations, integrationKeys } from "../db/integrationSchema.js";
+import { aiIdempotencyKeys, auditEvents, domains, emailAccounts, outboundMessages } from "../db/schema.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { installationSchema, issueIntegrationKey, keySchema } from "../integrations/contract.js";
 
@@ -19,6 +23,24 @@ export default async function integrationAdmin(app: FastifyInstance) {
     await requireOrgPermission(userId, row.organizationId, ["owner", "admin"]);
     return row;
   }
+  app.get("/api/admin/integrations/docs", async (_req, reply) => reply.type("text/plain; charset=utf-8").send(mailboxApiDocumentation));
+  app.get<{ Params: { id: string } }>("/api/admin/integrations/:id/service", async req => {
+    const row = await requireInstallation(req.user!.id, req.params.id);
+    let health = row.active ? "ready" : "paused";
+    try {
+      await integrationService.installation(row.id);
+      if (!row.testMode) {
+        const ctx = await integrationService.mailboxContext(row.accountId);
+        const principal = { productUserId: ctx.userId, authUserId: ctx.authUserId, accountId: ctx.accountId };
+        const token = await findStoredStalwartMailboxToken(principal) ?? await refreshStoredStalwartMailboxToken(principal);
+        if (!token) health = "mailbox_reconnect_required";
+      }
+    } catch { health = row.active ? "mailbox_attention_required" : "paused"; }
+    const [usage] = await db.select({ emails: sql<number>`count(*)` }).from(integrationEmails).where(eq(integrationEmails.installationId, row.id));
+    const emails = await db.select({ id: integrationEmails.id, createdAt: integrationEmails.createdAt, testMode: integrationEmails.testMode, status: outboundMessages.transportStatus, failureCode: outboundMessages.failureCode }).from(integrationEmails).leftJoin(outboundMessages, eq(integrationEmails.outboundMessageId, outboundMessages.id)).where(eq(integrationEmails.installationId, row.id)).orderBy(desc(integrationEmails.createdAt)).limit(20);
+    const operations = await db.select({ name: aiIdempotencyKeys.toolName, status: aiIdempotencyKeys.status, createdAt: aiIdempotencyKeys.createdAt }).from(aiIdempotencyKeys).where(sql`${aiIdempotencyKeys.key} LIKE ${`api:${row.id}:%`}`).orderBy(desc(aiIdempotencyKeys.createdAt)).limit(20);
+    return { health, acceptedEmails: Number(usage?.emails ?? 0), recentEmails: emails, recentOperations: operations };
+  });
   app.post("/api/admin/integrations", async (req, reply) => {
     const input = installationSchema.parse(req.body);
     await requireOrgPermission(req.user!.id, input.organizationId, ["owner", "admin"]);
@@ -54,7 +76,7 @@ export default async function integrationAdmin(app: FastifyInstance) {
     const issued = issueIntegrationKey();
     const expiresAt = new Date(Date.now() + input.expiresInDays * 86400_000);
     const key = await db.transaction(async tx => {
-      const [row] = await tx.insert(integrationKeys).values({ installationId: installation.id, name: input.name, scopes: input.scopes, keyHash: issued.keyHash, keyPrefix: issued.keyPrefix, expiresAt }).returning({ id: integrationKeys.id, name: integrationKeys.name, scopes: integrationKeys.scopes, expiresAt: integrationKeys.expiresAt });
+      const [row] = await tx.insert(integrationKeys).values({ installationId: installation.id, name: input.name, scopes: ["mailbox.full"], keyHash: issued.keyHash, keyPrefix: issued.keyPrefix, expiresAt }).returning({ id: integrationKeys.id, name: integrationKeys.name, scopes: integrationKeys.scopes, expiresAt: integrationKeys.expiresAt });
       await tx.insert(auditEvents).values({ organizationId: installation.organizationId, actorUserId: req.user!.id, action: "integration.key.created", resourceType: "integration_key", resourceId: row!.id });
       return row!;
     });

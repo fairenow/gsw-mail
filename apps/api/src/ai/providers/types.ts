@@ -1,6 +1,6 @@
 import type { ProviderToolDefinition } from "../tools/types.js";
 
-export type AiProviderId = "hetzner" | "openai" | "anthropic" | "huggingface" | "modal" | "modal-deepseek" | "modal-qwen";
+export type AiProviderId = "kimi" | "hetzner" | "openai" | "anthropic" | "huggingface" | "modal" | "modal-deepseek" | "modal-qwen";
 export type AiChatRole = "user" | "assistant";
 
 export interface AiToolCall {
@@ -14,7 +14,7 @@ export interface AiToolCall {
 
 export type AiProviderMessage =
   | { role: "user"; content: string }
-  | { role: "assistant"; content: string | null; tool_calls?: AiToolCall[] }
+  | { role: "assistant"; content: string | null; tool_calls?: AiToolCall[]; reasoning_content?: string }
   | { role: "tool"; content: string; tool_call_id: string };
 
 export interface AiProviderRunInput {
@@ -26,6 +26,7 @@ export interface AiProviderRunResult {
   content: string | null;
   toolCalls: AiToolCall[];
   model: string;
+  reasoningContent?: string;
 }
 
 export interface AiProvider {

@@ -19,6 +19,7 @@ test("integration API persists requests, isolates installations, enforces grants
     for (const file of ["0000_quick_falcon", "0001_add_template_key", "0006_better_auth", "0007_workspace_normalization", "0009_mailbox_auth_setup", "0041_integration_email_api"]) {
       await pg.exec(await readFile(new URL(`../../drizzle/${file}.sql`, import.meta.url), "utf8"));
     }
+    await pg.exec(await readFile(new URL("../../drizzle/0041_integration_email_api.sql", import.meta.url), "utf8"));
     const organizationId = randomUUID(), domainId = randomUUID(), accountId = randomUUID(), installationId = randomUUID(), otherInstallation = randomUUID(), keyId = randomUUID(), otherKeyId = randomUUID();
     await pg.query("INSERT INTO users(id,identity_subject,email) VALUES('admin','admin','admin@example.test')");
     await pg.query("INSERT INTO organizations(id,name,slug) VALUES($1,'Ministry','ministry')", [organizationId]);
@@ -44,6 +45,18 @@ test("integration API persists requests, isolates installations, enforces grants
       const stored = (await pg.query<{key_hash:string}>("SELECT key_hash FROM integration_keys WHERE id=$1", [keyId])).rows[0]!;
       assert.notEqual(stored.key_hash, issued.secret);
     });
+    await t.test("capability discovery excludes administration and test mode does not run operations or AI", async () => {
+      const capabilities = await app.inject({url:"/integrations/v1/capabilities",headers});
+      assert.equal(capabilities.statusCode,200);
+      assert.ok(capabilities.json().operations.length > 20);
+      assert.ok(!capabilities.json().operations.some((operation:{name:string}) => /^(domain|workspace|admin|alias)\./.test(operation.name)));
+      const simulated = await app.inject({method:"POST",url:"/integrations/v1/operations",headers,payload:{name:"mail.list_recent",arguments:{limit:1}}});
+      assert.equal(simulated.statusCode,200,simulated.body);
+      assert.equal(simulated.json().simulated,true);
+      const ai = await app.inject({method:"POST",url:"/integrations/v1/ai/chat",headers,payload:{messages:[{role:"user",content:"Welcome"}]}});
+      assert.equal(ai.statusCode,200);
+      assert.equal(ai.json().simulated,true);
+    });
     await t.test("concurrent duplicate requests return one ID and changed payload is a conflict", async () => {
       const responses = await Promise.all(Array.from({length: 5}, () => send()));
       assert.ok(responses.every(r => r.statusCode === 202 && r.json().id === emailId));
@@ -58,14 +71,14 @@ test("integration API persists requests, isolates installations, enforces grants
     });
     await t.test("sender, recipient, unknown fields and malformed idempotency input are rejected", async () => {
       assert.equal((await send({...payload, senderId: randomUUID()}, "wrong-sender")).statusCode, 403);
-      assert.equal((await send({...payload, to: ["unapproved@example.test"]}, "wrong-recipient")).statusCode, 403);
+      assert.equal((await send({...payload, to: ["new-visitor@example.test"]}, "dynamic-recipient")).statusCode, 202);
       assert.equal((await app.inject({method: "POST",url:"/integrations/v1/emails",headers,payload:{...payload,from:"spoof@example.test"}})).statusCode,400);
       assert.equal((await send(payload, "bad key")).statusCode, 400);
       assert.equal((await send({...payload,subject:"Hello\r\nBcc: victim@example.test"}, "header-injection")).statusCode,400);
     });
-    await t.test("key scopes and expiration are enforced without trusting caller principal scopes", async () => {
+    await t.test("keys grant full mailbox access without per-feature selection; expiration remains enforced", async () => {
       await pg.query("UPDATE integration_keys SET scopes='[\"connection.read\"]' WHERE id=$1", [keyId]);
-      assert.equal((await send(payload, "no-scope")).statusCode, 403);
+      assert.equal((await send(payload, "full-mailbox")).statusCode, 202);
       await pg.query("UPDATE integration_keys SET expires_at=now()-interval '1 second' WHERE id=$1", [keyId]);
       assert.equal((await send(payload, "expired")).statusCode, 401);
       await pg.query("UPDATE integration_keys SET scopes='[\"connection.read\",\"email.send\",\"email.read\"]',expires_at=now()+interval '1 day' WHERE id=$1", [keyId]);
@@ -78,12 +91,15 @@ test("integration API persists requests, isolates installations, enforces grants
       assert.equal((await send()).statusCode, 202);
       await pg.query("UPDATE integration_installations SET daily_limit=100 WHERE id=$1", [installationId]);
     });
-    await t.test("suppression and suspension take effect on the next operation", async () => {
+    await t.test("suppression and mailbox disablement block access while admin changes preserve service", async () => {
       await pg.query("INSERT INTO delivery_suppressions(organization_id,email,suppression_reason,source) VALUES($1,'visitor@example.test','manual','test')", [organizationId]);
       assert.equal((await send(payload, "suppressed")).statusCode, 409);
       await pg.query("DELETE FROM delivery_suppressions");
       await pg.query("UPDATE organization_memberships SET org_membership_status='suspended'");
-      assert.equal((await send(payload, "suspended")).statusCode, 403);
+      assert.equal((await send(payload, "admin-left")).statusCode, 202);
+      await pg.query("UPDATE email_accounts SET account_status='disabled'");
+      assert.equal((await send(payload, "disabled-mailbox")).statusCode, 403);
+      await pg.query("UPDATE email_accounts SET account_status='active'");
       await pg.query("UPDATE organization_memberships SET org_membership_status='active'");
       await pg.query("UPDATE integration_installations SET active=false WHERE id=$1", [installationId]);
       assert.equal((await send(payload, "paused")).statusCode, 403);

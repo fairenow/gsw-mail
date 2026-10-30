@@ -1,6 +1,6 @@
 # Guided Steps Mail API
 
-This reference describes the existing product routes and their current authorization. For the admin-issued external mailbox API, start with the [customer guide](integrations/mailbox-api.md), [approved full-mailbox plan](GSW_MAIL_API_SERVICE_PLAN.md), and [exact current pilot contract](integrations/email-api-pilot.md). The target is one full-mailbox key managed in the admin portal; its broader coverage is not implemented by the product routes listed here, and the key does not grant access to this document's admin routes.
+This reference describes the existing product routes and their current authorization. For the admin-issued external mailbox API, start with the [customer guide](integrations/mailbox-api.md), [approved full-mailbox plan](GSW_MAIL_API_SERVICE_PLAN.md), and [exact current pilot contract](integrations/email-api-pilot.md). The target is one full-mailbox key managed in the admin portal; its mailbox operations use the separate `/integrations/v1` interface rather than changing authentication on the product routes listed here, and the key does not grant access to this document's admin routes.
 
 
 Base path: `/mail`. Admin: `/admin`. Better Auth owns user-facing signup,

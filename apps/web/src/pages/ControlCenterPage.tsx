@@ -8,7 +8,7 @@ import { AuthCard } from "../components/auth/AuthCard";
 import { AuthPage } from "../components/auth/AuthPage";
 import { BrandMark } from "../components/auth/BrandMark";
 
-type ControlSection = "overview" | "domains" | "mailboxes" | "users" | "security" | "delivery";
+type ControlSection = "overview" | "domains" | "mailboxes" | "users" | "security" | "api";
 type AdminSummary = {
   organizationId: string;
   domains: { id: string; name: string; status: "pending" | "verified" | "failed"; mxStatus: string; spfStatus: string; dkimStatus: string; dmarcStatus: string; dkimSelector: string | null; updatedAt: string }[];
@@ -23,8 +23,9 @@ type AdminSummary = {
 };
 
 const sectionFromHash = (): ControlSection => {
-  const value = window.location.hash.replace(/^#/, "");
-  return value === "domains" || value === "mailboxes" || value === "users" || value === "security" || value === "delivery" ? value : "overview";
+  const hash = window.location.hash.replace(/^#/, "");
+  const value = hash === "delivery" ? "api" : hash;
+  return value === "domains" || value === "mailboxes" || value === "users" || value === "security" || value === "api" ? value : "overview";
 };
 
 function humanStatus(value: string) { return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
@@ -144,7 +145,7 @@ export function ControlCenterPage() {
         {navButton("mailboxes", "Mailboxes", pendingMailboxes ? `${pendingMailboxes} to finish` : undefined)}
         {navButton("users", "Users", admin ? String(admin.users.length) : undefined)}
         {navButton("security", "Security")}
-        {navButton("delivery", "Email Delivery", "Pilot")}
+        {navButton("api", "API")}
         <button className="is-disabled" disabled><span>Billing</span><small>Coming soon</small></button>
         <button className="is-disabled" disabled><span>Settings</span><small>Coming soon</small></button>
       </nav>
@@ -188,7 +189,7 @@ export function ControlCenterPage() {
         {admin ? <div className="gsw-user-grid">{filteredUsers.map((user) => <article className="gsw-user-card" key={user.membershipId}><div className="gsw-control-row-head"><div><h4>{user.name || user.email}</h4><p>{user.authEmail || user.email}</p></div><span className={`gsw-role-pill role-${user.role}`}>{humanStatus(user.role)}</span></div><div className="gsw-user-facts"><span><strong>Status</strong>{humanStatus(user.membershipStatus)}</span><span><strong>Verified</strong>{user.authEmailVerified || user.emailVerified ? "Yes" : "No"}</span><span><strong>Last login</strong>{formatDate(user.lastLoginAt)}</span></div><div className="gsw-access-block"><strong>Mailbox access</strong>{user.mailboxAccess.length ? user.mailboxAccess.map((access) => <div key={`${user.userId}-${access.accountId}`}><span>{access.address}</span><small>{humanStatus(access.role)}</small></div>) : <p>No mailbox access assigned.</p>}</div>{user.role !== "owner" && <button className="gsw-btn gsw-btn-ghost" disabled={deleteBusy} onClick={() => requestDelete({ type: "users", id: user.userId, label: user.email })}>Delete user from workspace</button>}</article>)}</div> : <div className="gsw-control-empty">Loading workspace users…</div>}
       </section>}
 
-      {section === "delivery" && workspace?.id && admin && <IntegrationDeliveryPanel key={workspace.id} organizationId={workspace.id} mailboxes={admin.mailboxes} />}
+      {section === "api" && workspace?.id && admin && <IntegrationDeliveryPanel key={workspace.id} organizationId={workspace.id} mailboxes={admin.mailboxes} />}
 
       {section === "security" && <section className="gsw-control-section">
         <div className="gsw-control-section-head"><div><p className="gsw-setup-kicker">Security</p><h3>Recovery & recent activity</h3><p>Keep the workspace recoverable even if an individual mailbox cannot receive mail.</p></div></div>

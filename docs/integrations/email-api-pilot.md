@@ -1,100 +1,90 @@
-# GSW Mail email API pilot
+# Mailbox API implementation reference
 
-Status: current implementation reference for the API pilot branch; deployment and live-host acceptance still required. Only connection inspection, transactional email submission/status and admin key/connection management are implemented here.
+Updated October 30, 2026. This file retains its original pilot filename for existing links. It now describes the current full-mailbox key foundation and shared operation interface. Deployment and live-host acceptance are separate from code validation.
 
-**Product direction has changed:** the target is one full-mailbox API key managed in the admin portal, with no per-feature scope or recipient-selection flow. See [mailbox API customer guide](mailbox-api.md) and [the updated service plan](../GSW_MAIL_API_SERVICE_PLAN.md). The scopes, allowlist, single-email payload and original-authorizer dependency below describe existing code, not the final product requirements. Documentation changes do not remove these restrictions from runtime behavior. External OAuth registration is not a prerequisite for the approved key-based API.
+## Authentication and ownership
 
-## Current pilot setup (temporary restrictions)
+Use `Authorization: Bearer YOUR_SERVER_KEY` on `/integrations/v1`. An API key has full access to its bound mailbox, including supported writes; no feature scopes or recipient allowlist are selected. Legacy pilot scope/recipient columns are retained for schema compatibility but no longer restrict keys. Existing pilot keys therefore receive the same mailbox access model. Workspace/domain/DNS/provisioning/account credentials and API-key administration are excluded from the external key.
 
-1. Sign in as a GSW workspace owner or administrator. Create/verify the workspace domain and create a separate sending mailbox. Complete its mailbox login setup. Admin identities remain control-plane identities and are not turned into mailboxes.
-2. Open **Control Center → Email Delivery**. Create a named website connection, choose its sending mailbox, and list exact approved recipients. Test mode is enabled by default. It persists simulated requests but never creates an outbound job or sends mail.
-3. Create a server key. Copy it immediately into the website hosting provider's server-side secret settings. GSW retains only its SHA-256 hash and a display prefix. Keys created through the UI expire after 30 days. The admin API supports 1–90 days and narrower scopes.
-4. Set `GSW_API_ORIGIN` to the deployed GSW API origin and `GSW_API_KEY` to the new key. Keep these out of frontend bundles, analytics, logs, and source control. Set `GSW_SENDER_ID` to the sender ID displayed in the connection panel.
-5. Have the website server call the connection endpoint, submit a test message, and poll its status. Check request IDs and your own external record ID. Do not interpret a `202` as recipient delivery.
-6. Before live sending, verify SPF, DKIM, and DMARC in GSW. Sign into the sending mailbox through the existing GSW mailbox OAuth flow so a refreshable mailbox credential is available. The worker uses that authorized mailbox identity, not the workspace admin's identity or the external API key as a mail-server credential. Missing credentials produce `mailbox_authorization_required` or `mailbox_reconnect_required` rather than privileged fallback.
-7. Create a separate live connection with a small approved recipient list, initially ministry staff. The mailbox must be active, ready, and on the same workspace's verified domain. The server must use the Stalwart mail engine and relay; a demo/null transport cannot accept live integration sends.
-8. Test one staff notification and confirm the real mailbox received it. Inspect submitted versus delivered status. Verify retries do not create another request; pause the connection and verify new work is blocked. Only then configure the website's production outbox.
+A connection belongs to its workspace. Current authorized owners/admins manage it through **Control Center → API**. The original creator remains in audit attribution, but removing that administrator does not disable the connection. Pausing the connection, disabling the mailbox or revoking/expiring its key blocks subsequent authorization. The mailbox identity and associated user resources remain separate from the admin identity.
 
-The current pilot supports **owner notification of a persisted inquiry** to an approved ministry address. Full mailbox sending, including dynamic visitor recipients, is the approved next implementation direction; it does not require a new customer permission-selection system. Until that change ships, the existing allowlist still applies. An inquiry does not grant newsletter consent.
+Mailbox operations resolve the mailbox's current active owner, matching authentication identity and owner membership. Engine operations use the existing stored/refreshable mailbox OAuth authorization; an expired/revoked authorization still requires mailbox reconnection. This release does not mint mailbox credentials from an admin key or remove that underlying authorization dependency.
 
-## Implemented pilot endpoints
+## Setup
 
-All routes require `Authorization: Bearer <server-key>`. Browser session cookies and mobile/MCP OAuth tokens do not authenticate these endpoints. Errors use `{ "error": { "code", "requestId", "retryable" } }`; responses are `Cache-Control: no-store`.
+1. Sign into the workspace admin account. Finish domain verification and create a separate mailbox with completed login setup.
+2. Open **Control Center → API**, select that mailbox and name the connection. Test mode defaults on.
+3. Create a server key, save the secret once in your website backend's secret settings, then open the linked API documentation. The UI issues 30-day keys; the admin API accepts 1–90 days. Only a hash and display prefix are stored.
+4. Use the connection and capabilities endpoints to discover current coverage. Test connections simulate operation/AI requests and never invoke the tools or providers. Email simulation records a request but no outbound message.
+5. For live operations, use an active, ready mailbox on the workspace's verified domain. Current live installation checks require verified SPF/DKIM/DMARC. Complete the mailbox OAuth authorization so engine operations can resolve its credential. Use the service check in the admin panel to inspect readiness/reconnect needs.
+6. Test a real staff email and mailbox read, then connect the website backend. No secret belongs in browser bundles, public forms, source control or logs.
 
-| Method and path | Scope | Behavior |
-|---|---|---|
-| `GET /integrations/v1/connection` | `connection.read` | Installation, sender, exact recipient allowlist, test mode, daily limit, key scopes |
-| `POST /integrations/v1/emails` | `email.send` | Durably accept a transactional request; require `Idempotency-Key` |
-| `GET /integrations/v1/emails/:id` | `email.read` | Read only this installation's request, processing and delivery state, correlation metadata |
+## External routes
 
-Example request (from the website's server):
+| Route | Contract |
+|---|---|
+| `GET /connection` | Connection name, test mode, full-mailbox access, mailbox/sender and direct-email daily quota |
+| `GET /capabilities` | Current mailbox registry functions, descriptions, input schemas and mutation indicator; admin functions omitted |
+| `POST /operations` | `{ "name": "mail.list_recent", "arguments": { "limit": 10 } }`; use returned schemas for other functions |
+| `POST /emails` | Durably queue a direct text/HTML email; require `Idempotency-Key` |
+| `GET /emails/:id` | Only this installation's email request/status/metadata |
+| `POST /ai/chat` | `{ "messages": [{ "role": "user", "content": "Draft a welcome message" }] }`; use the mailbox's selected AI provider |
+
+Paths above are relative to `/integrations/v1`. The Vercel and Vite proxies route this prefix to the API. The ordinary `/mail`, `/product`, `/admin` and OAuth/MCP routes retain their own authentication; the mailbox key does not authenticate to them.
+
+The operation interface exposes existing mailbox registry functions for mail, drafts/replies/message organization, contacts/calendar, templates, files, campaigns, research, tasks and automation where registered. Use `/capabilities` as the coverage source. It does not imply that every UI-only product feature has an operation yet. Existing product prerequisites and execution rules still apply. Caller-supplied identity/account/workspace/credential overrides and admin-worker selection are rejected, and nested registry calls retain the mailbox boundary.
+
+API operations are explicit actions authorized by the key; there is no additional MCP per-tool scope or confirmation wizard. Test mode simulates them. Created automations/schedules have their own lifecycle: revoking the key does not delete records previously created through it. Pause/delete those records separately when retiring a workflow.
+
+The AI endpoint performs text generation without tools. Use `/operations` for explicit mailbox actions. It uses the connected mailbox's saved AI model choice, respects AI-disabled settings and returns only final content/model, not provider reasoning metadata. Select **Kimi** in that mailbox's AI settings to use the server's `KIMI_API_KEY`. Provider credentials never reach the client.
+
+## Writes and retries
+
+Mutation operations require `Idempotency-Key` (1–200 letters/digits or `. _ : -`). The reservation is bound to installation, operation and canonical arguments. A repeated key does not execute again; changed arguments return `409 idempotency_conflict`. Replays return status (`completed`, `failed` or `in_progress_or_unknown`) plus a small resource reference, not cached private email/file bodies. Read the resource using its returned reference if you need its current content. An uncompleted reservation may reflect an interrupted action; investigate before creating another write.
+
+Email requests contain `senderId` (the bound mailbox UUID), 1–10 `to` addresses, subject (1–998 characters, no control characters), required `text` (max 100,000), optional `html` (max 100,000), `replyTo` and up to 10 string metadata fields. Body limit: 256 KiB. Unknown fields are rejected. Complex sending, drafts, replies, templates and attachments use supported mailbox operations instead of additional fields on this simple direct-send route.
 
 ```ts
-const response = await fetch(`${process.env.GSW_API_ORIGIN}/integrations/v1/emails`, {
+const result = await fetch(`${process.env.GSW_API_ORIGIN}/integrations/v1/emails`, {
   method: "POST",
   headers: {
     Authorization: `Bearer ${process.env.GSW_API_KEY}`,
     "Content-Type": "application/json",
-    "Idempotency-Key": `inquiry:${inquiryId}:owner-notification:v1`,
+    "Idempotency-Key": `inquiry:${inquiryId}:ack:v1`,
   },
   body: JSON.stringify({
     senderId: process.env.GSW_SENDER_ID,
-    to: ["office@your-ministry.example"],
-    subject: "New ministry inquiry",
-    text: "A new inquiry is ready in your website admin portal.",
+    to: [visitorEmail],
+    subject: "We received your inquiry",
+    text: "Thank you for contacting the ministry.",
     metadata: { externalRecordId: inquiryId },
   }),
 });
-const result = await response.json();
-if (!response.ok) throw new Error(result.error?.code ?? "gsw_request_failed");
-// Persist result.id with the website's outbox job; poll for completion.
 ```
 
-Supported payload: sender UUID; 1–10 recipient addresses; subject (1–998 characters without control characters); required text (up to 100,000 characters); optional HTML (up to 100,000 characters), reply-to email, and up to 10 string metadata entries. Unknown properties, including custom `from`, cc/bcc, attachments, and template requests, are rejected. Route body limit: 256 KiB. Addresses normalize to lowercase.
+Email acceptance atomically persists the request, outbound message and recipients before `202`, with status `accepted_for_processing` or `simulated`. Status polling distinguishes queued/sending/submitted/failed/cancelled from delivery evidence. Submitted does not mean delivered or read. Identical email replays return the original request ID; idempotency records have no automatic expiry today.
 
-The accepted response includes `id`, `testMode`, `idempotentReplay`, `requestId`, `status`, and a Location header. `status` is `simulated` in test mode or `accepted_for_processing` in live mode, including retries. Poll the status URL for the current result; an acceptance response does not claim queued work is still pending when replayed.
+Direct email submissions default to 100 per installation per UTC day (admin API range 1–1,000); simulations count, replays do not. These counters are not a commercial billing meter or a count of every mailbox operation. Existing global rate limits and mailbox sending limits still apply. `429` includes Retry-After. Sending checks suppressions at acceptance and dispatch. An inquiry is not newsletter consent.
 
-Status returns the request ID, test flag, processing status, deliveryStatus, failureCode, submission/delivery dates, creation date, and customer metadata. Test status is `simulated` / `not_sent`. Live processing uses `queued`, `sending`, `submitted`, `failed`, or `cancelled`. `submitted` means accepted by the transport, not delivered to the recipient. Delivery status uses the existing delivery event pipeline and may remain `pending` until there is evidence. Neither delivered nor submitted proves inbox placement or reading.
+Unknown direct-send outcomes and stale dispatch leases are quarantined as `submission_unknown`; ordinary mailbox retry cannot requeue them. The original submission key is checked before dispatch, including expiry/revocation. Already-submitted actions cannot be recalled. New queued work can use a rotated key; old queued email retains its original credential authorization.
 
-## Reliability and limits
+## Admin management routes
 
-- Persist the website inquiry and its local outbox entry before calling GSW. Retry temporary API failures using the same idempotency key and identical payload. Do not choose a fresh key merely because a request timed out.
-- Idempotency is installation-scoped and bound to the validated payload. A changed payload under the same key returns `409 idempotency_conflict`. Records currently have no automatic expiry, so keys remain reserved for the lifetime of their request record.
-- GSW creates the integration request, outbound message, and recipients in a single transaction before returning `202`. A failure rolls all of them back. Test mode persists only the request.
-- Default quota: 100 new accepted requests per installation per UTC day; administrator-selected API limit: 1–1,000. Simulations count toward the daily quota. Replays do not. Existing mailbox per-minute/per-hour limits also apply to live requests. `429` includes Retry-After; daily quotas reset at UTC midnight. Usage is currently quota accounting, not billable usage reporting.
-- The pilot has an exact recipient allowlist. It cannot act as an arbitrary-recipient mail relay. Suppressions are checked before acceptance and again before dispatch.
-- Workers recheck the key, its expiry/scopes, installation state, original authorizing administrator's active workspace access, mailbox/domain readiness, recipient policy and suppressions. Creating a replacement key does not transfer old queued work: revoking or expiring its original key prevents that work from dispatching.
-- Revocation/pause prevents subsequent authorization checks. It cannot recall a request already handed to the transport. Keep this distinction visible in customer support.
-- Integration sends whose dispatch lease expires are quarantined with `submission_unknown`. Ambiguous transport outcomes are also quarantined. Ordinary mailbox retry cannot requeue integration failures. An operator must inspect submission records and reconcile before deciding to make a new send. Never promise exactly-once delivery.
-- Temporary failures before submission can retry through the existing worker. Failed policy checks surface a stable failure code. Raw failure details and private message bodies are not returned by the public API.
+These require a normal authenticated GSW workspace owner/admin account; an external mailbox key cannot call them.
 
-## Existing admin management API (not callable with mailbox API keys)
-
-These endpoints require the existing GSW signed-in product session and workspace owner/admin permission, not an integration key. They live behind the Control Center panel.
-
-| Method and path | Request |
+| Route | Purpose |
 |---|---|
-| `POST /api/admin/integrations` | `organizationId`, `accountId`, `name`, `testMode` (default true), `allowedRecipients` (1–100), `dailyLimit` (default 100) |
-| `GET /api/admin/integrations?organizationId=...` | List authorized workspace installations |
-| `PATCH /api/admin/integrations/:id` | `{ "active": false }` to pause; true to resume |
-| `POST /api/admin/integrations/:id/keys` | `name`, `scopes`, `expiresInDays`; returns secret once |
-| `GET /api/admin/integrations/:id/keys` | Metadata only: ID, name, prefix, scopes, expiry, revocation and creation dates |
-| `DELETE /api/admin/integrations/:id/keys/:keyId` | Revoke rather than delete the credential |
+| `POST /api/admin/integrations` | Create connection: organizationId, accountId, name, testMode (default true), optional dailyLimit |
+| `GET /api/admin/integrations?organizationId=...` | List workspace connections |
+| `PATCH /api/admin/integrations/:id` | Pause/resume with `{ "active": false/true }` |
+| `POST /api/admin/integrations/:id/keys` | Issue full-mailbox key: name and optional expiresInDays; secret returned once |
+| `GET /api/admin/integrations/:id/keys` | List safe credential metadata |
+| `DELETE /api/admin/integrations/:id/keys/:keyId` | Revoke key |
+| `GET /api/admin/integrations/:id/service` | Readiness/reconnect status, accepted direct-email count and recent email/write-operation summaries |
+| `GET /api/admin/integrations/docs` | Plain-text developer quickstart and route guide linked from the portal |
 
-Rotate by creating a new key, updating the website's server secret, checking connection health, letting existing work settle, then revoking the previous key. To change a sender, recipient grant, or test/live mode in the pilot, create a new installation. Pause the old installation after cutover. This is a current pilot limitation. The target grants full mailbox functionality and does not add a granular permission editor.
+## Deployment and remaining work
 
-## Deployment and acceptance
+Startup now idempotently ensures integration tables before workers start, using migration 0041 with a transaction/advisory lock. The migration remains available through `npm run db:migrate --workspace apps/api`; it is safe after startup setup. The configured local PostgreSQL server was unavailable when that command was attempted; isolated database tests execute the migration successfully. Startup success and live acceptance still need observation after deployment.
 
-1. Apply `0041_integration_email_api.sql` using `npm run db:migrate --workspace apps/api` before deploying this API/worker version. The migration was executed in the isolated PostgreSQL-compatible test fixture. The configured local PostgreSQL server was unavailable, so no deployment database migration has been confirmed.
-2. Deploy the API, outbound worker and web build together. The new tables are required by the outbound worker as well as the new routes. Do not run the new worker against an unmigrated database.
-3. Forward `/integrations/*` to the API on the production host, or use the API's own origin. The Vite development proxy includes this path. Confirm HTTPS and authorization headers survive the reverse proxy.
-4. Complete the customer setup above, then run the controlled live send, status and revocation acceptance checks. No production sender, recipient grant or key has been provisioned by this implementation.
-5. Monitor failed/quarantined sends and validate the existing Stalwart delivery events before describing delivery reporting as operational for a customer.
-
-Implemented tests use Fastify injection and a PostgreSQL-compatible database: migration execution, durable simulated acceptance, duplicate/reordered requests, changed-payload conflicts, installation isolation, strict validation, scope/expiry/revocation, pause/suspended grants, quotas, suppression, atomic rollback, live enqueue without network send, dispatch-time policy rechecks, and stale-lease quarantine. API and web typechecks/build are part of validation. These do not substitute for live mailbox acceptance.
-
-## Next implementation work
-
-Replace narrow pilot scopes and mandatory recipient allowlists with one full-mailbox grant; keep the explicit mailbox/workspace boundary. Make connections workspace-owned and manageable by existing admins without runtime dependence on the original creator. Complete durable mailbox service authorization and consolidate API keys, service information and documentation in the admin portal. Expose all available mailbox functions through the same API, then add health/activity/usage, signed webhooks and recovery tools. No external OAuth app registration or per-feature permission builder is required for this key-based product.
-
-The [mailbox API guide](mailbox-api.md) owns the customer-facing direction; this document remains the exact existing pilot contract until implementation changes.
+Validate real mailbox reading, Kimi inference, mail delivery/status, revocation and admin-page operation in the deployed environment. Code tests use fixtures/mocked providers and do not prove live provider credentials or delivery. Customer signed webhooks, complete coverage of product features missing from the registry, richer usage/billing, reconciliation tooling and mailbox authorization lifecycle improvements remain work. See [service plan](../GSW_MAIL_API_SERVICE_PLAN.md).

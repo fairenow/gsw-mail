@@ -132,6 +132,7 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
               role: "assistant",
               content: response.content,
               tool_calls: response.toolCalls,
+        ...(response.reasoningContent !== undefined ? { reasoning_content: response.reasoningContent } : {}),
             });
             for (const call of response.toolCalls.slice(0, 8)) {
               const semanticName = call.function.name.replaceAll("__", ".");

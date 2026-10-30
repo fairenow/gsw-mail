@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/integrations/:path*",
+      "destination": "https://gsw-mail-production.up.railway.app/integrations/:path*"
+    },
+    {
       "source": "/.well-known/oauth-protected-resource/:path*",
       "destination": "https://gsw-mail-production.up.railway.app/.well-known/oauth-protected-resource/:path*"
     },

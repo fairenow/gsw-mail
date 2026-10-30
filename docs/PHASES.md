@@ -156,3 +156,7 @@ Status: code and isolated database validation; production migration, deployment 
 ## Mailbox API direction revision — October 30, 2026
 
 Documentation aligned to admin-managed API keys with one full-mailbox grant. Required next code work: remove pilot-only feature/recipient selections; make service ownership independent of the original admin; complete durable mailbox service access; expose all available mailbox functions without admin operations; add the admin API/docs/health experience. External OAuth app registration and granular permission tiers are no longer launch requirements. This entry records a product decision and documentation changes, not implementation or deployment of those capabilities. See [customer guide](integrations/mailbox-api.md).
+
+## Unified mailbox API and Kimi implementation — October 30, 2026
+
+Implemented full-mailbox keys without recipient allowlists, workspace-owned runtime connections, registry capability discovery/execution with nested admin denial and write idempotency, selected-model AI generation, and admin API/docs/service-activity controls. Kimi is selectable and uses `KIMI_API_KEY`, preserving reasoning metadata during tool continuations. Startup now ensures integration schema before workers. Isolated tests do not establish real mailbox/provider or browser acceptance; mailbox-token reconnection and capability coverage gaps remain explicit in [the reference](integrations/email-api-pilot.md).

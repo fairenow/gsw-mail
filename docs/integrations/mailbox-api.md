@@ -1,6 +1,6 @@
 # Mailbox API: customer setup and admin management
 
-Approved direction, October 30, 2026. Full mailbox coverage is not implemented yet. See [the current email pilot contract](email-api-pilot.md) for routes that exist on the API branch.
+Updated October 30, 2026. Full-mailbox keys, the API admin panel, registry operation discovery/execution and selected-model AI generation are implemented in code. Live deployment acceptance and coverage of any product features missing from the registry remain outstanding. See [the implementation reference](email-api-pilot.md) for exact routes.
 
 ## What the customer gets
 
@@ -22,7 +22,7 @@ Provide an **API** area in the GSW admin portal with:
 
 No per-feature permission builder or separate OAuth app-registration wizard is required. The existing owner/admin account is the service-management identity. A mailbox key itself cannot enter this admin area or create other keys.
 
-The current Control Center **Email Delivery** panel already creates pilot connections/keys and supports pause/resume and revocation. The consolidated API area, in-portal documentation links, health and usage views remain to be built.
+The current **Control Center → API** panel creates connections/keys, supports pause/resume and revocation, links developer documentation, and offers service readiness/reconnect checks with accepted-email counts and recent email/write activity. These are operational summaries, not full commercial metering.
 
 ## Customer process
 
@@ -43,28 +43,28 @@ The website backend keeps the key. Browser code and public form submitters never
 
 Connections belong to the workspace, not permanently to the administrator who first clicked Create. Existing authorized owners/admins should manage the same connections. Keep creator identity in audit history. Replacing an admin should not, by itself, disconnect a valid workspace mailbox service.
 
-The pilot currently rechecks the original authorizer's active membership. Removing that dependency and implementing durable workspace-owned service authority are explicit code changes still required. Existing mailbox credentials also require operational health/reconnect handling. This guide does not claim those changes have shipped.
+Runtime access no longer depends on the original authorizer retaining membership. Current workspace admins can manage the connection. The active mailbox-owner identity and existing stored/refreshable mailbox authorization are still required for engine operations; the service check surfaces reconnection needs. An independent mailbox service-credential lifecycle remains future work.
 
 ## Capabilities and status
 
 | Area | Target | Current API branch |
 |---|---|---|
-| Authentication | One full-mailbox key | Narrow connection/email scopes |
-| Management | API keys and service controls in admin portal | Connection/key creation, listing, revocation, pause/resume in Email Delivery |
-| Mail sending | Normal supported mailbox recipients, replies, cc/bcc, templates and attachments | Transactional text/optional HTML to exact approved recipients |
-| Mail reading/organization | Inbox, threads, search, drafts, attachment retrieval and message actions | Not exposed by the pilot |
-| Other mailbox services | Calendars, contacts, files, campaigns, tasks/AI/automation and preferences | Not exposed by the pilot |
-| Connection/status | Health, activity, usage and operation status | Connection inspection and email status polling |
+| Authentication | One full-mailbox key | Full-mailbox key |
+| Management | API keys and service controls in admin portal | API panel with key/connection controls, documentation and service/activity checks |
+| Mail sending | Normal supported mailbox recipients, replies, cc/bcc, templates and attachments | Direct email to normal recipients plus supported sending/draft/template/attachment registry operations |
+| Mail reading/organization | Inbox, threads, search, drafts, attachment retrieval and message actions | Available registered functions through /operations; discover schemas with /capabilities |
+| Other mailbox services | Calendars, contacts, files, campaigns, tasks/AI/automation and preferences | Available registered functions through /operations; discover schemas with /capabilities |
+| Connection/status | Health, activity, usage and operation status | Connection and email status plus admin readiness/activity summaries |
 | Events | Signed customer webhooks | Not implemented |
 | Admin operations through key | Never allowed | Not exposed |
 
-The pilot recipient allowlist and scope fields are temporary restrictions to replace, not permission settings the customer must learn for the full-mailbox service. Until code changes, actual requests remain subject to them. Test mode stays an operational tool; it is not a reduced-feature permission tier.
+Pilot recipient/scope columns remain for storage compatibility, but keys now grant full mailbox access and those values no longer restrict execution. Existing pilot keys receive this access model as well. Test mode stays an operational tool; it is not a reduced-feature permission tier.
 
 ## Safe Place Ministries
 
 The GSW admin creates the ministry mailbox connection and server key. Safe Place stores it on its backend and uses the same API for inquiry mail, visitor acknowledgments, subscriber records, calendars and files as those routes become available. Its own admin portal remains responsible for website content and business records.
 
-First live acceptance: save an inquiry and local outbox entry, notify the ministry, confirm real delivery and display status. Dynamic visitor acknowledgments cannot work through the current pilot unless their recipients are explicitly allowed; removing that pilot restriction is part of the approved foundation work.
+First live acceptance: save an inquiry and local outbox entry, notify the ministry, confirm real delivery and display status. Dynamic visitor acknowledgments can use the same mailbox API without a recipient allowlist; ordinary sender, suppression and sending rules still apply.
 
 ## Operational basics
 

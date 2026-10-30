@@ -17,7 +17,7 @@ export async function assertIntegrationDispatch(job: OutboundJob, database = db,
   await service.validateKey(principal, "email.send");
   const row = await service.installation(request.installationId);
   if (request.testMode || row.installation.testMode || !liveTransportReady()) throw new IntegrationError(403, "live_transport_unavailable");
-  if (row.account.id !== job.accountId || row.account.address !== job.fromAddress || job.to.some(e => !row.installation.allowedRecipients.includes(e))) throw new IntegrationError(403, "dispatch_not_allowed");
+  if (row.account.id !== job.accountId || row.account.address !== job.fromAddress) throw new IntegrationError(403, "dispatch_not_allowed");
   const suppressed = await database.select({ email: deliverySuppressions.email }).from(deliverySuppressions).where(eq(deliverySuppressions.organizationId, row.installation.organizationId));
   if (suppressed.some(r => job.to.includes(r.email))) throw new IntegrationError(403, "recipient_suppressed");
   return true;

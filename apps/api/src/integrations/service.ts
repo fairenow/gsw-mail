@@ -2,9 +2,10 @@ import { randomUUID } from "node:crypto";
 import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { integrationEmails, integrationInstallations, integrationKeys } from "../db/integrationSchema.js";
-import { deliverySuppressions, domains, emailAccounts, organizationMemberships, outboundMessages, outboundRecipients, users } from "../db/schema.js";
+import { deliverySuppressions, domains, emailAccounts, mailAccountMemberships, authUsers, outboundMessages, outboundRecipients, users } from "../db/schema.js";
 import { config } from "../config.js";
 import { fingerprint, hashKey, IntegrationError } from "./contract.js";
+import type { AgentExecutionContext } from "../ai/tools/types.js";
 import type { IntegrationSend } from "./contract.js";
 
 type Database = typeof db;
@@ -12,15 +13,12 @@ export type IntegrationPrincipal = { installationId: string; keyId: string; scop
 
 export function createIntegrationService(database: Database = db, options = { liveTransportReady: () => config.mailEngine !== "demo" && config.outbound.relay === "stalwart" }) {
   async function installation(id: string, source: Database = database) {
-    const [row] = await source.select({ installation: integrationInstallations, account: emailAccounts, domain: domains, role: organizationMemberships.role, membershipStatus: organizationMemberships.status, userStatus: users.status })
+    const [row] = await source.select({ installation: integrationInstallations, account: emailAccounts, domain: domains })
       .from(integrationInstallations)
       .innerJoin(emailAccounts, eq(integrationInstallations.accountId, emailAccounts.id))
       .innerJoin(domains, eq(emailAccounts.domainId, domains.id))
-      .innerJoin(users, eq(integrationInstallations.authorizedBy, users.id))
-      .leftJoin(organizationMemberships, and(eq(organizationMemberships.organizationId, integrationInstallations.organizationId), eq(organizationMemberships.userId, integrationInstallations.authorizedBy)))
       .where(eq(integrationInstallations.id, id)).limit(1);
-    if (!row || !row.installation.active || row.account.workspaceId !== row.installation.organizationId || row.domain.organizationId !== row.installation.organizationId
-      || row.userStatus !== "active" || row.membershipStatus !== "active" || !["owner", "admin"].includes(row.role ?? "")) throw new IntegrationError(403, "installation_unavailable");
+    if (!row || !row.installation.active || row.account.workspaceId !== row.installation.organizationId || row.domain.organizationId !== row.installation.organizationId) throw new IntegrationError(403, "installation_unavailable");
     if (row.account.status !== "active" || row.account.authSetupStatus !== "ready" || row.domain.status !== "verified") throw new IntegrationError(403, "sender_unavailable");
     if (!row.installation.testMode && (row.domain.spfStatus !== "verified" || row.domain.dkimStatus !== "verified" || row.domain.dmarcStatus !== "verified")) throw new IntegrationError(403, "sender_dns_not_ready");
     return row;
@@ -29,7 +27,7 @@ export function createIntegrationService(database: Database = db, options = { li
   async function validateKey(principal: IntegrationPrincipal, scope: string, source: Database = database) {
     const [key] = await source.select().from(integrationKeys).where(and(eq(integrationKeys.id, principal.keyId), eq(integrationKeys.installationId, principal.installationId), isNull(integrationKeys.revokedAt))).limit(1);
     if (!key || key.expiresAt <= new Date()) throw new IntegrationError(401, "invalid_api_key");
-    if (!key.scopes.includes(scope)) throw new IntegrationError(403, "insufficient_scope");
+
   }
 
   async function authenticate(authorization: string | undefined): Promise<IntegrationPrincipal> {
@@ -37,7 +35,7 @@ export function createIntegrationService(database: Database = db, options = { li
     if (!token) throw new IntegrationError(401, "invalid_api_key");
     const [key] = await database.select().from(integrationKeys).where(eq(integrationKeys.keyHash, hashKey(token))).limit(1);
     if (!key || key.revokedAt || key.expiresAt <= new Date()) throw new IntegrationError(401, "invalid_api_key");
-    const principal = { installationId: key.installationId, keyId: key.id, scopes: key.scopes };
+    const principal = { installationId: key.installationId, keyId: key.id, scopes: ["mailbox.full"] };
     await installation(key.installationId);
     return principal;
   }
@@ -45,7 +43,7 @@ export function createIntegrationService(database: Database = db, options = { li
   async function connection(principal: IntegrationPrincipal) {
     await validateKey(principal, "connection.read");
     const row = await installation(principal.installationId);
-    return { id: row.installation.id, name: row.installation.name, testMode: row.installation.testMode, scopes: principal.scopes, sender: { id: row.account.id, address: row.account.address }, allowedRecipients: row.installation.allowedRecipients, dailyLimit: row.installation.dailyLimit };
+    return { id: row.installation.id, name: row.installation.name, testMode: row.installation.testMode, scopes: principal.scopes, sender: { id: row.account.id, address: row.account.address }, access: "mailbox.full", dailyLimit: row.installation.dailyLimit };
   }
 
   async function submit(principal: IntegrationPrincipal, input: IntegrationSend, idempotencyKey: string) {
@@ -61,7 +59,6 @@ export function createIntegrationService(database: Database = db, options = { li
         return { id: existing.id, testMode: existing.testMode, idempotentReplay: true };
       }
       if (input.senderId !== row.account.id) throw new IntegrationError(403, "sender_not_allowed");
-      if (input.to.some(email => !row.installation.allowedRecipients.includes(email))) throw new IntegrationError(403, "recipient_not_allowed");
       const suppressed = await tx.select({ email: deliverySuppressions.email }).from(deliverySuppressions).where(and(eq(deliverySuppressions.organizationId, row.installation.organizationId), inArray(deliverySuppressions.email, input.to))).limit(1);
       if (suppressed.length) throw new IntegrationError(409, "recipient_suppressed");
       const [usage] = await tx.select({ count: sql<number>`count(*)` }).from(integrationEmails).where(and(eq(integrationEmails.installationId, row.installation.id), gte(integrationEmails.createdAt, sql`date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`)));
@@ -93,6 +90,19 @@ export function createIntegrationService(database: Database = db, options = { li
     return { id: row.email.id, testMode: row.email.testMode, status: row.email.testMode ? "simulated" : row.transportStatus === "accepted" ? "submitted" : row.transportStatus, deliveryStatus: row.email.testMode ? "not_sent" : row.deliveryStatus, failureCode: row.failureCode, submittedAt: row.acceptedAt, deliveredAt: row.deliveredAt, metadata: row.email.metadata, createdAt: row.email.createdAt };
   }
 
-  return { authenticate, connection, submit, status, installation, validateKey };
+  async function context(principal: IntegrationPrincipal): Promise<AgentExecutionContext> {
+    await validateKey(principal, "mailbox.full");
+    const row = await installation(principal.installationId);
+    return mailboxContext(row.account.id);
+  }
+  async function mailboxContext(accountId: string): Promise<AgentExecutionContext> {
+    const [owner] = await database.select({ userId: users.id, authUserId: users.authUserId, email: authUsers.email, address: emailAccounts.address }).from(emailAccounts)
+      .innerJoin(users, eq(emailAccounts.userId, users.id)).innerJoin(authUsers, eq(users.authUserId, authUsers.id))
+      .innerJoin(mailAccountMemberships, and(eq(mailAccountMemberships.accountId, emailAccounts.id), eq(mailAccountMemberships.userId, users.id), eq(mailAccountMemberships.authUserId, users.authUserId)))
+      .where(and(eq(emailAccounts.id, accountId), eq(users.status, "active"), eq(mailAccountMemberships.role, "owner"))).limit(1);
+    if (!owner?.authUserId || owner.email.toLowerCase() !== owner.address.toLowerCase()) throw new IntegrationError(403, "mailbox_authorization_required");
+    return { userId: owner.userId, authUserId: owner.authUserId, accountId: accountId, headers: {} };
+  }
+  return { authenticate, connection, submit, status, installation, validateKey, context, mailboxContext };
 }
 export const integrationService = createIntegrationService();
