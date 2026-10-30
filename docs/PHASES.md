@@ -146,3 +146,9 @@ Mailbox access is now staged behind Better Auth OAuth Provider interoperability.
 - [x] Overlay folder navigation on phone/tablet list and reader views.
 - [x] Expand phone/tablet search from an icon across the header.
 - [x] Bound compose height and scroll long content; full-screen compose on phones.
+
+## External email API pilot — October 30, 2026
+
+Implemented scoped, expiring/revocable server keys, exact sender/recipient installation grants, transactional acceptance, installation-bound idempotency, status polling, daily quotas, test simulations, and Control Center connection/key management. Queue dispatch rechecks access and suppressions; stale or uncertain submissions require operator reconciliation. Customer onboarding and deployment steps: [email API pilot](integrations/email-api-pilot.md).
+
+Status: code and isolated database validation; production migration, deployment and real mailbox delivery acceptance remain outstanding. This is a controlled own-app pilot, not the public OAuth service, customer webhook service, or marketplace release.

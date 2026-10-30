@@ -290,3 +290,7 @@ Account resolution now displays the supplied `/loading-animation-1.gif` while se
 The mail shell is bounded to the dynamic viewport. Message rows truncate within their grid column; the list body scrolls vertically while its header and pagination stay visible. Folder pages request 50 messages using the existing API limit/offset parameters and display the mailbox total. Search displays the results returned by the existing search endpoint.
 
 At widths below 1100px, folders overlay the list or reader and dismiss without changing the underlying view. Search opens over the header. Below 700px, compose fills the dynamic viewport; desktop compose has a bounded height. Long editor content scrolls internally.
+
+## External email API pilot
+
+`/integrations/v1` is an independently authenticated, installation-scoped API using hashed server keys. It does not broaden product bearer authentication or accept MCP/mobile credentials. A workspace admin binds one installation to one verified-domain mailbox and exact approved recipients; test mode produces durable simulations without outbound jobs. Live acceptance atomically persists the request, outbound message and recipients; the existing worker prepares mail through `MailEngine` using an already-authorized mailbox OAuth credential before invoking the existing relay. Dispatch rechecks grants and suppressions; uncertain outcomes are quarantined and excluded from ordinary mailbox retry. See [customer setup and contracts](integrations/email-api-pilot.md). Migration 0041 must precede the API/worker deployment.

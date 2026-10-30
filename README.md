@@ -112,3 +112,7 @@ administer without Google Workspace. Outbound may still ride an SMTP relay.
 
 Mail delivery and storage are infrastructure-critical. The API, AI, Convex, the
 website, and third-party integrations must be able to be down without stopping mail.
+
+## External application email API
+
+The controlled email API pilot and customer onboarding process are documented in [docs/integrations/email-api-pilot.md](docs/integrations/email-api-pilot.md). The broader roadmap is in [docs/GSW_MAIL_API_SERVICE_PLAN.md](docs/GSW_MAIL_API_SERVICE_PLAN.md).

@@ -6,7 +6,7 @@ Proposed specification • October 30, 2026 • First customer: Safe Place Minis
 
 Turn GSW Mail’s existing communication capabilities into a supported service that external applications can connect to. Start with transactional email, prove the customer installation model, and extend the same model to contacts, calendars, files, and configurable workflows.
 
-This is a design and implementation plan, not a claim that these endpoints or onboarding screens exist. No repository changes or production enablement are included in this document.
+This document is the original proposed roadmap. The controlled own-app email API pilot is now implemented in code; see [the implementation contract and customer onboarding guide](integrations/email-api-pilot.md) for the routes and screens that exist. Public OAuth onboarding and later milestones remain proposed. Production enablement requires migration, deployment and live-host acceptance.
 
 Verified foundation: GSW exposes MCP tools for sending and for templates, contacts, and campaigns. The current product API middleware explicitly restricts OAuth bearer authentication to the first-party mobile client. This prevents treating an arbitrary external app’s OAuth token as product API authorization. Source inspected October 30, 2026: https://github.com/fairenow/gsw-mail/blob/main/apps/api/src/auth/middleware.ts
 

@@ -187,3 +187,7 @@ The web auth gate checks the active identity on focus, visibility changes, and e
 ## 2026-10-29: Calendar invitation branding
 
 Calendar invitation and update emails use the GSW Mail favicon and their own layout rather than the sender's community or Bible template. The public RSVP page uses the same GSW Mail favicon. Existing email messages retain their previously rendered content.
+
+## October 30, 2026 — Own-app email API pilot
+
+Use a separate `/integrations/v1` authorization surface with installation-bound hashed keys; preserve the mobile-only product bearer trust rule. An installation grants one sending mailbox and explicit recipients, with simulation as the default. Live queued work uses persisted mailbox OAuth authority and the existing MailEngine/relay, rather than minting mail credentials from an admin or integration key. Keep request metadata separate from existing outbound payload records, persist acceptance atomically, and quarantine ambiguous submissions instead of automatically repeating them. Restrict the initial customer outcome to fixed ministry-owner inquiry notifications; defer dynamic visitor recipients, public OAuth onboarding, signed customer webhooks and billing until their own acceptance. The Control Center exposes connection, pause, key issue and revocation controls.
