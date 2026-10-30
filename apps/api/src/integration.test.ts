@@ -10,6 +10,7 @@ import { SignJWT, exportJWK } from "jose";
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? "postgres://gsw_mail:gsw_mail@localhost:5432/gsw_mail_test";
 if (new URL(process.env.DATABASE_URL).pathname !== "/gsw_mail_test") throw new Error("Integration tests require gsw_mail_test");
 process.env.NODE_ENV = "test";
+process.env.BETTER_AUTH_SECRET = "integration-test-mailbox-secret-000000000000000000";
 process.env.DELIVERY_WEBHOOK_SECRET = "";
 process.env.SEND_DELAY_SECONDS = "0";
 process.env.OUTBOUND_RELAY = "null";
@@ -730,6 +731,8 @@ test("sessionless mailbox credential renews only an authorized first-party refre
   await ensureMcpIdentityFixtures();
   const mobileClientId = "gsw-mail-mobile";
   const refreshModule = await import("./auth/refreshStalwartMailboxToken.js");
+  const { persistMailboxCredential } = await import("./auth/mailboxCredentialVault.js");
+  const { oauthTokenHash } = await import("./auth/mailboxCredentialCrypto.js");
 
   await db.insert(schema.oauthClient).values({
     id: mobileClientId, clientId: mobileClientId, disabled: false, name: "GSW Mail mobile",
@@ -758,15 +761,20 @@ test("sessionless mailbox credential renews only an authorized first-party refre
 
   const insertRefresh = (id: string, overrides: { expiresAt?: Date; revoked?: Date; scopes?: string[]; clientId?: string } = {}) =>
     db.insert(schema.oauthRefreshToken).values({
-      id, token: `refresh-${id}`, clientId: overrides.clientId ?? mobileClientId, userId: mcpAuthSubject,
+      id, token: oauthTokenHash(`refresh-${id}`), clientId: overrides.clientId ?? mobileClientId, userId: mcpAuthSubject,
       expiresAt: overrides.expiresAt ?? new Date(Date.now() + 86_400_000), createdAt: new Date(),
       revoked: overrides.revoked ?? null, scopes: overrides.scopes ?? ["openid", "email", "offline_access"],
     }).onConflictDoNothing();
 
   const reset = async () => {
-    refreshModule.clearRefreshedStalwartMailboxTokenCache(mcpAuthSubject, ramonAccountId);
+    await pool.query("DELETE FROM mailbox_credential_vault WHERE account_id=$1", [ramonAccountId]);
     await db.delete(schema.oauthRefreshToken).where(eq(schema.oauthRefreshToken.clientId, mobileClientId));
     tokenStatus = 200;
+  };
+  const prepareVault = async (id: string) => {
+    await insertRefresh(id);
+    await insertRefresh("rotated");
+    await persistMailboxCredential({ productUserId: ramonId, authUserId: mcpAuthSubject, accountId: ramonAccountId, clientId: mobileClientId, accessToken: await sign(), refreshToken: `refresh-${id}` });
   };
   const renew = () => refreshModule.refreshStoredStalwartMailboxToken({
     productUserId: ramonId, authUserId: mcpAuthSubject, accountId: ramonAccountId, request: requestStub,
@@ -786,7 +794,7 @@ test("sessionless mailbox credential renews only an authorized first-party refre
     assert.equal(await renew(), null, "a revoked refresh token is never renewed");
 
     await reset();
-    await insertRefresh("failing", {});
+    await prepareVault("failing");
     tokenStatus = 400;
     tokenBody = { error: "invalid_grant" };
     assert.equal(await renew(), null, "a rejected refresh never yields a credential");
@@ -797,23 +805,25 @@ test("sessionless mailbox credential renews only an authorized first-party refre
     assert.equal(await renew(), null, "a token without a mailbox scope is not a mailbox credential");
 
     await reset();
-    await insertRefresh("wrong-mailbox", {});
-    tokenBody = { access_token: await sign({ email: "other@it.example.com" }) };
+    await prepareVault("wrong-mailbox");
+    tokenBody = { access_token: await sign({ email: "other@it.example.com" }), refresh_token: "refresh-rotated" };
     assert.equal(await renew(), null, "a credential for another mailbox is rejected");
 
     await reset();
-    await insertRefresh("wrong-subject", {});
-    tokenBody = { access_token: await sign({ subject: "auth-someone-else" }) };
+    await prepareVault("wrong-subject");
+    tokenBody = { access_token: await sign({ subject: "auth-someone-else" }), refresh_token: "refresh-rotated" };
     assert.equal(await renew(), null, "a credential for another principal is rejected");
 
     await reset();
-    await insertRefresh("valid", {});
+    await prepareVault("valid");
     const expected = await sign();
-    tokenBody = { access_token: expected };
+    tokenBody = { access_token: expected, refresh_token: "refresh-rotated" };
     assert.equal(await renew(), expected, "an authorized first-party credential is renewed");
 
-    tokenBody = { access_token: await sign({ email: "other@it.example.com" }) };
-    assert.equal(await renew(), expected, "a fresh credential is served from cache within its lifetime");
+    tokenBody = { access_token: await sign({ email: "other@it.example.com" }), refresh_token: "refresh-rotated" };
+    assert.equal(await renew(), null, "a wrong mailbox refresh cannot be hidden by a credential cache");
+    await db.update(schema.oauthRefreshToken).set({ revoked: new Date() }).where(eq(schema.oauthRefreshToken.id, "rotated"));
+    assert.equal(await renew(), null, "revoking the rotated grant immediately blocks further refresh");
   } finally {
     await db.delete(schema.oauthRefreshToken).where(eq(schema.oauthRefreshToken.clientId, mobileClientId));
     await db.update(schema.emailAccounts)

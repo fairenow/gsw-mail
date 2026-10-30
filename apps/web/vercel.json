@@ -5,6 +5,10 @@
       "destination": "/docs/index.html"
     },
     {
+      "source": "/settings/mcp-mailbox-recovery",
+      "destination": "/index.html"
+    },
+    {
       "source": "/integrations/:path*",
       "destination": "https://gsw-mail-production.up.railway.app/integrations/:path*"
     },

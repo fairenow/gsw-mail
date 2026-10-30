@@ -1,3 +1,4 @@
+import { persistMailboxCredential } from "./mailboxCredentialVault.js";
 import { withInternalMailboxIdentity } from "./internalMailboxAuthorization.js";
 import { createHash, randomBytes } from "node:crypto";
 import { fromNodeHeaders } from "better-auth/node";
@@ -10,7 +11,6 @@ import { firstPartyStalwartClientIds } from "./firstPartyClients.js";
 import { auth } from "./better.js";
 import { assertMailboxSessionIdentity } from "./mailboxSessionIdentity.js";
 import { verifyStalwartMailboxJwt } from "./verifyStalwartMailboxJwt.js";
-import { clearRefreshedStalwartMailboxTokenCache } from "./refreshStalwartMailboxToken.js";
 
 /**
  * Establish a refreshable first-party Stalwart mailbox credential for the
@@ -101,7 +101,7 @@ export async function establishBrokerMailboxCredential(input: {
     console.warn("[mcp-broker] exchange_failed", { status: tokenResponse.status });
     return { established: false, reason: `mailbox_authorization_exchange_${tokenResponse.status}` };
   }
-  const token = await tokenResponse.json() as { access_token?: string };
+  const token = await tokenResponse.json() as { access_token?: string; refresh_token?: string };
   if (!token.access_token) return { established: false, reason: "mailbox_authorization_no_token" };
 
   await verifyStalwartMailboxJwt(token.access_token, {
@@ -130,7 +130,8 @@ export async function establishBrokerMailboxCredential(input: {
   const refreshable = refreshRows.some(row => row.scopes.includes("email"));
   console.info("[mcp-broker] persistence_check", { refreshable, candidateCount: refreshRows.length });
   if (!refreshable) return { established: false, reason: "mailbox_refresh_credential_not_persisted" };
-  clearRefreshedStalwartMailboxTokenCache(input.authUserId, input.accountId);
+  if (!token.refresh_token) return { established: false, reason: "mailbox_refresh_credential_not_returned" };
+  await persistMailboxCredential({ ...input, clientId: config.auth.mobileClientId, accessToken: token.access_token, refreshToken: token.refresh_token });
   console.info("[oauth] broker_mailbox_credential_established", { authUserId: input.authUserId, accountId: input.accountId });
   return { established: true };
 }
