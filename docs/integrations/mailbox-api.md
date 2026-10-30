@@ -73,3 +73,10 @@ Keys grant substantial mailbox authority. Treat them as secrets and rotate/revok
 Revocation prevents future authorization; it cannot recall an already-submitted message. Changing administrators should preserve workspace-owned connections; disabling the mailbox, pausing the service or revoking its authority should stop access. Document and test those cases as the lifecycle is implemented.
 
 For exact current requests, status semantics, deployment steps and known restrictions, use [email API pilot](email-api-pilot.md). For the implementation order, use [mailbox API service plan](../GSW_MAIL_API_SERVICE_PLAN.md).
+
+
+## Developer site and diagnostics
+
+Public docs: https://mail-docs.guidedstepswellness.com (fallback: https://mail.guidedstepswellness.com/docs). The documentation includes customer onboarding, server-side authentication examples and the current operation schemas. API requests continue to use the mail host. `GET /integrations/v1` now returns connection guidance rather than a route-not-found error.
+
+Control Center → API offers live mailbox and AI diagnostics using the existing mailbox authorization. This checks a mailbox read, the selected AI provider and Kimi without creating an external key or sending email. These checks do not establish bearer-key acceptance or recipient delivery.

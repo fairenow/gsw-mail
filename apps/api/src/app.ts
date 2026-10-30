@@ -1,3 +1,4 @@
+import integrationPublic from "./routes/integrationPublic.js";
 import integrationApi from "./routes/integrationApi.js";
 import integrationAdmin from "./routes/integrationAdmin.js";
 import mcpAccessProfile from "./routes/mcpAccessProfile.js";
@@ -141,6 +142,7 @@ export function buildApp() {
     anon.get("/health", async () => ({ ok: true, service: "gsw-mail-api" }));
   });
 
+  app.register(integrationPublic);
   app.register(integrationApi);
   app.register(integrationAdmin);
   app.register(accounts);

@@ -304,3 +304,23 @@ The approved next architecture is an admin-managed, full-mailbox server key: one
 Keys now grant `mailbox.full` with no per-feature scope/recipient selection. Runtime connection access is workspace/mailbox-owned rather than dependent on the original creator's membership. `/integrations/v1/capabilities` and `/operations` reuse mailbox registry services under an inherited mailbox-only execution boundary; caller identity overrides and nested admin actions are denied. Writes use existing durable AI idempotency reservations, store only small resource-reference summaries and do not repeat on replay. The simple email endpoint retains atomic acceptance and dispatch rechecks. `/ai/chat` uses the mailbox's selected provider for text generation without tools or returned reasoning metadata. Test connections simulate operations and inference without execution.
 
 The admin API page includes key/connection controls, documentation, readiness/reconnect checks, direct-email usage and recent write/email activity. Startup idempotently ensures integration tables before workers. Existing stored/refreshable mailbox OAuth is still required for engine calls; an independent service-credential lifecycle and complete UI-only capability parity remain outstanding. Kimi is selectable via settings and uses server-side `KIMI_API_KEY`, default model `kimi-k3.1-pro`; tool loops preserve required reasoning metadata in memory. See [implementation reference](integrations/email-api-pilot.md) and [Kimi configuration](integrations/kimi.md).
+
+
+## Public developer documentation and live diagnostics (2026-10-30)
+
+The public documentation is served from `apps/web/public/docs` on
+`mail-docs.guidedstepswellness.com` through a host-specific Vercel rewrite;
+`/docs` on the mail host is a fallback. API traffic remains on the mail host.
+The old authenticated docs endpoint redirects to the docs subdomain.
+`GET /integrations/v1` provides public connection guidance, and `/reference`
+exposes static mailbox operation schemas only. Private capabilities and all
+mailbox execution still require a bearer key.
+
+Control Center API includes an administrator-authorized, workspace-bound live
+service diagnostic. It reads at most one message without returning its contents
+and calls the selected AI provider plus Kimi when needed. It issues no API key
+and sends no email. It is explicitly distinct from bearer-key acceptance and
+recipient delivery checks. Diagnostic use is rate limited and audited.
+
+DNS for the docs host must be configured at the authoritative DNS provider.
+A successful build or deployment does not establish DNS, TLS or live acceptance.
