@@ -324,3 +324,28 @@ recipient delivery checks. Diagnostic use is rate limited and audited.
 
 DNS for the docs host must be configured at the authoritative DNS provider.
 A successful build or deployment does not establish DNS, TLS or live acceptance.
+
+
+## Sessionless mailbox credential correction (2026-10-30)
+
+Live admin diagnostics confirmed Kimi inference succeeds but mailbox access
+failed during token refresh. Better Auth stores OAuth token hashes; those
+hashes are not reusable access or refresh credentials. The former lookup
+and refresh path incorrectly attempted to use them as credentials.
+
+The first-party, identity-matched mailbox authorization flow now persists
+its actual returned credentials in `mailbox_credential_vault`, encrypted
+with AES-256-GCM using a domain-separated HKDF key derived from
+`BETTER_AUTH_SECRET`. Ciphertext is bound to the mailbox, auth user and
+first-party client. Keep that secret stable; rotating it requires mailbox
+reauthorization. OAuth grant hashes remain unchanged. Every vault read checks
+owner identity, active mailbox, first-party client, scope, grant expiry and
+revocation. Refresh rotation is serialized across replicas with a database
+advisory transaction lock and stores the verified replacement credentials.
+
+Migration 0042 is idempotently applied at API startup. Local `db:migrate`
+cannot connect to the default local database; the schema and authorization
+queries are validated in PGlite. Existing hashed-only records cannot be
+backfilled. The mailbox owner must use Restore mailbox service access while
+signed in as that mailbox once to establish the encrypted credential. An
+admin session cannot substitute for mailbox-owner authorization.

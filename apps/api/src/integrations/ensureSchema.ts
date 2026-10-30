@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { pool } from "../db/client.js";
 
 export async function ensureIntegrationSchema(): Promise<void> {
-  const migration = await readFile(new URL("../../drizzle/0041_integration_email_api.sql", import.meta.url), "utf8");
+  const migration = (await Promise.all(["0041_integration_email_api", "0042_mailbox_credential_vault"].map(name => readFile(new URL(`../../drizzle/${name}.sql`, import.meta.url), "utf8")))).join("\n");
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

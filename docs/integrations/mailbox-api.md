@@ -80,3 +80,6 @@ For exact current requests, status semantics, deployment steps and known restric
 Public docs: https://mail-docs.guidedstepswellness.com (fallback: https://mail.guidedstepswellness.com/docs). The documentation includes customer onboarding, server-side authentication examples and the current operation schemas. API requests continue to use the mail host. `GET /integrations/v1` now returns connection guidance rather than a route-not-found error.
 
 Control Center → API offers live mailbox and AI diagnostics using the existing mailbox authorization. This checks a mailbox read, the selected AI provider and Kimi without creating an external key or sending email. These checks do not establish bearer-key acceptance or recipient delivery.
+
+
+Mailbox authorization uses an encrypted, owner-bound first-party credential vault. Existing authorizations created before this correction stored hashes only and require one mailbox-owner renewal at `/settings/mcp-mailbox-recovery`. An admin login cannot replace the mailbox owner session. After renewal, repeat the admin live checks; bearer-key and delivery acceptance remain separate checks.

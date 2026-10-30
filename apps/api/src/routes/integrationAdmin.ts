@@ -40,7 +40,7 @@ export default async function integrationAdmin(app: FastifyInstance) {
       const messages = await engine.listMessages(account.id, { limit: 1 });
       checks.push({ name: "Live mailbox read", ok: true, detail: `Read succeeded (${messages.length} sample records); message content is not included.` });
     } catch {
-      checks.push({ name: "Live mailbox read", ok: false, detail: "Mailbox authorization or read failed. Reconnect the mailbox and review server logs." });
+      checks.push({ name: "Live mailbox read", ok: false, detail: "No usable mailbox credential or the live read failed. Sign in as this mailbox and restore mailbox access; an admin sign-in alone cannot repair mailbox authorization." });
     }
     const verifyProvider = async (provider: string, name: string) => {
       try {
