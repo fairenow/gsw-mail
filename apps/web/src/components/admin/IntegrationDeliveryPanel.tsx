@@ -5,7 +5,7 @@ type ApiKey = { id: string; name: string; prefix: string; expiresAt: string; rev
 type ServiceStatus = { health: string; acceptedEmails: number; recentEmails: { id: string; testMode: boolean; status: string | null; failureCode: string | null }[]; recentOperations: { name: string; status: string; createdAt: string }[] };
 type Mailbox = { id: string; address: string; status: string; authSetupStatus: string };
 async function request<T>(path: string, method = "GET", body?: unknown, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(path, { method, credentials: "include", headers: { "Content-Type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: signal ?? AbortSignal.timeout(15000) });
+  const response = await fetch(path, { method, credentials: "include", ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }), signal: signal ?? AbortSignal.timeout(15000) });
   const result = await response.json();
   if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : "The request could not be completed.");
   return result as T;

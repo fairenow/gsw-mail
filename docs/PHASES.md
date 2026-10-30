@@ -205,3 +205,14 @@ queries are validated in PGlite. Existing hashed-only records cannot be
 backfilled. The mailbox owner must use Restore mailbox service access while
 signed in as that mailbox once to establish the encrypted credential. An
 admin session cannot substitute for mailbox-owner authorization.
+
+
+### External API acceptance follow-up (2026-10-30)
+
+Production test-key checks passed for mailbox binding, 101-operation discovery,
+mailbox/AI simulation, admin/context-override rejection, durable simulated
+submission/status, duplicate replay and payload conflict. Live verification
+found that the admin request helper set JSON Content-Type on empty DELETE
+requests, preventing key revocation before the route handler. The helper now
+sets JSON headers only when sending a body. Verify revocation with a subsequent
+401, and keep test connections paused after acceptance checks.
