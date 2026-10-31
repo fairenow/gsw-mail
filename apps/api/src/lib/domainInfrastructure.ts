@@ -300,6 +300,30 @@ async function syncProviders(name: string): Promise<ProviderSync> {
   };
 }
 
+export function dmarcPolicyMatches(expected: string, observed: readonly string[]): boolean {
+  const parse = (value: string) => {
+    const tags = new Map<string, string>();
+    for (const part of value.split(";").map(value => value.trim()).filter(Boolean)) {
+      const tag = part.match(/^([a-z][a-z0-9_-]*)\s*=\s*(.+)$/i);
+      if (!tag || tags.has(tag[1]!.toLowerCase())) return null;
+      tags.set(tag[1]!.toLowerCase(), tag[2]!.trim());
+    }
+    if (tags.get("v") !== "DMARC1" || !["none", "quarantine", "reject"].includes(tags.get("p") ?? "")) return null;
+    const adkim = tags.get("adkim") ?? "r", aspf = tags.get("aspf") ?? "r", pct = tags.get("pct") ?? "100";
+    if (!["r", "s"].includes(adkim) || !["r", "s"].includes(aspf) || !/^\d{1,3}$/.test(pct) || Number(pct) > 100) return null;
+    return { policy: tags.get("p")!, adkim, aspf, pct: Number(pct) };
+  };
+  const candidates = observed.filter(value => /^v=DMARC1(?:\s*;|$)/i.test(value.trim()));
+  if (candidates.length !== 1) return false;
+  const actual = parse(candidates[0]!), required = parse(expected);
+  if (!actual || !required) return false;
+  const strength = ["none", "quarantine", "reject"];
+  return strength.indexOf(actual.policy) >= strength.indexOf(required.policy)
+    && (required.adkim === "r" || actual.adkim === "s")
+    && (required.aspf === "r" || actual.aspf === "s")
+    && actual.pct >= required.pct;
+}
+
 async function observe(record: DomainDnsRecord): Promise<ObservedDnsRecord> {
   try {
     if (record.type === "MX") {
@@ -313,7 +337,7 @@ async function observe(record: DomainDnsRecord): Promise<ObservedDnsRecord> {
       return { ...record, matches: observed.includes(normalizedHost(record.value)), observed };
     }
     const observed = (await resolveTxt(record.name)).map((parts) => normalizedValue(parts.join("")));
-    return { ...record, matches: observed.includes(normalizedValue(record.value)), observed };
+    return { ...record, matches: record.purpose === "dmarc" ? dmarcPolicyMatches(record.value, observed) : observed.includes(normalizedValue(record.value)), observed };
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ENODATA" || code === "ENOTFOUND" || code === "ESERVFAIL") return { ...record, matches: false, observed: [] };

@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { DEFAULT_DMARC_POLICY, normalizeManagedDnsRecords, parseStalwartZoneFile, stripZoneComment } from "./domainInfrastructure.js";
+import { DEFAULT_DMARC_POLICY, dmarcPolicyMatches, normalizeManagedDnsRecords, parseStalwartZoneFile, stripZoneComment } from "./domainInfrastructure.js";
 
 test("preserves semicolons inside quoted TXT values", () => {
   const records = parseStalwartZoneFile([
@@ -80,4 +80,19 @@ test("removes stale Resend and SES DNS records when mailbox relay is Stalwart", 
   assert.equal(records.some((record) => record.source === "resend"), false);
   assert.equal(records.some((record) => record.value.includes("amazonses.com")), false);
   assert.equal(records.some((record) => record.value === "v=spf1 ip4:2.28.120.166 -all"), true);
+});
+
+
+test("DMARC readiness accepts optional defaults and preserves reporting settings", () => {
+  assert.equal(dmarcPolicyMatches(DEFAULT_DMARC_POLICY, ["v=DMARC1; p=none; rua=mailto:postmaster@team.guidedstepswellness.com"]), true);
+  assert.equal(dmarcPolicyMatches(DEFAULT_DMARC_POLICY, ["v=DMARC1; rua=mailto:reports@example.com; aspf=r; p=none; adkim=r; pct=100"]), true);
+});
+
+test("DMARC readiness accepts stronger policies without requiring weaker DNS", () => {
+  assert.equal(dmarcPolicyMatches(DEFAULT_DMARC_POLICY, ["v=DMARC1; p=reject; adkim=s; aspf=s"]), true);
+  assert.equal(dmarcPolicyMatches("v=DMARC1; p=reject; adkim=s", ["v=DMARC1; p=none"]), false);
+});
+
+test("DMARC readiness rejects malformed, missing and ambiguous policies", () => {
+  for (const records of [[], ["v=DMARC1"], ["v=DMARC1; p=invalid"], ["v=DMARC1; p=none; p=reject"], ["v=DMARC1; p=none; pct=101"], ["v=DMARC1; p=none; pct=-1"], ["v=DMARC1; p=none; adkim=invalid"], ["v=DMARC1; p=none", "v=DMARC1; p=reject"]]) assert.equal(dmarcPolicyMatches(DEFAULT_DMARC_POLICY, records), false);
 });
