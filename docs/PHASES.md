@@ -216,3 +216,14 @@ found that the admin request helper set JSON Content-Type on empty DELETE
 requests, preventing key revocation before the route handler. The helper now
 sets JSON headers only when sending a body. Verify revocation with a subsequent
 401, and keep test connections paused after acceptance checks.
+
+
+### DMARC readiness comparison (2026-10-30)
+
+Live API acceptance found a false DNS failure for a valid DMARC policy with
+a reporting address and omitted relaxed-alignment/default percentage tags.
+The verifier now compares effective policy settings, accepts stronger
+enforcement/alignment, preserves existing reporting settings and rejects
+multiple policies, duplicate tags and malformed required values. TXT
+matching for SPF and DKIM is unchanged. This avoids rewriting working DNS
+merely to match the onboarding template.

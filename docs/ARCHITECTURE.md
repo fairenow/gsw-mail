@@ -349,3 +349,14 @@ queries are validated in PGlite. Existing hashed-only records cannot be
 backfilled. The mailbox owner must use Restore mailbox service access while
 signed in as that mailbox once to establish the encrypted credential. An
 admin session cannot substitute for mailbox-owner authorization.
+
+
+### DMARC readiness comparison (2026-10-30)
+
+Live API acceptance found a false DNS failure for a valid DMARC policy with
+a reporting address and omitted relaxed-alignment/default percentage tags.
+The verifier now compares effective policy settings, accepts stronger
+enforcement/alignment, preserves existing reporting settings and rejects
+multiple policies, duplicate tags and malformed required values. TXT
+matching for SPF and DKIM is unchanged. This avoids rewriting working DNS
+merely to match the onboarding template.
