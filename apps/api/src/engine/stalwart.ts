@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { normalizeMessageIdValue } from "../lib/messageId.js";
 import { JmapClient, JmapError, type JmapMethodCall, type JmapSession } from "./jmap.js";
 import type {
   AttachmentBody,
@@ -868,7 +869,7 @@ export class StalwartEngine implements MailEngine {
         "Email/query",
         {
           accountId,
-          filter: { header: { "Message-ID": [messageId] } },
+          filter: { header: ["Message-ID", normalizeMessageIdValue(messageId)] },
           sort: [{ property: "receivedAt", isAscending: true }],
           limit: 1,
           position: 0,

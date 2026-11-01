@@ -181,11 +181,11 @@ const mailstore = (methodCalls: { name: string; args: Record<string, unknown>; i
         const needle = (filter.text as string).toLowerCase();
         ids = ids.filter((e) => `${e.subject} ${e.bodyValues?.p1?.value ?? ""}`.toLowerCase().includes(needle));
       }
-      if (typeof filter.header === "object" && filter.header) {
-        const header = filter.header as Record<string, string[]>;
-        if (header["Message-ID"]) {
-          const wanted = header["Message-ID"];
-          ids = ids.filter((e) => e.messageId !== undefined && wanted.includes(e.messageId));
+      if (Array.isArray(filter.header)) {
+        const [name, value] = filter.header as unknown[];
+        if (typeof name === "string" && name.toLowerCase() === "message-id" && typeof value === "string") {
+          const wanted = value.replace(/^<+|>+$/g, "").trim();
+          ids = ids.filter((e) => e.messageId !== undefined && e.messageId.replace(/^<+|>+$/g, "").trim() === wanted);
         }
       }
       ids = ids.sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
@@ -541,9 +541,14 @@ test("contacts map JSContact fields through JMAP", async () => {
   assert.equal(updated.displayName, "Jane S.");
 });
 
-test("findMessageByRfcMessageId locates by header filter", async () => {
+test("findMessageByRfcMessageId locates by RFC header filter", async () => {
+  requestLog.length = 0;
   const hit = await engine.findMessageByRfcMessageId("ramon@gs.com", "<m3@vendor.net>");
   assert.deepEqual(hit, { engineMessageId: "e3", engineThreadId: "t3" });
+  const jmapCall = requestLog.find((l) => l.url.endsWith("/jmap"));
+  const body = JSON.parse(jmapCall!.body!) as { methodCalls: [string, Record<string, unknown>, string][] };
+  const query = body.methodCalls.find(([name]) => name === "Email/query");
+  assert.deepEqual(query?.[1].filter, { header: ["Message-ID", "m3@vendor.net"] });
 });
 
 test("listMessages rejects a pseudo reference instead of the standard result reference", async () => {
