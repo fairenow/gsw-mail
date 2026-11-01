@@ -29,7 +29,7 @@ const contactInput = z.object({
 });
 const profileImageUrl = z.string().max(2_048).refine((value) => {
   if (!value) return true;
-  if (/^\/product\/files\/[0-9a-f-]{36}\/content$/i.test(value)) return true;
+  if (/^\/product\/files\/[0-9a-f-]{36}\/content(?:\?width=\d{1,4})?$/i.test(value)) return true;
   try {
     const url = new URL(value);
     return url.protocol === "http:" || url.protocol === "https:";

@@ -74,7 +74,9 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
   };
   const saveSettings = async (body: { general?: Record<string, unknown>; compose?: Record<string, unknown>; contacts?: Record<string, unknown>; ai?: Record<string, unknown> }) => {
     try {
-      const saved = await api.updateSettings(body);
+      const cleanBody = body.general ? { ...body, general: { ...body.general } } : body;
+      if (cleanBody.general && "profileImageAssetId" in cleanBody.general) delete cleanBody.general.profileImageUrl;
+      const saved = await api.updateSettings(cleanBody);
       setSettings((current) => current ? { ...current, ...saved } : current);
       setNotice("Settings saved");
     } catch (err) {
@@ -101,7 +103,7 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
         ...settings.general,
         profileImageAssetId: uploaded.asset.id,
       };
-      const saved = await api.updateSettings({ general });
+      const saved = await api.updateSettings({ general: { ...general, profileImageUrl: "" } });
       setSettings((current) => current ? { ...current, ...saved } : current);
       const nextUrl = typeof saved.general?.profileImageUrl === "string" ? saved.general.profileImageUrl : "";
       setProfileImageUrl(nextUrl);
@@ -132,7 +134,7 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
       {section === "Security" && <><ConnectedAppsSettings /><McpDraftApprovals /></>}
       {section === "General" && <div className="gsw-settings-card"><label>Timezone<select value={String(settings.general.timezone ?? "America/Detroit")} onChange={(event) => setSettings({ ...settings, general: { ...settings.general, timezone: event.target.value } })}><option>America/Detroit</option><option>America/New_York</option><option>America/Chicago</option><option>UTC</option></select></label><label>Language<select value={String(settings.general.language ?? "en-US")} onChange={(event) => setSettings({ ...settings, general: { ...settings.general, language: event.target.value } })}><option value="en-US">English (US)</option></select></label><label><strong>Profile image</strong><span className="gsw-template-logo-picker">{settings.general.profileImageUrl ? <img src={String(settings.general.profileImageUrl)} alt="Profile" /> : <span>Initials</span>}<span><label className="gsw-secondary-btn">{profileUploading ? "Uploading…" : "Upload image"}<input className="gsw-hidden-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={profileUploading} onChange={(event) => void uploadProfileImage(event)} /></label>{Boolean(settings.general.profileImageAssetId) && <button className="gsw-link-btn" type="button" disabled={profileUploading} onClick={() => {
         const general = { ...settings.general, profileImageAssetId: null, profileImageUrl: "" };
-        void api.updateSettings({ general }).then((saved) => {
+        void api.updateSettings({ general: { ...general, profileImageUrl: "" } }).then((saved) => {
           setSettings((current) => current ? { ...current, ...saved } : current);
           setProfileImageUrl("");
           setNotice("Profile image removed");
