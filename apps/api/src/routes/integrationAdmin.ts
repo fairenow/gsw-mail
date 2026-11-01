@@ -38,14 +38,18 @@ export default async function integrationAdmin(app: FastifyInstance) {
     } catch { health = row.active ? "mailbox_attention_required" : "paused"; }
     const dayStart = new Date();
     dayStart.setUTCHours(0, 0, 0, 0);
-    const [[usage], [today], [keyUsage], [webhookUsage]] = await Promise.all([
+    const [[usage], [today], [keyUsage], [webhookUsage], [operationUsage], [operationToday]] = await Promise.all([
       db.select({ emails: sql<number>`count(*)` }).from(integrationEmails).where(eq(integrationEmails.installationId, row.id)),
       db.select({ emails: sql<number>`count(*)` }).from(integrationEmails).where(and(eq(integrationEmails.installationId, row.id), gte(integrationEmails.createdAt, dayStart))),
       db.select({
         total: sql<number>`count(*)`,
         active: sql<number>`count(*) filter (where ${isNull(integrationKeys.revokedAt)} and ${integrationKeys.expiresAt} > now())`,
+        expiringWithin7Days: sql<number>`count(*) filter (where ${isNull(integrationKeys.revokedAt)} and ${integrationKeys.expiresAt} > now() and ${integrationKeys.expiresAt} <= now() + interval '7 days')`,
+        nextExpiry: sql<Date | null>`min(${integrationKeys.expiresAt}) filter (where ${isNull(integrationKeys.revokedAt)} and ${integrationKeys.expiresAt} > now())`,
       }).from(integrationKeys).where(eq(integrationKeys.installationId, row.id)),
       db.select({ total: sql<number>`count(*)`, active: sql<number>`count(*) filter (where ${integrationWebhookEndpoints.active} = true)` }).from(integrationWebhookEndpoints).where(eq(integrationWebhookEndpoints.installationId, row.id)),
+      db.select({ count: sql<number>`count(*)` }).from(aiIdempotencyKeys).where(sql`${aiIdempotencyKeys.key} LIKE ${`api:${row.id}:%`}`),
+      db.select({ count: sql<number>`count(*)` }).from(aiIdempotencyKeys).where(and(sql`${aiIdempotencyKeys.key} LIKE ${`api:${row.id}:%`}`, gte(aiIdempotencyKeys.createdAt, dayStart))),
     ]);
     const emails = await db.select({ id: integrationEmails.id, createdAt: integrationEmails.createdAt, status: outboundMessages.transportStatus, failureCode: outboundMessages.failureCode }).from(integrationEmails).leftJoin(outboundMessages, eq(integrationEmails.outboundMessageId, outboundMessages.id)).where(eq(integrationEmails.installationId, row.id)).orderBy(desc(integrationEmails.createdAt)).limit(20);
     const operations = await db.select({ name: aiIdempotencyKeys.toolName, status: aiIdempotencyKeys.status, createdAt: aiIdempotencyKeys.createdAt }).from(aiIdempotencyKeys).where(sql`${aiIdempotencyKeys.key} LIKE ${`api:${row.id}:%`}`).orderBy(desc(aiIdempotencyKeys.createdAt)).limit(20);
@@ -55,10 +59,12 @@ export default async function integrationAdmin(app: FastifyInstance) {
       usage: {
         acceptedEmails: Number(usage?.emails ?? 0),
         acceptedToday: todayAccepted,
+        operations: Number(operationUsage?.count ?? 0),
+        operationsToday: Number(operationToday?.count ?? 0),
         dailyLimit: row.dailyLimit,
         remainingToday: Math.max(0, row.dailyLimit - todayAccepted),
       },
-      keys: { total: Number(keyUsage?.total ?? 0), active: Number(keyUsage?.active ?? 0) },
+      keys: { total: Number(keyUsage?.total ?? 0), active: Number(keyUsage?.active ?? 0), expiringWithin7Days: Number(keyUsage?.expiringWithin7Days ?? 0), nextExpiry: keyUsage?.nextExpiry ?? null },
       webhooks: { total: Number(webhookUsage?.total ?? 0), active: Number(webhookUsage?.active ?? 0) },
       recentEmails: emails,
       recentOperations: operations,
