@@ -24,6 +24,7 @@ test("mailbox operations use fixed identity, exclude admin capabilities, and ded
   const ops = createMailboxOperations({registry:nestedRegistry,service,
     reserve:async (input: {key:string;fingerprint:string}) => { const existing=rows.get(input.key);if(existing)return {reservation:existing,reused:true};const row={key:input.key,status:"reserved",result:{fingerprint:input.fingerprint}};rows.set(input.key,row);return {reservation:row,reused:false}; },
     complete:async (key:string,result:Record<string,unknown>) => { rows.set(key,{key,status:"completed",result}); },
+    emitWebhook: async () => "event",
   } as unknown as Parameters<typeof createMailboxOperations>[0]);
   const principal = {installationId:"installation",keyId:"key",scopes:["mailbox.full"]};
   assert.ok(!ops.capabilities().some(tool=>tool.name==="admin.delete"));
