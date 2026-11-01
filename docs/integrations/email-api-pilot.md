@@ -13,10 +13,10 @@ Mailbox operations resolve the mailbox's current active owner, matching authenti
 ## Setup
 
 1. Sign into the workspace admin account. Finish domain verification and create a separate mailbox with completed login setup.
-2. Open **Control Center → API**, select that mailbox and name the connection. Test mode defaults on.
+2. Open **Control Center → API**, select that mailbox and name the connection. New connections are live by default; the old rollout test-mode control is no longer shown.
 3. Create a server key, save the secret once in your website backend's secret settings, then open the linked API documentation. The UI issues 30-day keys; the admin API accepts 1–90 days. Only a hash and display prefix are stored.
-4. Use the connection and capabilities endpoints to discover current coverage. Test connections simulate operation/AI requests and never invoke the tools or providers. Email simulation records a request but no outbound message.
-5. For live operations, use an active, ready mailbox on the workspace's verified domain. Current live installation checks require verified SPF/DKIM/DMARC. Complete the mailbox OAuth authorization so engine operations can resolve its credential. Use the service check in the admin panel to inspect readiness/reconnect needs.
+4. Use the connection and capabilities endpoints to discover current coverage. Keep integration calls server-side and use idempotency keys on mutations.
+5. For operations, use an active, ready mailbox on the workspace's verified domain. Current live installation checks require verified SPF/DKIM/DMARC. Complete the mailbox OAuth authorization so engine operations can resolve its credential. Use the service check in the admin panel to inspect readiness/reconnect needs.
 6. Test a real staff email and mailbox read, then connect the website backend. No secret belongs in browser bundles, public forms, source control or logs.
 
 ## External routes
@@ -34,7 +34,7 @@ Paths above are relative to `/integrations/v1`. The Vercel and Vite proxies rout
 
 The operation interface exposes existing mailbox registry functions for mail, drafts/replies/message organization, contacts/calendar, templates, files, campaigns, research, tasks and automation where registered. Use `/capabilities` as the coverage source. It does not imply that every UI-only product feature has an operation yet. Existing product prerequisites and execution rules still apply. Caller-supplied identity/account/workspace/credential overrides and admin-worker selection are rejected, and nested registry calls retain the mailbox boundary.
 
-API operations are explicit actions authorized by the key; there is no additional MCP per-tool scope or confirmation wizard. Test mode simulates them. Created automations/schedules have their own lifecycle: revoking the key does not delete records previously created through it. Pause/delete those records separately when retiring a workflow.
+API operations are explicit actions authorized by the key; there is no additional MCP per-tool scope or confirmation wizard. Created automations/schedules have their own lifecycle: revoking the key does not delete records previously created through it. Pause/delete those records separately when retiring a workflow.
 
 The AI endpoint performs text generation without tools. Use `/operations` for explicit mailbox actions. It uses the connected mailbox's saved AI model choice, respects AI-disabled settings and returns only final content/model, not provider reasoning metadata. Select **Kimi** in that mailbox's AI settings to use the server's `KIMI_API_KEY`. Provider credentials never reach the client.
 
@@ -62,9 +62,9 @@ const result = await fetch(`${process.env.GSW_API_ORIGIN}/integrations/v1/emails
 });
 ```
 
-Email acceptance atomically persists the request, outbound message and recipients before `202`, with status `accepted_for_processing` or `simulated`. Status polling distinguishes queued/sending/submitted/failed/cancelled from delivery evidence. Submitted does not mean delivered or read. Identical email replays return the original request ID; idempotency records have no automatic expiry today.
+Email acceptance atomically persists the request, outbound message, recipients and the `email.accepted` webhook event before `202`, with status `accepted_for_processing` for normal production connections. Status polling distinguishes queued/sending/submitted/failed/cancelled from delivery evidence. Submitted does not mean delivered or read. Identical email replays return the original request ID; idempotency records have no automatic expiry today.
 
-Direct email submissions default to 100 per installation per UTC day (admin API range 1–1,000); simulations count, replays do not. These counters are not a commercial billing meter or a count of every mailbox operation. Existing global rate limits and mailbox sending limits still apply. `429` includes Retry-After. Sending checks suppressions at acceptance and dispatch. An inquiry is not newsletter consent.
+Direct email submissions default to 100 per installation per UTC day (admin API range 1–1,000); idempotent replays do not consume another slot. These counters are not a commercial billing meter or a count of every mailbox operation. Existing global rate limits and mailbox sending limits still apply. `429` includes Retry-After. Sending checks suppressions at acceptance and dispatch. An inquiry is not newsletter consent.
 
 Unknown direct-send outcomes and stale dispatch leases are quarantined as `submission_unknown`; ordinary mailbox retry cannot requeue them. The original submission key is checked before dispatch, including expiry/revocation. Already-submitted actions cannot be recalled. New queued work can use a rotated key; old queued email retains its original credential authorization.
 
@@ -74,14 +74,25 @@ These require a normal authenticated GSW workspace owner/admin account; an exter
 
 | Route | Purpose |
 |---|---|
-| `POST /api/admin/integrations` | Create connection: organizationId, accountId, name, testMode (default true), optional dailyLimit |
+| `POST /api/admin/integrations` | Create live connection: organizationId, accountId, name, optional dailyLimit; legacy testMode remains schema-compatible but defaults false |
 | `GET /api/admin/integrations?organizationId=...` | List workspace connections |
 | `PATCH /api/admin/integrations/:id` | Pause/resume with `{ "active": false/true }` |
 | `POST /api/admin/integrations/:id/keys` | Issue full-mailbox key: name and optional expiresInDays; secret returned once |
 | `GET /api/admin/integrations/:id/keys` | List safe credential metadata |
 | `DELETE /api/admin/integrations/:id/keys/:keyId` | Revoke key |
-| `GET /api/admin/integrations/:id/service` | Readiness/reconnect status, accepted direct-email count and recent email/write-operation summaries |
+| `GET /api/admin/integrations/:id/service` | Readiness/reconnect status, daily/total usage, key/webhook health and recent email/write-operation summaries |
+| `GET /api/admin/integrations/:id/webhooks` | List supported event types and safe webhook endpoint metadata |
+| `POST /api/admin/integrations/:id/webhooks` | Add a public HTTPS endpoint; signing secret returned once |
+| `DELETE /api/admin/integrations/:id/webhooks/:webhookId` | Remove endpoint and cancel pending deliveries |
 | `GET /api/admin/integrations/docs` | Plain-text developer quickstart and route guide linked from the portal |
+
+## Customer webhook contract
+
+Current event types: `email.accepted`, `email.delivered`, `email.deferred`, `email.bounced`, `email.complained`, and `operation.completed`.
+
+GSW Mail sends `POST` requests with `Content-Type: application/json`, a stable `X-GSW-Webhook-Id`, `X-GSW-Webhook-Timestamp`, and `X-GSW-Webhook-Signature: v1=<hex>`. Compute the expected signature as HMAC-SHA256 using the endpoint secret over the UTF-8 bytes of `timestamp + "." + rawBody`. Compare signatures in constant time. The event body is `{ "id": "...", "type": "...", "createdAt": "...", "data": {...} }`.
+
+Deliveries use the same event ID on retries. Non-2xx responses and network failures retry with backoff; after the retry budget is exhausted the delivery is marked failed. Endpoint targets are revalidated before delivery and must remain public HTTPS addresses. Redirects are not followed.
 
 ## Deployment and remaining work
 
@@ -99,6 +110,6 @@ form and adds a regression assertion.
 Stalwart header indexing is disabled on the current host, so Message-ID header
 searches return no matches; send duplicate prevention relies on the persisted
 engine message ID. Enable header indexing and reindex before relying on header
-search. Customer signed webhooks, complete coverage of product features missing
-from the registry, richer usage/billing, reconciliation tooling and mailbox
+search. Signed customer webhooks are implemented in the current branch. Complete coverage of product features missing
+from the registry, richer commercial usage/billing, reconciliation tooling and mailbox
 authorization lifecycle improvements remain work. See [service plan](../GSW_MAIL_API_SERVICE_PLAN.md).
