@@ -9,7 +9,7 @@ export const integrationInstallations = pgTable("integration_installations", {
   authorizedBy: text("authorized_by").notNull().references(() => users.id, { onDelete: "restrict" }),
   name: text("name").notNull(),
   active: boolean("active").default(true).notNull(),
-  testMode: boolean("test_mode").default(true).notNull(),
+  testMode: boolean("test_mode").default(false).notNull(),
   allowedRecipients: jsonb("allowed_recipients").$type<string[]>().notNull(),
   dailyLimit: integer("daily_limit").default(100).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
