@@ -7,13 +7,14 @@ import { reserveAiIdempotency, completeAiIdempotency } from "../ai/agentState.js
 import { integrationService } from "./service.js";
 import type { IntegrationPrincipal } from "./service.js";
 import { hashKey, IntegrationError } from "./contract.js";
+import { enqueueIntegrationWebhookEvent } from "./customerWebhooks.js";
 
 export const operationSchema = z.object({ name: z.string().min(1).max(200), arguments: z.record(z.string(), z.unknown()).default({}) }).strict();
 export const mailboxOperationAllowed = (tool: { name: string; requiredScopes: readonly string[] }) => !tool.requiredScopes.some(scope => adminScopes.has(scope)) && !/^(admin|domain|workspace|alias|mailbox_admin)\./.test(tool.name);
 const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value !== null && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, canonical(v)])) : value;
 const containsAdminWorker = (value: unknown): boolean => Array.isArray(value) ? value.some(containsAdminWorker) : value !== null && typeof value === "object" ? Object.entries(value).some(([k, v]) => (k === "worker" && v === "admin") || containsAdminWorker(v)) : false;
 
-const defaultDependencies = { registry: agentMailRegistry, service: integrationService, reserve: reserveAiIdempotency, complete: completeAiIdempotency };
+const defaultDependencies = { registry: agentMailRegistry, service: integrationService, reserve: reserveAiIdempotency, complete: completeAiIdempotency, emitWebhook: enqueueIntegrationWebhookEvent };
 export function createMailboxOperations(overrides: Partial<typeof defaultDependencies> = {}) {
   const dependencies = { ...defaultDependencies, ...overrides };
   function capabilities() {
@@ -36,7 +37,9 @@ export function createMailboxOperations(overrides: Partial<typeof defaultDepende
       const reservation = await dependencies.reserve({ key: ledgerKey, userId: ctx.userId, accountId: ctx.accountId, toolCallId: null, toolName: name, fingerprint: digest });
       if (reservation.reused) {
         if (reservation.reservation.result?.fingerprint !== digest) throw new IntegrationError(409, "idempotency_conflict");
-        return { name, replayed: true, status: reservation.reservation.status === "reserved" ? "in_progress_or_unknown" : reservation.reservation.result?.ok === false ? "failed" : "completed", ok: reservation.reservation.result?.ok ?? null, operationId: ledgerKey, reference: reservation.reservation.result?.reference ?? null };
+        const replayStatus = reservation.reservation.status === "reserved" ? "in_progress_or_unknown" : reservation.reservation.result?.ok === false ? "failed" : "completed";
+        if (replayStatus !== "in_progress_or_unknown") await dependencies.emitWebhook({ installationId: principal.installationId, type: "operation.completed", dedupeKey: `operation:${ledgerKey}`, payload: { name, operationId: ledgerKey, status: replayStatus, ok: reservation.reservation.result?.ok ?? null, reference: reservation.reservation.result?.reference ?? null } }).catch(error => console.warn("[integration:webhook] operation replay event enqueue failed", error instanceof Error ? error.message : error));
+        return { name, replayed: true, status: replayStatus, ok: reservation.reservation.result?.ok ?? null, operationId: ledgerKey, reference: reservation.reservation.result?.reference ?? null };
       }
     }
     await dependencies.service.validateKey(principal, "mailbox.full");
@@ -47,6 +50,7 @@ export function createMailboxOperations(overrides: Partial<typeof defaultDepende
         const data = result.data && typeof result.data === "object" ? result.data as Record<string, unknown> : {};
         const reference = Object.fromEntries(Object.entries(data).filter(([key, value]) => /^(id|.*Id|key|status|url)$/.test(key) && ["string", "number", "boolean"].includes(typeof value)));
         await dependencies.complete(ledgerKey, { fingerprint: digest, reference, ok: result.ok, errorCode: result.error?.code ?? null });
+        await dependencies.emitWebhook({ installationId: principal.installationId, type: "operation.completed", dedupeKey: `operation:${ledgerKey}`, payload: { name, operationId: ledgerKey, status: result.ok ? "completed" : "failed", ok: result.ok, reference } }).catch(error => console.warn("[integration:webhook] operation event enqueue failed", error instanceof Error ? error.message : error));
       }
       return result;
     });
