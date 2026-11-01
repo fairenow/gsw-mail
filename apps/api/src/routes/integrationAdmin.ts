@@ -1,7 +1,7 @@
 import { integrationService } from "../integrations/service.js";
 import { findStoredStalwartMailboxToken } from "../auth/storedStalwartToken.js";
 import { refreshStoredStalwartMailboxToken } from "../auth/refreshStalwartMailboxToken.js";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireOrgPermission } from "../auth/authorize.js";
@@ -35,10 +35,31 @@ export default async function integrationAdmin(app: FastifyInstance) {
         if (!token) health = "mailbox_reconnect_required";
       }
     } catch { health = row.active ? "mailbox_attention_required" : "paused"; }
-    const [usage] = await db.select({ emails: sql<number>`count(*)` }).from(integrationEmails).where(eq(integrationEmails.installationId, row.id));
-    const emails = await db.select({ id: integrationEmails.id, createdAt: integrationEmails.createdAt, testMode: integrationEmails.testMode, status: outboundMessages.transportStatus, failureCode: outboundMessages.failureCode }).from(integrationEmails).leftJoin(outboundMessages, eq(integrationEmails.outboundMessageId, outboundMessages.id)).where(eq(integrationEmails.installationId, row.id)).orderBy(desc(integrationEmails.createdAt)).limit(20);
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const [[usage], [today], [keyUsage]] = await Promise.all([
+      db.select({ emails: sql<number>`count(*)` }).from(integrationEmails).where(eq(integrationEmails.installationId, row.id)),
+      db.select({ emails: sql<number>`count(*)` }).from(integrationEmails).where(and(eq(integrationEmails.installationId, row.id), gte(integrationEmails.createdAt, dayStart))),
+      db.select({
+        total: sql<number>`count(*)`,
+        active: sql<number>`count(*) filter (where ${isNull(integrationKeys.revokedAt)} and ${integrationKeys.expiresAt} > now())`,
+      }).from(integrationKeys).where(eq(integrationKeys.installationId, row.id)),
+    ]);
+    const emails = await db.select({ id: integrationEmails.id, createdAt: integrationEmails.createdAt, status: outboundMessages.transportStatus, failureCode: outboundMessages.failureCode }).from(integrationEmails).leftJoin(outboundMessages, eq(integrationEmails.outboundMessageId, outboundMessages.id)).where(eq(integrationEmails.installationId, row.id)).orderBy(desc(integrationEmails.createdAt)).limit(20);
     const operations = await db.select({ name: aiIdempotencyKeys.toolName, status: aiIdempotencyKeys.status, createdAt: aiIdempotencyKeys.createdAt }).from(aiIdempotencyKeys).where(sql`${aiIdempotencyKeys.key} LIKE ${`api:${row.id}:%`}`).orderBy(desc(aiIdempotencyKeys.createdAt)).limit(20);
-    return { health, acceptedEmails: Number(usage?.emails ?? 0), recentEmails: emails, recentOperations: operations };
+    const todayAccepted = Number(today?.emails ?? 0);
+    return {
+      health,
+      usage: {
+        acceptedEmails: Number(usage?.emails ?? 0),
+        acceptedToday: todayAccepted,
+        dailyLimit: row.dailyLimit,
+        remainingToday: Math.max(0, row.dailyLimit - todayAccepted),
+      },
+      keys: { total: Number(keyUsage?.total ?? 0), active: Number(keyUsage?.active ?? 0) },
+      recentEmails: emails,
+      recentOperations: operations,
+    };
   });
   app.post("/api/admin/integrations", async (req, reply) => {
     const input = installationSchema.parse(req.body);
