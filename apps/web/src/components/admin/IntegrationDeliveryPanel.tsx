@@ -26,6 +26,9 @@ export function IntegrationDeliveryPanel({ organizationId, mailboxes }: { organi
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [secret, setSecret] = useState("");
+  const [secretOwner, setSecretOwner] = useState("");
+  const [keyExpiry, setKeyExpiry] = useState<Record<string, string>>({});
+  const [keyBusy, setKeyBusy] = useState<Record<string, string>>({});
   const [webhookSecret, setWebhookSecret] = useState("");
   const [copied, setCopied] = useState("");
   const copyValue = async (value: string, label: string) => {
@@ -53,6 +56,7 @@ export function IntegrationDeliveryPanel({ organizationId, mailboxes }: { organi
     setBusy(true); setError("");
     try { await action(); } catch (cause) { setError(cause instanceof Error ? cause.message : "The request failed."); } finally { setBusy(false); }
   };
+  const expirationLabel = (value: string) => new Date(value).getUTCFullYear() >= 9999 ? "Never" : new Date(value).toLocaleDateString();
   const loadKeys = async (id: string) => {
     const result = await request<{ keys: ApiKey[] }>(`${base}/${id}/keys`);
     setKeys(previous => ({ ...previous, [id]: result.keys }));
@@ -68,7 +72,6 @@ export function IntegrationDeliveryPanel({ organizationId, mailboxes }: { organi
     <p><a className="gsw-btn gsw-btn-quiet" href="https://mail-docs.guidedstepswellness.com" target="_blank" rel="noreferrer">Open API documentation</a></p>
     <p>Base URL: <code>{window.location.origin}/integrations/v1</code> · Discover available functions at <code>GET /capabilities</code>.</p>
     {error && <p role="alert">{error}</p>}
-    {secret && <div className="gsw-audit-card" role="status"><h4>Save your API key</h4><p>The complete secret is available only in this creation window. Click the masked value to copy the full key into your server’s secret settings before dismissing.</p><div className="gsw-auth-field"><span>New API key</span><button type="button" className="gsw-api-key-copy gsw-api-secret-copy" onClick={() => void copyValue(secret, "new API key")} title="Copy the complete API key (display is masked)" aria-label="Copy full newly generated API key"><code>{secret.slice(0, 16)}••••••••••••</code><span aria-hidden="true"> ⧉</span></button>{copied === "new API key" && <span role="status">Complete API key copied.</span>}</div><button className="gsw-btn gsw-btn-quiet" onClick={() => setSecret("")}>I’ve saved the key</button></div>}
     {webhookSecret && <div className="gsw-audit-card" role="status"><h4>Save your webhook signing secret</h4><p>This secret is shown once. Your server uses it to verify <code>X-GSW-Webhook-Signature</code> on webhook deliveries.</p><label className="gsw-auth-field">Webhook signing secret<input readOnly value={webhookSecret} onFocus={event => event.currentTarget.select()} onClick={() => void copyValue(webhookSecret, "webhook secret")} title="Click to copy the complete webhook signing secret" autoComplete="off" spellCheck={false} /></label>{copied === "webhook secret" && <span role="status">Webhook signing secret copied.</span>}<button className="gsw-btn gsw-btn-quiet" onClick={() => setWebhookSecret("")}>I’ve saved the secret</button></div>}
     <form onSubmit={event => { event.preventDefault(); void perform(async () => {
       await request(base, "POST", { organizationId, accountId: senderId, name });
@@ -84,11 +87,15 @@ export function IntegrationDeliveryPanel({ organizationId, mailboxes }: { organi
       <h4>{installation.name}</h4><p>{installation.active ? "Active" : "Paused"} · {installation.dailyLimit} direct email submissions per UTC day</p>
       <p>Mailbox: {mailboxes.find(m => m.id === installation.accountId)?.address ?? installation.accountId}</p><p>Access: full mailbox</p>
       <p>Sender ID: <code>{installation.accountId}</code></p>
+      {secret && secretOwner === installation.id && <div className="gsw-audit-card" role="status"><h4>Save your API key</h4><p>The complete secret is available only in this creation window. Click the masked value to copy the full key into your server’s secret settings before dismissing.</p><div className="gsw-auth-field"><span>New API key</span><button type="button" className="gsw-api-key-copy gsw-api-secret-copy" onClick={() => void copyValue(secret, "new API key")} title="Copy the complete API key (display is masked)" aria-label="Copy full newly generated API key"><code>{secret.slice(0, 16)}••••••••••••</code><span aria-hidden="true"> ⧉</span></button>{copied === "new API key" && <span role="status">Complete API key copied.</span>}</div><button className="gsw-btn gsw-btn-quiet" onClick={() => { setSecret(""); setSecretOwner(""); }}>I’ve saved the key</button></div>}
+      <div className="gsw-key-create-row"><label>Key expiration<select value={keyExpiry[installation.id] ?? "30"} disabled={busy || Boolean(secret)} onChange={event => setKeyExpiry(previous => ({ ...previous, [installation.id]: event.target.value }))}><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="never">Never (until revoked)</option></select></label></div>
       <div className="gsw-control-modal-actions">
         <button className="gsw-btn gsw-btn-quiet" disabled={busy || Boolean(secret)} onClick={() => void perform(async () => {
-          const created = await request<{ secret: string }>(`${base}/${installation.id}/keys`, "POST", { name: "Website server", expiresInDays: 30 });
-          setCopied(""); setSecret(created.secret); await loadKeys(installation.id);
-        })}>Create 30-day server key</button>
+          const duration = keyExpiry[installation.id] ?? "30";
+          const created = await request<{ secret: string }>(`${base}/${installation.id}/keys`, "POST", { name: "Website server", expiresInDays: duration === "never" ? null : Number(duration) });
+          setCopied(""); setSecretOwner(installation.id); setSecret(created.secret);
+          void loadKeys(installation.id).catch(() => setError("Key created. Copy the complete secret now; refreshing the list failed."));
+        })}>{busy ? "Creating key…" : "Create server key"}</button>
         <button className="gsw-btn gsw-btn-quiet" disabled={busy} onClick={() => void perform(async () => { await request(`${base}/${installation.id}`, "PATCH", { active: !installation.active }); await reload(); })}>{installation.active ? "Pause connection" : "Resume connection"}</button>
         <button className="gsw-btn gsw-btn-ghost" disabled={busy} onClick={() => void perform(() => loadKeys(installation.id))}>{keys[installation.id] ? "Refresh keys" : "Show keys"}</button>
         <button className="gsw-btn gsw-btn-ghost" disabled={busy} onClick={() => void perform(() => loadWebhooks(installation.id))}>Manage webhooks</button>
@@ -117,7 +124,14 @@ export function IntegrationDeliveryPanel({ organizationId, mailboxes }: { organi
       {keys[installation.id] && <div className="gsw-audit-card" aria-label="Connection API keys">
         <h5>API keys ({keys[installation.id].length})</h5>
         <p>Existing keys display an identifier only, not a copyable credential. For security, their full secrets are not retrievable. If you did not save the original, create a replacement key, copy its full secret from the masked creation display, update your application, then revoke the old key.</p>
-        {keys[installation.id].length === 0 ? <p>No API keys have been created for this connection.</p> : keys[installation.id].map(key => <div className="gsw-audit-row" key={key.id}><div><strong>{key.name}</strong><button type="button" className="gsw-api-key-copy" title="Only the prefix remains; the complete secret is unavailable" aria-label={`Prefix for ${key.name}; full key unavailable`} disabled><code>{key.prefix}…</code><span aria-hidden="true"> ⧉</span></button><span>Expires {new Date(key.expiresAt).toLocaleDateString()} · {key.revokedAt ? "Revoked" : new Date(key.expiresAt).getTime() <= Date.now() ? "Expired" : "Active"}</span></div>{!key.revokedAt && <button className="gsw-btn gsw-btn-ghost" disabled={busy} onClick={() => void perform(async () => { await request(`${base}/${installation.id}/keys/${key.id}`, "DELETE"); await loadKeys(installation.id); })}>Revoke key</button>}</div>)}
+        {keys[installation.id].length === 0 ? <p>No API keys have been created for this connection.</p> : keys[installation.id].map(key => <div className="gsw-audit-row" key={key.id}><div><strong>{key.name}</strong><button type="button" className="gsw-api-key-copy" title="Only the prefix remains; the complete secret is unavailable" aria-label={`Prefix for ${key.name}; full key unavailable`} disabled><code>{key.prefix}…</code></button><span>{expirationLabel(key.expiresAt) === "Never" ? "Never expires" : `Expires ${expirationLabel(key.expiresAt)}`} · {key.revokedAt ? "Revoked" : new Date(key.expiresAt).getTime() <= Date.now() ? "Expired" : "Active"}</span></div>{!key.revokedAt && <button className="gsw-btn gsw-btn-ghost" disabled={busy} onClick={() => void perform(async () => {
+          setKeyBusy(previous => ({ ...previous, [key.id]: "Revoking…" }));
+          try {
+            await request(`${base}/${installation.id}/keys/${key.id}`, "DELETE");
+            setKeys(previous => ({ ...previous, [installation.id]: (previous[installation.id] ?? []).map(item => item.id === key.id ? { ...item, revokedAt: new Date().toISOString() } : item) }));
+            void loadKeys(installation.id).catch(() => {});
+          } finally { setKeyBusy(previous => { const next = { ...previous }; delete next[key.id]; return next; }); }
+        })}>{keyBusy[key.id] ?? "Revoke key"}</button>}</div>)}
       </div>}
     </article>)}
   </section>;
