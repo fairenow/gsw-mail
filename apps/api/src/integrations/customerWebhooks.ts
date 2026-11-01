@@ -23,10 +23,10 @@ const MAX_ATTEMPTS = 6;
 const RETRY_MS = [30_000, 120_000, 600_000, 3_600_000, 21_600_000];
 const secretKey = () => Buffer.from(hkdfSync("sha256", config.auth.secret, "gsw-integration-webhooks-v1", "aes-256-gcm", 32));
 
-function aad(endpointId: string): Buffer { return Buffer.from(`gsw-webhook:\${endpointId}`); }
+function aad(endpointId: string): Buffer { return Buffer.from(`gsw-webhook:${endpointId}`); }
 
 export function issueWebhookSecret(): string {
-  return `gsw_whsec_\${randomBytes(32).toString("hex")}`;
+  return `gsw_whsec_${randomBytes(32).toString("hex")}`;
 }
 
 export function sealWebhookSecret(secret: string, endpointId: string): string {
@@ -78,7 +78,7 @@ export function webhookBody(event: { id: string; type: string; payload: Record<s
 }
 
 export function webhookSignature(secret: string, timestamp: string, body: string): string {
-  return `v1=\${createHmac("sha256", secret).update(`\${timestamp}.\${body}`).digest("hex")}`;
+  return `v1=${createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex")}`;
 }
 
 export async function enqueueIntegrationWebhookEvent(input: {
@@ -158,7 +158,7 @@ async function deliverOne(deliveryId: string): Promise<void> {
       });
       return;
     }
-    errorText = `HTTP \${response.status}`;
+    errorText = `HTTP ${response.status}`;
   } catch (error) {
     errorText = error instanceof Error ? error.message.slice(0, 500) : "webhook delivery failed";
   }
