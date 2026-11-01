@@ -53,7 +53,8 @@ const isPrivateIp = (address: string): boolean => {
   if (normalized.startsWith("::ffff:")) return isPrivateIp(normalized.slice("::ffff:".length));
   const parts = address.split(".").map(Number);
   if (parts.length !== 4 || parts.some(Number.isNaN)) return false;
-  const [a,b] = parts;
+  const a = parts[0]!;
+  const b = parts[1]!;
   return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
 };
 
