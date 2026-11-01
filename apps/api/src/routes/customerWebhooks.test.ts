@@ -27,5 +27,6 @@ test("customer webhook targets require public HTTPS destinations", async () => {
   await assert.rejects(assertSafeWebhookUrl("https://localhost/hook"), /unsafe_webhook_url/);
   await assert.rejects(assertSafeWebhookUrl("https://127.0.0.1/hook"), /unsafe_webhook_url/);
   await assert.rejects(assertSafeWebhookUrl("https://10.0.0.2/hook"), /unsafe_webhook_url/);
+  await assert.rejects(assertSafeWebhookUrl("https://[::1]/hook"), /unsafe_webhook_url/);
   await assert.rejects(assertSafeWebhookUrl("https://user:pass@example.com/hook"), /invalid_webhook_url/);
 });
