@@ -138,3 +138,7 @@
 .gsw-api-secret-copy { width: 100%; justify-content: space-between; padding: 10px 12px; background: var(--gsw-accent-soft); border-color: var(--gsw-border-soft); }
 .gsw-api-key-copy:disabled { cursor: default; opacity: .7; }
 .gsw-api-key-copy:disabled:hover { background: transparent; border-color: transparent; }
+
+.gsw-key-create-row { display: flex; margin: 12px 0 8px; }
+.gsw-key-create-row label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; }
+.gsw-key-create-row select { min-width: 190px; border: 1px solid var(--gsw-border-soft); border-radius: 8px; padding: 9px 12px; background: #fff; color: var(--gsw-text-heading); }
