@@ -1,6 +1,6 @@
 # Mailbox API: customer setup and admin management
 
-Updated October 30, 2026. Full-mailbox keys, the API admin panel, registry operation discovery/execution and selected-model AI generation are implemented in code. Live deployment acceptance and coverage of any product features missing from the registry remain outstanding. See [the implementation reference](email-api-pilot.md) for exact routes.
+Updated November 1, 2026. Full-mailbox keys, the API admin panel, registry operation discovery/execution, selected-model AI generation, live external sending, idempotent replay and key revocation have passed production acceptance. Coverage of product features missing from the operation registry remains ongoing. See [the implementation reference](email-api-pilot.md) for exact routes.
 
 ## What the customer gets
 
@@ -33,9 +33,8 @@ The current **Control Center → API** panel creates connections/keys, supports 
 | 3 | Select that mailbox and name the website/service connection | Workspace-owned connection with full mailbox capability |
 | 4 | Create an API key and save it in backend secrets | A secret shown once; only its hash retained by GSW |
 | 5 | Read the linked quickstart and check connection health | Confirm base URL, mailbox and authentication |
-| 6 | Test the website's supported mailbox operations | Request IDs, safe retries and expected results |
-| 7 | Enable production after service acceptance | Website can operate the mailbox without an open GSW or AI chat |
-| 8 | Monitor/manage the service in the admin portal | Rotate/revoke keys, pause, review usage and diagnose failures |
+| 6 | Integrate the website against supported mailbox operations | Request IDs, safe retries and expected results |
+| 7 | Monitor/manage the service in the admin portal | Rotate/revoke keys, pause, review usage and diagnose failures |
 
 The website backend keeps the key. Browser code and public form submitters never receive it. The external application needs no separately registered GSW OAuth client for this key-based path. GSW's existing underlying mailbox authentication is an implementation responsibility, not a second developer integration product to assemble.
 
@@ -55,10 +54,10 @@ Runtime access no longer depends on the original authorizer retaining membership
 | Mail reading/organization | Inbox, threads, search, drafts, attachment retrieval and message actions | Available registered functions through /operations; discover schemas with /capabilities |
 | Other mailbox services | Calendars, contacts, files, campaigns, tasks/AI/automation and preferences | Available registered functions through /operations; discover schemas with /capabilities |
 | Connection/status | Health, activity, usage and operation status | Connection and email status plus admin readiness/activity summaries |
-| Events | Signed customer webhooks | Not implemented |
+| Events | Signed customer webhooks | Remaining implementation work |
 | Admin operations through key | Never allowed | Not exposed |
 
-Pilot recipient/scope columns remain for storage compatibility, but keys now grant full mailbox access and those values no longer restrict execution. Existing pilot keys receive this access model as well. Test mode stays an operational tool; it is not a reduced-feature permission tier.
+Pilot recipient/scope columns remain for storage compatibility, but keys now grant full mailbox access and those values no longer restrict execution. Existing pilot keys receive this access model as well. New customer connections are created in live mode; legacy test-mode records remain compatible but are no longer exposed as a normal admin workflow.
 
 ## Safe Place Ministries
 
@@ -75,11 +74,10 @@ Revocation prevents future authorization; it cannot recall an already-submitted 
 For exact current requests, status semantics, deployment steps and known restrictions, use [email API pilot](email-api-pilot.md). For the implementation order, use [mailbox API service plan](../GSW_MAIL_API_SERVICE_PLAN.md).
 
 
-## Developer site and diagnostics
+## Developer site and service health
 
 Public docs: https://mail-docs.guidedstepswellness.com (fallback: https://mail.guidedstepswellness.com/docs). The documentation includes customer onboarding, server-side authentication examples and the current operation schemas. API requests continue to use the mail host. `GET /integrations/v1` now returns connection guidance rather than a route-not-found error.
 
-Control Center → API offers live mailbox and AI diagnostics using the existing mailbox authorization. This checks a mailbox read, the selected AI provider and Kimi without creating an external key or sending email. These checks do not establish bearer-key acceptance or recipient delivery.
+Control Center → API exposes production service health, usage, key status, recent send activity and recent mailbox operations. Acceptance-only mailbox/AI diagnostic controls have been removed from the customer-facing admin workflow after production validation.
 
-
-Mailbox authorization uses an encrypted, owner-bound first-party credential vault. Existing authorizations created before this correction stored hashes only and require one mailbox-owner renewal at `/settings/mcp-mailbox-recovery`. An admin login cannot replace the mailbox owner session. After renewal, repeat the admin live checks; bearer-key and delivery acceptance remain separate checks.
+Mailbox authorization uses an encrypted, owner-bound first-party credential vault. Existing authorizations created before this correction stored hashes only and require one mailbox-owner renewal at `/settings/mcp-mailbox-recovery`. An admin login cannot replace the mailbox owner session. After renewal, use the connection service-health view to confirm the mailbox is ready.
