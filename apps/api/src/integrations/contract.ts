@@ -26,7 +26,7 @@ export const installationSchema = z.object({
 export const keySchema = z.object({
   name: z.string().trim().min(1).max(100),
 
-  expiresInDays: z.number().int().min(1).max(90).default(30),
+  expiresInDays: z.union([z.literal(7), z.literal(30), z.literal(90), z.null()]).default(30),
 }).strict();
 export const hashKey = (value: string): string => createHash("sha256").update(value).digest("hex");
 export function issueIntegrationKey() {
