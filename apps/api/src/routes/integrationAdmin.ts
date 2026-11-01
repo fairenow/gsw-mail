@@ -11,7 +11,7 @@ import { integrationEmails, integrationInstallations, integrationKeys, integrati
 import { aiIdempotencyKeys, auditEvents, domains, emailAccounts, outboundMessages } from "../db/schema.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { installationSchema, issueIntegrationKey, keySchema } from "../integrations/contract.js";
-import { createWebhookEndpoint, integrationWebhookEventTypes, listWebhookEndpoints, removeWebhookEndpoint } from "../integrations/customerWebhooks.js";
+import { createWebhookEndpoint, integrationWebhookEventTypes, listWebhookDeliveries, listWebhookEndpoints, removeWebhookEndpoint, retryWebhookDelivery } from "../integrations/customerWebhooks.js";
 
 const uuid = z.string().uuid();
 export default async function integrationAdmin(app: FastifyInstance) {
@@ -111,7 +111,7 @@ export default async function integrationAdmin(app: FastifyInstance) {
   });
   app.get<{ Params: { id: string } }>("/api/admin/integrations/:id/webhooks", async req => {
     const installation = await requireInstallation(req.user!.id, req.params.id);
-    return { eventTypes: integrationWebhookEventTypes, endpoints: await listWebhookEndpoints(installation.id) };
+    return { eventTypes: integrationWebhookEventTypes, endpoints: await listWebhookEndpoints(installation.id), deliveries: await listWebhookDeliveries(installation.id) };
   });
   app.post<{ Params: { id: string } }>("/api/admin/integrations/:id/webhooks", async (req, reply) => {
     const installation = await requireInstallation(req.user!.id, req.params.id);
@@ -129,6 +129,13 @@ export default async function integrationAdmin(app: FastifyInstance) {
     if (!await removeWebhookEndpoint(installation.id, webhookId)) throw notFound("webhook endpoint not found");
     await db.insert(auditEvents).values({ organizationId: installation.organizationId, actorUserId: req.user!.id, action: "integration.webhook.removed", resourceType: "integration_webhook_endpoint", resourceId: webhookId });
     return { removed: true };
+  });
+  app.post<{ Params: { id: string; deliveryId: string } }>("/api/admin/integrations/:id/webhooks/deliveries/:deliveryId/retry", async req => {
+    const installation = await requireInstallation(req.user!.id, req.params.id);
+    const deliveryId = uuid.parse(req.params.deliveryId);
+    if (!await retryWebhookDelivery(installation.id, deliveryId)) throw notFound("failed webhook delivery not found");
+    await db.insert(auditEvents).values({ organizationId: installation.organizationId, actorUserId: req.user!.id, action: "integration.webhook.delivery_retried", resourceType: "integration_webhook_delivery", resourceId: deliveryId });
+    return { retrying: true };
   });
   app.post<{ Params: { id: string } }>("/api/admin/integrations/:id/keys", async (req, reply) => {
     const installation = await requireInstallation(req.user!.id, req.params.id);

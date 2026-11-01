@@ -70,7 +70,7 @@ Each delivery posts JSON shaped as `{ id, type, createdAt, data }` with these he
 - `X-GSW-Webhook-Timestamp`: Unix timestamp in seconds.
 - `X-GSW-Webhook-Signature`: `v1=<hex HMAC-SHA256>` over `<timestamp>.<exact request body>`.
 
-Receivers should verify the signature against the exact raw body, reject stale timestamps according to their own policy, and deduplicate by event ID. GSW Mail retries failed/non-2xx deliveries with backoff and keeps the same event ID across retries. Endpoint URLs must be public HTTPS targets; localhost/private-network destinations and redirects are not followed. Paused connections defer pending webhook delivery; removed connections cancel it.
+Receivers should verify the signature against the exact raw body, reject stale timestamps according to their own policy, and deduplicate by event ID. GSW Mail retries failed/non-2xx deliveries with backoff and keeps the same event ID across retries. Endpoint URLs must be public HTTPS targets; localhost/private-network destinations and redirects are not followed. Paused connections defer pending webhook delivery; removed connections cancel it. Control Center shows recent delivery attempts and allows an administrator to manually retry a delivery that exhausted its automatic retry budget. Terminal webhook delivery/event history is retained for 30 days, then pruned automatically.
 
 ## Safe Place Ministries
 
@@ -91,6 +91,6 @@ For exact current requests, status semantics, deployment steps and known restric
 
 Public docs: https://mail-docs.guidedstepswellness.com (fallback: https://mail.guidedstepswellness.com/docs). The documentation includes customer onboarding, server-side authentication examples and the current operation schemas. API requests continue to use the mail host. `GET /integrations/v1` now returns connection guidance rather than a route-not-found error.
 
-Control Center → API exposes production service health, usage, key status, recent send activity and recent mailbox operations. Acceptance-only mailbox/AI diagnostic controls have been removed from the customer-facing admin workflow after production validation.
+Control Center → API exposes production service health, usage, key status, recent send activity, recent mailbox operations and webhook delivery/retry history. Acceptance-only mailbox/AI diagnostic controls have been removed from the customer-facing admin workflow after production validation.
 
 Mailbox authorization uses an encrypted, owner-bound first-party credential vault. Existing authorizations created before this correction stored hashes only and require one mailbox-owner renewal at `/settings/mcp-mailbox-recovery`. An admin login cannot replace the mailbox owner session. After renewal, use the connection service-health view to confirm the mailbox is ready.

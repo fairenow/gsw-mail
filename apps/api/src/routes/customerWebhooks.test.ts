@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { issueWebhookSecret, openWebhookSecret, sealWebhookSecret, webhookBody, webhookSignature, assertSafeWebhookUrl } from "../integrations/customerWebhooks.js";
+import { WEBHOOK_HISTORY_RETENTION_DAYS, issueWebhookSecret, openWebhookSecret, sealWebhookSecret, webhookBody, webhookSignature, assertSafeWebhookUrl } from "../integrations/customerWebhooks.js";
 
 test("customer webhook secrets are encrypted, endpoint-bound and sign exact payload bytes", () => {
   const endpointId = "11111111-1111-4111-8111-111111111111";
@@ -29,4 +29,9 @@ test("customer webhook targets require public HTTPS destinations", async () => {
   await assert.rejects(assertSafeWebhookUrl("https://10.0.0.2/hook"), /unsafe_webhook_url/);
   await assert.rejects(assertSafeWebhookUrl("https://[::1]/hook"), /unsafe_webhook_url/);
   await assert.rejects(assertSafeWebhookUrl("https://user:pass@example.com/hook"), /invalid_webhook_url/);
+});
+
+
+test("webhook terminal history has a bounded retention policy", () => {
+  assert.equal(WEBHOOK_HISTORY_RETENTION_DAYS, 30);
 });
