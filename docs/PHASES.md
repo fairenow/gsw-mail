@@ -182,6 +182,25 @@ DNS for the docs host must be configured at the authoritative DNS provider.
 A successful build or deployment does not establish DNS, TLS or live acceptance.
 
 
+## External mailbox API live acceptance (2026-11-01)
+
+Production live acceptance passed for `team.guidedstepswellness.com` and
+`ramon@team.guidedstepswellness.com`: MX/SPF/DKIM/DMARC verified, `/connection`
+reported live mode, `/capabilities` returned 101 operations, mailbox reads and
+Kimi inference succeeded, and a uniquely labeled external send appeared in both
+Inbox and Sent Items. Replaying the same `Idempotency-Key` returned the original
+request ID with no second outbound row. Revoking the temporary key returned 401
+for `/connection` and `/capabilities`, and the installation was paused.
+
+The send path initially failed with `JMAP request failed: HTTP 400` because
+`findMessageByRfcMessageId` used a non-RFC object form for the JMAP `header`
+filter. Commit `e7aa514` uses `header: ["Message-ID", bareMessageId]` and adds a
+regression assertion. Stalwart header indexing is disabled on the host, so
+Message-ID header searches return no matches; send duplicate prevention relies on
+the persisted engine message ID. Enable header indexing and reindex if header
+search is required.
+
+
 ## Sessionless mailbox credential correction (2026-10-30)
 
 Live admin diagnostics confirmed Kimi inference succeeds but mailbox access

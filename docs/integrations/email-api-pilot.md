@@ -1,6 +1,6 @@
 # Mailbox API implementation reference
 
-Updated October 30, 2026. This file retains its original pilot filename for existing links. It now describes the current full-mailbox key foundation and shared operation interface. Deployment and live-host acceptance are separate from code validation.
+Updated November 1, 2026. This file retains its original pilot filename for existing links. It now describes the current full-mailbox key foundation and shared operation interface. Deployment and live-host acceptance are separate from code validation.
 
 ## Authentication and ownership
 
@@ -87,4 +87,18 @@ These require a normal authenticated GSW workspace owner/admin account; an exter
 
 Startup now idempotently ensures integration tables before workers start, using migration 0041 with a transaction/advisory lock. The migration remains available through `npm run db:migrate --workspace apps/api`; it is safe after startup setup. The configured local PostgreSQL server was unavailable when that command was attempted; isolated database tests execute the migration successfully. Startup success and live acceptance still need observation after deployment.
 
-Validate real mailbox reading, Kimi inference, mail delivery/status, revocation and admin-page operation in the deployed environment. Code tests use fixtures/mocked providers and do not prove live provider credentials or delivery. Customer signed webhooks, complete coverage of product features missing from the registry, richer usage/billing, reconciliation tooling and mailbox authorization lifecycle improvements remain work. See [service plan](../GSW_MAIL_API_SERVICE_PLAN.md).
+Live external-key acceptance passed on 2026-11-01 for the verified
+`team.guidedstepswellness.com` mailbox: connection/capabilities, mailbox reads,
+Kimi inference, a uniquely labeled direct send visible in Inbox and Sent Items,
+idempotent replay without a second outbound row, and key revocation returning
+401. The send path initially failed with `JMAP request failed: HTTP 400` because
+`findMessageByRfcMessageId` used a non-RFC object form for the JMAP `header`
+filter; commit `e7aa514` uses the RFC `header: ["Message-ID", bareMessageId]`
+form and adds a regression assertion.
+
+Stalwart header indexing is disabled on the current host, so Message-ID header
+searches return no matches; send duplicate prevention relies on the persisted
+engine message ID. Enable header indexing and reindex before relying on header
+search. Customer signed webhooks, complete coverage of product features missing
+from the registry, richer usage/billing, reconciliation tooling and mailbox
+authorization lifecycle improvements remain work. See [service plan](../GSW_MAIL_API_SERVICE_PLAN.md).
