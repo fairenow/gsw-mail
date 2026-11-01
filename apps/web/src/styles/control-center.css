@@ -128,3 +128,9 @@
   .gsw-domain-add-row, .gsw-domain-actions, .gsw-dns-records-head { align-items: stretch; flex-direction: column; }
   .gsw-domain-service-state { grid-template-columns: 1fr; }
 }
+
+/* Compact copy action for the displayed API key prefix. */
+.gsw-api-key-copy { display: inline-flex; align-items: center; gap: 4px; width: fit-content; max-width: 100%; padding: 4px 6px; margin: 4px 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: inherit; cursor: copy; text-align: left; }
+.gsw-api-key-copy:hover { background: var(--gsw-accent-soft); border-color: var(--gsw-border-soft); }
+.gsw-api-key-copy:focus-visible { outline: 2px solid var(--gsw-accent-dark); outline-offset: 2px; }
+.gsw-api-key-copy code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
