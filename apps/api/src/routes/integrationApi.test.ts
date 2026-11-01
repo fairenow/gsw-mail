@@ -16,7 +16,7 @@ test("integration API persists requests, isolates installations, enforces grants
   const pg = new PGlite();
   const app = Fastify();
   try {
-    for (const file of ["0000_quick_falcon", "0001_add_template_key", "0006_better_auth", "0007_workspace_normalization", "0009_mailbox_auth_setup", "0041_integration_email_api", "0044_integration_customer_webhooks"]) {
+    for (const file of ["0000_quick_falcon", "0001_add_template_key", "0006_better_auth", "0007_workspace_normalization", "0009_mailbox_auth_setup", "0041_integration_email_api", "0043_integration_live_default", "0044_integration_customer_webhooks"]) {
       await pg.exec(await readFile(new URL(`../../drizzle/${file}.sql`, import.meta.url), "utf8"));
     }
     await pg.exec(await readFile(new URL("../../drizzle/0041_integration_email_api.sql", import.meta.url), "utf8"));
@@ -26,7 +26,7 @@ test("integration API persists requests, isolates installations, enforces grants
     await pg.query("INSERT INTO organization_memberships(organization_id,user_id,org_membership_role) VALUES($1,'admin','owner')", [organizationId]);
     await pg.query("INSERT INTO domains(id,organization_id,name,domain_status,spf_status,dkim_status,dmarc_status) VALUES($1,$2,'example.test','verified','verified','verified','verified')", [domainId, organizationId]);
     await pg.query("INSERT INTO email_accounts(id,workspace_id,domain_id,local_part,address,account_status,auth_setup_status) VALUES($1,$2,$3,'office','office@example.test','active','ready')", [accountId, organizationId, domainId]);
-    for (const id of [installationId, otherInstallation]) await pg.query("INSERT INTO integration_installations(id,organization_id,account_id,authorized_by,name,allowed_recipients) VALUES($1,$2,$3,'admin','Website','[\"visitor@example.test\"]')", [id, organizationId, accountId]);
+    for (const id of [installationId, otherInstallation]) await pg.query("INSERT INTO integration_installations(id,organization_id,account_id,authorized_by,name,allowed_recipients,test_mode) VALUES($1,$2,$3,'admin','Website','[\"visitor@example.test\"]',true)", [id, organizationId, accountId]);
     const issued = issueIntegrationKey(), otherIssued = issueIntegrationKey();
     for (const [id, installation, key] of [[keyId, installationId, issued], [otherKeyId, otherInstallation, otherIssued]] as const) await pg.query("INSERT INTO integration_keys(id,installation_id,name,key_hash,key_prefix,scopes,expires_at) VALUES($1,$2,'Server',$3,$4,'[\"connection.read\",\"email.send\",\"email.read\"]',now()+interval '1 day')", [id, installation, key.keyHash, key.keyPrefix]);
     const service = createIntegrationService(drizzle(pg) as unknown as typeof productionDb, { liveTransportReady: () => true });
