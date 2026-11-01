@@ -141,7 +141,7 @@ export default async function integrationAdmin(app: FastifyInstance) {
     const installation = await requireInstallation(req.user!.id, req.params.id);
     const input = keySchema.parse(req.body);
     const issued = issueIntegrationKey();
-    const expiresAt = new Date(Date.now() + input.expiresInDays * 86400_000);
+    const expiresAt = input.expiresInDays === null ? new Date("9999-12-31T00:00:00.000Z") : new Date(Date.now() + input.expiresInDays * 86400_000);
     const key = await db.transaction(async tx => {
       const [row] = await tx.insert(integrationKeys).values({ installationId: installation.id, name: input.name, scopes: ["mailbox.full"], keyHash: issued.keyHash, keyPrefix: issued.keyPrefix, expiresAt }).returning({ id: integrationKeys.id, name: integrationKeys.name, scopes: integrationKeys.scopes, expiresAt: integrationKeys.expiresAt });
       await tx.insert(auditEvents).values({ organizationId: installation.organizationId, actorUserId: req.user!.id, action: "integration.key.created", resourceType: "integration_key", resourceId: row!.id });
