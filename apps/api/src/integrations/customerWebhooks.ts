@@ -47,7 +47,7 @@ export function openWebhookSecret(sealed: string, endpointId: string): string {
 }
 
 const isPrivateIp = (address: string): boolean => {
-  if (address === "::1") return true;
+  if (address === "::1" || address === "::") return true;
   const normalized = address.toLowerCase();
   if (normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe80:")) return true;
   if (normalized.startsWith("::ffff:")) return isPrivateIp(normalized.slice("::ffff:".length));
@@ -61,7 +61,7 @@ export async function assertSafeWebhookUrl(raw: string): Promise<string> {
   let url: URL;
   try { url = new URL(raw); } catch { throw new IntegrationError(400, "invalid_webhook_url"); }
   if (url.protocol !== "https:" || url.username || url.password || !url.hostname) throw new IntegrationError(400, "invalid_webhook_url");
-  const hostname = url.hostname.toLowerCase();
+  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local") || hostname.endsWith(".internal")) throw new IntegrationError(400, "unsafe_webhook_url");
   if (isIP(hostname)) {
     if (isPrivateIp(hostname)) throw new IntegrationError(400, "unsafe_webhook_url");
