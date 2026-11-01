@@ -1,11 +1,13 @@
 import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes, randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
-import { and, eq, inArray, isNull, lt, lte } from "drizzle-orm";
+import { and, eq, inArray, lt, lte } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { integrationInstallations, integrationWebhookDeliveries, integrationWebhookEndpoints, integrationWebhookEvents } from "../db/integrationSchema.js";
 import { config } from "../config.js";
 import { IntegrationError } from "./contract.js";
+
+type Database = typeof db;
 
 export const integrationWebhookEventTypes = [
   "email.accepted",
@@ -84,28 +86,28 @@ export async function enqueueIntegrationWebhookEvent(input: {
   type: IntegrationWebhookEventType;
   dedupeKey: string;
   payload: Record<string, unknown>;
-}): Promise<string> {
-  const [installation] = await db.select({ id: integrationInstallations.id, active: integrationInstallations.active, deletedAt: integrationInstallations.deletedAt })
+} , source: Database = db): Promise<string> {
+  const [installation] = await source.select({ id: integrationInstallations.id, active: integrationInstallations.active, deletedAt: integrationInstallations.deletedAt })
     .from(integrationInstallations).where(eq(integrationInstallations.id, input.installationId)).limit(1);
   if (!installation || !installation.active || installation.deletedAt) return "";
 
-  let [event] = await db.insert(integrationWebhookEvents).values(input).onConflictDoNothing({
+  let [event] = await source.insert(integrationWebhookEvents).values(input).onConflictDoNothing({
     target: [integrationWebhookEvents.installationId, integrationWebhookEvents.dedupeKey],
   }).returning();
   if (!event) {
-    [event] = await db.select().from(integrationWebhookEvents).where(and(
+    [event] = await source.select().from(integrationWebhookEvents).where(and(
       eq(integrationWebhookEvents.installationId, input.installationId),
       eq(integrationWebhookEvents.dedupeKey, input.dedupeKey),
     )).limit(1);
   }
   if (!event) throw new Error("webhook event persistence failed");
-  const endpoints = await db.select().from(integrationWebhookEndpoints).where(and(
+  const endpoints = await source.select().from(integrationWebhookEndpoints).where(and(
     eq(integrationWebhookEndpoints.installationId, input.installationId),
     eq(integrationWebhookEndpoints.active, true),
   ));
   const targets = endpoints.filter(endpoint => endpoint.events.includes(input.type));
   if (targets.length) {
-    await db.insert(integrationWebhookDeliveries).values(targets.map(endpoint => ({ endpointId: endpoint.id, eventId: event!.id })))
+    await source.insert(integrationWebhookDeliveries).values(targets.map(endpoint => ({ endpointId: endpoint.id, eventId: event!.id })))
       .onConflictDoNothing({ target: [integrationWebhookDeliveries.endpointId, integrationWebhookDeliveries.eventId] });
   }
   return event.id;
