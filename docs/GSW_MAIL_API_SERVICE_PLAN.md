@@ -14,14 +14,14 @@ This decision supersedes the earlier proposals for granular API permissions, per
 
 | Area | Implemented on the API pilot branch | Approved target; remaining work |
 |---|---|---|
-| Management | Workspace owner/admin can create connections and keys, list keys, revoke them, pause/resume connections | API portal now links docs and service/activity checks; richer metering and recovery remain |
+| Management | Workspace owner/admin can create, pause/resume and remove connections; create/list/revoke keys; removal revokes active keys while preserving audit history | API portal now links docs and production service/activity checks; commercial billing metering remains |
 | Mailbox binding | Each installation names one mailbox in the workspace | Keep an explicit mailbox boundary; broad access inside that mailbox |
 | Runtime API | Connection/capability discovery, mailbox operations, direct email/status and selected-model AI chat | Registry functions are exposed; inventory any UI-only capabilities still missing |
 | Permissions | Full-mailbox keys; no recipient allowlist | Implemented; retain mailbox isolation and existing product rules |
 | Sending | Atomic queue acceptance, idempotency, test simulations, quotas, suppression checks | Use the same mailbox sending abilities as the product, including dynamic recipients, replies, templates and attachments |
 | Ownership | Connections remain usable after original administrator membership changes | Implemented; creator retained for audit |
 | Mailbox credentials | Worker requires an existing authorized mailbox OAuth credential | Durable service access managed through the connection lifecycle, without unrelated browser-session dependence |
-| Operations | Status polling, admin service health/activity, email counts and write reservations; uncertain sends quarantined | Activity, connection health, usage, recovery and signed customer webhooks |
+| Operations | Status polling, admin service health/activity, total and daily usage/capacity, active-key health, recovery and write reservations; uncertain sends quarantined | Signed customer webhooks and commercial billing metering remain |
 | Deployment | Production live acceptance passed for connection, capabilities, mailbox reads, Kimi inference, external sending, idempotent replay and revocation | Continue customer integrations and close remaining parity/webhook work |
 
 The current code implements the full-mailbox key and registry operation interface, and live-host acceptance has passed. Complete UI-to-API coverage is still being inventoried. [The pilot reference](integrations/email-api-pilot.md) is authoritative for requests accepted by the current branch. [The mailbox API guide](integrations/mailbox-api.md) describes the approved customer experience and remaining implementation.
