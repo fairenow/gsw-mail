@@ -19,7 +19,7 @@ export const installationSchema = z.object({
   organizationId: z.string().uuid(),
   accountId: z.string().uuid(),
   name: z.string().trim().min(1).max(100),
-  testMode: z.boolean().default(true),
+  testMode: z.boolean().default(false),
   allowedRecipients: z.array(email).max(100).default([]),
   dailyLimit: z.number().int().min(1).max(1000).default(100),
 }).strict();

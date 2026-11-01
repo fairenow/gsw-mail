@@ -18,7 +18,7 @@ export function createIntegrationService(database: Database = db, options = { li
       .innerJoin(emailAccounts, eq(integrationInstallations.accountId, emailAccounts.id))
       .innerJoin(domains, eq(emailAccounts.domainId, domains.id))
       .where(eq(integrationInstallations.id, id)).limit(1);
-    if (!row || !row.installation.active || row.account.workspaceId !== row.installation.organizationId || row.domain.organizationId !== row.installation.organizationId) throw new IntegrationError(403, "installation_unavailable");
+    if (!row || row.installation.deletedAt || !row.installation.active || row.account.workspaceId !== row.installation.organizationId || row.domain.organizationId !== row.installation.organizationId) throw new IntegrationError(403, "installation_unavailable");
     if (row.account.status !== "active" || row.account.authSetupStatus !== "ready" || row.domain.status !== "verified") throw new IntegrationError(403, "sender_unavailable");
     if (!row.installation.testMode && (row.domain.spfStatus !== "verified" || row.domain.dkimStatus !== "verified" || row.domain.dmarcStatus !== "verified")) throw new IntegrationError(403, "sender_dns_not_ready");
     return row;

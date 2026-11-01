@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
-type Installation = { id: string; name: string; accountId: string; testMode: boolean; active: boolean; allowedRecipients: string[]; dailyLimit: number };
+type Installation = { id: string; name: string; accountId: string; active: boolean; dailyLimit: number };
 type ApiKey = { id: string; name: string; prefix: string; expiresAt: string; revokedAt: string | null };
-type ServiceStatus = { health: string; acceptedEmails: number; recentEmails: { id: string; testMode: boolean; status: string | null; failureCode: string | null }[]; recentOperations: { name: string; status: string; createdAt: string }[] };
+type ServiceStatus = { health: string; usage: { acceptedEmails: number; acceptedToday: number; dailyLimit: number; remainingToday: number }; keys: { total: number; active: number }; recentEmails: { id: string; status: string | null; failureCode: string | null }[]; recentOperations: { name: string; status: string; createdAt: string }[] };
 type Mailbox = { id: string; address: string; status: string; authSetupStatus: string };
 async function request<T>(path: string, method = "GET", body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, { method, credentials: "include", ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }), signal: signal ?? AbortSignal.timeout(15000) });
@@ -17,11 +17,9 @@ export function IntegrationDeliveryPanel({ organizationId, mailboxes }: { organi
   const [keys, setKeys] = useState<Record<string, ApiKey[]>>({});
   const [name, setName] = useState("");
   const [accountId, setAccountId] = useState("");
-  const [testMode, setTestMode] = useState(true);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [diagnostics, setDiagnostics] = useState<{ checks: { name: string; ok: boolean; detail: string }[]; coverage: string } | null>(null);
   const [secret, setSecret] = useState("");
   const readyMailboxes = mailboxes.filter(m => m.status === "active" && m.authSetupStatus === "ready");
   const senderId = accountId || readyMailboxes[0]?.id || "";
@@ -56,22 +54,17 @@ export function IntegrationDeliveryPanel({ organizationId, mailboxes }: { organi
     {error && <p role="alert">{error}</p>}
     {secret && <div className="gsw-audit-card" role="status"><h4>Save your API key</h4><p>This key is shown once. Copy it into your server’s secret settings before dismissing.</p><label className="gsw-auth-field">New API key<input readOnly value={secret} onFocus={event => event.currentTarget.select()} autoComplete="off" spellCheck={false} /></label><button className="gsw-btn gsw-btn-quiet" onClick={() => setSecret("")}>I’ve saved the key</button></div>}
     <form onSubmit={event => { event.preventDefault(); void perform(async () => {
-      await request(base, "POST", { organizationId, accountId: senderId, name, testMode });
+      await request(base, "POST", { organizationId, accountId: senderId, name });
       setName(""); await reload();
     }); }}>
       <label className="gsw-auth-field">Connection name<input required maxLength={100} value={name} onChange={event => setName(event.target.value)} placeholder="Safe Place Ministries website" /></label>
       <label className="gsw-auth-field">Mailbox<select required value={senderId} onChange={event => setAccountId(event.target.value)}><option value="" disabled>Select a ready mailbox</option>{readyMailboxes.map(mailbox => <option key={mailbox.id} value={mailbox.id}>{mailbox.address}</option>)}</select></label>
-      <label><input type="checkbox" checked={testMode} onChange={event => setTestMode(event.target.checked)} /> Test mode: simulate API calls without executing actions</label>
-      {!testMode && <p>Live mode enables real mailbox actions using this key.</p>}
+      <p>This creates a live server connection. Calls made with its API key can perform real mailbox actions.</p>
       <div><button className="gsw-btn gsw-btn-primary" disabled={busy || loading || !senderId} type="submit">{busy ? "Working…" : "Create connection"}</button></div>
     </form>
-    <div className="gsw-audit-card"><h4>Live service checks</h4><p><a href="/settings/mcp-mailbox-recovery" target="_blank" rel="noreferrer">Restore mailbox service access</a> while signed in as the mailbox owner.</p><p>Check the selected mailbox and AI providers using its existing authorization. This reads at most one message without returning its contents, makes a small AI connectivity request, creates no API key and sends no email.</p><button className="gsw-btn gsw-btn-quiet" disabled={busy || loading || !senderId} onClick={() => void perform(async () => {
-      setDiagnostics(null);
-      setDiagnostics(await request(`${base}/diagnostics`, "POST", { organizationId, accountId: senderId }, AbortSignal.timeout(180000)));
-    })}>{busy ? "Working…" : "Run mailbox and AI checks"}</button>{diagnostics && <div role="status">{diagnostics.checks.map(check => <p key={check.name}><strong>{check.name}: {check.ok ? "Passed" : "Needs attention"}</strong> — {check.detail}</p>)}<p>{diagnostics.coverage}</p></div>}</div>
     <h4>Your connections</h4>
     {loading ? <p role="status">Loading connections…</p> : installations.length === 0 ? <p>No website connections yet.</p> : installations.map(installation => <article className="gsw-audit-card" key={installation.id}>
-      <h4>{installation.name}</h4><p>{installation.testMode ? "Test" : "Live"} · {installation.active ? "Active" : "Paused"} · {installation.dailyLimit} direct email submissions per UTC day</p>
+      <h4>{installation.name}</h4><p>{installation.active ? "Active" : "Paused"} · {installation.dailyLimit} direct email submissions per UTC day</p>
       <p>Mailbox: {mailboxes.find(m => m.id === installation.accountId)?.address ?? installation.accountId}</p><p>Access: full mailbox</p>
       <p>Sender ID: <code>{installation.accountId}</code></p>
       <div className="gsw-control-modal-actions">
@@ -82,8 +75,9 @@ export function IntegrationDeliveryPanel({ organizationId, mailboxes }: { organi
         <button className="gsw-btn gsw-btn-quiet" disabled={busy} onClick={() => void perform(async () => { await request(`${base}/${installation.id}`, "PATCH", { active: !installation.active }); await reload(); })}>{installation.active ? "Pause connection" : "Resume connection"}</button>
         <button className="gsw-btn gsw-btn-ghost" disabled={busy} onClick={() => void perform(() => loadKeys(installation.id))}>Show keys</button>
         <button className="gsw-btn gsw-btn-ghost" disabled={busy} onClick={() => void perform(async () => { const result = await request<ServiceStatus>(`${base}/${installation.id}/service`); setServices(previous => ({ ...previous, [installation.id]: result })); })}>Check service and activity</button>
+        <button className="gsw-btn gsw-btn-ghost" disabled={busy} onClick={() => { if (!window.confirm(`Remove ${installation.name}? All of its API keys will be revoked immediately.`)) return; void perform(async () => { await request(`${base}/${installation.id}`, "DELETE"); setKeys(previous => { const next = { ...previous }; delete next[installation.id]; return next; }); setServices(previous => { const next = { ...previous }; delete next[installation.id]; return next; }); await reload(); }); }}>Remove connection</button>
       </div>
-      {services[installation.id] && <div role="status"><p>Service: {services[installation.id].health.replaceAll("_", " ")} · Accepted emails: {services[installation.id].acceptedEmails}</p><p>Recent emails: {services[installation.id].recentEmails.map(email => `${email.id.slice(0, 8)}: ${email.testMode ? "simulated" : email.status ?? "pending"}${email.failureCode ? ` (${email.failureCode})` : ""}`).join("; ") || "None"}</p><p>Recent operations: {services[installation.id].recentOperations.map(operation => `${operation.name}: ${operation.status}`).join("; ") || "None"}</p></div>}
+      {services[installation.id] && <div role="status"><p>Service: {services[installation.id].health.replaceAll("_", " ")}</p><p>Usage today: {services[installation.id].usage.acceptedToday} of {services[installation.id].usage.dailyLimit} direct email submissions · {services[installation.id].usage.remainingToday} remaining · {services[installation.id].usage.acceptedEmails} total</p><p>API keys: {services[installation.id].keys.active} active of {services[installation.id].keys.total} issued</p><p>Recent emails: {services[installation.id].recentEmails.map(email => `${email.id.slice(0, 8)}: ${email.status ?? "pending"}${email.failureCode ? ` (${email.failureCode})` : ""}`).join("; ") || "None"}</p><p>Recent operations: {services[installation.id].recentOperations.map(operation => `${operation.name}: ${operation.status}`).join("; ") || "None"}</p></div>}
       {keys[installation.id]?.map(key => <div className="gsw-audit-row" key={key.id}><div><strong>{key.name}</strong><span>{key.prefix}… · Expires {new Date(key.expiresAt).toLocaleDateString()} · {key.revokedAt ? "Revoked" : new Date(key.expiresAt).getTime() <= Date.now() ? "Expired" : "Active"}</span></div>{!key.revokedAt && <button className="gsw-btn gsw-btn-ghost" disabled={busy} onClick={() => void perform(async () => { await request(`${base}/${installation.id}/keys/${key.id}`, "DELETE"); await loadKeys(installation.id); })}>Revoke key</button>}</div>)}
     </article>)}
   </section>;

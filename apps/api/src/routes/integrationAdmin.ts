@@ -1,11 +1,7 @@
-import { getUserEngine } from "../engine/index.js";
-import { getAiCapabilitySettings } from "../ai/capabilities.js";
-import { getAiProvider } from "../ai/providers/index.js";
-import { HttpError } from "../lib/errors.js";
 import { integrationService } from "../integrations/service.js";
 import { findStoredStalwartMailboxToken } from "../auth/storedStalwartToken.js";
 import { refreshStoredStalwartMailboxToken } from "../auth/refreshStalwartMailboxToken.js";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireOrgPermission } from "../auth/authorize.js";
@@ -22,45 +18,11 @@ export default async function integrationAdmin(app: FastifyInstance) {
   app.addHook("onRequest", async (_req, reply) => { reply.header("Cache-Control", "no-store"); });
   async function requireInstallation(userId: string, id: string) {
     const [row] = await db.select().from(integrationInstallations).where(eq(integrationInstallations.id, uuid.parse(id))).limit(1);
-    if (!row) throw notFound("installation not found");
+    if (!row || row.deletedAt) throw notFound("installation not found");
     await requireOrgPermission(userId, row.organizationId, ["owner", "admin"]);
     return row;
   }
   app.get("/api/admin/integrations/docs", async (_req, reply) => reply.redirect("https://mail-docs.guidedstepswellness.com"));
-  app.post("/api/admin/integrations/diagnostics", { config: { rateLimit: { max: 3, timeWindow: "1 minute" } } }, async req => {
-    const input = z.object({ organizationId: uuid, accountId: uuid }).strict().parse(req.body);
-    await requireOrgPermission(req.user!.id, input.organizationId, ["owner", "admin"]);
-    const [account] = await db.select().from(emailAccounts).where(and(eq(emailAccounts.id, input.accountId), eq(emailAccounts.workspaceId, input.organizationId))).limit(1);
-    if (!account) throw notFound("mailbox not found in this workspace");
-    const checks: { name: string; ok: boolean; detail: string }[] = [];
-    let ctx: Awaited<ReturnType<typeof integrationService.mailboxContext>> | undefined;
-    try {
-      ctx = await integrationService.mailboxContext(account.id);
-      const engine = await getUserEngine({ productUserId: ctx.userId, authUserId: ctx.authUserId, accountId: account.id, headers: {}, permission: "read" });
-      const messages = await engine.listMessages(account.id, { limit: 1 });
-      checks.push({ name: "Live mailbox read", ok: true, detail: `Read succeeded (${messages.length} sample records); message content is not included.` });
-    } catch {
-      checks.push({ name: "Live mailbox read", ok: false, detail: "No usable mailbox credential or the live read failed. Sign in as this mailbox and restore mailbox access; an admin sign-in alone cannot repair mailbox authorization." });
-    }
-    const verifyProvider = async (provider: string, name: string) => {
-      try {
-        const result = await getAiProvider(provider).run({ messages: [{ role: "user", content: "Reply with OK. This is a service connectivity check. Do not use tools." }] });
-        checks.push({ name, ok: Boolean(result.content), detail: result.content ? `Provider responded using ${result.model}.` : "Provider returned no text." });
-      } catch (error) {
-        checks.push({ name, ok: false, detail: error instanceof HttpError ? `Provider check failed (HTTP ${error.status}). Check its configuration and account availability.` : "Provider check failed. Review server logs." });
-      }
-    };
-    let selectedProvider: string | undefined;
-    if (ctx) {
-      const settings = await getAiCapabilitySettings(ctx.userId);
-      selectedProvider = settings.modelProvider;
-      if (settings.enabled) await verifyProvider(selectedProvider, "Selected mailbox AI");
-      else checks.push({ name: "Selected mailbox AI", ok: false, detail: "AI is disabled for this mailbox." });
-    }
-    if (selectedProvider !== "kimi" || !checks.some(check => check.name === "Selected mailbox AI" && check.ok)) await verifyProvider("kimi", "Kimi provider");
-    await db.insert(auditEvents).values({ organizationId: input.organizationId, actorUserId: req.user!.id, action: "integration.diagnostics", resourceType: "email_account", resourceId: account.id });
-    return { checkedAt: new Date().toISOString(), accountId: account.id, checks, coverage: "Live service diagnostics only. No external key created, no email sent. Bearer-key requests and recipient delivery need separate verification." };
-  });
   app.get<{ Params: { id: string } }>("/api/admin/integrations/:id/service", async req => {
     const row = await requireInstallation(req.user!.id, req.params.id);
     let health = row.active ? "ready" : "paused";
@@ -73,10 +35,31 @@ export default async function integrationAdmin(app: FastifyInstance) {
         if (!token) health = "mailbox_reconnect_required";
       }
     } catch { health = row.active ? "mailbox_attention_required" : "paused"; }
-    const [usage] = await db.select({ emails: sql<number>`count(*)` }).from(integrationEmails).where(eq(integrationEmails.installationId, row.id));
-    const emails = await db.select({ id: integrationEmails.id, createdAt: integrationEmails.createdAt, testMode: integrationEmails.testMode, status: outboundMessages.transportStatus, failureCode: outboundMessages.failureCode }).from(integrationEmails).leftJoin(outboundMessages, eq(integrationEmails.outboundMessageId, outboundMessages.id)).where(eq(integrationEmails.installationId, row.id)).orderBy(desc(integrationEmails.createdAt)).limit(20);
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const [[usage], [today], [keyUsage]] = await Promise.all([
+      db.select({ emails: sql<number>`count(*)` }).from(integrationEmails).where(eq(integrationEmails.installationId, row.id)),
+      db.select({ emails: sql<number>`count(*)` }).from(integrationEmails).where(and(eq(integrationEmails.installationId, row.id), gte(integrationEmails.createdAt, dayStart))),
+      db.select({
+        total: sql<number>`count(*)`,
+        active: sql<number>`count(*) filter (where ${isNull(integrationKeys.revokedAt)} and ${integrationKeys.expiresAt} > now())`,
+      }).from(integrationKeys).where(eq(integrationKeys.installationId, row.id)),
+    ]);
+    const emails = await db.select({ id: integrationEmails.id, createdAt: integrationEmails.createdAt, status: outboundMessages.transportStatus, failureCode: outboundMessages.failureCode }).from(integrationEmails).leftJoin(outboundMessages, eq(integrationEmails.outboundMessageId, outboundMessages.id)).where(eq(integrationEmails.installationId, row.id)).orderBy(desc(integrationEmails.createdAt)).limit(20);
     const operations = await db.select({ name: aiIdempotencyKeys.toolName, status: aiIdempotencyKeys.status, createdAt: aiIdempotencyKeys.createdAt }).from(aiIdempotencyKeys).where(sql`${aiIdempotencyKeys.key} LIKE ${`api:${row.id}:%`}`).orderBy(desc(aiIdempotencyKeys.createdAt)).limit(20);
-    return { health, acceptedEmails: Number(usage?.emails ?? 0), recentEmails: emails, recentOperations: operations };
+    const todayAccepted = Number(today?.emails ?? 0);
+    return {
+      health,
+      usage: {
+        acceptedEmails: Number(usage?.emails ?? 0),
+        acceptedToday: todayAccepted,
+        dailyLimit: row.dailyLimit,
+        remainingToday: Math.max(0, row.dailyLimit - todayAccepted),
+      },
+      keys: { total: Number(keyUsage?.total ?? 0), active: Number(keyUsage?.active ?? 0) },
+      recentEmails: emails,
+      recentOperations: operations,
+    };
   });
   app.post("/api/admin/integrations", async (req, reply) => {
     const input = installationSchema.parse(req.body);
@@ -95,7 +78,7 @@ export default async function integrationAdmin(app: FastifyInstance) {
   app.get<{ Querystring: { organizationId: string } }>("/api/admin/integrations", async req => {
     const organizationId = uuid.parse(req.query.organizationId);
     await requireOrgPermission(req.user!.id, organizationId, ["owner", "admin"]);
-    return { installations: await db.select().from(integrationInstallations).where(eq(integrationInstallations.organizationId, organizationId)).orderBy(desc(integrationInstallations.createdAt)) };
+    return { installations: await db.select().from(integrationInstallations).where(and(eq(integrationInstallations.organizationId, organizationId), isNull(integrationInstallations.deletedAt))).orderBy(desc(integrationInstallations.createdAt)) };
   });
   app.patch<{ Params: { id: string } }>("/api/admin/integrations/:id", async req => {
     const installation = await requireInstallation(req.user!.id, req.params.id);
@@ -105,6 +88,16 @@ export default async function integrationAdmin(app: FastifyInstance) {
       const [row] = await tx.update(integrationInstallations).set(input).where(eq(integrationInstallations.id, installation.id)).returning();
       await tx.insert(auditEvents).values({ organizationId: installation.organizationId, actorUserId: req.user!.id, action: input.active ? "integration.resumed" : "integration.paused", resourceType: "integration_installation", resourceId: installation.id });
       return row;
+    });
+  });
+  app.delete<{ Params: { id: string } }>("/api/admin/integrations/:id", async req => {
+    const installation = await requireInstallation(req.user!.id, req.params.id);
+    return db.transaction(async tx => {
+      await tx.select({ id: integrationInstallations.id }).from(integrationInstallations).where(eq(integrationInstallations.id, installation.id)).for("update");
+      await tx.update(integrationKeys).set({ revokedAt: new Date() }).where(and(eq(integrationKeys.installationId, installation.id), isNull(integrationKeys.revokedAt)));
+      await tx.update(integrationInstallations).set({ active: false, deletedAt: new Date() }).where(eq(integrationInstallations.id, installation.id));
+      await tx.insert(auditEvents).values({ organizationId: installation.organizationId, actorUserId: req.user!.id, action: "integration.removed", resourceType: "integration_installation", resourceId: installation.id });
+      return { removed: true };
     });
   });
   app.post<{ Params: { id: string } }>("/api/admin/integrations/:id/keys", async (req, reply) => {

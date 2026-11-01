@@ -302,6 +302,13 @@
       "when": 1793403000000,
       "tag": "0042_mailbox_credential_vault",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1793491200000,
+      "tag": "0043_integration_live_default",
+      "breakpoints": true
     }
   ]
 }
