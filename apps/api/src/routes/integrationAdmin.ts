@@ -7,10 +7,11 @@ import { z } from "zod";
 import { requireOrgPermission } from "../auth/authorize.js";
 import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
-import { integrationEmails, integrationInstallations, integrationKeys } from "../db/integrationSchema.js";
+import { integrationEmails, integrationInstallations, integrationKeys, integrationWebhookEndpoints } from "../db/integrationSchema.js";
 import { aiIdempotencyKeys, auditEvents, domains, emailAccounts, outboundMessages } from "../db/schema.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { installationSchema, issueIntegrationKey, keySchema } from "../integrations/contract.js";
+import { createWebhookEndpoint, integrationWebhookEventTypes, listWebhookEndpoints, removeWebhookEndpoint } from "../integrations/customerWebhooks.js";
 
 const uuid = z.string().uuid();
 export default async function integrationAdmin(app: FastifyInstance) {
@@ -37,13 +38,18 @@ export default async function integrationAdmin(app: FastifyInstance) {
     } catch { health = row.active ? "mailbox_attention_required" : "paused"; }
     const dayStart = new Date();
     dayStart.setUTCHours(0, 0, 0, 0);
-    const [[usage], [today], [keyUsage]] = await Promise.all([
+    const [[usage], [today], [keyUsage], [webhookUsage], [operationUsage], [operationToday]] = await Promise.all([
       db.select({ emails: sql<number>`count(*)` }).from(integrationEmails).where(eq(integrationEmails.installationId, row.id)),
       db.select({ emails: sql<number>`count(*)` }).from(integrationEmails).where(and(eq(integrationEmails.installationId, row.id), gte(integrationEmails.createdAt, dayStart))),
       db.select({
         total: sql<number>`count(*)`,
         active: sql<number>`count(*) filter (where ${isNull(integrationKeys.revokedAt)} and ${integrationKeys.expiresAt} > now())`,
+        expiringWithin7Days: sql<number>`count(*) filter (where ${isNull(integrationKeys.revokedAt)} and ${integrationKeys.expiresAt} > now() and ${integrationKeys.expiresAt} <= now() + interval '7 days')`,
+        nextExpiry: sql<Date | null>`min(${integrationKeys.expiresAt}) filter (where ${isNull(integrationKeys.revokedAt)} and ${integrationKeys.expiresAt} > now())`,
       }).from(integrationKeys).where(eq(integrationKeys.installationId, row.id)),
+      db.select({ total: sql<number>`count(*)`, active: sql<number>`count(*) filter (where ${integrationWebhookEndpoints.active} = true)` }).from(integrationWebhookEndpoints).where(eq(integrationWebhookEndpoints.installationId, row.id)),
+      db.select({ count: sql<number>`count(*)` }).from(aiIdempotencyKeys).where(sql`${aiIdempotencyKeys.key} LIKE ${`api:${row.id}:%`}`),
+      db.select({ count: sql<number>`count(*)` }).from(aiIdempotencyKeys).where(and(sql`${aiIdempotencyKeys.key} LIKE ${`api:${row.id}:%`}`, gte(aiIdempotencyKeys.createdAt, dayStart))),
     ]);
     const emails = await db.select({ id: integrationEmails.id, createdAt: integrationEmails.createdAt, status: outboundMessages.transportStatus, failureCode: outboundMessages.failureCode }).from(integrationEmails).leftJoin(outboundMessages, eq(integrationEmails.outboundMessageId, outboundMessages.id)).where(eq(integrationEmails.installationId, row.id)).orderBy(desc(integrationEmails.createdAt)).limit(20);
     const operations = await db.select({ name: aiIdempotencyKeys.toolName, status: aiIdempotencyKeys.status, createdAt: aiIdempotencyKeys.createdAt }).from(aiIdempotencyKeys).where(sql`${aiIdempotencyKeys.key} LIKE ${`api:${row.id}:%`}`).orderBy(desc(aiIdempotencyKeys.createdAt)).limit(20);
@@ -53,10 +59,13 @@ export default async function integrationAdmin(app: FastifyInstance) {
       usage: {
         acceptedEmails: Number(usage?.emails ?? 0),
         acceptedToday: todayAccepted,
+        operations: Number(operationUsage?.count ?? 0),
+        operationsToday: Number(operationToday?.count ?? 0),
         dailyLimit: row.dailyLimit,
         remainingToday: Math.max(0, row.dailyLimit - todayAccepted),
       },
-      keys: { total: Number(keyUsage?.total ?? 0), active: Number(keyUsage?.active ?? 0) },
+      keys: { total: Number(keyUsage?.total ?? 0), active: Number(keyUsage?.active ?? 0), expiringWithin7Days: Number(keyUsage?.expiringWithin7Days ?? 0), nextExpiry: keyUsage?.nextExpiry ?? null },
+      webhooks: { total: Number(webhookUsage?.total ?? 0), active: Number(webhookUsage?.active ?? 0) },
       recentEmails: emails,
       recentOperations: operations,
     };
@@ -99,6 +108,27 @@ export default async function integrationAdmin(app: FastifyInstance) {
       await tx.insert(auditEvents).values({ organizationId: installation.organizationId, actorUserId: req.user!.id, action: "integration.removed", resourceType: "integration_installation", resourceId: installation.id });
       return { removed: true };
     });
+  });
+  app.get<{ Params: { id: string } }>("/api/admin/integrations/:id/webhooks", async req => {
+    const installation = await requireInstallation(req.user!.id, req.params.id);
+    return { eventTypes: integrationWebhookEventTypes, endpoints: await listWebhookEndpoints(installation.id) };
+  });
+  app.post<{ Params: { id: string } }>("/api/admin/integrations/:id/webhooks", async (req, reply) => {
+    const installation = await requireInstallation(req.user!.id, req.params.id);
+    const input = z.object({
+      url: z.string().url().max(2048),
+      events: z.array(z.enum(integrationWebhookEventTypes)).min(1).max(integrationWebhookEventTypes.length).default([...integrationWebhookEventTypes]),
+    }).strict().parse(req.body);
+    const created = await createWebhookEndpoint({ installationId: installation.id, url: input.url, events: input.events });
+    await db.insert(auditEvents).values({ organizationId: installation.organizationId, actorUserId: req.user!.id, action: "integration.webhook.created", resourceType: "integration_webhook_endpoint", resourceId: created.endpoint.id });
+    return reply.code(201).send({ ...created.endpoint, secret: created.secret });
+  });
+  app.delete<{ Params: { id: string; webhookId: string } }>("/api/admin/integrations/:id/webhooks/:webhookId", async req => {
+    const installation = await requireInstallation(req.user!.id, req.params.id);
+    const webhookId = uuid.parse(req.params.webhookId);
+    if (!await removeWebhookEndpoint(installation.id, webhookId)) throw notFound("webhook endpoint not found");
+    await db.insert(auditEvents).values({ organizationId: installation.organizationId, actorUserId: req.user!.id, action: "integration.webhook.removed", resourceType: "integration_webhook_endpoint", resourceId: webhookId });
+    return { removed: true };
   });
   app.post<{ Params: { id: string } }>("/api/admin/integrations/:id/keys", async (req, reply) => {
     const installation = await requireInstallation(req.user!.id, req.params.id);

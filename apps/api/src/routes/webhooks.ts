@@ -3,6 +3,8 @@ import { eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
+import { integrationEmails } from "../db/integrationSchema.js";
+import { enqueueIntegrationWebhookEvent } from "../integrations/customerWebhooks.js";
 import { domains, emailAccounts, outboundDeliveryEvents, outboundMessages } from "../db/schema.js";
 import { badRequest, unauthorized } from "../lib/errors.js";
 import { applyRecipientEvent, recordSuppression } from "../outbound/delivery.js";
@@ -143,6 +145,18 @@ export default async (app: FastifyInstance) => {
     }
 
     await applyRecipientEvent(messageId, emails, recipientStatus);
+
+    const [integrationEmail] = await db.select({ id: integrationEmails.id, installationId: integrationEmails.installationId, metadata: integrationEmails.metadata })
+      .from(integrationEmails).where(eq(integrationEmails.outboundMessageId, messageId)).limit(1);
+    if (integrationEmail) {
+      const type = (`email.${recipientStatus}`) as "email.delivered" | "email.deferred" | "email.bounced" | "email.complained";
+      await enqueueIntegrationWebhookEvent({
+        installationId: integrationEmail.installationId,
+        type,
+        dedupeKey: `delivery:${providerEventId}:${recipientStatus}`,
+        payload: { requestId: integrationEmail.id, deliveryStatus: recipientStatus, metadata: integrationEmail.metadata },
+      });
+    }
 
     return { received: true, messageId, deliveryStatus: recipientStatus };
   });

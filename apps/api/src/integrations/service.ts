@@ -7,11 +7,13 @@ import { config } from "../config.js";
 import { fingerprint, hashKey, IntegrationError } from "./contract.js";
 import type { AgentExecutionContext } from "../ai/tools/types.js";
 import type { IntegrationSend } from "./contract.js";
+import { enqueueIntegrationWebhookEvent } from "./customerWebhooks.js";
 
 type Database = typeof db;
 export type IntegrationPrincipal = { installationId: string; keyId: string; scopes: string[] };
 
-export function createIntegrationService(database: Database = db, options = { liveTransportReady: () => config.mailEngine !== "demo" && config.outbound.relay === "stalwart" }) {
+export function createIntegrationService(database: Database = db, options: { liveTransportReady?: () => boolean } = {}) {
+  const liveTransportReady = options.liveTransportReady ?? (() => config.mailEngine !== "demo" && config.outbound.relay === "stalwart");
   async function installation(id: string, source: Database = database) {
     const [row] = await source.select({ installation: integrationInstallations, account: emailAccounts, domain: domains })
       .from(integrationInstallations)
@@ -63,7 +65,7 @@ export function createIntegrationService(database: Database = db, options = { li
       if (suppressed.length) throw new IntegrationError(409, "recipient_suppressed");
       const [usage] = await tx.select({ count: sql<number>`count(*)` }).from(integrationEmails).where(and(eq(integrationEmails.installationId, row.installation.id), gte(integrationEmails.createdAt, sql`date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`)));
       if (Number(usage?.count ?? 0) >= row.installation.dailyLimit) throw new IntegrationError(429, "daily_limit_reached", true);
-      if (!row.installation.testMode && !options.liveTransportReady()) throw new IntegrationError(503, "live_transport_unavailable", true);
+      if (!row.installation.testMode && !liveTransportReady()) throw new IntegrationError(503, "live_transport_unavailable", true);
       await tx.select({ id: emailAccounts.id }).from(emailAccounts).where(eq(emailAccounts.id, row.account.id)).for("update");
       const [rate] = await tx.select({ count: sql<number>`count(*)` }).from(outboundMessages).where(and(eq(outboundMessages.accountId, row.account.id), gte(outboundMessages.createdAt, sql`now() - interval '1 hour'`)));
       if (!row.installation.testMode && Number(rate?.count ?? 0) >= config.send.perHour) throw new IntegrationError(429, "sender_rate_limit", true);
@@ -76,6 +78,7 @@ export function createIntegrationService(database: Database = db, options = { li
         await tx.insert(outboundRecipients).values([...new Set(input.to)].map(email => ({ outboundMessageId: outboundId!, email, recipientType: "to" as const })));
       }
       const [request] = await tx.insert(integrationEmails).values({ installationId: row.installation.id, keyId: principal.keyId, outboundMessageId: outboundId, idempotencyKey, fingerprint: requestFingerprint, testMode: row.installation.testMode, metadata: input.metadata }).returning({ id: integrationEmails.id });
+      await enqueueIntegrationWebhookEvent({ installationId: row.installation.id, type: "email.accepted", dedupeKey: `email:${request!.id}:accepted`, payload: { requestId: request!.id, metadata: input.metadata, status: row.installation.testMode ? "simulated" : "accepted_for_processing" } }, source);
       return { id: request!.id, testMode: row.installation.testMode, idempotentReplay: false };
     });
   }

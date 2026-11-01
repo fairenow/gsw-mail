@@ -21,7 +21,7 @@ This decision supersedes the earlier proposals for granular API permissions, per
 | Sending | Atomic queue acceptance, idempotency, test simulations, quotas, suppression checks | Use the same mailbox sending abilities as the product, including dynamic recipients, replies, templates and attachments |
 | Ownership | Connections remain usable after original administrator membership changes | Implemented; creator retained for audit |
 | Mailbox credentials | Worker requires an existing authorized mailbox OAuth credential | Durable service access managed through the connection lifecycle, without unrelated browser-session dependence |
-| Operations | Status polling, admin service health/activity, total and daily usage/capacity, active-key health, recovery and write reservations; uncertain sends quarantined | Signed customer webhooks and commercial billing metering remain |
+| Operations | Status polling, admin service health/activity, total and daily usage/capacity, active-key health, signed customer webhooks with retry/backoff, recovery and write reservations; uncertain sends quarantined | Commercial billing metering and deeper reconciliation remain |
 | Deployment | Production live acceptance passed for connection, capabilities, mailbox reads, Kimi inference, external sending, idempotent replay and revocation | Continue customer integrations and close remaining parity/webhook work |
 
 The current code implements the full-mailbox key and registry operation interface, and live-host acceptance has passed. Complete UI-to-API coverage is still being inventoried. [The pilot reference](integrations/email-api-pilot.md) is authoritative for requests accepted by the current branch. [The mailbox API guide](integrations/mailbox-api.md) describes the approved customer experience and remaining implementation.
@@ -93,14 +93,14 @@ Retain ordinary service protections: mailbox/workspace isolation, secret hashing
 
 Keep transactional and marketing behavior consistent with the existing product. An inquiry is not newsletter consent. Templates, files and audiences stay owned by their mailbox/workspace; broad mailbox access does not authorize access to someone else's resources.
 
-Use stable operation IDs, status and idempotency for supported writes. Accepted does not mean delivered. Keep uncertain sends quarantined until reconciled rather than automatically sending them again. Customer webhooks need signatures, retries and duplicate/out-of-order handling; they are not implemented yet. Ordinary webhooks are separate from provider-specific MCP event delivery.
+Use stable operation IDs, status and idempotency for supported writes. Accepted does not mean delivered. Keep uncertain sends quarantined until reconciled rather than automatically sending them again. Customer webhooks now use stable event IDs, HMAC signatures, retry/backoff, receiver-side dedupe guidance and public-HTTPS target validation. Ordinary webhooks remain separate from provider-specific MCP event delivery. Ordinary webhooks are separate from provider-specific MCP event delivery.
 
 ## Delivery sequence
 
 1. **API foundation implemented and live acceptance passed:** one full-mailbox grant, remove pilot-only recipient/feature selections, workspace-owned administration, durable service authorization, admin API/docs entry point. Preserve existing isolation/reliability behavior while retiring customer-facing test-mode controls.
 2. **Complete mail parity:** reading, search, threads, drafts, replies, message actions, templates, signatures, attachments and supported scheduling. Add operation tests and capability inventory as routes are implemented.
 3. **Complete mailbox product parity:** contacts, calendars, files, campaigns, tasks/AI/automation and associated mailbox preferences through the same key. Do not add per-feature API plans or consent choices.
-4. **Finish customer operations:** health, usage, activity, signed webhooks, recovery, retention/deletion and key-expiration visibility. Define pricing separately from permission tiers.
+4. **Finish customer operations:** health, usage, activity, signed webhooks and connection removal are implemented; continue recovery, retention/deletion policy, richer key-expiration visibility and commercial metering. Define pricing separately from permission tiers.
 5. **Prove Safe Place end to end:** persist inquiry and website outbox → owner notification → visitor acknowledgment → status in its admin. Then connect subscribers, calendars and media using the same API.
 6. **Build owned workflows and the catalog:** versioned configurations and run history above existing mailbox services. Workflows organize behavior; they do not force a new API registration or feature-scope system.
 
