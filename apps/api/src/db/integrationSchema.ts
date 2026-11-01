@@ -13,6 +13,7 @@ export const integrationInstallations = pgTable("integration_installations", {
   allowedRecipients: jsonb("allowed_recipients").$type<string[]>().notNull(),
   dailyLimit: integer("daily_limit").default(100).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
 }, t => [index("integration_installations_org_idx").on(t.organizationId), check("integration_installations_daily_limit_check", sql`${t.dailyLimit} BETWEEN 1 AND 1000`)]);
 
 export const integrationKeys = pgTable("integration_keys", {
