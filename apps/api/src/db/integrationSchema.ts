@@ -74,6 +74,7 @@ export const integrationWebhookDeliveries = pgTable("integration_webhook_deliver
   status: text("status").default("pending").notNull(),
   attempts: integer("attempts").default(0).notNull(),
   nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).defaultNow().notNull(),
+  processingAt: timestamp("processing_at", { withTimezone: true }),
   lastStatus: integer("last_status"),
   lastError: text("last_error"),
   deliveredAt: timestamp("delivered_at", { withTimezone: true }),
