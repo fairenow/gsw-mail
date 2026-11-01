@@ -46,6 +46,7 @@ export function DomainAdminPanel({ organizationId, onChanged }: { organizationId
   const [adding, setAdding] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!organizationId) return;
@@ -91,9 +92,15 @@ export function DomainAdminPanel({ organizationId, onChanged }: { organizationId
     finally { setBusyId(null); }
   };
 
-  const copy = async (value: string) => {
-    await navigator.clipboard.writeText(value);
-    setMessage("Copied DNS value.");
+  const copy = async (value: string, field: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedField(key);
+      setError("");
+      setMessage(`Copied ${field} to clipboard.`);
+    } catch {
+      setError("Could not copy automatically. Select the text and copy it manually.");
+    }
   };
 
   return <section className="gsw-control-section">
@@ -133,10 +140,9 @@ export function DomainAdminPanel({ organizationId, onChanged }: { organizationId
           <div className="gsw-dns-records-head"><strong>DNS records to publish</strong><span>Required records must match before the domain becomes Ready.</span></div>
           {records.map((record, index) => <div className="gsw-dns-record-row" key={`${record.source}-${record.type}-${record.name}-${index}`}>
             <div><span className="gsw-dns-source">{record.source}</span><strong>{record.purpose.toUpperCase()} · {record.type}</strong>{record.required ? <small>Required</small> : <small>Optional for current routing</small>}</div>
-            <div><small>Host / Name</small><code>{record.name}</code></div>
-            {record.type === "MX" && <div><small>Priority</small><code>{record.priority ?? 0}</code></div>}
-            <div className="gsw-dns-value"><small>Value</small><code>{record.value}</code></div>
-            <button className="gsw-btn gsw-btn-ghost" onClick={() => void copy(record.value)}>Copy value</button>
+            <div><small>Host / Name</small><button type="button" className="gsw-dns-copy-field" title={record.name} aria-label={`Copy host/name: ${record.name}`} onClick={() => void copy(record.name, "host/name", `${domain.id}-${index}-name`)}><code>{record.name}</code><span aria-hidden="true">{copiedField === `${domain.id}-${index}-name` ? "✓" : "⧉"}</span></button></div>
+            {record.type === "MX" && <div><small>Priority</small><button type="button" className="gsw-dns-copy-field" title={String(record.priority ?? 0)} aria-label={`Copy priority: ${record.priority ?? 0}`} onClick={() => void copy(String(record.priority ?? 0), "priority", `${domain.id}-${index}-priority`)}><code>{record.priority ?? 0}</code><span aria-hidden="true">{copiedField === `${domain.id}-${index}-priority` ? "✓" : "⧉"}</span></button></div>}
+            <div className="gsw-dns-value"><small>Value</small><button type="button" className="gsw-dns-copy-field" title={record.value} aria-label={`Copy value: ${record.value}`} onClick={() => void copy(record.value, "DNS value", `${domain.id}-${index}-value`)}><code>{record.value}</code><span aria-hidden="true">{copiedField === `${domain.id}-${index}-value` ? "✓" : "⧉"}</span></button></div>
           </div>)}
         </div>}
       </article>;
