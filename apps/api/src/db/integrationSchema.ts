@@ -39,3 +39,46 @@ export const integrationEmails = pgTable("integration_emails", {
   metadata: jsonb("metadata").$type<Record<string, string>>().default(sql`'{}'::jsonb`).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, t => [uniqueIndex("integration_emails_idempotency_idx").on(t.installationId, t.idempotencyKey), uniqueIndex("integration_emails_outbound_idx").on(t.outboundMessageId), index("integration_emails_usage_idx").on(t.installationId, t.createdAt)]);
+
+
+export const integrationWebhookEndpoints = pgTable("integration_webhook_endpoints", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  installationId: uuid("installation_id").notNull().references(() => integrationInstallations.id, { onDelete: "cascade" }),
+  url: text("url").notNull(),
+  secretEncrypted: text("secret_encrypted").notNull(),
+  secretPrefix: text("secret_prefix").notNull(),
+  events: jsonb("events").$type<string[]>().notNull(),
+  active: boolean("active").default(true).notNull(),
+  failureCount: integer("failure_count").default(0).notNull(),
+  lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  lastFailureAt: timestamp("last_failure_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, t => [index("integration_webhook_endpoints_installation_idx").on(t.installationId)]);
+
+export const integrationWebhookEvents = pgTable("integration_webhook_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  installationId: uuid("installation_id").notNull().references(() => integrationInstallations.id, { onDelete: "restrict" }),
+  type: text("type").notNull(),
+  dedupeKey: text("dedupe_key").notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, t => [
+  uniqueIndex("integration_webhook_events_dedupe_idx").on(t.installationId, t.dedupeKey),
+  index("integration_webhook_events_installation_idx").on(t.installationId, t.createdAt),
+]);
+
+export const integrationWebhookDeliveries = pgTable("integration_webhook_deliveries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  endpointId: uuid("endpoint_id").notNull().references(() => integrationWebhookEndpoints.id, { onDelete: "cascade" }),
+  eventId: uuid("event_id").notNull().references(() => integrationWebhookEvents.id, { onDelete: "cascade" }),
+  status: text("status").default("pending").notNull(),
+  attempts: integer("attempts").default(0).notNull(),
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).defaultNow().notNull(),
+  lastStatus: integer("last_status"),
+  lastError: text("last_error"),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, t => [
+  uniqueIndex("integration_webhook_deliveries_endpoint_event_idx").on(t.endpointId, t.eventId),
+  index("integration_webhook_deliveries_due_idx").on(t.status, t.nextAttemptAt),
+]);
