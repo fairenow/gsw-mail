@@ -18,11 +18,12 @@ Provide an **API** area in the GSW admin portal with:
 - Create-key, secret-once display, key metadata, rotation and revocation.
 - Pause/resume/removal controls and connection health/reconnect information.
 - Operation activity, errors, daily usage/capacity and API-key health information.
+- Signed webhook endpoints with one-time signing secrets, retry health and delivery history.
 - API reference, quickstart examples, base URL and available capability documentation.
 
 No per-feature permission builder or separate OAuth app-registration wizard is required. The existing owner/admin account is the service-management identity. A mailbox key itself cannot enter this admin area or create other keys.
 
-The current **Control Center → API** panel creates connections/keys, supports pause/resume/removal and key revocation, links developer documentation, and shows service readiness/reconnect state, daily capacity, key health and recent email/write activity. Removing a connection immediately revokes its active keys while preserving audit/history records. These are operational summaries, not full commercial billing metering.
+The current **Control Center → API** panel creates connections/keys, supports pause/resume/removal and key revocation, manages signed webhook endpoints, links developer documentation, and shows service readiness/reconnect state, daily capacity, key health and recent email/write activity. Removing a connection immediately revokes its active keys while preserving audit/history records. These are operational summaries, not full commercial billing metering.
 
 ## Customer process
 
@@ -54,10 +55,22 @@ Runtime access no longer depends on the original authorizer retaining membership
 | Mail reading/organization | Inbox, threads, search, drafts, attachment retrieval and message actions | Available registered functions through /operations; discover schemas with /capabilities |
 | Other mailbox services | Calendars, contacts, files, campaigns, tasks/AI/automation and preferences | Available registered functions through /operations; discover schemas with /capabilities |
 | Connection/status | Health, activity, usage and operation status | Connection and email status plus admin readiness/activity summaries |
-| Events | Signed customer webhooks | Remaining implementation work |
+| Events | Signed customer webhooks | HTTPS endpoints with one-time secrets, stable event IDs, HMAC signatures, retry/backoff and delivery deduplication |
 | Admin operations through key | Never allowed | Not exposed |
 
 Pilot recipient/scope columns remain for storage compatibility, but keys now grant full mailbox access and those values no longer restrict execution. Existing pilot keys receive this access model as well. New customer connections are created in live mode; legacy test-mode records remain compatible but are no longer exposed as a normal admin workflow.
+
+## Signed customer webhooks
+
+Workspace owners/admins can add HTTPS webhook endpoints under **Control Center → API** for a mailbox connection. The signing secret is shown once and encrypted at rest. Current events are `email.accepted`, `email.delivered`, `email.deferred`, `email.bounced`, `email.complained` and `operation.completed`.
+
+Each delivery posts JSON shaped as `{ id, type, createdAt, data }` with these headers:
+
+- `X-GSW-Webhook-Id`: stable event UUID.
+- `X-GSW-Webhook-Timestamp`: Unix timestamp in seconds.
+- `X-GSW-Webhook-Signature`: `v1=<hex HMAC-SHA256>` over `<timestamp>.<exact request body>`.
+
+Receivers should verify the signature against the exact raw body, reject stale timestamps according to their own policy, and deduplicate by event ID. GSW Mail retries failed/non-2xx deliveries with backoff and keeps the same event ID across retries. Endpoint URLs must be public HTTPS targets; localhost/private-network destinations and redirects are not followed. Paused connections defer pending webhook delivery; removed connections cancel it.
 
 ## Safe Place Ministries
 
