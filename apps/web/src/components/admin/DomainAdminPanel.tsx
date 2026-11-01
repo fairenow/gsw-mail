@@ -138,7 +138,7 @@ export function DomainAdminPanel({ organizationId, onChanged }: { organizationId
 
         {records.length > 0 && <div className="gsw-dns-records">
           <div className="gsw-dns-records-head"><strong>DNS records to publish</strong><span>Required records must match before the domain becomes Ready.</span></div>
-          {records.map((record, index) => <div className="gsw-dns-record-row" key={`${record.source}-${record.type}-${record.name}-${index}`}>
+          {records.map((record, index) => <div className={`gsw-dns-record-row${record.type === "MX" ? " gsw-dns-record-row-mx" : ""}`} key={`${record.source}-${record.type}-${record.name}-${index}`}>
             <div><span className="gsw-dns-source">{record.source}</span><strong>{record.purpose.toUpperCase()} · {record.type}</strong>{record.required ? <small>Required</small> : <small>Optional for current routing</small>}</div>
             <div><small>Host / Name</small><button type="button" className="gsw-dns-copy-field" title={record.name} aria-label={`Copy host/name: ${record.name}`} onClick={() => void copy(record.name, "host/name", `${domain.id}-${index}-name`)}><code>{record.name}</code><span aria-hidden="true">{copiedField === `${domain.id}-${index}-name` ? "✓" : "⧉"}</span></button></div>
             {record.type === "MX" && <div><small>Priority</small><button type="button" className="gsw-dns-copy-field" title={String(record.priority ?? 0)} aria-label={`Copy priority: ${record.priority ?? 0}`} onClick={() => void copy(String(record.priority ?? 0), "priority", `${domain.id}-${index}-priority`)}><code>{record.priority ?? 0}</code><span aria-hidden="true">{copiedField === `${domain.id}-${index}-priority` ? "✓" : "⧉"}</span></button></div>}
