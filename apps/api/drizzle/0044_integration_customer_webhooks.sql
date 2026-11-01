@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS "integration_webhook_deliveries" (
   "status" text DEFAULT 'pending' NOT NULL,
   "attempts" integer DEFAULT 0 NOT NULL,
   "next_attempt_at" timestamptz DEFAULT now() NOT NULL,
+  "processing_at" timestamptz,
   "last_status" integer,
   "last_error" text,
   "delivered_at" timestamptz,
