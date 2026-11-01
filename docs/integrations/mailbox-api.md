@@ -16,13 +16,13 @@ Provide an **API** area in the GSW admin portal with:
 
 - Connections and their selected mailbox, status and name.
 - Create-key, secret-once display, key metadata, rotation and revocation.
-- Pause/resume controls and connection health/reconnect information.
-- Operation activity, errors, usage and capacity information.
+- Pause/resume/removal controls and connection health/reconnect information.
+- Operation activity, errors, daily usage/capacity and API-key health information.
 - API reference, quickstart examples, base URL and available capability documentation.
 
 No per-feature permission builder or separate OAuth app-registration wizard is required. The existing owner/admin account is the service-management identity. A mailbox key itself cannot enter this admin area or create other keys.
 
-The current **Control Center → API** panel creates connections/keys, supports pause/resume and revocation, links developer documentation, and offers service readiness/reconnect checks with accepted-email counts and recent email/write activity. These are operational summaries, not full commercial metering.
+The current **Control Center → API** panel creates connections/keys, supports pause/resume/removal and key revocation, links developer documentation, and shows service readiness/reconnect state, daily capacity, key health and recent email/write activity. Removing a connection immediately revokes its active keys while preserving audit/history records. These are operational summaries, not full commercial billing metering.
 
 ## Customer process
 
