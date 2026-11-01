@@ -4,6 +4,8 @@ import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import type { FastifyInstance } from "fastify";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
+import { integrationEmails } from "../db/integrationSchema.js";
+import { enqueueIntegrationWebhookEvent } from "../integrations/customerWebhooks.js";
 import { emailAccounts, mailAccountMemberships } from "../db/schema.js";
 import { sendPushToUser } from "../mobile/expoPush.js";
 import { resolveIncomingMailForPush } from "../mobile/incomingMailEnrichment.js";
@@ -344,6 +346,19 @@ export default async (app: FastifyInstance) => {
             }, "Could not correlate Stalwart outbound event to a GSW send");
           } else {
             outboundMatched += 1;
+            if (!result.duplicate && result.outboundMessageId && ["delivered", "deferred", "bounced"].includes(result.disposition ?? "")) {
+              const [integrationEmail] = await db.select({ id: integrationEmails.id, installationId: integrationEmails.installationId, metadata: integrationEmails.metadata })
+                .from(integrationEmails).where(eq(integrationEmails.outboundMessageId, result.outboundMessageId)).limit(1);
+              if (integrationEmail) {
+                const type = (`email.${result.disposition}`) as "email.delivered" | "email.deferred" | "email.bounced";
+                await enqueueIntegrationWebhookEvent({
+                  installationId: integrationEmail.installationId,
+                  type,
+                  dedupeKey: `stalwart:${eventId}:${result.disposition}`,
+                  payload: { requestId: integrationEmail.id, deliveryStatus: result.disposition, recipients: result.recipients ?? [], metadata: integrationEmail.metadata },
+                });
+              }
+            }
             req.log.info({
               event: "OUTBOUND_DELIVERY_UPDATED",
               traceId: eventId,
