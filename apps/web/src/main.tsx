@@ -4,7 +4,6 @@ import "./styles/globals.css";
 import "./styles/auth.css";
 import "./styles/oauth-account-chooser.css";
 import "./styles/oauth-consent.css";
-import "./styles/oauth-test.css";
 import "./styles/landing.css";
 import "./styles/landing-showcase-motion.css";
 import "./styles/landing-page-motion.css";
@@ -24,7 +23,7 @@ import { AuthGate } from "./AuthGate";
 import { App } from "./App";
 import { startEngagementAnalytics } from "./lib/engagementAnalytics";
 
-const PUBLIC_PATHS = new Set(["/", "/privacy", "/terms", "/support", "/account-deleted", "/calendar/rsvp", "/oauth/connect", "/oauth/test", "/oauth/test/callback"]);
+const PUBLIC_PATHS = new Set(["/", "/privacy", "/terms", "/support", "/account-deleted", "/calendar/rsvp"]);
 
 function Root() {
   const [path, setPath] = useState(() => window.location.pathname);
