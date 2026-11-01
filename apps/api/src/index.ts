@@ -5,7 +5,6 @@ import { ensureCalendarEmailReminderSchema, deliverDueCalendarEmailReminders } f
 import { buildApp } from "./app.js";
 import { config } from "./config.js";
 import { pool } from "./db/client.js";
-import { ensureWebOAuthTestClient } from "./auth/ensureWebOAuthTestClient.js";
 import { ensureScheduledSendSchema } from "./outbound/ensureScheduledSchema.js";
 import { ensureCalendarRsvpSchema } from "./calendar/ensureRsvpSchema.js";
 import { ensureAiAgentSchema } from "./ai/ensureAgentSchema.js";
@@ -55,7 +54,6 @@ async function main() {
   await ensurePromptingQuotaSchema();
   await ensureProposalSchema();
   await ensureProposalConversationSchema();
-  await ensureWebOAuthTestClient();
   stopMcpPayloadRetention = startMcpPayloadRetentionWorker(
     error => app.log.error(error, "MCP payload retention cleanup failed"),
     count => app.log.info({ count }, "Expired MCP encrypted payloads removed"),
