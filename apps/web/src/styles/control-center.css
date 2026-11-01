@@ -97,6 +97,7 @@
 .gsw-dns-record-row code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gsw-text-heading); font-size: 11px; }
 .gsw-dns-source { width: fit-content; padding: 2px 6px; border-radius: 999px; background: var(--gsw-accent-soft); color: var(--gsw-accent-dark); font-size: 9px; text-transform: uppercase; }
 .gsw-dns-value { min-width: 0; }
+.gsw-dns-record-row:not(.gsw-dns-record-row-mx) .gsw-dns-value { grid-column: 3 / -1; }
 .gsw-dns-copy-field { width: 100%; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 8px; border: 1px solid transparent; border-radius: 7px; background: transparent; text-align: left; cursor: copy; color: var(--gsw-text-heading); transition: background .15s ease, border-color .15s ease; }
 .gsw-dns-copy-field code { display: block; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gsw-dns-copy-field span { flex: none; color: var(--gsw-text-muted); font-size: 13px; }
@@ -113,7 +114,7 @@
   .gsw-control-main { padding: 30px 20px 60px; }
   .gsw-domain-add-card { grid-template-columns: 1fr; }
   .gsw-dns-record-row { grid-template-columns: 120px minmax(0, 1fr); }
-  .gsw-dns-record-row .gsw-dns-value { grid-column: 1 / -1; }
+  .gsw-dns-record-row .gsw-dns-value, .gsw-dns-record-row:not(.gsw-dns-record-row-mx) .gsw-dns-value { grid-column: 1 / -1; }
 }
 
 @media (max-width: 700px) {
