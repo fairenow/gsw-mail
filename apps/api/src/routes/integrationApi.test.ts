@@ -16,7 +16,7 @@ test("integration API persists requests, isolates installations, enforces grants
   const pg = new PGlite();
   const app = Fastify();
   try {
-    for (const file of ["0000_quick_falcon", "0001_add_template_key", "0006_better_auth", "0007_workspace_normalization", "0009_mailbox_auth_setup", "0041_integration_email_api", "0043_integration_live_default", "0044_integration_customer_webhooks"]) {
+    for (const file of ["0000_quick_falcon", "0001_add_template_key", "0006_better_auth", "0007_workspace_normalization", "0009_mailbox_auth_setup", "0012_better_auth_oauth", "0041_integration_email_api", "0043_integration_live_default", "0044_integration_customer_webhooks"]) {
       await pg.exec(await readFile(new URL(`../../drizzle/${file}.sql`, import.meta.url), "utf8"));
     }
     await pg.exec(await readFile(new URL("../../drizzle/0041_integration_email_api.sql", import.meta.url), "utf8"));
