@@ -1,6 +1,6 @@
 # GSW Mail mailbox API service plan
 
-Updated October 30, 2026. First customer: Safe Place Ministries.
+Updated November 1, 2026. First customer: Safe Place Ministries.
 
 ## Product decision
 
@@ -22,9 +22,9 @@ This decision supersedes the earlier proposals for granular API permissions, per
 | Ownership | Connections remain usable after original administrator membership changes | Implemented; creator retained for audit |
 | Mailbox credentials | Worker requires an existing authorized mailbox OAuth credential | Durable service access managed through the connection lifecycle, without unrelated browser-session dependence |
 | Operations | Status polling, admin service health/activity, email counts and write reservations; uncertain sends quarantined | Activity, connection health, usage, recovery and signed customer webhooks |
-| Deployment | Code and automated checks passed on the pilot; no live acceptance established | Migrate, deploy, verify a real mailbox, then connect Safe Place |
+| Deployment | Production live acceptance passed for connection, capabilities, mailbox reads, Kimi inference, external sending, idempotent replay and revocation | Continue customer integrations and close remaining parity/webhook work |
 
-The current code implements the full-mailbox key and registry operation interface; live-host acceptance and complete UI-to-API coverage are not yet established. [The pilot reference](integrations/email-api-pilot.md) is authoritative for requests accepted by the current branch. [The mailbox API guide](integrations/mailbox-api.md) describes the approved customer experience and remaining implementation.
+The current code implements the full-mailbox key and registry operation interface, and live-host acceptance has passed. Complete UI-to-API coverage is still being inventoried. [The pilot reference](integrations/email-api-pilot.md) is authoritative for requests accepted by the current branch. [The mailbox API guide](integrations/mailbox-api.md) describes the approved customer experience and remaining implementation.
 
 ## Administration and mailbox boundary
 
@@ -68,10 +68,10 @@ The initial customer path uses an admin-issued server API key. No external devel
 2. Customer finishes domain verification and creates a separate mailbox if needed.
 3. In the planned **Admin → API** area, customer selects the mailbox, names its connection and creates a key. The key grants full mailbox access.
 4. Customer saves the secret once in its website's backend secret settings. GSW stores a hash and display metadata.
-5. Customer follows the linked API documentation, checks its connection and tests operations using that mailbox.
-6. Customer enables production after deployment and mailbox service checks pass, then monitors activity and manages keys from the same portal.
+5. Customer follows the linked API documentation and integrates supported operations using that mailbox.
+6. Customer monitors production health, usage and activity and manages keys from the same portal.
 
-The UI is now **Control Center → API**, with mailbox connections, keys, documentation and service/activity checks. Its deployment and browser acceptance must be verified separately.
+The UI is now **Control Center → API**, with live mailbox connections, keys, documentation, service health, usage and activity. Rollout-only diagnostics and test-mode controls are no longer part of the normal production admin experience.
 
 The website calls GSW from its backend. Public forms do not receive keys or get to choose arbitrary actions through an exposed proxy. The admin-authorized key is the authority for supported mailbox operations; do not introduce a per-request approval requirement merely because a website uses the API.
 
@@ -97,14 +97,14 @@ Use stable operation IDs, status and idempotency for supported writes. Accepted 
 
 ## Delivery sequence
 
-1. **API foundation implemented, live acceptance pending:** one full-mailbox grant, remove pilot-only recipient/feature selections, workspace-owned administration, durable service authorization, admin API/docs entry point. Preserve test mode and existing isolation/reliability behavior.
+1. **API foundation implemented and live acceptance passed:** one full-mailbox grant, remove pilot-only recipient/feature selections, workspace-owned administration, durable service authorization, admin API/docs entry point. Preserve existing isolation/reliability behavior while retiring customer-facing test-mode controls.
 2. **Complete mail parity:** reading, search, threads, drafts, replies, message actions, templates, signatures, attachments and supported scheduling. Add operation tests and capability inventory as routes are implemented.
 3. **Complete mailbox product parity:** contacts, calendars, files, campaigns, tasks/AI/automation and associated mailbox preferences through the same key. Do not add per-feature API plans or consent choices.
 4. **Finish customer operations:** health, usage, activity, signed webhooks, recovery, retention/deletion and key-expiration visibility. Define pricing separately from permission tiers.
 5. **Prove Safe Place end to end:** persist inquiry and website outbox → owner notification → visitor acknowledgment → status in its admin. Then connect subscribers, calendars and media using the same API.
 6. **Build owned workflows and the catalog:** versioned configurations and run history above existing mailbox services. Workflows organize behavior; they do not force a new API registration or feature-scope system.
 
-Deploy only after the required migration and acceptance checks. The pilot has automated evidence, but no production migration, real mailbox send or complete browser acceptance was established by that work. Service parity requires a test for every implemented mailbox operation, cross-mailbox denial and explicit denial of admin operations with a mailbox key.
+Production migration and external mailbox acceptance have been established. Continue to require automated tests, deployment health and browser acceptance for each new customer-facing tranche. Service parity requires a test for every implemented mailbox operation, cross-mailbox denial and explicit denial of admin operations with a mailbox key.
 
 ## Documentation ownership
 
