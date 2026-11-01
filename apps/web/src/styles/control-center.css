@@ -134,3 +134,7 @@
 .gsw-api-key-copy:hover { background: var(--gsw-accent-soft); border-color: var(--gsw-border-soft); }
 .gsw-api-key-copy:focus-visible { outline: 2px solid var(--gsw-accent-dark); outline-offset: 2px; }
 .gsw-api-key-copy code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.gsw-api-secret-copy { width: 100%; justify-content: space-between; padding: 10px 12px; background: var(--gsw-accent-soft); border-color: var(--gsw-border-soft); }
+.gsw-api-key-copy:disabled { cursor: default; opacity: .7; }
+.gsw-api-key-copy:disabled:hover { background: transparent; border-color: transparent; }
