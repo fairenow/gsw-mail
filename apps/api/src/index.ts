@@ -25,6 +25,7 @@ import { ensureProposalSchema } from "./ai/proposalStore.js";
 import { ensureProposalConversationSchema } from "./ai/proposalConversation.js";
 import { startProposalNotificationWorker } from "./ai/proposalNotificationWorker.js";
 import { startMcpPayloadRetentionWorker } from "./mcp/payloadRetentionWorker.js";
+import { startIntegrationWebhookWorker } from "./integrations/customerWebhooks.js";
 
 const app = buildApp();
 const worker = getOutboundWorker();
@@ -35,6 +36,7 @@ let stopChatWorker: (()=>void)|null=null;
 let stopFileOrganizer: (() => void) | null = null;
 let stopProposalNotifier: (() => void) | null = null;
 let stopMcpPayloadRetention: (() => void) | null = null;
+let stopIntegrationWebhookWorker: (() => void) | null = null;
 
 async function main() {
   await ensureIntegrationSchema();
@@ -54,6 +56,7 @@ async function main() {
   await ensurePromptingQuotaSchema();
   await ensureProposalSchema();
   await ensureProposalConversationSchema();
+  stopIntegrationWebhookWorker = startIntegrationWebhookWorker(error => app.log.error(error, "customer webhook delivery failed"));
   stopMcpPayloadRetention = startMcpPayloadRetentionWorker(
     error => app.log.error(error, "MCP payload retention cleanup failed"),
     count => app.log.info({ count }, "Expired MCP encrypted payloads removed"),
@@ -76,6 +79,7 @@ const shutdown = async (signal: string) => {
   worker.stop();
   stopProposalNotifier?.();
   stopMcpPayloadRetention?.();
+  stopIntegrationWebhookWorker?.();
   mobileNotificationWorker.stop();
   automationWorker.stop();
   agentTaskRunner.stop();
