@@ -78,7 +78,7 @@ export default async function integrationAdmin(app: FastifyInstance) {
   app.get<{ Querystring: { organizationId: string } }>("/api/admin/integrations", async req => {
     const organizationId = uuid.parse(req.query.organizationId);
     await requireOrgPermission(req.user!.id, organizationId, ["owner", "admin"]);
-    return { installations: await db.select().from(integrationInstallations).where(eq(integrationInstallations.organizationId, organizationId)).orderBy(desc(integrationInstallations.createdAt)) };
+    return { installations: await db.select().from(integrationInstallations).where(and(eq(integrationInstallations.organizationId, organizationId), isNull(integrationInstallations.deletedAt))).orderBy(desc(integrationInstallations.createdAt)) };
   });
   app.patch<{ Params: { id: string } }>("/api/admin/integrations/:id", async req => {
     const installation = await requireInstallation(req.user!.id, req.params.id);
@@ -88,6 +88,16 @@ export default async function integrationAdmin(app: FastifyInstance) {
       const [row] = await tx.update(integrationInstallations).set(input).where(eq(integrationInstallations.id, installation.id)).returning();
       await tx.insert(auditEvents).values({ organizationId: installation.organizationId, actorUserId: req.user!.id, action: input.active ? "integration.resumed" : "integration.paused", resourceType: "integration_installation", resourceId: installation.id });
       return row;
+    });
+  });
+  app.delete<{ Params: { id: string } }>("/api/admin/integrations/:id", async req => {
+    const installation = await requireInstallation(req.user!.id, req.params.id);
+    return db.transaction(async tx => {
+      await tx.select({ id: integrationInstallations.id }).from(integrationInstallations).where(eq(integrationInstallations.id, installation.id)).for("update");
+      await tx.update(integrationKeys).set({ revokedAt: new Date() }).where(and(eq(integrationKeys.installationId, installation.id), isNull(integrationKeys.revokedAt)));
+      await tx.update(integrationInstallations).set({ active: false, deletedAt: new Date() }).where(eq(integrationInstallations.id, installation.id));
+      await tx.insert(auditEvents).values({ organizationId: installation.organizationId, actorUserId: req.user!.id, action: "integration.removed", resourceType: "integration_installation", resourceId: installation.id });
+      return { removed: true };
     });
   });
   app.post<{ Params: { id: string } }>("/api/admin/integrations/:id/keys", async (req, reply) => {
