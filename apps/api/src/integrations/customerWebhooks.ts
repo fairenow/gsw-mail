@@ -114,13 +114,18 @@ export async function enqueueIntegrationWebhookEvent(input: {
 }
 
 async function deliverOne(deliveryId: string): Promise<void> {
-  const [row] = await db.select({ delivery: integrationWebhookDeliveries, endpoint: integrationWebhookEndpoints, event: integrationWebhookEvents })
+  const [row] = await db.select({ delivery: integrationWebhookDeliveries, endpoint: integrationWebhookEndpoints, event: integrationWebhookEvents, installation: integrationInstallations })
     .from(integrationWebhookDeliveries)
     .innerJoin(integrationWebhookEndpoints, eq(integrationWebhookDeliveries.endpointId, integrationWebhookEndpoints.id))
     .innerJoin(integrationWebhookEvents, eq(integrationWebhookDeliveries.eventId, integrationWebhookEvents.id))
+    .innerJoin(integrationInstallations, eq(integrationWebhookEndpoints.installationId, integrationInstallations.id))
     .where(eq(integrationWebhookDeliveries.id, deliveryId)).limit(1);
-  if (!row || !row.endpoint.active) {
+  if (!row || !row.endpoint.active || row.installation.deletedAt) {
     if (row) await db.update(integrationWebhookDeliveries).set({ status: "cancelled", processingAt: null }).where(eq(integrationWebhookDeliveries.id, deliveryId));
+    return;
+  }
+  if (!row.installation.active) {
+    await db.update(integrationWebhookDeliveries).set({ status: "retrying", processingAt: null, nextAttemptAt: new Date(Date.now() + 60_000) }).where(eq(integrationWebhookDeliveries.id, deliveryId));
     return;
   }
 
