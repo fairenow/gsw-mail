@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes, randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
-import { and, eq, inArray, lt, lte } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, lte, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { integrationInstallations, integrationWebhookDeliveries, integrationWebhookEndpoints, integrationWebhookEvents } from "../db/integrationSchema.js";
 import { config } from "../config.js";
@@ -20,6 +20,8 @@ export const integrationWebhookEventTypes = [
 export type IntegrationWebhookEventType = typeof integrationWebhookEventTypes[number];
 
 const MAX_ATTEMPTS = 6;
+export const WEBHOOK_HISTORY_RETENTION_DAYS = 30;
+const WEBHOOK_HISTORY_PRUNE_INTERVAL_MS = 6 * 60 * 60_000;
 const RETRY_MS = [30_000, 120_000, 600_000, 3_600_000, 21_600_000];
 const secretKey = () => Buffer.from(hkdfSync("sha256", config.auth.secret, "gsw-integration-webhooks-v1", "aes-256-gcm", 32));
 
@@ -185,10 +187,15 @@ async function deliverOne(deliveryId: string): Promise<void> {
 export function startIntegrationWebhookWorker(onError: (error: unknown) => void): () => void {
   let stopped = false;
   let running = false;
+  let lastPruneAt = 0;
   const run = async () => {
     if (stopped || running) return;
     running = true;
     try {
+      if (Date.now() - lastPruneAt >= WEBHOOK_HISTORY_PRUNE_INTERVAL_MS) {
+        await pruneWebhookHistory();
+        lastPruneAt = Date.now();
+      }
       await db.update(integrationWebhookDeliveries).set({ status: "retrying", processingAt: null, nextAttemptAt: new Date() }).where(and(
         eq(integrationWebhookDeliveries.status, "processing"),
         lt(integrationWebhookDeliveries.processingAt, new Date(Date.now() - 5 * 60_000)),
@@ -257,4 +264,64 @@ export async function removeWebhookEndpoint(installationId: string, endpointId: 
     inArray(integrationWebhookDeliveries.status, ["pending", "retrying"]),
   ));
   return true;
+}
+
+
+export async function listWebhookDeliveries(installationId: string, limit = 50) {
+  return db.select({
+    id: integrationWebhookDeliveries.id,
+    endpointId: integrationWebhookDeliveries.endpointId,
+    endpointUrl: integrationWebhookEndpoints.url,
+    eventId: integrationWebhookEvents.id,
+    eventType: integrationWebhookEvents.type,
+    status: integrationWebhookDeliveries.status,
+    attempts: integrationWebhookDeliveries.attempts,
+    lastStatus: integrationWebhookDeliveries.lastStatus,
+    lastError: integrationWebhookDeliveries.lastError,
+    deliveredAt: integrationWebhookDeliveries.deliveredAt,
+    createdAt: integrationWebhookDeliveries.createdAt,
+  }).from(integrationWebhookDeliveries)
+    .innerJoin(integrationWebhookEndpoints, eq(integrationWebhookDeliveries.endpointId, integrationWebhookEndpoints.id))
+    .innerJoin(integrationWebhookEvents, eq(integrationWebhookDeliveries.eventId, integrationWebhookEvents.id))
+    .where(eq(integrationWebhookEndpoints.installationId, installationId))
+    .orderBy(desc(integrationWebhookDeliveries.createdAt))
+    .limit(Math.max(1, Math.min(limit, 100)));
+}
+
+export async function retryWebhookDelivery(installationId: string, deliveryId: string): Promise<boolean> {
+  const [row] = await db.select({ id: integrationWebhookDeliveries.id })
+    .from(integrationWebhookDeliveries)
+    .innerJoin(integrationWebhookEndpoints, eq(integrationWebhookDeliveries.endpointId, integrationWebhookEndpoints.id))
+    .where(and(
+      eq(integrationWebhookDeliveries.id, deliveryId),
+      eq(integrationWebhookEndpoints.installationId, installationId),
+      eq(integrationWebhookDeliveries.status, "failed"),
+      eq(integrationWebhookEndpoints.active, true),
+    )).limit(1);
+  if (!row) return false;
+  await db.update(integrationWebhookDeliveries).set({
+    status: "retrying",
+    attempts: 0,
+    processingAt: null,
+    nextAttemptAt: new Date(),
+    lastError: null,
+  }).where(eq(integrationWebhookDeliveries.id, deliveryId));
+  return true;
+}
+
+export async function pruneWebhookHistory(now = new Date()): Promise<void> {
+  const cutoff = new Date(now.getTime() - WEBHOOK_HISTORY_RETENTION_DAYS * 24 * 60 * 60_000);
+  await db.transaction(async tx => {
+    await tx.delete(integrationWebhookDeliveries).where(and(
+      lt(integrationWebhookDeliveries.createdAt, cutoff),
+      inArray(integrationWebhookDeliveries.status, ["delivered", "failed", "cancelled"]),
+    ));
+    await tx.execute(sql`
+      DELETE FROM integration_webhook_events e
+      WHERE e.created_at < ${cutoff}
+        AND NOT EXISTS (
+          SELECT 1 FROM integration_webhook_deliveries d WHERE d.event_id = e.id
+        )
+    `);
+  });
 }
