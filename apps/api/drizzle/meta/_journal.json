@@ -309,6 +309,13 @@
       "when": 1793491200000,
       "tag": "0043_integration_live_default",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1793494800000,
+      "tag": "0044_integration_customer_webhooks",
+      "breakpoints": true
     }
   ]
 }
