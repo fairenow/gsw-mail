@@ -18,7 +18,7 @@ export default async function integrationAdmin(app: FastifyInstance) {
   app.addHook("onRequest", async (_req, reply) => { reply.header("Cache-Control", "no-store"); });
   async function requireInstallation(userId: string, id: string) {
     const [row] = await db.select().from(integrationInstallations).where(eq(integrationInstallations.id, uuid.parse(id))).limit(1);
-    if (!row) throw notFound("installation not found");
+    if (!row || row.deletedAt) throw notFound("installation not found");
     await requireOrgPermission(userId, row.organizationId, ["owner", "admin"]);
     return row;
   }
