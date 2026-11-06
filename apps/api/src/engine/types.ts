@@ -123,6 +123,7 @@ export interface AttachmentMeta {
 }
 
 export interface FullMessage extends MessageSummary {
+  bcc?: MessageAddress[] | undefined;
   textBody?: string | undefined;
   htmlBody?: string | undefined;
   attachments: AttachmentMeta[];
