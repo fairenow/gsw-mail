@@ -20,10 +20,10 @@ export function canUseMcpWriteTestMode(input: {
 
 export function canUseMcpOwnerWrites(input: {
   userId: string;
-  ownerWritesEnabled?: string;
-  ownerUserId?: string;
-  legacyTestEnabled?: string;
-  legacyTestUserId?: string;
+  ownerWritesEnabled?: string | undefined;
+  ownerUserId?: string | undefined;
+  legacyTestEnabled?: string | undefined;
+  legacyTestUserId?: string | undefined;
 }): boolean {
   return canUseMcpWriteTestMode({
     userId: input.userId,
