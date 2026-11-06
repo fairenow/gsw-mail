@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canUseMcpWriteTestMode, mcpWriteCallPolicy } from "./writeTestPolicy.js";
+import { canUseMcpOwnerWrites, canUseMcpWriteTestMode, mcpWriteCallPolicy } from "./writeTestPolicy.js";
 
 test("write test mode requires the configured owner and explicit enablement", () => {
   const userId = "11111111-1111-4111-8111-111111111111";
@@ -95,4 +95,16 @@ test("shared confirmation classification protects always-confirm capabilities", 
   });
   assert.equal(mcpWriteCallPolicy({ ...base, confirmExternal: true }).allowed, true);
   assert.equal(mcpWriteCallPolicy({ ...base, requiredScopes: ["mail.write"] }).allowed, true);
+});
+
+
+test("owner writes require an explicit switch bound to the authenticated user", () => {
+  const userId = "mailbox-user-79a80874-506c-47a1-8ffd-8496b9386e32";
+  const configured = { userId, ownerWritesEnabled: "true", ownerUserId: userId };
+  assert.equal(canUseMcpOwnerWrites(configured), true);
+  assert.equal(canUseMcpOwnerWrites({ ...configured, userId: "another-mailbox-user-123456" }), false);
+  assert.equal(canUseMcpOwnerWrites({ ...configured, ownerWritesEnabled: "false" }), false);
+  assert.equal(canUseMcpOwnerWrites({ ...configured, ownerUserId: "" }), false);
+  assert.equal(canUseMcpOwnerWrites({ ...configured, ownerWritesEnabled: undefined, legacyTestEnabled: "true", legacyTestUserId: userId }), true);
+  assert.equal(canUseMcpOwnerWrites({ ...configured, ownerWritesEnabled: undefined, legacyTestEnabled: "true", legacyTestUserId: "other-user-123456" }), false);
 });
