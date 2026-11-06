@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { pageRecentMessages } from "./recentMessages.js";
+import { draftSendRecipients } from "./draftSendRecipients.js";
 import { getStalwartAccessToken } from "../auth/stalwartToken.js";
 import { config } from "../config.js";
 import { JmapClient, JmapError } from "../engine/jmap.js";
@@ -459,8 +460,7 @@ export function createMailService(context: MailServiceContext) {
         authUserId: context.authUserId,
         headers: context.headers,
         account,
-        to: draft.to.map((address) => address.email),
-        cc: draft.cc.map((address) => address.email),
+        ...draftSendRecipients(draft),
         subject: draft.subject,
         textBody: draft.textBody,
         htmlBody,
