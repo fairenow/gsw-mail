@@ -18,6 +18,24 @@ export function canUseMcpWriteTestMode(input: {
     input.userId === input.allowedUserId;
 }
 
+export function canUseMcpOwnerWrites(input: {
+  userId: string;
+  ownerWritesEnabled?: string;
+  ownerUserId?: string;
+  legacyTestEnabled?: string;
+  legacyTestUserId?: string;
+}): boolean {
+  return canUseMcpWriteTestMode({
+    userId: input.userId,
+    enabled: input.ownerWritesEnabled,
+    allowedUserId: input.ownerUserId,
+  }) || canUseMcpWriteTestMode({
+    userId: input.userId,
+    enabled: input.legacyTestEnabled,
+    allowedUserId: input.legacyTestUserId,
+  });
+}
+
 export function mcpWriteCallPolicy(input: {
   risk: AgentRisk;
   requiredScopes?: readonly string[];
