@@ -647,6 +647,7 @@ export class StalwartEngine implements MailEngine {
     return {
       ...summary,
       mailbox,
+      bcc: (email.bcc ?? []).filter((address): address is JmapEmailAddress & { email: string } => typeof address.email === "string" && address.email.length > 0).map((address) => ({ email: address.email, ...(address.name ? { name: address.name } : {}) })),
       textBody: textPartId ? email.bodyValues?.[textPartId]?.value ?? "" : undefined,
       htmlBody: htmlPartId ? email.bodyValues?.[htmlPartId]?.value ?? "" : undefined,
       attachments,
