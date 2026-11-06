@@ -315,8 +315,13 @@ export async function mcpRoutes(app:FastifyInstance, dependencies: {verifyBearer
       }
       const accountId=typeof params.accountId==="string"?params.accountId:"";
       const policy=await resolveMcpUserToolPermission({userId:identity.userId,accountId,oauthScopes:identity.oauthScopes,toolName:name});
-      if(!policy.allowed)
+      if(!policy.allowed) {
+        if(policy.reason==="oauth_scope_missing") {
+          const requested=agentMailRegistry.definition(name)?.requiredScopes ?? [];
+          return requireScopes(requested);
+        }
         return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"permission_denied",reason:policy.reason,tool:name})}]});
+      }
       if(policy.tool.risk!=="read"&&!writeTestEnabled)
         return wrap({isError:true,content:[{type:"text",text:JSON.stringify({error:"owner_writes_disabled",tool:name})}]});
       const {accountId:_,requestId,confirmExternal,approvalId,...toolArguments}=params;
