@@ -81,3 +81,23 @@ test("admin scope upgrades use OAuth challenges and full admin discovery stays s
     if(previousResource===undefined)delete process.env.GSW_MCP_RESOURCE_URL;else process.env.GSW_MCP_RESOURCE_URL=previousResource;
   }
 });
+
+
+test("mailbox MCP requests missing template scopes trigger OAuth re-consent", async () => {
+  const previous = process.env.GSW_MCP_ENABLED;
+  process.env.GSW_MCP_ENABLED = "true";
+  const app = Fastify();
+  await app.register(mcpRoutes, {
+    verifyBearer: async () => ({ userId: "mailbox-user-test", authUserId: "mailbox-auth-test", clientId: "client", oauthScopes: new Set(["openid", "mail.read"]) }),
+    resolveProfile: async () => ({ mode: "mailbox" as const, allowedScopes: ["openid", "mail.read", "templates.read", "templates.write"] }),
+  });
+  try {
+    const response = await app.inject({ method: "POST", url: "/mcp", headers: { authorization: "Bearer test" }, payload: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "templates__list", arguments: { accountId: "11111111-1111-4111-8111-111111111111" } } } });
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().error, "insufficient_scope");
+    assert.match(String(response.headers["www-authenticate"]), /templates.read/);
+  } finally {
+    await app.close();
+    if (previous === undefined) delete process.env.GSW_MCP_ENABLED; else process.env.GSW_MCP_ENABLED = previous;
+  }
+});
