@@ -123,9 +123,31 @@ async function findOutboundMessageId(data: Record<string, unknown>): Promise<str
   return findRecentOutboundByEnvelope(data);
 }
 
-async function recipientTargets(outboundMessageId: string, data: Record<string, unknown>): Promise<string[]> {
+/**
+ * Stalwart sometimes reports the full SMTP envelope in `to` for a rejected
+ * delivery while `details` identifies only the failed recipient (for example,
+ * "permanent failure ... (customer@example.com:blocked)"). Never suppress
+ * every CC/To address just because one recipient was rejected.
+ * An ambiguous multi-recipient bounce is recorded but not attributed.
+ */
+export function bounceRecipientsFromEvent(data: Record<string, unknown>): string[] {
+  const envelope = emailAddresses(data.to);
+  if (envelope.length <= 1) return envelope;
+
+  const details = [data.details, data.reason].flatMap(stringsFrom).join(" ").toLowerCase();
+  const failedMarkers = ["blocked", "rejected", "failed", "bounced", "permanent", "550", "551", "552", "553", "554", "5."];
+  return envelope.filter((email) => {
+    const marker = `${email.toLowerCase()}:`;
+    const position = details.indexOf(marker);
+    if (position < 0) return false;
+    const following = details.slice(position + marker.length).trimStart();
+    return failedMarkers.some((status) => following.startsWith(status));
+  });
+}
+
+async function recipientTargets(outboundMessageId: string, data: Record<string, unknown>, disposition: StalwartDeliveryDisposition): Promise<string[]> {
   const explicit = emailAddresses(data.to);
-  if (explicit.length) return explicit;
+  if (explicit.length) return disposition === "bounced" ? bounceRecipientsFromEvent(data) : explicit;
   const rows = await db
     .select({ email: outboundRecipients.email })
     .from(outboundRecipients)
@@ -212,7 +234,7 @@ export async function recordStalwartDeliveryEvent(input: {
     return { matched: true, duplicate: false, outboundMessageId, disposition, recipients: [] };
   }
 
-  const recipients = await recipientTargets(outboundMessageId, input.data);
+  const recipients = await recipientTargets(outboundMessageId, input.data, disposition);
   if (recipients.length) {
     await db
       .update(outboundRecipients)
