@@ -48,6 +48,14 @@ test("credential vault requires an existing owner-bound offline grant and immedi
     assert.equal(await loadMailboxCredential({ ...input, accountId: randomUUID() }, database), null);
     await assert.rejects(persistMailboxCredential({ ...input, refreshToken: oauthTokenHash("raw-refresh") }, database, async () => {}));
     await assert.rejects(persistMailboxCredential(input, database, async () => { throw new Error("JWT mismatch"); }));
+    // A revoked or rotated grant never silently reuses its stale vault entry.
+    // A fresh owner-authorized grant can replace it without sharing token
+    // material across clients or identities.
+    await pg.query("DELETE FROM oauth_refresh_token WHERE id='grant'");
+    assert.equal(await loadMailboxCredential(input, database), null);
+    await pg.query("INSERT INTO oauth_refresh_token(id,token,client_id,user_id,expires_at,created_at,scopes) VALUES('rotated-grant',$1,'gsw-mail-mobile','auth-owner',now()+interval '1 day',now(),'{email,offline_access}')", [oauthTokenHash("rotated-refresh")]);
+    await persistMailboxCredential({ ...input, refreshToken: "rotated-refresh", accessToken: "rotated-access" }, database, async () => {});
+    assert.equal((await loadMailboxCredential(input, database))?.refreshToken, "rotated-refresh");
     await pg.query("UPDATE oauth_client SET disabled=true");
     assert.equal(await loadMailboxCredential(input, database), null);
     await pg.query("UPDATE oauth_client SET disabled=false");
