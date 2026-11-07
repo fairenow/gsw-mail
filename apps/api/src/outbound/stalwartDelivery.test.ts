@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyStalwartDeliveryEvent, isStalwartOutboundDeliveryEvent } from "./stalwartDelivery.js";
+import { bounceRecipientsFromEvent, classifyStalwartDeliveryEvent, isStalwartOutboundDeliveryEvent } from "./stalwartDelivery.js";
 
 test("classifies final Stalwart delivery outcomes", () => {
   assert.equal(classifyStalwartDeliveryEvent("delivery.delivered"), "delivered");
@@ -22,4 +22,23 @@ test("tracks queue correlation events but ignores unrelated telemetry", () => {
   assert.equal(isStalwartOutboundDeliveryEvent("queue.authenticated-message-queued"), true);
   assert.equal(isStalwartOutboundDeliveryEvent("message-ingest.ham"), false);
   assert.equal(classifyStalwartDeliveryEvent("delivery.start-tls"), null);
+});
+
+test("only suppresses the explicitly rejected recipient from a mixed To/CC envelope", () => {
+  const event = {
+    to: ["ramon@aistandard.app", "info@presidentcontainer.com"],
+    details: "permanent failure for one or more recipients (info@presidentcontainer.com:blocked)",
+  };
+  assert.deepEqual(bounceRecipientsFromEvent(event), ["info@presidentcontainer.com"]);
+});
+
+test("does not attribute ambiguous multi-recipient bounce to every addressee", () => {
+  assert.deepEqual(bounceRecipientsFromEvent({
+    to: ["customer@example.com", "cc@example.com"],
+    details: "permanent failure for one or more recipients",
+  }), []);
+});
+
+test("preserves single-recipient bounce attribution", () => {
+  assert.deepEqual(bounceRecipientsFromEvent({ to: ["customer@example.com"] }), ["customer@example.com"]);
 });
