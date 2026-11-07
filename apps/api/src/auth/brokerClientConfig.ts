@@ -4,8 +4,8 @@
  * rotation or logout must never revoke the MCP broker's grant.
  */
 export function selectBrokerClient(input: {
-  clientId?: string;
-  clientSecret?: string;
+  clientId?: string | undefined;
+  clientSecret?: string | undefined;
   redirectUri: string;
   mobileClientId: string;
 }): { clientId: string; clientSecret: string; redirectUri: string } | null {
