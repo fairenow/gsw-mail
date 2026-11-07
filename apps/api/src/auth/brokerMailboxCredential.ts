@@ -1,4 +1,5 @@
 import { persistMailboxCredential } from "./mailboxCredentialVault.js";
+import { selectBrokerClient } from "./brokerClientConfig.js";
 import { withInternalMailboxIdentity } from "./internalMailboxAuthorization.js";
 import { createHash, randomBytes } from "node:crypto";
 import { fromNodeHeaders } from "better-auth/node";
@@ -33,9 +34,13 @@ export async function establishBrokerMailboxCredential(input: {
   const request = input.request ?? fetch;
   // Never use a mobile client's refresh authorization for the long-lived MCP
   // broker. Its independent grant is allowed only for a live first-party session.
-  if (!config.auth.oauthClientId || !config.auth.oauthClientSecret) {
-    return { established: false, reason: "mailbox_broker_not_configured" };
-  }
+  const broker = selectBrokerClient({
+    clientId: config.auth.oauthClientId,
+    clientSecret: config.auth.oauthClientSecret,
+    redirectUri: config.auth.oauthRedirectUri,
+    mobileClientId: config.auth.mobileClientId,
+  });
+  if (!broker) return { established: false, reason: "mailbox_broker_not_configured" };
   const cookie = input.headers.cookie;
   if (!cookie) return { established: false, reason: "mailbox_session_required" };
 
@@ -54,8 +59,8 @@ export async function establishBrokerMailboxCredential(input: {
   const authorize = new URL(`${config.auth.issuer}/oauth2/authorize`);
   authorize.search = new URLSearchParams({
     response_type: "code",
-    client_id: config.auth.oauthClientId,
-    redirect_uri: config.auth.oauthRedirectUri,
+    client_id: broker.clientId,
+    redirect_uri: broker.redirectUri,
     scope,
     resource: config.auth.stalwartAudience,
     state,
@@ -92,13 +97,13 @@ export async function establishBrokerMailboxCredential(input: {
     method: "POST",
     headers: {
       "content-type": "application/x-www-form-urlencoded",
-      authorization: `Basic ${Buffer.from(`${config.auth.oauthClientId}:${config.auth.oauthClientSecret}`, "utf8").toString("base64")}`,
+      authorization: `Basic ${Buffer.from(`${broker.clientId}:${broker.clientSecret}`, "utf8").toString("base64")}`,
     },
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code,
-      redirect_uri: config.auth.oauthRedirectUri,
-      client_id: config.auth.oauthClientId,
+      redirect_uri: broker.redirectUri,
+      client_id: broker.clientId,
       code_verifier: verifier,
       resource: config.auth.stalwartAudience,
     }),
@@ -129,7 +134,7 @@ export async function establishBrokerMailboxCredential(input: {
     .innerJoin(oauthClient, eq(oauthRefreshToken.clientId, oauthClient.clientId))
     .where(and(
       eq(oauthRefreshToken.userId, input.authUserId),
-      eq(oauthRefreshToken.clientId, config.auth.oauthClientId),
+      eq(oauthRefreshToken.clientId, broker.clientId),
       eq(oauthClient.disabled, false),
       isNull(oauthRefreshToken.revoked),
       gt(oauthRefreshToken.expiresAt, new Date()),
@@ -138,7 +143,7 @@ export async function establishBrokerMailboxCredential(input: {
   console.info("[mcp-broker] persistence_check", { refreshable, candidateCount: refreshRows.length });
   if (!refreshable) return { established: false, reason: "mailbox_refresh_credential_not_persisted" };
   if (!token.refresh_token) return { established: false, reason: "mailbox_refresh_credential_not_returned" };
-  await persistMailboxCredential({ ...input, clientId: config.auth.oauthClientId, accessToken: token.access_token, refreshToken: token.refresh_token });
+  await persistMailboxCredential({ ...input, clientId: broker.clientId, accessToken: token.access_token, refreshToken: token.refresh_token });
   console.info("[oauth] broker_mailbox_credential_established", { authUserId: input.authUserId, accountId: input.accountId });
   return { established: true };
 }
