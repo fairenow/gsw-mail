@@ -3,11 +3,10 @@ import { withInternalMailboxIdentity } from "./internalMailboxAuthorization.js";
 import { createHash, randomBytes } from "node:crypto";
 import { fromNodeHeaders } from "better-auth/node";
 import { createRemoteJWKSet } from "jose";
-import { and, eq, gt, inArray, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { emailAccounts, oauthClient, oauthRefreshToken } from "../db/schema.js";
-import { firstPartyStalwartClientIds } from "./firstPartyClients.js";
 import { auth } from "./better.js";
 import { assertMailboxSessionIdentity } from "./mailboxSessionIdentity.js";
 import { verifyStalwartMailboxJwt } from "./verifyStalwartMailboxJwt.js";
@@ -15,9 +14,9 @@ import { verifyStalwartMailboxJwt } from "./verifyStalwartMailboxJwt.js";
 /**
  * Establish a refreshable first-party Stalwart mailbox credential for the
  * signed-in user while they are present (for example when connecting an MCP
- * client). This reuses the product's own mobile OAuth client with
- * `offline_access`, so Better Auth persists a refresh authorization that a
- * later sessionless MCP request can renew. It never mints a mailbox credential
+ * client). This uses the product's dedicated confidential Stalwart OAuth
+ * client with `offline_access`, so mobile logout or mobile refresh-token
+ * rotation cannot invalidate the sessionless MCP mailbox credential. It never mints a mailbox credential
  * from an MCP grant and requires a live, identity-matched browser session.
  */
 const jwks = createRemoteJWKSet(new URL(`${config.auth.issuer}/jwks`));
@@ -32,6 +31,11 @@ export async function establishBrokerMailboxCredential(input: {
   request?: typeof fetch;
 }): Promise<{ established: boolean; reason?: string }> {
   const request = input.request ?? fetch;
+  // Never use a mobile client's refresh authorization for the long-lived MCP
+  // broker. Its independent grant is allowed only for a live first-party session.
+  if (!config.auth.oauthClientId || !config.auth.oauthClientSecret) {
+    return { established: false, reason: "mailbox_broker_not_configured" };
+  }
   const cookie = input.headers.cookie;
   if (!cookie) return { established: false, reason: "mailbox_session_required" };
 
@@ -50,8 +54,8 @@ export async function establishBrokerMailboxCredential(input: {
   const authorize = new URL(`${config.auth.issuer}/oauth2/authorize`);
   authorize.search = new URLSearchParams({
     response_type: "code",
-    client_id: config.auth.mobileClientId,
-    redirect_uri: config.auth.mobileRedirectUri,
+    client_id: config.auth.oauthClientId,
+    redirect_uri: config.auth.oauthRedirectUri,
     scope,
     resource: config.auth.stalwartAudience,
     state,
@@ -86,12 +90,15 @@ export async function establishBrokerMailboxCredential(input: {
 
   const tokenResponse = await request(`${config.auth.issuer}/oauth2/token`, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      authorization: `Basic ${Buffer.from(`${config.auth.oauthClientId}:${config.auth.oauthClientSecret}`, "utf8").toString("base64")}`,
+    },
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code,
-      redirect_uri: config.auth.mobileRedirectUri,
-      client_id: config.auth.mobileClientId,
+      redirect_uri: config.auth.oauthRedirectUri,
+      client_id: config.auth.oauthClientId,
       code_verifier: verifier,
       resource: config.auth.stalwartAudience,
     }),
@@ -122,16 +129,16 @@ export async function establishBrokerMailboxCredential(input: {
     .innerJoin(oauthClient, eq(oauthRefreshToken.clientId, oauthClient.clientId))
     .where(and(
       eq(oauthRefreshToken.userId, input.authUserId),
-      inArray(oauthRefreshToken.clientId, firstPartyStalwartClientIds()),
+      eq(oauthRefreshToken.clientId, config.auth.oauthClientId),
       eq(oauthClient.disabled, false),
       isNull(oauthRefreshToken.revoked),
       gt(oauthRefreshToken.expiresAt, new Date()),
     )).limit(10);
-  const refreshable = refreshRows.some(row => row.scopes.includes("email"));
+  const refreshable = refreshRows.some(row => row.scopes.includes("email") && row.scopes.includes("offline_access"));
   console.info("[mcp-broker] persistence_check", { refreshable, candidateCount: refreshRows.length });
   if (!refreshable) return { established: false, reason: "mailbox_refresh_credential_not_persisted" };
   if (!token.refresh_token) return { established: false, reason: "mailbox_refresh_credential_not_returned" };
-  await persistMailboxCredential({ ...input, clientId: config.auth.mobileClientId, accessToken: token.access_token, refreshToken: token.refresh_token });
+  await persistMailboxCredential({ ...input, clientId: config.auth.oauthClientId, accessToken: token.access_token, refreshToken: token.refresh_token });
   console.info("[oauth] broker_mailbox_credential_established", { authUserId: input.authUserId, accountId: input.accountId });
   return { established: true };
 }
