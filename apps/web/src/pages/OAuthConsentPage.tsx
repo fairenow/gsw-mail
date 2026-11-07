@@ -135,14 +135,17 @@ export function OAuthConsentPage() {
         window.location.assign(adminOAuthUpgradeUrl(window.location.search,accessProfile.allowedScopes));
         return;
       }
-      // Mailbox credential brokerage is separate from OAuth consent.
-      // Failure to provision a mailbox credential must not reject requested
-      // OAuth scopes. Mail operations still fail closed at execution.
+      // A granted MCP scope alone is not a renewable Stalwart mailbox session.
+      // Fail the *connection attempt* visibly rather than allowing a connection
+      // that works briefly and then silently loses access after token expiry.
+      // Retrying requires this same signed-in first-party session; an external
+      // MCP bearer must never be used to mint the mailbox credential.
       if (accept && accessProfile.mode === "mailbox" && acceptedScopes.some((scope) => /^(mail|calendar)\./.test(scope))) {
-        try {
-          await establishMcpMailboxCredentials();
-        } catch {
-          // An unavailable first-party mailbox credential is not consent denial.
+        const outcome = await establishMcpMailboxCredentials();
+        if (!outcome.attempted || outcome.established !== outcome.attempted) {
+          setError("Persistent mailbox access could not be established. Check your GSW Mail sign-in, then retry Approve access. No mailbox permissions were granted by this attempt.");
+          setBusy(false);
+          return;
         }
       }
       await submitOAuthConsent(accept, accept ? acceptedScopes.join(" ") : undefined);
