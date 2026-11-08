@@ -26,17 +26,19 @@ export async function ensureRenewableStalwartBrokerClient(): Promise<"updated" |
     tokenEndpointAuthMethod: oauthClient.tokenEndpointAuthMethod,
   }).from(oauthClient).where(eq(oauthClient.clientId, clientId)).limit(1);
 
+  const existingGrantTypes = client?.grantTypes ?? [];
+  const existingScopes = client?.scopes ?? [];
   if (!client || client.name !== "GSW Stalwart Mail Access"
     || client.disabled || client.public
     || client.tokenEndpointAuthMethod !== "client_secret_basic"
-    || !client.grantTypes.includes("authorization_code")
-    || !client.scopes.includes("openid") || !client.scopes.includes("email")) {
+    || !existingGrantTypes.includes("authorization_code")
+    || !existingScopes.includes("openid") || !existingScopes.includes("email")) {
     return "invalid";
   }
 
-  const grantTypes = [...new Set([...client.grantTypes, "refresh_token"])];
-  const scopes = [...new Set([...client.scopes, "offline_access"])];
-  if (grantTypes.length === client.grantTypes.length && scopes.length === client.scopes.length) return "ready";
+  const grantTypes = [...new Set([...existingGrantTypes, "refresh_token"])];
+  const scopes = [...new Set([...existingScopes, "offline_access"])];
+  if (grantTypes.length === existingGrantTypes.length && scopes.length === existingScopes.length) return "ready";
 
   await db.update(oauthClient).set({ grantTypes, scopes }).where(eq(oauthClient.id, client.id));
   return "updated";
