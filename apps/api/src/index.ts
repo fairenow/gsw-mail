@@ -10,6 +10,7 @@ import { ensureCalendarRsvpSchema } from "./calendar/ensureRsvpSchema.js";
 import { ensureAiAgentSchema } from "./ai/ensureAgentSchema.js";
 import { startChatExecutionWorker } from "./ai/chatBackgroundWorker.js";
 import { ensureBackgroundMailboxGrantSchema } from "./ai/backgroundMailboxGrants.js";
+import { ensureRenewableStalwartBrokerClient } from "./auth/ensureRenewableStalwartBrokerClient.js";
 import { ensureInboxTriageSchema } from "./ai/ensureInboxTriageSchema.js";
 import { ensureChatExecutionSchema } from "./ai/ensureChatExecutionSchema.js";
 import { getOutboundWorker } from "./outbound/worker.js";
@@ -40,6 +41,9 @@ let stopIntegrationWebhookWorker: (() => void) | null = null;
 
 async function main() {
   await ensureIntegrationSchema();
+  const brokerStatus = await ensureRenewableStalwartBrokerClient();
+  app.log.info({ status: brokerStatus }, "confidential mailbox broker grant configuration");
+  if (brokerStatus === "invalid") app.log.warn("configured confidential Stalwart broker client needs administrator attention");
   await ensureScheduledSendSchema();
   await ensureCalendarRsvpSchema();
   await ensureCalendarEmailReminderSchema();
