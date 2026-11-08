@@ -11,9 +11,9 @@ const existing = await db.select({ id: oauthClient.id }).from(oauthClient).where
 if (existing[0]) {
     await db.update(oauthClient).set({
       redirectUris: [config.auth.oauthRedirectUri],
-      scopes: ["openid", "email"],
+      scopes: ["openid", "email", "offline_access"],
       name: "GSW Stalwart Mail Access",
-      grantTypes: ["authorization_code"],
+      grantTypes: ["authorization_code", "refresh_token"],
       responseTypes: ["code"],
       skipConsent: true,
       requirePKCE: true,
@@ -25,10 +25,10 @@ if (existing[0]) {
   const result = await auth.api.adminCreateOAuthClient({
     body: {
       redirect_uris: [config.auth.oauthRedirectUri],
-      scope: "openid email",
+      scope: "openid email offline_access",
       client_name: "GSW Stalwart Mail Access",
       token_endpoint_auth_method: "client_secret_basic",
-      grant_types: ["authorization_code"],
+      grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       skip_consent: true,
       require_pkce: true,
