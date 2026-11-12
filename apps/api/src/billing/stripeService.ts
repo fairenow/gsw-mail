@@ -22,7 +22,7 @@ export class StripeBillingError extends Error {
   constructor(readonly status: number, readonly code: string, message = code) { super(message); }
 }
 
-export async function stripeRequest<T extends Record<string, unknown>>(method: "GET"|"POST", path: string, params?: URLSearchParams): Promise<T> {
+export async function stripeRequest<T>(method: "GET"|"POST", path: string, params?: URLSearchParams): Promise<T> {
   if (!configuredStripeValue(stripeBillingConfig.secretKey)) throw new StripeBillingError(503, "stripe_not_configured");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12_000);
