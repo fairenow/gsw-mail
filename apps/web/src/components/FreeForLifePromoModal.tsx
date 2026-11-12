@@ -97,7 +97,7 @@ export function FreeForLifePromoModal({ onDismiss }: { onDismiss: () => void }) 
       <button className="lp2-free-close" ref={closeRef} type="button" aria-label="Close offer" onClick={onDismiss}><X size={21} /></button>
       <div className="lp2-offer-stage">
         <div className="lp2-offer-rotator">
-          <div className="lp2-offer-face lp2-offer-front" aria-hidden={flipped} inert={flipped}>
+          <div className="lp2-offer-face lp2-offer-front" aria-hidden={flipped}>
             <span className="lp2-free-kicker"><Gift size={16}/> A thank-you to our first members</span>
             <h2>Your mail.<br/><em>Free for life.</em></h2>
             <p>Join GSW Mail <strong>before November 21, 2026</strong> and keep your eligible account free for life, even when subscriptions begin.</p>
@@ -115,7 +115,7 @@ export function FreeForLifePromoModal({ onDismiss }: { onDismiss: () => void }) 
             </button>
             <small className="lp2-offer-expiry">Offer closes November 20 at 11:59 PM Eastern. Registration must be completed before the deadline.</small>
           </div>
-          <div className="lp2-offer-face lp2-offer-back" aria-hidden={!flipped} inert={!flipped}>
+          <div className="lp2-offer-face lp2-offer-back" aria-hidden={!flipped}>
             <div className="lp2-offer-back-head">
               <span className="lp2-free-kicker">The value beyond the inbox</span>
               <h2>Less for mail.<br/><em>More for your mission.</em></h2>
@@ -129,13 +129,13 @@ export function FreeForLifePromoModal({ onDismiss }: { onDismiss: () => void }) 
               <table className="lp2-offer-table">
                 <caption className="lp2-sr-only">Public list prices for custom domain email plans in US dollars as of November 2026</caption>
                 <thead><tr><th scope="col">Provider</th>{comparisons.map((plan) =>
-                  <th key={plan.name} scope="col" className={plan.recommended ? "gsw-plan" : ""}>
+                  <th key={plan.name} scope="col" className={plan.name === "GSW Mail" ? "gsw-plan" : ""}>
                     <a href={plan.url} target={plan.url.startsWith("https") ? "_blank" : undefined} rel={plan.url.startsWith("https") ? "noopener noreferrer" : undefined}>{plan.name}</a>
                     <small>{plan.subtitle}</small>
                   </th>)}</tr></thead>
                 <tbody>
                   <tr className="lp2-offer-price-row"><th scope="row">Per mailbox</th>{comparisons.map((p) =>
-                    <td key={p.name} className={p.recommended ? "gsw-plan" : ""}><strong>{p[period]}</strong><small>{period === "annual" && p.name !== "GSW Mail" ? "annual commitment" : period === "annual" ? "paid upfront" : "per month"}</small></td>)}</tr>
+                    <td key={p.name} className={p.name === "GSW Mail" ? "gsw-plan" : ""}><strong>{p[period]}</strong><small>{period === "annual" && p.name !== "GSW Mail" ? "annual commitment" : period === "annual" ? "paid upfront" : "per month"}</small></td>)}</tr>
                   <tr><th scope="row">Email storage</th>{comparisons.map(p=><td key={p.name}>{p.storage}</td>)}</tr>
                   <tr><th scope="row">Included tools</th>{comparisons.map(p=><td key={p.name}>{p.tools}</td>)}</tr>
                   <tr><th scope="row">Built-in AI</th>{comparisons.map(p=><td key={p.name}>{p.ai}</td>)}</tr>
