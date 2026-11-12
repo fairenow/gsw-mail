@@ -10,9 +10,9 @@ const comparisons = [
     monthly: "$2.50",
     annual: "$15/yr",
     storage: "1 GB total per mailbox (current)",
-    tools: "Custom-domain email, calendar, contacts, files, templates, scheduled sending, API + MCP",
-    ai: "Hosted AI Chat + agentic scheduled work optional ($25/mo or $125/yr per AI mailbox)",
-    community: "Guided Steps Wellness community connections; meeting booking and livestream workflows in development",
+    tools: "Custom email, calendar, files, branded templates, scheduled mail, API + MCP",
+    ai: "Optional hosted AI Chat + scheduled agent work",
+    community: "Guided Steps Wellness: The Community; scheduling and live-streaming roadmap",
     url: "/control-center#billing",
     recommended: true,
   },
@@ -155,7 +155,7 @@ export function FreeForLifePromoModal({ onDismiss }: { onDismiss: () => void }) 
               </table>
             </div>
             <p className="lp2-offer-note">{moneyNote[period]} USD before tax, excluding promotions. Plans are not identical; storage, app functionality and AI allowances differ. Zoho Mail Lite is an email-only option, while Zoho Workplace Standard includes more office tools. <a href="https://workspace.google.com/pricing" target="_blank" rel="noopener noreferrer">Google</a> · <a href="https://www.zoho.com/workplace/pricing.html" target="_blank" rel="noopener noreferrer">Zoho</a> · <a href="https://www.microsoft.com/en-us/microsoft-365/business/microsoft-365-business-basic" target="_blank" rel="noopener noreferrer">Microsoft</a></p>
-            <div className="lp2-offer-outlook"><HeartHandshake size={25}/><div><strong>One inbox. A connected ecosystem.</strong><p>GSW Mail brings custom-domain email, calendars, contacts, files, branded templates, scheduled sending, API access, and bring-your-own AI through MCP into one place. Optional hosted AI adds chat and agentic work. Meeting booking and cross-platform video/live streaming through the Bible Study App are in development—not yet included services.</p><p>Built for small teams, ministry leaders and founders—and connected to Guided Steps Wellness: The Community.</p></div></div>
+            <div className="lp2-offer-outlook"><HeartHandshake size={25}/><div><strong>One inbox. A connected ecosystem.</strong><p>Custom-domain inboxes, calendar, contacts, files, branded templates, scheduled mail, API access, and MCP for ChatGPT or Claude are included. Hosted AI Chat and agentic scheduled work are optional. Coming next: bookable meeting links with Zoom, Teams, Google Meet or Zoho Cliq; Bible Study App rooms, livestreams and social broadcasting. These are in development.</p><p>Built for small teams, ministry leaders and founders—and connected to Guided Steps Wellness: The Community.</p></div></div>
             <div className="lp2-offer-actions"><button type="button" className="lp2-offer-back-button" onClick={() => setFlipped(false)}><ArrowLeft size={17}/> Back to free offer <RotateCcw size={14}/></button><a href="/sign-up" className="lp2-button lp2-free-cta" onClick={onDismiss}>Join before November 21 <ArrowRight size={17}/></a></div>
           </div>
         </div>
