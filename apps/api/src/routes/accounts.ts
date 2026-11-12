@@ -1,4 +1,5 @@
 import { createAdminMailbox } from "../services/adminMailboxCreation.js";
+import { MAILBOX_STORAGE_BYTES } from "../billing/pricing.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -124,7 +125,7 @@ export default async (app: FastifyInstance) => {
     if (row.organizationId !== input.organizationId) throw notFound("account not found");
     const [updated] = await db
       .update(emailAccounts)
-      .set({ status: input.status, displayName: input.displayName, quotaBytes: input.quotaBytes })
+      .set({ status: input.status, displayName: input.displayName, quotaBytes: input.quotaBytes === undefined ? undefined : Math.max(input.quotaBytes, MAILBOX_STORAGE_BYTES) })
       .where(eq(emailAccounts.id, req.params.id))
       .returning();
     if (!updated) throw notFound("account not found");
