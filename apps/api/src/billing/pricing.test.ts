@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BILLING_DEFAULTS, quoteBilling, isLegacyUnlimited } from "./pricing.js";
+import { BILLING_DEFAULTS, MAILBOX_STORAGE_BYTES, quoteBilling, isLegacyUnlimited } from "./pricing.js";
 
 test("one mailbox is $2.50 monthly or $15 annual", () => {
   assert.equal(quoteBilling(1, 0, "month").totalCents, 250);
@@ -25,4 +25,9 @@ test("legacy entitlement exempts an existing user or workspace, without bypassin
 });
 test("initial API usage allowance scales per mailbox, not per domain", () => {
   assert.equal(BILLING_DEFAULTS.apiRequestsPerMailboxPerMonth * 3, 30_000);
+});
+
+test("each core mailbox includes 5 GB of storage", () => {
+  assert.equal(MAILBOX_STORAGE_BYTES, 5_000_000_000);
+  assert.equal(BILLING_DEFAULTS.mailboxStorageBytes, 5_000_000_000);
 });
