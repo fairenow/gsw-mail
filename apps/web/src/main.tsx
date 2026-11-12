@@ -35,7 +35,7 @@ function Root() {
   }, []);
 
   const publicPath = PUBLIC_PATHS.has(path);
-  return publicPath ? <App /> : <AuthGate key={path}><App /></AuthGate>;
+  return publicPath ? <App /> : <AuthGate><App /></AuthGate>;
 }
 
 startEngagementAnalytics();
