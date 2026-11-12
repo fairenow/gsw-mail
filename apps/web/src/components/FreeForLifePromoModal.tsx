@@ -9,7 +9,7 @@ const comparisons = [
     subtitle: "Built for purpose-driven teams",
     monthly: "$2.50",
     annual: "$15/yr",
-    storage: "5 GB included per mailbox",
+    storage: "5 GB email storage per mailbox",
     tools: "Custom email, calendar, contacts, files, branded templates, scheduled mail, API + AI plugins",
     ai: "Optional AI Chat + scheduled agents ($25/mo or $125/yr)",
     community: "Guided Steps Wellness: The Community; scheduling and live-streaming roadmap",
@@ -144,7 +144,7 @@ export function FreeForLifePromoModal({ onDismiss }: { onDismiss: () => void }) 
                     {plan.name === "GSW Mail" && <span className="lp2-gsw-featured-tag"><Check size={12}/> YOUR COMMUNITY WORKSPACE</span>}
                     <a href={plan.url} target={plan.url.startsWith("https") ? "_blank" : undefined} rel={plan.url.startsWith("https") ? "noopener noreferrer" : undefined}>{plan.name}</a>
                     <small>{plan.subtitle}</small>
-                    {plan.name === "GSW Mail" && <span className="lp2-gsw-featured-storage">5 GB included per mailbox</span>}
+                    {plan.name === "GSW Mail" && <span className="lp2-gsw-featured-storage">5 GB email storage / mailbox</span>}
                   </th>)}</tr></thead>
                 <tbody>
                   <tr className="lp2-offer-price-row"><th scope="row">Price per mailbox / user</th>{comparisons.map((p) =>
