@@ -11,11 +11,11 @@ import {
   RefreshCw,
   Send,
   ShieldCheck,
-  X,
   Smartphone,
   UsersRound,
 } from "lucide-react";
 import { BrandMark } from "../components/auth/BrandMark";
+import { FreeForLifePromoModal } from "../components/FreeForLifePromoModal";
 import "../styles/landing-v2.css";
 
 // Registration closes for lifetime-free eligibility at midnight EST on Nov 21.
@@ -109,14 +109,6 @@ export function LandingPage() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
-    if (!showFreeAccountModal) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") dismissFreeAccountModal();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showFreeAccountModal]);
   const dismissFreeAccountModal = () => {
     setShowFreeAccountModal(false);
     try { sessionStorage.setItem(FREE_ACCOUNT_PROMO_SESSION_KEY, "dismissed"); } catch { /* Storage is optional. */ }
@@ -142,18 +134,7 @@ export function LandingPage() {
   }, []);
 
   return <main ref={pageRef} className="lp2">
-    {showFreeAccountModal && freeOfferOpen() && <div className="lp2-free-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) dismissFreeAccountModal(); }}>
-      <section className="lp2-free-dialog" role="dialog" aria-modal="true" aria-labelledby="lp2-free-title" aria-describedby="lp2-free-description">
-        <button className="lp2-free-close" type="button" aria-label="Dismiss free account invitation" onClick={dismissFreeAccountModal}><X size={22} /></button>
-        <span className="lp2-free-kicker">A thank-you to our first members</span>
-        <h2 id="lp2-free-title">Your mail. Free for life.</h2>
-        <p id="lp2-free-description">Create your GSW Mail account <strong>before November 21, 2026</strong> and keep your account free for life, even after subscription pricing begins.</p>
-        <div className="lp2-free-benefits"><span><Check size={17}/> Email, calendar and contacts</span><span><Check size={17}/> Files and productivity tools</span><span><Check size={17}/> MCP access with your own AI provider</span></div>
-        <a className="lp2-button lp2-free-cta" href="/sign-up" onClick={dismissFreeAccountModal}>Claim my free account <ArrowRight size={17}/></a>
-        <button type="button" className="lp2-free-later" onClick={dismissFreeAccountModal}>Maybe later</button>
-        <small>Offer ends November 20 at 11:59 PM Eastern. Account registration must be completed before the deadline.</small>
-      </section>
-    </div>}
+    {showFreeAccountModal && freeOfferOpen() && <FreeForLifePromoModal onDismiss={dismissFreeAccountModal} />}
     <nav className="lp2-nav">
       <a className="lp2-brand" href="/"><BrandMark size={34}/><span>GSW Mail</span></a>
       <div className="lp2-nav-links"><a href="#features">Features</a><a href="#workflows">Workflows</a><a href="#ownership">Built differently</a><a href="#faq">FAQ</a></div>
