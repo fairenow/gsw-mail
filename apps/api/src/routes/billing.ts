@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { z } from "zod";
+import { z, ZodError } from "zod";
+import { HttpError } from "../lib/errors.js";
 import { pool } from "../db/client.js";
 import { requireUser } from "../auth/middleware.js";
 import { requireOrgPermission } from "../auth/authorize.js";
@@ -98,6 +99,8 @@ export default async function billingRoutes(app:FastifyInstance){
   });
   app.setErrorHandler((err,req,reply)=>{
     if(err instanceof StripeBillingError)return reply.status(err.status).send({error:err.code});
+    if(err instanceof HttpError)return reply.status(err.status).send({error:err.message});
+    if(err instanceof ZodError)return reply.status(400).send({error:"invalid_billing_request"});
     req.log.error({err},"admin billing error");
     return reply.status(500).send({error:"billing_error"});
   });
