@@ -7,8 +7,35 @@ const PRICES = {
 } as const;
 const dollars = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 
-export function AdminBillingPanel({ currentMailboxes }: { currentMailboxes: number }) {
+type BillingState = {
+  organizationId:string; legacyFreeForLife:boolean; provisionedMailboxes:number; checkoutEnabled:boolean; stripeConfigured:boolean;
+  subscription:null|{id:string;status:string|null;interval:string|null;mailboxes:number|null;aiSeats:number|null;currentPeriodEnd:string|null};
+};
+export function AdminBillingPanel({ currentMailboxes, organizationId }: { currentMailboxes: number; organizationId:string }) {
   const [interval, setInterval] = useState<Interval>("month");
+  const [billingState, setBillingState] = useState<BillingState|null>(null);
+  const [billingError, setBillingError] = useState("");
+  const [billingBusy, setBillingBusy] = useState(false);
+  useEffect(() => {
+    if (!organizationId) return;
+    const controller=new AbortController();
+    fetch("/admin/billing?organizationId="+encodeURIComponent(organizationId),{credentials:"include",signal:controller.signal})
+      .then(async r=>{const data=await r.json();if(!r.ok)throw new Error(data.error??"Billing status unavailable");setBillingState(data as BillingState);})
+      .catch((err:unknown)=>{if(!controller.signal.aborted)setBillingError(err instanceof Error?err.message:"Billing unavailable");});
+    return ()=>controller.abort();
+  },[organizationId]);
+  const openBilling = async (path:"checkout"|"portal") => {
+    setBillingBusy(true);setBillingError("");
+    try {
+      const body=path==="checkout"?{organizationId,interval,mailboxes,aiSeats:aiMailboxes}:{organizationId};
+      const response=await fetch("/admin/billing/"+path,{method:"POST",credentials:"include",
+        headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      const result=await response.json() as {url?:string;error?:string};
+      if(!response.ok||!result.url)throw new Error(result.error??"Unable to open Stripe");
+      if(!result.url.startsWith("https://checkout.stripe.com/")&&!result.url.startsWith("https://billing.stripe.com/"))throw new Error("Invalid Stripe redirect");
+      window.location.assign(result.url);
+    }catch(e){setBillingError(e instanceof Error?e.message:"Billing unavailable");setBillingBusy(false);}
+  };
   const [mailboxes, setMailboxes] = useState(Math.max(1, currentMailboxes));
   const [aiMailboxes, setAiMailboxes] = useState(0);
   useEffect(() => { setMailboxes(value => Math.max(value, currentMailboxes, 1)); }, [currentMailboxes]);
@@ -50,7 +77,18 @@ export function AdminBillingPanel({ currentMailboxes }: { currentMailboxes: numb
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><span>{aiMailboxes} × AI add-ons</span><strong>{dollars(aiMailboxes * PRICES[interval].ai)}</strong></div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, paddingTop: 8 }}><strong>Estimated total / {period}</strong><strong style={{ fontSize: 32, color: "#258b71" }}>{dollars(total)}</strong></div>
       </div>
-      <p style={{ fontSize: 12, opacity: .7, marginTop: 15 }}>Price preview only. Subscription checkout is not yet enabled. Taxes, if applicable, are not included.</p>
+      {billingState?.legacyFreeForLife && <p style={{padding:14,border:"1px solid #7fae95",borderRadius:12,marginTop:18}}><strong>Free for life.</strong> This workspace is grandfathered. No subscription is required.</p>}
+      {billingState?.subscription && <div style={{padding:14,border:"1px solid var(--gsw-border,#d8dcd8)",borderRadius:12,marginTop:18}}>
+        <strong>Current subscription: {billingState.subscription.status}</strong><p style={{fontSize:13}}>
+          {billingState.subscription.mailboxes ?? 0} mailbox licenses · {billingState.subscription.aiSeats ?? 0} AI licenses
+          {billingState.subscription.currentPeriodEnd ? " · Period ends "+new Date(billingState.subscription.currentPeriodEnd).toLocaleDateString(): ""}</p>
+      </div>}
+      {billingError && <p role="alert" style={{color:"#ab3838"}}>{billingError}</p>}
+      {billingState && !billingState.legacyFreeForLife && <div style={{marginTop:16}}>
+        {billingState.subscription ? <button type="button" className="gsw-btn gsw-btn-primary" disabled={!billingState.checkoutEnabled||billingBusy} onClick={()=>void openBilling("portal")}>Manage subscription & invoices</button>
+        : <button type="button" className="gsw-btn gsw-btn-primary" disabled={!billingState.checkoutEnabled||billingBusy} onClick={()=>void openBilling("checkout")}>Subscribe with Stripe</button>}
+      </div>}
+      <p style={{ fontSize: 12, opacity: .7, marginTop: 15 }}>{billingState?.checkoutEnabled ? "Final price and applicable taxes are confirmed in Stripe Checkout." : "Price preview only. Stripe checkout is not enabled yet; your data and existing mail remain accessible."}</p>
     </section>
   </div>;
 }
