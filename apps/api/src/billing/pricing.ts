@@ -10,7 +10,7 @@ export const BILLING_PRICES = {
   mailbox: { month: 250, year: 1500 },
   ai: { month: 2500, year: 12500 },
 } as const;
-export const MAILBOX_STORAGE_BYTES = 1_000_000_000;
+export const MAILBOX_STORAGE_BYTES = 5_000_000_000;
 export const BILLING_DEFAULTS = {
   mailboxStorageBytes: MAILBOX_STORAGE_BYTES,
   apiRequestsPerMailboxPerMonth: 10_000,
