@@ -1,7 +1,6 @@
 -- Phase 1: additive, non-enforcing billing foundation.
--- A single migration transaction must snapshot all existing identities/workspaces.
+-- Let the Drizzle migrator own the transaction; never split the cutoff backfill.
 -- Future users and workspaces default to false; no current permissions are altered.
-BEGIN;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS legacy_free_for_life boolean NOT NULL DEFAULT false;
 ALTER TABLE organizations ADD COLUMN IF NOT EXISTS legacy_free_for_life boolean NOT NULL DEFAULT false;
 CREATE TABLE IF NOT EXISTS billing_legacy_grants (
@@ -84,4 +83,3 @@ CREATE TABLE IF NOT EXISTS billing_usage_monthly (
   used bigint NOT NULL DEFAULT 0 CHECK(used >= 0),
   PRIMARY KEY(organization_id,bucket,period_start)
 );
-COMMIT;
