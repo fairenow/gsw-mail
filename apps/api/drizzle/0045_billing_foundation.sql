@@ -28,7 +28,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS gsw_legacy_user_before_insert ON users;
-CREATE TRIGGER gsw_legacy_user_before_insert BEFORE INSERT ON users
+CREATE TRIGGER gsw_legacy_user_before_insert BEFORE INSERT OR UPDATE OF auth_user_id ON users
   FOR EACH ROW EXECUTE FUNCTION gsw_apply_legacy_user_on_insert();
 
 CREATE OR REPLACE FUNCTION gsw_apply_legacy_organization_on_insert() RETURNS trigger AS $$
