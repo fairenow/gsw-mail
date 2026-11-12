@@ -20,7 +20,7 @@ export default async function billingRoutes(app:FastifyInstance){
       legacy:boolean; provisioned:string; customer:string|null; subscription:string|null;
       status:string|null; interval:string|null; mailboxes:number|null; ai:number|null; period_end:Date|null;
     }>("SELECT o.legacy_free_for_life AS legacy, "+
-      "(SELECT count(*)::text FROM email_accounts ea WHERE ea.workspace_id=o.id AND ea.status != 'disabled') AS provisioned, "+
+      "(SELECT count(*)::text FROM email_accounts ea WHERE ea.workspace_id=o.id AND ea.account_status != 'disabled') AS provisioned, "+
       "c.stripe_customer_id AS customer,s.stripe_subscription_id AS subscription,s.status,s.billing_interval AS interval, "+
       "s.mailbox_quantity AS mailboxes,s.ai_quantity AS ai,s.current_period_end AS period_end "+
       "FROM organizations o LEFT JOIN billing_customers c ON c.organization_id=o.id "+
