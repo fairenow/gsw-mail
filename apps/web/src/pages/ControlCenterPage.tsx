@@ -1,4 +1,5 @@
 import { IntegrationDeliveryPanel } from "../components/admin/IntegrationDeliveryPanel";
+import { AdminBillingPanel } from "../components/admin/AdminBillingPanel";
 import { useEffect, useMemo, useState } from "react";
 import { completeMailboxSetup, getAccountContext, requestMailboxSetup, type AccountContext } from "../auth";
 import { logout } from "../auth";
@@ -8,7 +9,7 @@ import { AuthCard } from "../components/auth/AuthCard";
 import { AuthPage } from "../components/auth/AuthPage";
 import { BrandMark } from "../components/auth/BrandMark";
 
-type ControlSection = "overview" | "domains" | "mailboxes" | "users" | "security" | "api";
+type ControlSection = "overview" | "domains" | "mailboxes" | "users" | "security" | "api" | "billing";
 type AdminSummary = {
   organizationId: string;
   domains: { id: string; name: string; status: "pending" | "verified" | "failed"; mxStatus: string; spfStatus: string; dkimStatus: string; dmarcStatus: string; dkimSelector: string | null; updatedAt: string }[];
@@ -25,7 +26,7 @@ type AdminSummary = {
 const sectionFromHash = (): ControlSection => {
   const hash = window.location.hash.replace(/^#/, "");
   const value = hash === "delivery" ? "api" : hash;
-  return value === "domains" || value === "mailboxes" || value === "users" || value === "security" || value === "api" ? value : "overview";
+  return value === "domains" || value === "mailboxes" || value === "users" || value === "security" || value === "api" || value === "billing" ? value : "overview";
 };
 
 function humanStatus(value: string) { return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
@@ -146,7 +147,7 @@ export function ControlCenterPage() {
         {navButton("users", "Users", admin ? String(admin.users.length) : undefined)}
         {navButton("security", "Security")}
         {navButton("api", "API")}
-        <button className="is-disabled" disabled><span>Billing</span><small>Coming soon</small></button>
+        {navButton("billing", "Billing")}
         <button className="is-disabled" disabled><span>Settings</span><small>Coming soon</small></button>
       </nav>
       <button className="gsw-btn gsw-btn-ghost" onClick={() => void logout()}>Sign out</button>
@@ -156,6 +157,7 @@ export function ControlCenterPage() {
       <header><div><p className="gsw-setup-kicker">Control center</p><h2>{workspace?.name ?? "Guided Steps Wellness"}</h2><p>{workspace?.role ?? "member"} · {adminEmail}</p></div><button className="gsw-btn gsw-btn-primary" onClick={() => void logout().then(() => window.location.assign("/sign-in"))}>Open Mail</button></header>
       {adminError && <div className="gsw-control-alert"><strong>Some admin details could not load.</strong><span>{adminError}</span></div>}
 
+      {section === "billing" && <AdminBillingPanel currentMailboxes={admin?.mailboxes.length ?? context.managedMailboxes.length} />}
       {section === "overview" && <>
         <div className="gsw-control-stats">
           <button onClick={() => navigate("domains")}><strong>{managedDomains.length}</strong><span>Domains</span><small>{admin?.domains.some((domain) => domain.status !== "verified") ? "Review DNS readiness" : "All ready"}</small></button>
