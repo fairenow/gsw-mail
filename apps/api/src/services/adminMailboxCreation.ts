@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireOrgPermission } from "../auth/authorize.js";
 import { db } from "../db/client.js";
 import { domains, emailAccounts, mailAccountMemberships, mailboxes, organizationMemberships, users } from "../db/schema.js";
-import { badRequest, notFound } from "../lib/errors.js";
+import { badRequest, HttpError, notFound } from "../lib/errors.js";
 
 export const adminMailboxCreateSchema = z.object({
   organizationId: z.string().uuid(),
@@ -30,6 +30,27 @@ export async function createAdminMailbox(actorUserId: string, rawInput: unknown)
     const address = `${input.localPart.toLowerCase()}@${domain.name}`;
 
     const account = await db.transaction(async (tx) => {
+      // Explicit rollout switch: production mailbox creation remains unchanged until billing is approved.
+      // Transaction-scoped advisory locking prevents concurrent creates exceeding licensed seats.
+      if (process.env.STRIPE_ENFORCE_SUBSCRIPTIONS === "true") {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${orgId}))`);
+        const entitlement = await tx.execute(sql`
+          SELECT o.legacy_free_for_life AS legacy,
+            s.status AS subscription_status, s.mailbox_quantity AS licensed_mailboxes,
+            (SELECT count(*)::integer FROM email_accounts ea
+              WHERE ea.workspace_id = o.id AND ea.status != 'disabled') AS used_mailboxes
+          FROM organizations o LEFT JOIN billing_subscriptions s ON s.organization_id = o.id
+          WHERE o.id = ${orgId}
+        `);
+        const row = entitlement.rows[0] as {legacy?:boolean;subscription_status?:string;licensed_mailboxes?:number;used_mailboxes?:number}|undefined;
+        if (!row) throw notFound("workspace not found");
+        if (!row.legacy) {
+          if (!["active","trialing"].includes(row.subscription_status ?? ""))
+            throw new HttpError(402,"billing_subscription_required");
+          if ((row.used_mailboxes ?? 0) >= (row.licensed_mailboxes ?? 0))
+            throw new HttpError(402,"mailbox_license_limit_reached");
+        }
+      }
       let ownerUserId = input.ownerUserId;
       let ownerAuthUserId: string | null = null;
 
