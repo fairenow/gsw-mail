@@ -67,7 +67,7 @@ export function verifyStripeSignature(payload: Buffer, signature: string|undefin
 }
 export type StripeSubscription = {
   id: string; customer: string | {id:string}; status: string; cancel_at_period_end?:boolean;
-  items: { data: Array<{ id:string; quantity?: number; price:{ id:string; recurring?:{interval:string} } }> };
+  items: { data: Array<{ id:string; quantity?: number; current_period_end?:number; price:{ id:string; recurring?:{interval:string} } }> };
   current_period_end?: number; metadata?: Record<string,string>;
 };
 export function subscriptionSnapshot(subscription: StripeSubscription): {
@@ -75,6 +75,7 @@ export function subscriptionSnapshot(subscription: StripeSubscription): {
 } {
   let mailboxes=0, aiSeats=0;
   let interval: StripeBillingInterval = "month";
+  let periodEndSeconds = subscription.current_period_end ?? 0;
   for (const item of subscription.items.data) {
     const period = item.price.recurring?.interval;
     const quantity = item.quantity ?? 0;
@@ -83,8 +84,9 @@ export function subscriptionSnapshot(subscription: StripeSubscription): {
     if (!mailboxPeriod && !aiPeriod) continue;
     if (period !== mailboxPeriod && period !== aiPeriod) throw new StripeBillingError(422,"stripe_subscription_interval_mismatch");
     if (mailboxPeriod) { mailboxes += quantity; interval = mailboxPeriod; }
+    periodEndSeconds = Math.max(periodEndSeconds, item.current_period_end ?? 0);
     if (aiPeriod) aiSeats += quantity;
   }
   if (aiSeats > mailboxes) throw new StripeBillingError(422,"stripe_ai_quantity_exceeds_mailboxes");
-  return {interval,mailboxes,aiSeats,periodEnd:subscription.current_period_end ? new Date(subscription.current_period_end*1000):null};
+  return {interval,mailboxes,aiSeats,periodEnd:periodEndSeconds ? new Date(periodEndSeconds*1000):null};
 }
