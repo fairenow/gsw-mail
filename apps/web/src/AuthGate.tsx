@@ -58,8 +58,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
       const context = await resolveAccountContext();
       if (attempt !== generation.current) return;
       setResolution("resolved");
-      await new Promise((resolve) => setTimeout(resolve, 450));
-      if (attempt !== generation.current) return;
       const destination = `/${context.defaultDestination}`;
       const path = window.location.pathname;
       const mailPath = ["/mail", "/contacts", "/settings"].includes(path);
