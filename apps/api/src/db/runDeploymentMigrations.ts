@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { Client } from "pg";
+import { applyMcpApprovalMigration } from "./applyMcpApprovalMigration.js";
 
 /**
  * Railway's forward-only deployment migration runner.
@@ -20,6 +21,8 @@ export const DEPLOYMENT_MIGRATIONS = [
 
 export async function runDeploymentMigrations(connectionString: string): Promise<void> {
   if (!connectionString) throw new Error("DATABASE_URL is required");
+  // Preserve the existing MCP approval/send-policy pre-deploy migration.
+  await applyMcpApprovalMigration(connectionString);
   const client = new Client({ connectionString });
   await client.connect();
   try {
