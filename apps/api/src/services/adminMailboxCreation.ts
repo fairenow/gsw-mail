@@ -5,6 +5,7 @@ import { requireOrgPermission } from "../auth/authorize.js";
 import { db } from "../db/client.js";
 import { domains, emailAccounts, mailAccountMemberships, mailboxes, organizationMemberships, users } from "../db/schema.js";
 import { badRequest, HttpError, notFound } from "../lib/errors.js";
+import { MAILBOX_STORAGE_BYTES } from "../billing/pricing.js";
 
 export const adminMailboxCreateSchema = z.object({
   organizationId: z.string().uuid(),
@@ -95,7 +96,7 @@ export async function createAdminMailbox(actorUserId: string, rawInput: unknown)
           localPart: input.localPart.toLowerCase(),
           address,
           displayName: input.displayName,
-          quotaBytes: input.quotaBytes,
+          quotaBytes: input.quotaBytes ?? MAILBOX_STORAGE_BYTES,
         })
         .returning();
       if (!created) throw new Error("failed to create account");
