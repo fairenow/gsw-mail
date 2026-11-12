@@ -6,7 +6,7 @@ Updated: November 12, 2026.
 - **Free domain administration:** administrators do not incur a mailbox charge solely by administering a workspace; adding and managing domains is free.
 - **Optional GSW-hosted AI:** $25 per AI-enabled mailbox monthly or $125 annually. AI entitlement may be assigned to individual mailboxes by a workspace administrator. Core mailbox remains separately billed.
 - **MCP included:** use MCP with any compatible external AI provider without purchasing GSW AI. Third-party provider charges remain the customer's responsibility.
-- **API included with reasonable operational limits:** initial soft budget (not yet enforced) 10,000 API requests, 5,000 MCP calls, 500 outbound emails per mailbox per month; 1 GB per mailbox. Limits must be tuned against measured cost; do not treat as an unlimited sending commitment.
+- **API included with reasonable operational limits:** initial soft budget (not yet enforced) 10,000 API requests, 5,000 MCP calls, 500 outbound emails per mailbox per month; 5 GB email storage per mailbox. Limits must be tuned against measured cost; do not treat as an unlimited sending commitment.
 - **Web-only billing:** settings is the only place to check out, manage billing methods, and purchase licenses. Mobile clients consume server-side entitlements but never initiate checkout.
 - **No discounts/tiers for v1.** Accounts registered before November 21, 2026 at 00:00 America/Detroit (2026-11-21 05:00 UTC) receive a permanent `legacy_free_for_life=true` flag. Free-for-life grants do not override safety/anti-spam controls.
 
