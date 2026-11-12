@@ -34,3 +34,15 @@ The initial usage budgets are policy placeholders only; enforcement is deliberat
 - Stop showing the campaign after midnight Eastern on November 21, 2026; the browser date controls presentation only and cannot issue entitlements.
 - The free-for-life migration, signup eligibility, and billing decisions use the server/database cutoff at **2026-11-21 05:00:00+00**.
 - Existing and eligible future users can be given true in the database via the automated migration/trigger or a documented administrator-approved update. The flag is not editable by the user.
+
+## Railway automatic migrations
+
+The production Neon database has an incomplete Drizzle migration journal (14 recorded migrations as of November 12, 2026), while historical schema changes were applied through direct/ensure scripts. **Do not run an unconditional `drizzle-kit migrate` in production**, as it could replay older migrations. Instead, Railway runs the existing MCP approval migration followed by `node apps/api/dist/db/runDeploymentMigrations.js` when that file exists.
+
+The forward-only runner declares approved new migrations in an ordered manifest, with a durable `public.gsw_deployment_migrations` ledger, SHA-256 checksums, an advisory lock, and a transactional rollback on failure. First approved migration is `0045_billing_foundation.sql`. For subsequent schema changes, add a new numbered SQL migration and append it to `DEPLOYMENT_MIGRATIONS` in `runDeploymentMigrations.ts`. Do not edit a migration after it has been applied.
+
+Railway pre-deploy must use both commands in order:
+1. `node apps/api/dist/db/applyMcpApprovalMigration.js`
+2. `sh -c 'if [ -f apps/api/dist/db/runDeploymentMigrations.js ]; then node apps/api/dist/db/runDeploymentMigrations.js; else echo "No forward migration runner in this build"; fi'`
+
+The existence guard allows the configuration to be deployed safely while the feature branch remains unmerged. It does **not** ignore migration execution failures. Take a production snapshot/backup prior to first migration, and validate the legacy count afterwards. Stripe keys and subscriptions are not required for the migration.
