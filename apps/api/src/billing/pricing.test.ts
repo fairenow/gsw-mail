@@ -7,7 +7,7 @@ test("one mailbox is $2.50 monthly or $15 annual", () => {
   assert.equal(quoteBilling(1, 0, "year").totalCents, 1500);
 });
 test("AI is optional, priced per mailbox and adds $25 monthly or $125 annually", () => {
-  assert.equal(quoteBilling(2, 1, "month").totalCents, 7500);
+  assert.equal(quoteBilling(2, 1, "month").totalCents, 3000);
   assert.equal(quoteBilling(2, 2, "year").totalCents, 28000);
 });
 test("zero mailboxes and free domain administration never generate charges", () => {
