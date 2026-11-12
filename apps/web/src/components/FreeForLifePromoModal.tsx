@@ -20,7 +20,7 @@ const comparisons = [
     name: "Google Workspace",
     subtitle: "Business Starter",
     monthly: "$8.40",
-    annual: "$7/mo",
+    annual: "$84/yr",
     storage: "30 GB pooled per user",
     tools: "Gmail, Calendar, Drive, Docs",
     ai: "Gemini in Gmail (plan features vary)",
@@ -31,7 +31,7 @@ const comparisons = [
     name: "Zoho Workplace",
     subtitle: "Standard",
     monthly: "$4.00",
-    annual: "$3/mo",
+    annual: "$36/yr",
     storage: "30 GB mail + team files",
     tools: "Mail, Calendar, WorkDrive, Writer",
     ai: "Zia assistant (features vary)",
@@ -42,7 +42,7 @@ const comparisons = [
     name: "Zoho Mail Lite",
     subtitle: "Email-only, 5 GB",
     monthly: "Annual only",
-    annual: "$1/mo",
+    annual: "$12/yr",
     storage: "5 GB mail",
     tools: "Custom-domain webmail and mail tools",
     ai: "No comparable hosted AI bundle",
@@ -64,7 +64,7 @@ const comparisons = [
 
 const moneyNote = {
   monthly: "Monthly, no annual commitment where offered.",
-  annual: "Annual-commitment prices. GSW charges $15 upfront per mailbox; other providers may bill monthly on an annual commitment.",
+  annual: "Annual totals per user or mailbox. GSW charges $15 upfront; other providers may bill monthly on an annual commitment."
 } as const;
 
 export function FreeForLifePromoModal({ onDismiss }: { onDismiss: () => void }) {
