@@ -37,12 +37,8 @@ The initial usage budgets are policy placeholders only; enforcement is deliberat
 
 ## Railway automatic migrations
 
-The production Neon database has an incomplete Drizzle migration journal (14 recorded migrations as of November 12, 2026), while historical schema changes were applied through direct/ensure scripts. **Do not run an unconditional `drizzle-kit migrate` in production**, as it could replay older migrations. Instead, Railway runs the existing MCP approval migration followed by `node apps/api/dist/db/runDeploymentMigrations.js` when that file exists.
+The production Neon database has an incomplete Drizzle migration journal (14 recorded migrations as of November 12, 2026), while historical schema changes were applied through direct/ensure scripts. **Do not run an unconditional `drizzle-kit migrate` in production**, as it could replay older migrations. Instead, Railway runs one compiled entry point: `node apps/api/dist/db/runDeploymentMigrations.js`. This entry point invokes the existing MCP approval/send-policy migration first, followed by the forward-only billing migration manifest.
 
 The forward-only runner declares approved new migrations in an ordered manifest, with a durable `public.gsw_deployment_migrations` ledger, SHA-256 checksums, an advisory lock, and a transactional rollback on failure. First approved migration is `0045_billing_foundation.sql`. For subsequent schema changes, add a new numbered SQL migration and append it to `DEPLOYMENT_MIGRATIONS` in `runDeploymentMigrations.ts`. Do not edit a migration after it has been applied.
 
-Railway pre-deploy must use both commands in order:
-1. `node apps/api/dist/db/applyMcpApprovalMigration.js`
-2. `sh -c 'if [ -f apps/api/dist/db/runDeploymentMigrations.js ]; then node apps/api/dist/db/runDeploymentMigrations.js; else echo "No forward migration runner in this build"; fi'`
-
-The existence guard allows the configuration to be deployed safely while the feature branch remains unmerged. It does **not** ignore migration execution failures. Take a production snapshot/backup prior to first migration, and validate the legacy count afterwards. Stripe keys and subscriptions are not required for the migration.
+Railway pre-deploy must run **one command**: `node apps/api/dist/db/runDeploymentMigrations.js`. Railway service settings are staged but must not be applied to the currently deployed `main` revision because the runner is only in the feature branch. Once the branch is merged and the build contains the compiled runner, apply the pre-deploy configuration and redeploy. The migration runner must be present in the built API bundle. Take a production snapshot/backup prior to first migration, and validate the legacy count afterwards. Stripe keys and subscriptions are not required for the migration.
