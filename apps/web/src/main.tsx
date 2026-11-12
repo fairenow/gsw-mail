@@ -35,7 +35,10 @@ function Root() {
   }, []);
 
   const publicPath = PUBLIC_PATHS.has(path);
-  return publicPath ? <App /> : <AuthGate><App /></AuthGate>;
+  // Preserve the verified session across workspace navigation. Explicit login and
+  // password flows remain separate auth boundaries so switching accounts is safe.
+  const authBoundary = ["/sign-in", "/sign-up", "/create-password"].includes(path) ? path : "workspace";
+  return publicPath ? <App /> : <AuthGate key={authBoundary}><App /></AuthGate>;
 }
 
 startEngagementAnalytics();
