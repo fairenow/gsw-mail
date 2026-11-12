@@ -14,46 +14,7 @@ type AppShellContextValue = {
   configureTopBar: (options: Partial<AppTopBarOptions>) => void;
 };
 
-type IdleWindow = Window & { requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number };
-
 const AppShellContext = createContext<AppShellContextValue | null>(null);
-
-const calendarBoundary = (date: Date) => {
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-};
-
-const currentCalendarRange = () => {
-  const now = new Date();
-  const first = new Date(now.getFullYear(), now.getMonth(), 1);
-  const after = new Date(first);
-  after.setDate(after.getDate() - after.getDay());
-  after.setHours(0, 0, 0, 0);
-  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const before = new Date(last);
-  before.setDate(before.getDate() - before.getDay() + 7);
-  before.setHours(0, 0, 0, 0);
-  return { after: calendarBoundary(after), before: calendarBoundary(before) };
-};
-
-const warmAccountData = (accountId: string) => {
-  void Promise.allSettled([
-    api.messages(accountId, "Inbox", 50, 0),
-    api.mailboxStats(accountId),
-  ]);
-
-  const range = currentCalendarRange();
-  api.prefetchCalendarEvents(accountId, range.after, range.before);
-  void api.calendars(accountId).catch(() => undefined);
-
-  const warmContacts = () => {
-    api.prefetchContactsPage();
-    void Promise.allSettled([api.contactImports(), api.contactAddressBooks()]);
-  };
-  const idleCallback = (window as IdleWindow).requestIdleCallback;
-  if (idleCallback) idleCallback(warmContacts, { timeout: 500 });
-  else window.setTimeout(warmContacts, 250);
-};
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -110,22 +71,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       setAccounts(rows);
       setAccount((current) => {
         const next = current && rows.some((item) => item.id === current.id) ? current : rows[0] ?? null;
-        if (next) warmAccountData(next.id);
         return next;
       });
     }).catch(() => undefined);
-    void Promise.all([api.settings(), getSession()]).then(([settings, session]) => {
+    // AuthGate has already validated the session; do not repeat that request
+    // just to render the profile photo in the application shell.
+    void api.settings().then((settings) => {
       if (cancelled) return;
-      const nextProfileImageUrl = typeof settings.general.profileImageUrl === "string" ? settings.general.profileImageUrl : "";
-      setProfileImageUrl(nextProfileImageUrl);
-      if (session) {
-        rememberIdentity({
-          id: session.user.id,
-          email: session.user.email,
-          name: session.user.name || session.user.email,
-          image: nextProfileImageUrl || session.user.image,
-        });
-      }
+      const image = settings.general.profileImageUrl;
+      setProfileImageUrl(typeof image === "string" ? image : "");
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, []);
@@ -133,7 +87,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const selectAccount = (id: string) => {
     const next = accounts.find((item) => item.id === id) ?? null;
     setAccount(next);
-    if (next) warmAccountData(next.id);
   };
 
   const value = useMemo<AppShellContextValue>(() => ({
