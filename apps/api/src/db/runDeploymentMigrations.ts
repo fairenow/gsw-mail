@@ -18,6 +18,7 @@ import { applyMcpApprovalMigration } from "./applyMcpApprovalMigration.js";
 export const DEPLOYMENT_MIGRATIONS = [
   "0045_billing_foundation.sql",
   "0046_mailbox_storage_5gb.sql",
+  "0047_mailbox_storage_minimum.sql",
 ] as const;
 
 export async function runDeploymentMigrations(connectionString: string): Promise<void> {
