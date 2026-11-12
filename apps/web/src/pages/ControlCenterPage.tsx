@@ -157,7 +157,7 @@ export function ControlCenterPage() {
       <header><div><p className="gsw-setup-kicker">Control center</p><h2>{workspace?.name ?? "Guided Steps Wellness"}</h2><p>{workspace?.role ?? "member"} · {adminEmail}</p></div><button className="gsw-btn gsw-btn-primary" onClick={() => void logout().then(() => window.location.assign("/sign-in"))}>Open Mail</button></header>
       {adminError && <div className="gsw-control-alert"><strong>Some admin details could not load.</strong><span>{adminError}</span></div>}
 
-      {section === "billing" && <AdminBillingPanel currentMailboxes={admin?.mailboxes.length ?? context.managedMailboxes.length} />}
+      {section === "billing" && <AdminBillingPanel currentMailboxes={admin?.mailboxes.length ?? context.managedMailboxes.length} organizationId={workspace?.id ?? ""} />}
       {section === "overview" && <>
         <div className="gsw-control-stats">
           <button onClick={() => navigate("domains")}><strong>{managedDomains.length}</strong><span>Domains</span><small>{admin?.domains.some((domain) => domain.status !== "verified") ? "Review DNS readiness" : "All ready"}</small></button>
