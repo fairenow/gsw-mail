@@ -200,6 +200,7 @@ export const organizations = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
+    legacyFreeForLife: boolean("legacy_free_for_life").default(false).notNull(),
     ...timestamps,
   },
   (t) => [uniqueIndex("organizations_slug_idx").on(t.slug)],
@@ -230,6 +231,7 @@ export const users = pgTable(
     name: text("name"),
     status: userStatus("user_status").default("active").notNull(),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+    legacyFreeForLife: boolean("legacy_free_for_life").default(false).notNull(),
     ...timestamps,
   },
   (t) => [
