@@ -237,10 +237,10 @@
 }
 .lp2-offer-dialog.is-flipped .lp2-offer-rotator { transform: rotateY(180deg); }
 .lp2-offer-face { box-sizing: border-box; padding: clamp(26px, 5vw, 45px); backface-visibility: hidden; -webkit-backface-visibility: hidden; }
-.lp2-offer-front { position: relative; max-width: 660px; margin: auto; text-align: left; }
-.lp2-offer-back { position: absolute; inset: 0; transform: rotateY(180deg); visibility: hidden; }
-.lp2-offer-dialog.is-flipped .lp2-offer-front { position: absolute; inset: 0; visibility: hidden; }
-.lp2-offer-dialog.is-flipped .lp2-offer-back { position: relative; visibility: visible; }
+.lp2-offer-front { position: relative; max-width: 660px; margin: auto; text-align: left; transition: visibility 0s; }
+.lp2-offer-back { position: absolute; inset: 0; transform: rotateY(180deg); visibility: hidden; transition: visibility 0s linear .7s; }
+.lp2-offer-dialog.is-flipped .lp2-offer-front { position: absolute; inset: 0; visibility: hidden; transition: visibility 0s linear .7s; }
+.lp2-offer-dialog.is-flipped .lp2-offer-back { position: relative; visibility: visible; transition: visibility 0s; }
 .lp2-offer-dialog .lp2-free-close { z-index: 20; right: 15px; top: 15px; }
 .lp2-offer-dialog .lp2-free-kicker { display: inline-flex; align-items: center; gap: 8px; }
 .lp2-offer-dialog h2 { font-size: clamp(30px, 5vw, 52px); line-height: 1.04; letter-spacing: -.045em; margin: 20px 0 16px; color: #153f31; }
