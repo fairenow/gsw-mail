@@ -6,11 +6,11 @@ type BillingPeriod = "monthly" | "annual";
 const comparisons = [
   {
     name: "GSW Mail",
-    subtitle: "The Community",
+    subtitle: "Built for purpose-driven teams",
     monthly: "$2.50",
     annual: "$15/yr",
-    storage: "1 GB per mailbox (current)",
-    tools: "Custom email, calendar, files, branded templates, scheduled mail, API + MCP",
+    storage: "5 GB included per mailbox",
+    tools: "Custom email, calendar, contacts, files, branded templates, scheduled mail, API + AI plugins",
     ai: "Optional AI Chat + scheduled agents ($25/mo or $125/yr)",
     community: "Guided Steps Wellness: The Community; scheduling and live-streaming roadmap",
     url: "/control-center#billing",
@@ -115,7 +115,7 @@ export function FreeForLifePromoModal({ onDismiss }: { onDismiss: () => void }) 
             <div className="lp2-free-benefits">
               <span><Check size={17}/> Custom-domain email and calendars</span>
               <span><Check size={17}/> Contacts, files and scheduled sending</span>
-              <span><Check size={17}/> MCP access with your own AI provider</span>
+              <span><Check size={17}/> AI plugins for ChatGPT, Claude and more</span>
             </div>
             <div className="lp2-offer-community"><HeartHandshake size={24}/>
               <div><strong>More than an inbox.</strong><span>Be part of Guided Steps Wellness: The Community—a growing ecosystem connecting people, ministries, businesses and opportunities to serve.</span></div>
@@ -141,21 +141,23 @@ export function FreeForLifePromoModal({ onDismiss }: { onDismiss: () => void }) 
                 <caption className="lp2-sr-only">Public list prices for custom domain email plans in US dollars as of November 2026</caption>
                 <thead><tr><th scope="col">Provider</th>{comparisons.map((plan) =>
                   <th key={plan.name} scope="col" className={plan.name === "GSW Mail" ? "gsw-plan" : ""}>
+                    {plan.name === "GSW Mail" && <span className="lp2-gsw-featured-tag"><Check size={12}/> YOUR COMMUNITY WORKSPACE</span>}
                     <a href={plan.url} target={plan.url.startsWith("https") ? "_blank" : undefined} rel={plan.url.startsWith("https") ? "noopener noreferrer" : undefined}>{plan.name}</a>
                     <small>{plan.subtitle}</small>
+                    {plan.name === "GSW Mail" && <span className="lp2-gsw-featured-storage">5 GB included per mailbox</span>}
                   </th>)}</tr></thead>
                 <tbody>
-                  <tr className="lp2-offer-price-row"><th scope="row">Per mailbox</th>{comparisons.map((p) =>
-                    <td key={p.name} className={p.name === "GSW Mail" ? "gsw-plan" : ""}><strong>{p[period]}</strong><small>{period === "annual" && p.name !== "GSW Mail" ? "annual commitment" : period === "annual" ? "paid upfront" : "per month"}</small></td>)}</tr>
-                  <tr><th scope="row">Email storage</th>{comparisons.map(p=><td key={p.name}>{p.storage}</td>)}</tr>
-                  <tr><th scope="row">Included tools</th>{comparisons.map(p=><td key={p.name}>{p.tools}</td>)}</tr>
-                  <tr><th scope="row">Built-in AI</th>{comparisons.map(p=><td key={p.name}>{p.ai}</td>)}</tr>
-                  <tr><th scope="row">Ecosystem</th>{comparisons.map(p=><td key={p.name}>{p.community}</td>)}</tr>
+                  <tr className="lp2-offer-price-row"><th scope="row">Price per mailbox / user</th>{comparisons.map((p) =>
+                    <td key={p.name} className={p.name === "GSW Mail" ? "gsw-plan" : ""}><strong>{p[period]}</strong><small>{period === "annual" && p.name !== "GSW Mail" ? "annual commitment" : period === "annual" ? "per mailbox · paid upfront" : "per mailbox / month"}</small></td>)}</tr>
+                  <tr><th scope="row">Email storage</th>{comparisons.map(p=><td key={p.name} className={p.name === "GSW Mail" ? "gsw-plan" : ""}>{p.storage}</td>)}</tr>
+                  <tr><th scope="row">Included tools</th>{comparisons.map(p=><td key={p.name} className={p.name === "GSW Mail" ? "gsw-plan" : ""}>{p.tools}</td>)}</tr>
+                  <tr><th scope="row">Built-in AI</th>{comparisons.map(p=><td key={p.name} className={p.name === "GSW Mail" ? "gsw-plan" : ""}>{p.ai}</td>)}</tr>
+                  <tr><th scope="row">Ecosystem</th>{comparisons.map(p=><td key={p.name} className={p.name === "GSW Mail" ? "gsw-plan" : ""}>{p.community}</td>)}</tr>
                 </tbody>
               </table>
             </div>
             <p className="lp2-offer-note">{moneyNote[period]} USD before tax, excluding promotions. Plans are not identical; storage, app functionality and AI allowances differ. Zoho Mail Lite is an email-only option, while Zoho Workplace Standard includes more office tools. <a href="https://workspace.google.com/pricing" target="_blank" rel="noopener noreferrer">Google</a> · <a href="https://www.zoho.com/workplace/pricing.html" target="_blank" rel="noopener noreferrer">Zoho</a> · <a href="https://www.microsoft.com/en-us/microsoft-365/business/microsoft-365-business-basic" target="_blank" rel="noopener noreferrer">Microsoft</a></p>
-            <div className="lp2-offer-outlook"><HeartHandshake size={25}/><div><strong>One inbox. A connected ecosystem.</strong><p>Custom-domain inboxes, calendar, contacts, files, branded templates, scheduled mail, API access, and MCP for ChatGPT or Claude are included. Hosted AI Chat and agentic scheduled work are optional. Coming next: bookable meeting links with Zoom, Teams, Google Meet or Zoho Cliq; Bible Study App rooms, livestreams and social broadcasting. These are in development.</p><p>Built for small teams, ministry leaders and founders—and connected to Guided Steps Wellness: The Community.</p></div></div>
+            <div className="lp2-offer-outlook"><HeartHandshake size={25}/><div><strong>One inbox. A connected ecosystem.</strong><p>Custom-domain inboxes, calendar, contacts, files, branded templates, scheduled mail, API access, and AI plugins for ChatGPT or Claude are included. Hosted AI Chat and agentic scheduled work are optional. Coming next: bookable meeting links with Zoom, Teams, Google Meet or Zoho Cliq; Bible Study App rooms, livestreams and social broadcasting. These are in development.</p><p>Built for small teams, ministry leaders and founders—and connected to Guided Steps Wellness: The Community.</p></div></div>
             <div className="lp2-offer-actions"><button type="button" className="lp2-offer-back-button" onClick={() => setFlipped(false)}><ArrowLeft size={17}/> Back to free offer <RotateCcw size={14}/></button><a href="/sign-up" className="lp2-button lp2-free-cta" onClick={onDismiss}>Join before November 21 <ArrowRight size={17}/></a></div>
           </div>
         </div>
