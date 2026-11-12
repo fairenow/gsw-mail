@@ -300,3 +300,39 @@
 @media (prefers-reduced-motion: reduce) {
   .lp2-offer-rotator { transition: none; }
 }
+
+/* Featured GSW Mail column: a continuous branded visual anchor across the comparison. */
+.lp2-offer-table .gsw-plan {
+  background: linear-gradient(160deg, #0e4b3d 0%, #1d6650 100%);
+  color: #f7fff8;
+  border-bottom-color: rgba(192, 236, 205, .25);
+  border-left: 2px solid #b2e8ae;
+  border-right: 2px solid #b2e8ae;
+  font-weight: 570;
+  box-shadow: inset 0 0 20px rgba(177, 232, 174, .08);
+}
+.lp2-offer-table thead .gsw-plan {
+  background: linear-gradient(145deg, #103d34 0%, #1a7659 100%);
+  border-top: 2px solid #b2e8ae;
+  border-radius: 10px 10px 0 0;
+  padding-top: 15px;
+}
+.lp2-offer-table tr:last-child .gsw-plan { border-bottom: 2px solid #b2e8ae; }
+.lp2-offer-table thead .gsw-plan a,
+.lp2-offer-table .gsw-plan strong,
+.lp2-offer-table .gsw-plan small { color: #fffef4; }
+.lp2-offer-table .gsw-plan strong { font-size: 22px; letter-spacing: -.035em; }
+.lp2-gsw-featured-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 7px; margin-bottom: 9px; border-radius: 5px;
+  font-size: 9px; font-weight: 850; letter-spacing: .035em;
+  color: #113c2b; background: #c8f0b2;
+}
+.lp2-offer-table thead .gsw-plan .lp2-gsw-featured-storage {
+  display: block; margin-top: 7px; font-size: 10px; font-weight: 700;
+  color: #d7f7db;
+}
+.lp2-offer-table tbody .gsw-plan { font-size: 12px; line-height: 1.6; }
+@media (prefers-reduced-motion: reduce) {
+  .lp2-offer-table .gsw-plan { animation: none; }
+}
