@@ -220,3 +220,83 @@
 @media (prefers-reduced-motion: reduce) {
   .lp2-free-backdrop, .lp2-free-dialog { animation: none !important; transition: none !important; }
 }
+
+
+/* The free-for-life campaign is a two-sided, keyboard-accessible card. */
+.lp2-offer-dialog {
+  position: relative; width: min(96vw, 990px); max-height: min(92dvh, 930px);
+  border-radius: 27px; overflow-y: auto; overflow-x: hidden;
+  background: #fcfdf9; color: #19312d;
+  box-shadow: 0 24px 100px rgba(0,0,0,.3);
+  scrollbar-gutter: stable;
+}
+.lp2-offer-stage { perspective: 2200px; }
+.lp2-offer-rotator {
+  position: relative; transform-style: preserve-3d;
+  transition: transform .7s cubic-bezier(.2,.8,.2,1);
+}
+.lp2-offer-dialog.is-flipped .lp2-offer-rotator { transform: rotateY(180deg); }
+.lp2-offer-face { box-sizing: border-box; padding: clamp(26px, 5vw, 45px); backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.lp2-offer-front { position: relative; max-width: 660px; margin: auto; text-align: left; }
+.lp2-offer-back { position: absolute; inset: 0; transform: rotateY(180deg); visibility: hidden; }
+.lp2-offer-dialog.is-flipped .lp2-offer-front { position: absolute; inset: 0; visibility: hidden; }
+.lp2-offer-dialog.is-flipped .lp2-offer-back { position: relative; visibility: visible; }
+.lp2-offer-dialog .lp2-free-close { z-index: 20; right: 15px; top: 15px; }
+.lp2-offer-dialog .lp2-free-kicker { display: inline-flex; align-items: center; gap: 8px; }
+.lp2-offer-dialog h2 { font-size: clamp(30px, 5vw, 52px); line-height: 1.04; letter-spacing: -.045em; margin: 20px 0 16px; color: #153f31; }
+.lp2-offer-dialog h2 em { font-style: normal; color: #288564; }
+.lp2-offer-dialog p { color: #4a6055; line-height: 1.65; }
+.lp2-offer-front > p { max-width: 540px; font-size: clamp(15px,2.2vw,18px); }
+.lp2-offer-dialog .lp2-free-benefits { margin: 22px 0; }
+.lp2-offer-community,.lp2-offer-outlook {
+  display: flex; align-items: flex-start; gap: 13px; padding: 18px;
+  background: #eaf4ee; border: 1px solid #cfe6d7; border-radius: 17px;
+  margin: 20px 0 23px;
+}
+.lp2-offer-community > svg,.lp2-offer-outlook > svg { flex: none; color: #2b7c5c; }
+.lp2-offer-community strong,.lp2-offer-outlook strong { display: block; color: #214b3b; margin-bottom: 4px; }
+.lp2-offer-community span { display: block; line-height: 1.5; font-size: 14px; }
+.lp2-offer-flip-trigger,.lp2-offer-back-button {
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  gap: 10px; min-height: 43px; padding: 10px 16px;
+  border: none; border-radius: 12px; background: transparent;
+  color: #256a53; font-weight: 700;
+}
+.lp2-offer-flip-trigger { width: 100%; margin: 12px 0 6px; }
+.lp2-offer-flip-trigger:hover,.lp2-offer-back-button:hover { background: #eaf3ee; }
+.lp2-offer-dialog .lp2-offer-expiry { display: block; margin-top: 5px; text-align: center; font-size: 12px; color: #73837b; line-height: 1.5; }
+.lp2-offer-back-head h2 { margin: 12px 0; font-size: clamp(27px,4vw,40px); }
+.lp2-offer-back-head p { margin: 0 0 12px; max-width: 740px; }
+.lp2-offer-period { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid #d5e3db; border-radius: 999px; margin: 9px 0 14px; background: #edf3ee; }
+.lp2-offer-period button { cursor: pointer; border: 0; background: transparent; color: #38584c; font-weight: 700; padding: 8px 19px; border-radius: 999px; }
+.lp2-offer-period button.active { color: #fff; background: #226f50; }
+.lp2-offer-table-scroll { overflow-x: auto; border-radius: 16px; border: 1px solid #dce6df; }
+.lp2-offer-table { border-collapse: collapse; table-layout: fixed; width: 100%; min-width: 740px; font-size: 12px; line-height: 1.45; }
+.lp2-offer-table th,.lp2-offer-table td { text-align: left; vertical-align: top; border-bottom: 1px solid #e7ede8; padding: 13px 10px; overflow-wrap: anywhere; }
+.lp2-offer-table th { font-weight: 750; }
+.lp2-offer-table thead th { background: #f3f7f3; font-size: 12px; }
+.lp2-offer-table thead th a { color: #1a5940; text-decoration: none; font-weight: 800; }
+.lp2-offer-table thead th a:hover { text-decoration: underline; }
+.lp2-offer-table thead th small,.lp2-offer-table td small { display: block; color: #76857c; margin-top: 4px; font-weight: 500; }
+.lp2-offer-table td strong { font-size: 19px; color: #214736; }
+.lp2-offer-table .gsw-plan { background: #e9f5eb; }
+.lp2-offer-table tr:last-child > * { border-bottom: none; }
+.lp2-offer-note { font-size: 11px; margin: 11px 0 0; }
+.lp2-offer-note a { color: #206a4e; }
+.lp2-offer-outlook { margin: 15px 0; padding: 14px 16px; }
+.lp2-offer-outlook p { font-size: 13px; margin: 3px 0 0; }
+.lp2-offer-actions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
+.lp2-offer-actions .lp2-free-cta { width: auto; min-width: 240px; }
+.lp2-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+@media(max-width:650px){
+  .lp2-free-backdrop { padding: 10px; }
+  .lp2-offer-dialog { width: min(100%, 580px); max-height: 94dvh; border-radius: 20px; }
+  .lp2-offer-face { padding: 26px 19px 24px; }
+  .lp2-offer-dialog h2 { padding-right: 25px; }
+  .lp2-offer-actions { justify-content: center; }
+  .lp2-offer-actions .lp2-free-cta { width: 100%; }
+  .lp2-offer-dialog .lp2-free-kicker { max-width: calc(100% - 30px); font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp2-offer-rotator { transition: none; }
+}
