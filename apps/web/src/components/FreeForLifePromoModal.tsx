@@ -39,6 +39,17 @@ const comparisons = [
     url: "https://www.zoho.com/workplace/pricing.html",
   },
   {
+    name: "Zoho Mail Lite",
+    subtitle: "Email-only, 5 GB",
+    monthly: "Annual only",
+    annual: "$1/mo",
+    storage: "5 GB mail",
+    tools: "Custom-domain webmail and mail tools",
+    ai: "No comparable hosted AI bundle",
+    community: "Independent Zoho ecosystem",
+    url: "https://www.zoho.com/mail/zohomail-pricing.html",
+  },
+  {
     name: "Microsoft 365",
     subtitle: "Business Basic",
     monthly: "$8.40",
@@ -143,7 +154,7 @@ export function FreeForLifePromoModal({ onDismiss }: { onDismiss: () => void }) 
                 </tbody>
               </table>
             </div>
-            <p className="lp2-offer-note">{moneyNote[period]} USD before tax, excluding promotions. Plans are not identical; storage, app functionality and AI allowances differ. <a href="https://workspace.google.com/pricing" target="_blank" rel="noopener noreferrer">Google</a> · <a href="https://www.zoho.com/workplace/pricing.html" target="_blank" rel="noopener noreferrer">Zoho</a> · <a href="https://www.microsoft.com/en-us/microsoft-365/business/microsoft-365-business-basic" target="_blank" rel="noopener noreferrer">Microsoft</a></p>
+            <p className="lp2-offer-note">{moneyNote[period]} USD before tax, excluding promotions. Plans are not identical; storage, app functionality and AI allowances differ. Zoho Mail Lite is an email-only option, while Zoho Workplace Standard includes more office tools. <a href="https://workspace.google.com/pricing" target="_blank" rel="noopener noreferrer">Google</a> · <a href="https://www.zoho.com/workplace/pricing.html" target="_blank" rel="noopener noreferrer">Zoho</a> · <a href="https://www.microsoft.com/en-us/microsoft-365/business/microsoft-365-business-basic" target="_blank" rel="noopener noreferrer">Microsoft</a></p>
             <div className="lp2-offer-outlook"><HeartHandshake size={25}/><div><strong>The Guided Steps Wellness difference</strong><p>GSW Mail is a doorway into our broader Community—bringing communication closer to ministry, volunteering, collaboration and future shared resources. Community services and additional benefits may have separate eligibility or terms.</p></div></div>
             <div className="lp2-offer-actions"><button type="button" className="lp2-offer-back-button" onClick={() => setFlipped(false)}><ArrowLeft size={17}/> Back to free offer <RotateCcw size={14}/></button><a href="/sign-up" className="lp2-button lp2-free-cta" onClick={onDismiss}>Join before November 21 <ArrowRight size={17}/></a></div>
           </div>
