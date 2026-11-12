@@ -96,7 +96,7 @@ export async function createAdminMailbox(actorUserId: string, rawInput: unknown)
           localPart: input.localPart.toLowerCase(),
           address,
           displayName: input.displayName,
-          quotaBytes: input.quotaBytes ?? MAILBOX_STORAGE_BYTES,
+          quotaBytes: Math.max(input.quotaBytes ?? 0, MAILBOX_STORAGE_BYTES),
         })
         .returning();
       if (!created) throw new Error("failed to create account");
