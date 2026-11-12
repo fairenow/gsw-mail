@@ -39,7 +39,7 @@ export async function createAdminMailbox(actorUserId: string, rawInput: unknown)
           SELECT o.legacy_free_for_life AS legacy,
             s.status AS subscription_status, s.mailbox_quantity AS licensed_mailboxes,
             (SELECT count(*)::integer FROM email_accounts ea
-              WHERE ea.workspace_id = o.id AND ea.status != 'disabled') AS used_mailboxes
+              WHERE ea.workspace_id = o.id AND ea.account_status != 'disabled') AS used_mailboxes
           FROM organizations o LEFT JOIN billing_subscriptions s ON s.organization_id = o.id
           WHERE o.id = ${orgId}
         `);
