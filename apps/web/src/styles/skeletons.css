@@ -58,3 +58,8 @@
 @media (prefers-reduced-motion: reduce) {
   .gsw-skeleton { animation: none; }
 }
+
+/* Route-level fallback: a stable, non-blocking surface while code-split UI arrives. */
+.gsw-route-loading { display: flex; align-items: flex-start; justify-content: center; min-height: 240px; padding: 36px 24px; background: var(--gsw-bg, transparent); }
+.gsw-route-loading-bar { width: min(460px, 90%); height: 8px; border-radius: 999px; background: linear-gradient(90deg, rgba(176,125,46,.13), rgba(176,125,46,.34), rgba(176,125,46,.13)); background-size: 200% 100%; animation: gsw-skeleton-shimmer 1.35s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .gsw-route-loading-bar { animation: none; } }
