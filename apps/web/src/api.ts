@@ -660,6 +660,16 @@ export const api = {
   mailboxStats: (accountId: string) => { activeMailAccountId = accountId; return cachedGet<MailboxStatsResponse>(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`, 5_000, 30_000).then((r) => r.folders); },
   refreshMessages: (accountId: string, mailbox: string, limit = 50, offset = 0) =>
     refreshGet<MessagesResponse>(`/mail/messages?accountId=${encodeURIComponent(accountId)}&mailbox=${encodeURIComponent(mailbox)}&limit=${limit}&offset=${offset}`, 4_000, 30_000).then(r => r.messages),
+  mailChanges: (accountId: string, sinceState?: string) =>
+    get<{
+      oldState: string | null;
+      newState: string;
+      hasMoreChanges: boolean;
+      created: string[];
+      updated: string[];
+      destroyed: string[];
+      resetRequired: boolean;
+    }>(`/mail/changes?accountId=${encodeURIComponent(accountId)}${sinceState ? `&sinceState=${encodeURIComponent(sinceState)}` : ""}`),
   refreshMailboxStats: (accountId: string) =>
     refreshGet<MailboxStatsResponse>(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`, 5_000, 30_000).then(r => r.folders),
   folders: (accountId: string) => { activeMailAccountId = accountId; return cachedGet<MailFoldersResponse>(`/mail/folders?accountId=${encodeURIComponent(accountId)}`, 5_000, 30_000).then((r) => r.folders); },
