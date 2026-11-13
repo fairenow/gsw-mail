@@ -398,6 +398,33 @@ test("listMailboxStats reads counts from Mailbox/get metadata", async () => {
   assert.deepEqual(body.methodCalls[0]?.[1].properties, ["id", "name", "role", "sortOrder", "totalEmails", "unreadEmails"]);
 });
 
+test("mailbox counts refresh after expiry and concurrent refreshes share one JMAP call", async () => {
+  const calls: string[] = [];
+  const fetchImpl = makeFetch();
+  const statsEngine = new StalwartEngine({
+    jmapUrl: BASE,
+    accessToken: "user-token",
+    sessionTtlMs: 10_000,
+    mailboxStatsTtlMs: 0,
+    fetchImpl: async (input, init) => {
+      if (String(input) === `${BASE}/jmap`) {
+        const body = JSON.parse(String(init?.body)) as { methodCalls: [string, unknown, string][] };
+        if (body.methodCalls.some(([name]) => name === "Mailbox/get")) calls.push("Mailbox/get");
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      return fetchImpl(input, init);
+    },
+  });
+  const [a, b] = await Promise.all([
+    statsEngine.listMailboxStats("ramon@gs.com"),
+    statsEngine.listMailboxStats("ramon@gs.com"),
+  ]);
+  assert.deepEqual(a, b);
+  assert.equal(calls.length, 1, "concurrent reads share a single mailbox statistics call");
+  await statsEngine.listMailboxStats("ramon@gs.com");
+  assert.equal(calls.length, 2, "expired mailbox statistics are fetched again");
+});
+
 test("listMessages returns summaries with names", async () => {
   requestLog.length = 0;
   const rows = await engine.listMessages("ramon@gs.com", { mailbox: "Inbox", limit: 50 });
