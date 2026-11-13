@@ -23,11 +23,23 @@
   border: 0;
 }
 
-/* Mailbox skeletons were intentionally removed. Mail now prioritizes immediate
-   data loading and keeps the message list visually quiet while requests finish. */
-.gsw-message-list-scroll[aria-busy="true"] .gsw-list-empty {
-  visibility: hidden;
+/* Preserve the inbox row geometry while loading instead of collapsing the list.
+   Keep these lightweight: no image downloads or JS-driven measurements. */
+.gsw-mail-skeleton-list { width: 100%; min-height: 100%; }
+.gsw-mail-skeleton-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 6px;
+  min-height: 76px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--gsw-border-soft);
+  align-items: center;
 }
+.gsw-mail-skeleton-avatar { width: 28px; height: 28px; border-radius: 50%; }
+.gsw-mail-skeleton-copy { display: grid; grid-template-rows: 9px 10px 8px; gap: 8px; min-width: 0; }
+.gsw-mail-skeleton-sender { width: 38%; max-width: 160px; height: 9px; }
+.gsw-mail-skeleton-subject { width: 74%; height: 10px; }
+.gsw-mail-skeleton-preview { width: 89%; height: 8px; }
 
 .gsw-calendar-event-skeleton {
   display: grid;
