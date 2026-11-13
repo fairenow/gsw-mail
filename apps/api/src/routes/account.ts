@@ -76,14 +76,49 @@ export default async function accountRoutes(app: FastifyInstance) {
     const [productUser] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!productUser || productUser.status !== "active") throw conflict("Account linkage unavailable");
     if (!productUser.authUserId) throw conflict("Account linkage unavailable");
-    await db.transaction(async (tx) => {
-      const owned = await tx.select({ id: emailAccounts.id, workspaceId: emailAccounts.workspaceId, status: emailAccounts.status, authSetupStatus: emailAccounts.authSetupStatus }).from(emailAccounts).where(eq(emailAccounts.userId, userId));
-      for (const mailbox of owned) {
-        if (mailbox.status !== "active" || mailbox.authSetupStatus !== "ready") continue;
-        await tx.insert(mailAccountMemberships).values({ accountId: mailbox.id, userId, authUserId: productUser.authUserId!, role: "owner" }).onConflictDoUpdate({ target: [mailAccountMemberships.accountId, mailAccountMemberships.userId], set: { authUserId: productUser.authUserId!, role: "owner" } });
+    // Most context requests are read-only. The previous implementation wrote
+    // EVERY membership in a transaction on every GET, including unchanged
+    // rows, which deadlocked when mobile restored several sessions concurrently.
+    // Repair only missing or stale links; normal startup takes no write locks.
+    const owned = await db.select({
+      id: emailAccounts.id,
+      status: emailAccounts.status,
+      authSetupStatus: emailAccounts.authSetupStatus,
+    }).from(emailAccounts).where(eq(emailAccounts.userId, userId));
+    const existingLinks = await db.select({
+      accountId: mailAccountMemberships.accountId,
+      authUserId: mailAccountMemberships.authUserId,
+      role: mailAccountMemberships.role,
+    }).from(mailAccountMemberships).where(eq(mailAccountMemberships.userId, userId));
+    const linksByAccount = new Map(existingLinks.map(link => [link.accountId, link]));
+    const requiredAuthUserId = productUser.authUserId;
+    for (const mailbox of owned) {
+      if (mailbox.status !== "active" || mailbox.authSetupStatus !== "ready") continue;
+      const existing = linksByAccount.get(mailbox.id);
+      if (existing?.authUserId === requiredAuthUserId && existing.role === "owner") continue;
+      if (!existing) {
+        await db.insert(mailAccountMemberships)
+          .values({ accountId: mailbox.id, userId, authUserId: requiredAuthUserId, role: "owner" })
+          .onConflictDoNothing({ target: [mailAccountMemberships.accountId, mailAccountMemberships.userId] });
       }
-      await tx.update(mailAccountMemberships).set({ authUserId: productUser.authUserId! }).where(eq(mailAccountMemberships.userId, userId));
-    });
+      // If another request inserted concurrently, or ownership changed, this
+      // selective update is safe and restores canonical owner permissions.
+      await db.update(mailAccountMemberships)
+        .set({ authUserId: requiredAuthUserId, role: "owner" })
+        .where(and(
+          eq(mailAccountMemberships.accountId, mailbox.id),
+          eq(mailAccountMemberships.userId, userId),
+        ));
+    }
+    // Delegate and read-only memberships need identity linkage, but should not
+    // be updated on every page load. Avoid bulk multi-row locks altogether.
+    const ownedIds = new Set(owned.filter(mailbox => mailbox.status === "active" && mailbox.authSetupStatus === "ready").map(mailbox => mailbox.id));
+    for (const link of existingLinks) {
+      if (ownedIds.has(link.accountId) || link.authUserId === requiredAuthUserId) continue;
+      await db.update(mailAccountMemberships)
+        .set({ authUserId: requiredAuthUserId })
+        .where(and(eq(mailAccountMemberships.accountId, link.accountId), eq(mailAccountMemberships.userId, userId)));
+    }
     const workspaces = await db
       .select({ id: organizations.id, name: organizations.name, role: organizationMemberships.role, status: organizationMemberships.status, setupStep: workspaceSetupStates.currentStep, migratedFromExisting: workspaceSetupStates.migratedFromExisting })
       .from(organizationMemberships)
