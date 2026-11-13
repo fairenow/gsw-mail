@@ -75,3 +75,28 @@
 .gsw-route-loading { display: flex; align-items: flex-start; justify-content: center; min-height: 240px; padding: 36px 24px; background: var(--gsw-bg, transparent); }
 .gsw-route-loading-bar { width: min(460px, 90%); height: 8px; border-radius: 999px; background: linear-gradient(90deg, rgba(176,125,46,.13), rgba(176,125,46,.34), rgba(176,125,46,.13)); background-size: 200% 100%; animation: gsw-skeleton-shimmer 1.35s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .gsw-route-loading-bar { animation: none; } }
+
+/* Match the workspace pane geometry until its lazy bundle and first data arrive. */
+.gsw-workspace-loading {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 340px;
+  background: var(--gsw-bg);
+  padding: 22px clamp(16px, 3vw, 32px);
+  overflow: hidden;
+}
+.gsw-workspace-loading-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  min-height: 54px;
+  border-bottom: 1px solid var(--gsw-border-soft);
+}
+.gsw-workspace-loading-title { width: 36%; max-width: 210px; height: 17px; }
+.gsw-workspace-loading-action { width: 90px; height: 30px; border-radius: 9px; }
+.gsw-workspace-loading-content { display: grid; gap: 20px; padding-top: 24px; }
+.gsw-workspace-loading-line { height: 13px; width: 64%; }
+.gsw-workspace-loading-line.short { width: 37%; }
+.gsw-workspace-loading-panel { width: 100%; height: min(300px, 38vh); border-radius: 14px; }
