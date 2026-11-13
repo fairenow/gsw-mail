@@ -44,17 +44,25 @@ export class JmapClient {
   readonly authHeader = (): string => authorizationHeader(this.opts);
 
   private sessionCache: { at: number; session: JmapSession } | undefined;
+  private sessionInFlight: Promise<JmapSession> | undefined;
 
   private get fetchImpl(): typeof fetch {
     return this.opts.fetchImpl ?? fetch;
   }
 
   async session(force = false): Promise<JmapSession> {
-    const now = Date.now();
-    const started = performance.now();
-    if (!force && this.sessionCache && now - this.sessionCache.at < this.opts.sessionTtlMs) {
+    if (this.sessionInFlight) return this.sessionInFlight;
+    if (!force && this.sessionCache && Date.now() - this.sessionCache.at < this.opts.sessionTtlMs) {
       return this.sessionCache.session;
     }
+    const load = this.loadSession();
+    this.sessionInFlight = load;
+    try { return await load; } finally { if (this.sessionInFlight === load) this.sessionInFlight = undefined; }
+  }
+
+  private async loadSession(): Promise<JmapSession> {
+    const now = Date.now();
+    const started = performance.now();
     this.opts.onSessionEvent?.("start");
 
     const headers = { Accept: "application/json", Authorization: authorizationHeader(this.opts) };
