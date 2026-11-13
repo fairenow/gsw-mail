@@ -80,3 +80,41 @@ test("reports JMAP session rejection status after both session endpoints fail", 
   await assert.rejects(client.session(), (error: { type?: string }) => error.type === "mail_identity_rejected");
   assert.deepEqual(events, [["start", undefined], ["rejected", 401]]);
 });
+
+test("coalesces concurrent JMAP session discovery and reuses the cached session", async () => {
+  let requests = 0;
+  const client = new JmapClient({
+    baseUrl: "https://mx1.test",
+    token: "user-token",
+    sessionTtlMs: 60_000,
+    fetchImpl: async () => {
+      requests++;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return Response.json(session);
+    },
+  });
+  const [a, b, c] = await Promise.all([client.session(), client.session(), client.session()]);
+  assert.equal(a, b);
+  assert.equal(b, c);
+  assert.equal(requests, 1, "only one discovery request for three concurrent callers");
+  await client.session();
+  assert.equal(requests, 1, "fresh cached session does not refetch");
+});
+
+test("retries a failed session discovery instead of caching a rejected in-flight request", async () => {
+  let requests = 0;
+  const client = new JmapClient({
+    baseUrl: "https://mx1.test",
+    token: "user-token",
+    sessionTtlMs: 60_000,
+    fetchImpl: async () => {
+      requests++;
+      if (requests <= 2) return new Response("unavailable", { status: 503 });
+      return Response.json(session);
+    },
+  });
+  await assert.rejects(Promise.all([client.session(), client.session()]));
+  assert.equal(requests, 2, "failed discovery checks both supported endpoints once");
+  await client.session();
+  assert.equal(requests, 3, "next attempt recovers after failed discovery");
+});
