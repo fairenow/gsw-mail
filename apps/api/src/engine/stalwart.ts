@@ -30,6 +30,7 @@ export interface StalwartOptions {
   jmapUrl: string;
   accessToken?: string;
   sessionTtlMs?: number;
+  mailboxStatsTtlMs?: number;
   fetchImpl?: typeof fetch;
   onSlowOperation?: (operation: string, durationMs: number) => void;
   onSessionEvent?: (event: "start" | "success" | "rejected", status?: number) => void;
@@ -398,6 +399,7 @@ export class StalwartEngine implements MailEngine {
   private readonly client: JmapClient;
   private readonly mailboxes = new Map<EngineAccountId, MailboxName[]>();
   private readonly mailboxStats = new Map<EngineAccountId, MailboxStats[]>();
+  private readonly mailboxStatsUpdatedAt = new Map<EngineAccountId, number>();
   private readonly mailboxLoads = new Map<EngineAccountId, Promise<MailboxName[]>>();
 
   constructor(private readonly opts: StalwartOptions) {
@@ -459,11 +461,28 @@ export class StalwartEngine implements MailEngine {
     });
     this.mailboxes.set(engineAccountId, mailboxes);
     this.mailboxStats.set(engineAccountId, stats);
+    this.mailboxStatsUpdatedAt.set(engineAccountId, Date.now());
     return mailboxes;
   }
 
   async listMailboxStats(engineAccountId: EngineAccountId): Promise<MailboxStats[]> {
-    await this.ensureMailboxes(engineAccountId);
+    // Mailbox/get includes unread and total counts, but those values are not
+    // immutable. Refresh them on a bounded TTL instead of retaining stale
+    // counts for the entire process lifetime.
+    const updated = this.mailboxStatsUpdatedAt.get(engineAccountId);
+    const ttl = this.opts.mailboxStatsTtlMs ?? 15_000;
+    if (updated !== undefined && Date.now() - updated < ttl) {
+      return this.mailboxStats.get(engineAccountId) ?? [];
+    }
+    const pending = this.mailboxLoads.get(engineAccountId);
+    if (pending) {
+      await pending;
+    } else {
+      const request = this.loadMailboxes(engineAccountId);
+      this.mailboxLoads.set(engineAccountId, request);
+      try { await request; }
+      finally { if (this.mailboxLoads.get(engineAccountId) === request) this.mailboxLoads.delete(engineAccountId); }
+    }
     return this.mailboxStats.get(engineAccountId) ?? [];
   }
 
