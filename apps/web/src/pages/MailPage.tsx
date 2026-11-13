@@ -73,6 +73,9 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
   const [loading, setLoading] = useState(false);
   const [searchResults, setSearchResults] = useState(false);
   const listRequest = useRef(0);
+  const countsRequest = useRef(0);
+  const activeAccountId = useRef<string | null>(null);
+  activeAccountId.current = account?.id ?? null;
   const listScroll = useRef<HTMLDivElement>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("gsw-mail-sidebar-collapsed") === "true");
   const readTimers = useRef(new Map<string, number>());
@@ -121,9 +124,10 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
     if (document.visibilityState !== "visible") return;
     try {
       const [latest, stats] = await Promise.all([
-        api.messages(accountId, name, pageSize, 0),
-        api.mailboxStats(accountId),
+        api.refreshMessages(accountId, name, pageSize, 0),
+        api.refreshMailboxStats(accountId),
       ]);
+      if (activeAccountId.current !== accountId) return;
       setFolderCounts(Object.fromEntries(FOLDERS.map((key) => [key, stats[key] ?? { total: 0, unread: 0 }])) as Record<Folder, { total: number; unread: number }>);
       // If the user is paging through older mail or searching, leave their list alone.
       if (pageRef.current !== 0 || searchRef.current.trim()) return;
@@ -134,8 +138,9 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
     } catch { /* Passive refresh errors must not disrupt the current mailbox. */ }
   }, []);
   const loadFolderCounts = useCallback(async (accountId: string) => {
-    try { const stats = await timedMailRequest("mailbox-stats", () => api.mailboxStats(accountId)); setFolderCounts(Object.fromEntries(FOLDERS.map((name) => [name, stats[name] ?? { total: 0, unread: 0 }])) as Record<Folder, { total: number; unread: number }>); }
-    catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    const request = ++countsRequest.current;
+    try { const stats = await timedMailRequest("mailbox-stats", () => api.mailboxStats(accountId)); if (request === countsRequest.current && activeAccountId.current === accountId) setFolderCounts(Object.fromEntries(FOLDERS.map((name) => [name, stats[name] ?? { total: 0, unread: 0 }])) as Record<Folder, { total: number; unread: number }>); }
+    catch (err) { if (request === countsRequest.current && activeAccountId.current === accountId) setError(err instanceof Error ? err.message : String(err)); }
   }, []);
   const loadAccount = useCallback(async (accountId: string, name: Folder) => { await timedMailRequest("account-load", async () => { await Promise.all([loadFolder(accountId, name), loadFolderCounts(accountId)]); }); }, [loadFolder, loadFolderCounts]);
   const adjustFolderCounts = useCallback((source: Folder, destination: Folder | undefined, message: MessageSummary | FullMessage | undefined) => {
