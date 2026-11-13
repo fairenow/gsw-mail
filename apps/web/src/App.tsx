@@ -1,19 +1,20 @@
-import { useEffect, useState } from "react";
-import { ContactsPage } from "./pages/ContactsPage";
-import { MailPage } from "./pages/MailPage";
-import { SettingsPage } from "./pages/SettingsPage";
+import { lazy, Suspense, useEffect, useState } from "react";
+const ContactsPage = lazy(() => import("./pages/ContactsPage").then(module => ({ default: module.ContactsPage })));
+const MailPage = lazy(() => import("./pages/MailPage").then(module => ({ default: module.MailPage })));
+const SettingsPage = lazy(() => import("./pages/SettingsPage").then(module => ({ default: module.SettingsPage })));
 import { AppShell } from "./components/AppShell";
-import { SetupPage } from "./pages/SetupPage";
-import { ControlCenterPage } from "./pages/ControlCenterPage";
-import { CalendarPage } from "./pages/CalendarPage";
-import { CampaignReviewPage } from "./pages/CampaignReviewPage";
-import { CalendarRsvpPage } from "./pages/CalendarRsvpPage";
-import { AccountDeletedPage, LegalPage } from "./pages/LegalPage";
-import { LandingPage } from "./pages/LandingPage";
-import { SupportPage } from "./pages/SupportPage";
-import { OAuthAccountChooserPage } from "./pages/OAuthAccountChooserPage";
-import { OAuthConsentPage } from "./pages/OAuthConsentPage";
-import { McpMailboxRecoveryPage } from "./pages/McpMailboxRecoveryPage";
+const SetupPage = lazy(() => import("./pages/SetupPage").then(module => ({ default: module.SetupPage })));
+const ControlCenterPage = lazy(() => import("./pages/ControlCenterPage").then(module => ({ default: module.ControlCenterPage })));
+const CalendarPage = lazy(() => import("./pages/CalendarPage").then(module => ({ default: module.CalendarPage })));
+const CampaignReviewPage = lazy(() => import("./pages/CampaignReviewPage").then(module => ({ default: module.CampaignReviewPage })));
+const CalendarRsvpPage = lazy(() => import("./pages/CalendarRsvpPage").then(module => ({ default: module.CalendarRsvpPage })));
+const LegalPage = lazy(() => import("./pages/LegalPage").then(module => ({ default: module.LegalPage })));
+const AccountDeletedPage = lazy(() => import("./pages/LegalPage").then(module => ({ default: module.AccountDeletedPage })));
+const LandingPage = lazy(() => import("./pages/LandingPage").then(module => ({ default: module.LandingPage })));
+const SupportPage = lazy(() => import("./pages/SupportPage").then(module => ({ default: module.SupportPage })));
+const OAuthAccountChooserPage = lazy(() => import("./pages/OAuthAccountChooserPage").then(module => ({ default: module.OAuthAccountChooserPage })));
+const OAuthConsentPage = lazy(() => import("./pages/OAuthConsentPage").then(module => ({ default: module.OAuthConsentPage })));
+const McpMailboxRecoveryPage = lazy(() => import("./pages/McpMailboxRecoveryPage").then(module => ({ default: module.McpMailboxRecoveryPage })));
 
 const scrollToHash = (hash: string) => {
   if (!hash) return;
@@ -39,6 +40,26 @@ const navigate = (href: string) => {
   if (url.hash) scrollToHash(url.hash);
   return true;
 };
+
+function RouteLoading() {
+  return <div className="gsw-route-loading" role="status" aria-label="Loading page"><div className="gsw-route-loading-bar" /><span className="gsw-sr-only">Loading page</span></div>;
+}
+
+function renderRoute(path: string) {
+  if (path === "/") return <LandingPage />;
+  if (path === "/privacy") return <LegalPage kind="privacy" />;
+  if (path === "/terms") return <LegalPage kind="terms" />;
+  if (path === "/support") return <SupportPage />;
+  if (path === "/account-deleted") return <AccountDeletedPage />;
+  if (path === "/calendar/rsvp") return <CalendarRsvpPage />;
+  if (path === "/oauth/select-account") return <OAuthAccountChooserPage />;
+  if (path === "/oauth/consent") return <OAuthConsentPage />;
+  if (path === "/settings/mcp-mailbox-recovery") return <McpMailboxRecoveryPage />;
+  if (path === "/setup") return <SetupPage />;
+  if (path === "/control-center") return <ControlCenterPage />;
+  const page = /^\/campaigns\/[0-9a-f-]{36}$/i.test(path) ? <CampaignReviewPage /> : path === "/settings" ? <SettingsPage /> : path === "/contacts" ? <ContactsPage /> : path === "/calendar" ? <CalendarPage /> : path === "/files" ? <MailPage initialSection="files" /> : <MailPage />;
+  return <AppShell><Suspense fallback={<RouteLoading />}>{page}</Suspense></AppShell>;
+}
 
 export function App() {
   const [path, setPath] = useState(() => window.location.pathname);
@@ -67,19 +88,7 @@ export function App() {
     };
   }, []);
 
-  if (path === "/") return <LandingPage />;
-  if (path === "/privacy") return <LegalPage kind="privacy" />;
-  if (path === "/terms") return <LegalPage kind="terms" />;
-  if (path === "/support") return <SupportPage />;
-  if (path === "/account-deleted") return <AccountDeletedPage />;
-  if (path === "/calendar/rsvp") return <CalendarRsvpPage />;
-  if (path === "/oauth/select-account") return <OAuthAccountChooserPage />;
-  if (path === "/oauth/consent") return <OAuthConsentPage />;
-  if (path === "/settings/mcp-mailbox-recovery") return <McpMailboxRecoveryPage />;
-  if (path === "/setup") return <SetupPage />;
-  if (path === "/control-center") return <ControlCenterPage />;
-  const page = /^\/campaigns\/[0-9a-f-]{36}$/i.test(path) ? <CampaignReviewPage /> : path === "/settings" ? <SettingsPage /> : path === "/contacts" ? <ContactsPage /> : path === "/calendar" ? <CalendarPage /> : path === "/files" ? <MailPage initialSection="files" /> : <MailPage />;
-  return <AppShell>{page}</AppShell>;
+  return <Suspense fallback={<RouteLoading />}>{renderRoute(path)}</Suspense>;
 }
 
 export default App;
