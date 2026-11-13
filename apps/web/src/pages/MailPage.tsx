@@ -75,6 +75,9 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
   const listRequest = useRef(0);
   const countsRequest = useRef(0);
   const activeAccountId = useRef<string | null>(null);
+  // Account-scoped JMAP state tokens are ephemeral; never persist across sign-in.
+  const syncState = useRef(new Map<string, { state: string; lastFullRefresh: number }>());
+
   activeAccountId.current = account?.id ?? null;
   const listScroll = useRef<HTMLDivElement>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("gsw-mail-sidebar-collapsed") === "true");
@@ -122,12 +125,39 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
   // Passive updates must not clear selection, scroll position, page or the open reader.
   const silentRefresh = useCallback(async (accountId: string, name: Folder) => {
     if (document.visibilityState !== "visible") return;
+    const now = Date.now();
+    const previous = syncState.current.get(accountId);
+    let nextState: string | undefined;
+    try {
+      // Stalwart's Email/changes is a lightweight check before fetching 50
+      // message summaries. Force a full reconciliation at least every 5 min.
+      if (previous && now - previous.lastFullRefresh < 5 * 60_000) {
+        const changes = await api.mailChanges(accountId, previous.state);
+        nextState = changes.newState;
+        if (!changes.resetRequired && !changes.hasMoreChanges &&
+          !changes.created.length && !changes.updated.length && !changes.destroyed.length) {
+          if (activeAccountId.current === accountId) {
+            syncState.current.set(accountId, { ...previous, state: changes.newState });
+          }
+          return;
+        }
+      } else {
+        // Capture state before the full read so updates arriving during that
+        // read are observed on the next change check.
+        nextState = (await api.mailChanges(accountId)).newState;
+      }
+    } catch {
+      // Unsupported JMAP changes, transient authorization or stale state:
+      // the existing refresh continues, rather than leaving mail frozen.
+      syncState.current.delete(accountId);
+    }
     try {
       const [latest, stats] = await Promise.all([
         api.refreshMessages(accountId, name, pageSize, 0),
         api.refreshMailboxStats(accountId),
       ]);
       if (activeAccountId.current !== accountId) return;
+      if (nextState) syncState.current.set(accountId, { state: nextState, lastFullRefresh: Date.now() });
       setFolderCounts(Object.fromEntries(FOLDERS.map((key) => [key, stats[key] ?? { total: 0, unread: 0 }])) as Record<Folder, { total: number; unread: number }>);
       // If the user is paging through older mail or searching, leave their list alone.
       if (pageRef.current !== 0 || searchRef.current.trim()) return;
