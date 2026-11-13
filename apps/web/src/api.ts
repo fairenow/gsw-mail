@@ -507,6 +507,12 @@ const cachedGet = <T,>(url: string, freshMs: number, staleMs = freshMs * 6): Pro
   return fetchAndCache<T>(url, freshMs, staleMs);
 };
 
+// Explicit refresh bypasses stale-while-revalidate while reusing in-flight
+// network work. Background polling must see the latest response, not a stale
+// snapshot that happened to be cached when it started.
+const refreshGet = <T,>(url: string, freshMs: number, staleMs: number): Promise<T> =>
+  fetchAndCache<T>(url, freshMs, staleMs);
+
 const messageListPrefix = (accountId: string) => `/mail/messages?accountId=${accountId}&`;
 const messageDetailKey = (accountId: string, engineId: string) => `/mail/messages/${engineId}?accountId=${accountId}`;
 const calendarPrefix = (accountId: string) => `/product/calendar-events?accountId=${encodeURIComponent(accountId)}&`;
@@ -652,6 +658,10 @@ export const api = {
   accounts: () => cachedGet<AccountsResponse>("/mail/accounts", 15_000, 120_000).then((r) => r.accounts),
   messages: (accountId: string, mailbox: string, limit = 50, offset = 0) => { activeMailAccountId = accountId; return cachedGet<MessagesResponse>(`/mail/messages?accountId=${accountId}&mailbox=${encodeURIComponent(mailbox)}&limit=${limit}&offset=${offset}`, 4_000, 30_000).then((r) => r.messages); },
   mailboxStats: (accountId: string) => { activeMailAccountId = accountId; return cachedGet<MailboxStatsResponse>(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`, 5_000, 30_000).then((r) => r.folders); },
+  refreshMessages: (accountId: string, mailbox: string, limit = 50, offset = 0) =>
+    refreshGet<MessagesResponse>(`/mail/messages?accountId=${encodeURIComponent(accountId)}&mailbox=${encodeURIComponent(mailbox)}&limit=${limit}&offset=${offset}`, 4_000, 30_000).then(r => r.messages),
+  refreshMailboxStats: (accountId: string) =>
+    refreshGet<MailboxStatsResponse>(`/mail/mailboxes/stats?accountId=${encodeURIComponent(accountId)}`, 5_000, 30_000).then(r => r.folders),
   folders: (accountId: string) => { activeMailAccountId = accountId; return cachedGet<MailFoldersResponse>(`/mail/folders?accountId=${encodeURIComponent(accountId)}`, 5_000, 30_000).then((r) => r.folders); },
   createFolder: async (accountId: string, name: string, parentId?: string | null) => { const result = await post<{ folder: MailFolder }>("/mail/folders", { accountId, name, parentId: parentId ?? null }, interactiveTimeout); clearAccountMailCache(accountId); return result.folder; },
   updateFolder: async (accountId: string, id: string, patchBody: { name?: string; parentId?: string | null }) => { const result = await patch<{ folder: MailFolder }>(`/mail/folders/${encodeURIComponent(id)}`, { accountId, ...patchBody }, interactiveTimeout); clearAccountMailCache(accountId); return result.folder; },
