@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, type Account, type AiTaskRecord } from "../api";
 import { getSession } from "../auth";
 import { rememberIdentity } from "../lib/rememberedIdentities";
@@ -46,7 +46,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           }
           return false;
         }) ?? null;
-        setActiveAgentTask(relevant);
+        // Polls frequently, but don't publish new context values for an
+        // unchanged task snapshot: that would rerender the entire workspace.
+        setActiveAgentTask((current) => {
+          if (current === relevant) return current;
+          if (!current || !relevant) return relevant;
+          return current.id === relevant.id &&
+            current.status === relevant.status &&
+            current.completedAt === relevant.completedAt ? current : relevant;
+        });
       } catch {
         if (!cancelled) setActiveAgentTask(null);
       } finally {
@@ -84,10 +92,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
-  const selectAccount = (id: string) => {
+  const selectAccount = useCallback((id: string) => {
     const next = accounts.find((item) => item.id === id) ?? null;
     setAccount(next);
-  };
+  }, [accounts]);
+
+  const configureTopBar = useCallback((options: Partial<AppTopBarOptions>) => {
+    setTopBar((current) => ({ ...current, ...options }));
+  }, []);
 
   const value = useMemo<AppShellContextValue>(() => ({
     account,
@@ -107,8 +119,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       }).catch(() => undefined);
     },
     selectAccount,
-    configureTopBar: (options) => setTopBar((current) => ({ ...current, ...options })),
-  }), [account, accounts, profileImageUrl, activeAgentTask]);
+    configureTopBar,
+  }), [account, accounts, profileImageUrl, activeAgentTask, selectAccount, configureTopBar]);
 
   return (
     <AppShellContext.Provider value={value}>
