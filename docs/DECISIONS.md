@@ -257,3 +257,8 @@ enforcement/alignment, preserves existing reporting settings and rejects
 multiple policies, duplicate tags and malformed required values. TXT
 matching for SPF and DKIM is unchanged. This avoids rewriting working DNS
 merely to match the onboarding template.
+
+
+### Private meetings are a service integration, not community ownership
+
+Use Bible Study's existing LiveKit Cloud infrastructure through meeting-specific records and scoped sessions. Mail owns billing and mailbox authorization; the Bible backend owns meeting policy, guest admission and media tokens. Do not create hidden communities, copy Mail engine state, authorize hosts by email equality, or embed host rights in calendar invitations. Use existing active paid workspace subscriptions/operator exemptions for the initial entitlement; free-only workspaces are excluded. Ship web first behind disabled-by-default flags, with conservative participant/duration/concurrency limits. Do not claim event deletion or recurring synchronization until those lifecycle phases are implemented. Configuration and validation: [GSW_MAIL_MEETINGS_IMPLEMENTATION.md](GSW_MAIL_MEETINGS_IMPLEMENTATION.md).

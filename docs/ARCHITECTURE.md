@@ -360,3 +360,8 @@ enforcement/alignment, preserves existing reporting settings and rejects
 multiple policies, duplicate tags and malformed required values. TXT
 matching for SPF and DKIM is unchanged. This avoids rewriting working DNS
 merely to match the onboarding template.
+
+
+### GSW Mail private video meetings — web milestone
+
+Calendar video-meeting creation now calls a protected Bible Study Convex service after mailbox send authorization and paid-workspace entitlement checks. Calendar storage continues through MailEngine and the existing meetingLink field. Meeting-only ownership is scoped to immutable Mail workspace/product user IDs; no Bible community membership is created. Shared links contain no host rights. A two-minute single-use organizer handoff opens a dedicated /meet web room, while guests wait for admission. See [implementation and configuration](GSW_MAIL_MEETINGS_IMPLEMENTATION.md). Both rollout switches default off.
