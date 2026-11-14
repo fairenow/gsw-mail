@@ -257,3 +257,10 @@ enforcement/alignment, preserves existing reporting settings and rejects
 multiple policies, duplicate tags and malformed required values. TXT
 matching for SPF and DKIM is unchanged. This avoids rewriting working DNS
 merely to match the onboarding template.
+
+
+## Private meeting integration foundation (2026-11-14)
+
+The authenticated POST /product/calendar-meetings route derives organizer and workspace from the signed-in mailbox owner, checks an active/trialing Core subscription with at least one paid mailbox and a future period end, and calls the Bible Study Convex HTTP API. Free mailbox access and mailbox exemptions do not grant meetings. Requests include short-lived body-bound assertions and a videoMeetings entitlement claim. The draft event UUID is namespaced by account ID for idempotency.
+
+GSW_MEETINGS_ENABLED defaults off on both backends. No composer controls are enabled. The receiving backend, host handoff, meeting entry, lifecycle synchronization and device acceptance must be released together before enabling customer use. See PRIVATE_MEETINGS_HANDOFF.md.

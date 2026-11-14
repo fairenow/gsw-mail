@@ -23,7 +23,7 @@ export class MeetingServiceError extends Error {
 }
 
 export type MeetingServiceConfig = { apiUrl: string; webOrigin: string; signingSecret: string };
-export type MeetingOrganizer = { userId: string; workspaceId: string };
+export type MeetingOrganizer = { userId: string; workspaceId: string; videoMeetings: true };
 
 function trustedOrigin(value: string): string {
   const url = new URL(value);
@@ -40,10 +40,11 @@ export function createMeetingClient(config: MeetingServiceConfig, transport: typ
 
   return {
     async createRoom(organizer: MeetingOrganizer, input: z.input<typeof createInput>) {
-      if (!organizer.userId || !organizer.workspaceId) throw new Error("Meeting organizer identity required");
+      if (!organizer.userId || !organizer.workspaceId || organizer.videoMeetings !== true) throw new Error("Meeting organizer entitlement required");
       const body = JSON.stringify(createInput.parse(input));
       const assertion = await new SignJWT({
         workspaceId: organizer.workspaceId,
+        videoMeetings: true,
         operation: "rooms.create",
         bodySha256: createHash("sha256").update(body).digest("hex"),
       }).setProtectedHeader({ alg: "HS256", typ: "JWT" })

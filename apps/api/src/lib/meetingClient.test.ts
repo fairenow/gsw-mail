@@ -6,7 +6,7 @@ import { createMeetingClient } from "../meetings/client.js";
 
 const config = { apiUrl: "https://meetings.example.com", webOrigin: "https://bible.example.com", signingSecret: "a".repeat(32) };
 const input = { externalEventId: "draft-1", title: "Planning", scheduledAt: "2026-11-20T15:00:00Z", timezone: "America/Detroit" };
-const organizer = { userId: "user-1", workspaceId: "workspace-1" };
+const organizer = { userId: "user-1", workspaceId: "workspace-1", videoMeetings: true as const };
 const room = { meetingId: "room-1", joinUrl: "https://bible.example.com/meet/room-1", status: "scheduled" };
 
 test("meeting request binds trusted identity and exact payload with expiring unique assertions", async () => {

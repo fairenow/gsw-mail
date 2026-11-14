@@ -1,6 +1,6 @@
 # GSW Mail private meetings implementation
 
-Status: contract and server-client foundation. Not enabled or deployed.
+Status: signed client, authenticated paid creation route, and receiving Convex metadata API implemented on draft branches. Not enabled or deployed.
 
 ## Verified repository integration points
 
@@ -16,7 +16,7 @@ Status: contract and server-client foundation. Not enabled or deployed.
 
 ## Contract v1
 
-GSW Mail calls an HTTPS Convex HTTP action, server to server. Use a dedicated signing secret, never a browser token or LiveKit secret. Each request uses a compact HS256 JWS bearer assertion with issuer gsw-mail, audience bible-study-meetings, a 60-second expiry, random jti, immutable organizer sub, workspaceId, operation and SHA-256 digest of the exact body. Receiver verifies all claims, consumes jti atomically and validates current entitlement before mutation. Replayed requests fail; business retries use a new jti and the same event idempotency key.
+GSW Mail calls an HTTPS Convex HTTP action, server to server. Use a dedicated signing secret, never a browser token or LiveKit secret. Each request uses a compact HS256 JWS bearer assertion with issuer gsw-mail, audience bible-study-meetings, a 60-second expiry, random jti, immutable organizer sub, workspaceId, operation, videoMeetings=true entitlement and SHA-256 digest of the exact body. Receiver verifies all claims, consumes jti atomically and validates current entitlement before mutation. Replayed requests fail; business retries use a new jti and the same event idempotency key.
 
 Operations: POST rooms; POST rooms/{meetingId}/handoff; PATCH rooms/{meetingId}; POST rooms/{meetingId}/cancel. No caller-supplied public, recording or social-output settings.
 
@@ -48,3 +48,12 @@ Feature flag defaults off. No changes to current subscription pricing.
 ## Rollout
 
 Draft branches first. No production schema migration, billing activation, LiveKit provisioning or customer traffic until backend and end-to-end gates pass.
+
+
+## Private meeting integration foundation (2026-11-14)
+
+The authenticated POST /product/calendar-meetings route derives organizer and workspace from the signed-in mailbox owner, checks an active/trialing Core subscription with at least one paid mailbox and a future period end, and calls the Bible Study Convex HTTP API. Free mailbox access and mailbox exemptions do not grant meetings. Requests include short-lived body-bound assertions and a videoMeetings entitlement claim. The draft event UUID is namespaced by account ID for idempotency.
+
+GSW_MEETINGS_ENABLED defaults off on both backends. No composer controls are enabled. The receiving backend, host handoff, meeting entry, lifecycle synchronization and device acceptance must be released together before enabling customer use. See PRIVATE_MEETINGS_HANDOFF.md.
+
+Receiver branch: feature/private-meeting-api-20261114 in fairenow/bible-streaming-app. Invitation URLs use /meet/{meetingId}; the entry screen is not implemented yet, so do not enable this feature. Host grants and LiveKit provisioning remain pending.
