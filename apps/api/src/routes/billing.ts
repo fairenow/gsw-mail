@@ -4,7 +4,7 @@ import { HttpError } from "../lib/errors.js";
 import { pool } from "../db/client.js";
 import { requireUser } from "../auth/middleware.js";
 import { requireOrgPermission } from "../auth/authorize.js";
-import { quoteBilling } from "../billing/pricing.js";
+import { billableMailboxCount, FREE_MAILBOXES_PER_WORKSPACE, quoteBilling } from "../billing/pricing.js";
 import { isStripeLiveReady, stripeBillingConfig, stripePriceId, stripeRequest, StripeBillingError } from "../billing/stripeService.js";
 
 const org=z.object({organizationId:z.string().uuid()}).strict();
@@ -17,9 +17,9 @@ export default async function billingRoutes(app:FastifyInstance){
   const getStatus=async(userId:string,organizationId:string)=>{
     await requireOrgPermission(userId,organizationId,["owner","admin"]);
     const result=await pool.query<{
-      legacy:boolean; provisioned:string; customer:string|null; subscription:string|null;
+      legacy:boolean; operator_exempt:boolean; provisioned:string; customer:string|null; subscription:string|null;
       status:string|null; interval:string|null; mailboxes:number|null; ai:number|null; period_end:Date|null;
-    }>("SELECT o.legacy_free_for_life AS legacy, "+
+    }>("SELECT o.legacy_free_for_life AS legacy, EXISTS (SELECT 1 FROM billing_mailbox_exemptions e WHERE e.organization_id=o.id) AS operator_exempt, "+
       "(SELECT count(*)::text FROM email_accounts ea WHERE ea.workspace_id=o.id AND ea.account_status != 'disabled') AS provisioned, "+
       "c.stripe_customer_id AS customer,s.stripe_subscription_id AS subscription,s.status,s.billing_interval AS interval, "+
       "s.mailbox_quantity AS mailboxes,s.ai_quantity AS ai,s.current_period_end AS period_end "+
@@ -27,7 +27,10 @@ export default async function billingRoutes(app:FastifyInstance){
       "LEFT JOIN billing_subscriptions s ON s.organization_id=o.id WHERE o.id=$1",[organizationId]);
     const row=result.rows[0];
     if(!row) throw new StripeBillingError(404,"workspace_not_found");
-    return {organizationId,legacyFreeForLife:row.legacy,provisionedMailboxes:Number(row.provisioned),
+    return {organizationId,legacyFreeForLife:row.operator_exempt,operatorExempt:row.operator_exempt,
+      includedFreeMailboxes:FREE_MAILBOXES_PER_WORKSPACE,
+      billableMailboxes:row.operator_exempt ? 0 : billableMailboxCount(Number(row.provisioned)),
+      provisionedMailboxes:Number(row.provisioned),
       stripeCustomerExists:Boolean(row.customer),
       subscription:row.subscription ? {id:row.subscription,status:row.status,interval:row.interval,mailboxes:row.mailboxes,aiSeats:row.ai,currentPeriodEnd:row.period_end}:null,
       checkoutEnabled:stripeBillingConfig.checkoutEnabled && isStripeLiveReady(),
@@ -40,12 +43,14 @@ export default async function billingRoutes(app:FastifyInstance){
   app.post("/admin/billing/checkout",async(req,reply)=>{
     const input=selection.parse(req.body);
     const state=await getStatus(req.user!.id,input.organizationId);
-    if(state.legacyFreeForLife) throw new StripeBillingError(409,"lifetime_free_account");
+    if(state.operatorExempt) throw new StripeBillingError(409,"operator_exempt_workspace");
     if(!state.checkoutEnabled) throw new StripeBillingError(503,"checkout_not_enabled");
     if(state.subscription && ["active","trialing","past_due","incomplete"].includes(state.subscription.status||""))
       throw new StripeBillingError(409,"existing_subscription_use_portal");
     if(input.mailboxes<state.provisionedMailboxes) throw new StripeBillingError(422,"mailboxes_below_provisioned");
-    quoteBilling(input.mailboxes,input.aiSeats,input.interval);
+    const quote = quoteBilling(input.mailboxes,input.aiSeats,input.interval);
+    if (quote.paidMailboxes === 0 && input.aiSeats === 0)
+      throw new StripeBillingError(409,"first_mailbox_is_free_no_checkout_required");
     const url=new URL(stripeBillingConfig.publicUrl);
     if(url.protocol!=="https:"||url.username||url.password||url.search||url.hash)throw new StripeBillingError(503,"billing_return_url_invalid");
     const existing=await pool.query<{stripe_customer_id:string}>(
@@ -64,17 +69,21 @@ export default async function billingRoutes(app:FastifyInstance){
     if(!customerId)throw new StripeBillingError(500,"billing_customer_unavailable");
     const params=new URLSearchParams({
       mode:"subscription",customer:customerId,
-      "line_items[0][price]":stripePriceId("mailbox",input.interval),
-      "line_items[0][quantity]":String(input.mailboxes),
       "success_url":new URL("/control-center#billing",url).toString(),
       "cancel_url":new URL("/control-center#billing",url).toString(),
       "client_reference_id":input.organizationId,
       "metadata[organization_id]":input.organizationId,
       "subscription_data[metadata][organization_id]":input.organizationId,
     });
+    let itemIndex = 0;
+    if (quote.paidMailboxes > 0) {
+      params.set(`line_items[${itemIndex}][price]`, stripePriceId("mailbox", input.interval));
+      params.set(`line_items[${itemIndex}][quantity]`, String(quote.paidMailboxes));
+      itemIndex++;
+    }
     if(input.aiSeats){
-      params.set("line_items[1][price]",stripePriceId("ai",input.interval));
-      params.set("line_items[1][quantity]",String(input.aiSeats));
+      params.set(`line_items[${itemIndex}][price]`,stripePriceId("ai",input.interval));
+      params.set(`line_items[${itemIndex}][quantity]`,String(input.aiSeats));
     }
     const session=await stripeRequest<StripeSession>("POST","checkout/sessions",params);
     if(!session.url||!session.url.startsWith("https://checkout.stripe.com/"))throw new StripeBillingError(502,"checkout_url_invalid");
@@ -84,7 +93,7 @@ export default async function billingRoutes(app:FastifyInstance){
   app.post("/admin/billing/portal",async(req,reply)=>{
     const {organizationId}=org.parse(req.body);
     const state=await getStatus(req.user!.id,organizationId);
-    if(state.legacyFreeForLife)throw new StripeBillingError(409,"lifetime_free_account");
+    if(state.operatorExempt)throw new StripeBillingError(409,"operator_exempt_workspace");
     if(!stripeBillingConfig.checkoutEnabled||!isStripeLiveReady())throw new StripeBillingError(503,"checkout_not_enabled");
     const customer=await pool.query<{stripe_customer_id:string}>("SELECT stripe_customer_id FROM billing_customers WHERE organization_id=$1",[organizationId]);
     const customerId=customer.rows[0]?.stripe_customer_id;
