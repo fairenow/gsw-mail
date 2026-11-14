@@ -645,6 +645,9 @@ const setupProvisioningTimeout = 30_000;
 export type BulkMailAction = "archive" | "trash" | "restore" | "destroy" | "read" | "unread" | "star" | "unstar";
 
 export const api = {
+  videoMeetingStatus: (accountId: string) => get<{available:boolean;reason:string|null;webOrigin:string|null}>(`/product/video-meetings/status?accountId=${encodeURIComponent(accountId)}`),
+  createVideoMeeting: (input: {accountId:string;externalEventId:string;title:string;scheduledAt?:number}) => post<{meetingId:string;joinUrl:string}>("/product/video-meetings",input),
+  launchVideoMeeting: (input: {accountId:string;meetingId:string}) => post<{url:string}>("/product/video-meetings/launch",input),
   connectedAppActivity: () => get<{events:OAuthConnectionEvent[]}>("/api/account/connected-apps/activity"),
   mcpApprovals: () => get<{ approvals: McpApprovalRecord[] }>("/product/mcp/approvals"),
   mcpDraftPreview: (id: string) => get<{ draft: McpDraftPreview; reviewedArgumentsDigest: string }>(`/product/mcp/approvals/${encodeURIComponent(id)}/draft`),

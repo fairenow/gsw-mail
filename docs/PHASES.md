@@ -246,3 +246,8 @@ enforcement/alignment, preserves existing reporting settings and rejects
 multiple policies, duplicate tags and malformed required values. TXT
 matching for SPF and DKIM is unchanged. This avoids rewriting working DNS
 merely to match the onboarding template.
+
+
+### GSW Mail private meetings — implementation awaiting live acceptance
+
+The first web milestone includes paid access gating, idempotent link creation in the calendar composer, secure organizer handoff (including ordinary-link sign-in return), accountless waiting-room entry, media admission/moderation and bounded session cleanup. Twelve canonical-backend tests, eight Mail tests and three simulated DOM checks pass; full Mail web and focused backend/API typechecks pass. Live two-browser/provider/billing acceptance, full application builds and deployment remain pending. Recording, recurring sessions, native handoff, usage metering and automatic calendar edit/cancel synchronization are later phases. See [rollout instructions](GSW_MAIL_MEETINGS_IMPLEMENTATION.md).

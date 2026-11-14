@@ -1,3 +1,4 @@
+import videoMeetingRoutes from "./routes/videoMeetings.js";
 import integrationPublic from "./routes/integrationPublic.js";
 import billingRoutes from "./routes/billing.js";
 import stripeWebhook from "./routes/stripeWebhook.js";
@@ -170,6 +171,7 @@ export function buildApp() {
   app.register(webhooks);
   app.register(stalwartWebhooks);
   app.register(product);
+  app.register(videoMeetingRoutes);
   app.register(templateAssetsPublic);
   app.register(publicAvatars);
   app.register(avatarLookup);
