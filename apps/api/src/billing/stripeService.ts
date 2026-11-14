@@ -87,6 +87,8 @@ export function subscriptionSnapshot(subscription: StripeSubscription): {
     periodEndSeconds = Math.max(periodEndSeconds, item.current_period_end ?? 0);
     if (aiPeriod) aiSeats += quantity;
   }
-  if (aiSeats > mailboxes) throw new StripeBillingError(422,"stripe_ai_quantity_exceeds_mailboxes");
+  // Stripe mailbox quantity contains only PAID seats; the first Core mailbox
+  // is included free, but may still purchase one optional AI license.
+  if (aiSeats > mailboxes + 1) throw new StripeBillingError(422,"stripe_ai_quantity_exceeds_mailboxes");
   return {interval,mailboxes,aiSeats,periodEnd:periodEndSeconds ? new Date(periodEndSeconds*1000):null};
 }
