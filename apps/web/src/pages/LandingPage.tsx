@@ -21,10 +21,8 @@ import { BrandMark } from "../components/auth/BrandMark";
 import { FreeForLifePromoModal } from "../components/FreeForLifePromoModal";
 import "../styles/landing-v2.css";
 
-// Registration closes for lifetime-free eligibility at midnight EST on Nov 21.
-const FREE_FOR_LIFE_CUTOFF_MS = Date.parse("2026-11-21T05:00:00.000Z");
-const FREE_ACCOUNT_PROMO_SESSION_KEY = "gsw-mail-lifetime-free-promo-2026";
-const freeOfferOpen = () => Date.now() < FREE_FOR_LIFE_CUTOFF_MS;
+// The first mailbox is free for every customer, without a signup deadline.
+const FREE_ACCOUNT_PROMO_SESSION_KEY = "gsw-mail-first-mailbox-free";
 
 const capabilityItems = [
   ["One place for ministry email", "Move between church, ministry, and personal accounts without changing apps.", Layers3],
@@ -102,12 +100,11 @@ export function LandingPage() {
   const pageRef = useRef<HTMLElement>(null);
   const [showFreeAccountModal, setShowFreeAccountModal] = useState(false);
   useEffect(() => {
-    if (!freeOfferOpen()) return;
     try {
       if (sessionStorage.getItem(FREE_ACCOUNT_PROMO_SESSION_KEY) === "dismissed") return;
     } catch { /* Private browsing can disable session storage. */ }
     const timer = window.setTimeout(() => {
-      if (freeOfferOpen()) setShowFreeAccountModal(true);
+      setShowFreeAccountModal(true);
     }, 7_000);
     return () => window.clearTimeout(timer);
   }, []);
@@ -137,7 +134,7 @@ export function LandingPage() {
   }, []);
 
   return <main ref={pageRef} className="lp2">
-    {showFreeAccountModal && freeOfferOpen() && <FreeForLifePromoModal onDismiss={dismissFreeAccountModal} />}
+    {showFreeAccountModal && <FreeForLifePromoModal onDismiss={dismissFreeAccountModal} />}
     <nav className="lp2-nav">
       <a className="lp2-brand" href="/"><BrandMark size={34}/><span>GSW Mail</span></a>
       <div className="lp2-nav-links"><a href="#features">Features</a><a href="#ministry-ecosystem">Bible Study App</a><a href="#workflows">Workflows</a><a href="#faq">FAQ</a></div>
@@ -148,9 +145,9 @@ export function LandingPage() {
       <div className="lp2-hero-copy">
         <span className="lp2-eyebrow">For pastors · Churches · Christian ministries</span>
         <h1>Email built for the work of ministry.</h1>
-        <p>Lead people, not another inbox. Bring church communication, ministry follow-ups, scheduling, and your team’s email together in one thoughtful workspace. Pair it with the Bible Study App to engage your community and take your ministry beyond Sunday.</p>
+        <p>Lead people, not another inbox. Bring church communication, ministry follow-ups, scheduling, and your team’s email together in one thoughtful workspace. Pair it with the Bible Study App to engage your community and take your ministry beyond Sunday. Your first mailbox is free for life.</p>
         <div className="lp2-actions"><a className="lp2-button" href="/sign-up">Start free <ArrowRight size={17}/></a><a className="lp2-text-link" href="#product">See it work</a></div>
-        <div className="lp2-hero-note"><Clock3 size={17}/><span>Write → Schedule → Outbox → Send</span></div>
+        <div className="lp2-hero-note"><Clock3 size={17}/><span>First mailbox free for life · Additional mailboxes $15/year each</span></div>
       </div>
       <div id="product" className="lp2-hero-product"><ProductMockup/></div>
     </section>
