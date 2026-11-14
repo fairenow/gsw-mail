@@ -65,8 +65,8 @@ export default async function stripeWebhook(app:FastifyInstance){
         await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",[customer]);
         const already=await client.query("SELECT 1 FROM billing_processed_events WHERE stripe_event_id=$1",[event.id]);
         if(already.rowCount){await client.query("COMMIT");return {received:true,duplicate:true};}
-        const workspace=await client.query<{organization_id:string;legacy:boolean}>(
-          "SELECT o.id AS organization_id,o.legacy_free_for_life AS legacy FROM billing_customers c "+
+        const workspace=await client.query<{organization_id:string;operator_exempt:boolean}>(
+          "SELECT o.id AS organization_id, EXISTS (SELECT 1 FROM billing_mailbox_exemptions e WHERE e.organization_id=o.id) AS operator_exempt FROM billing_customers c "+
           "JOIN organizations o ON o.id=c.organization_id WHERE c.stripe_customer_id=$1",[customer]);
         if(!workspace.rows[0]){
           req.log.warn({eventId:event.id,type:event.type},"Stripe billing event has no matching workspace");
@@ -75,7 +75,7 @@ export default async function stripeWebhook(app:FastifyInstance){
           return reply.code(503).send({error:"billing_customer_unmapped"});
         }
         const organizationId=workspace.rows[0].organization_id;
-        if(!workspace.rows[0].legacy){
+        if(!workspace.rows[0].operator_exempt){
           await client.query(
             "INSERT INTO billing_subscriptions (organization_id,stripe_subscription_id,status,billing_interval,mailbox_quantity,ai_quantity,current_period_end,updated_at) "+
             "VALUES ($1,$2,$3,$4,$5,$6,$7,now()) "+
