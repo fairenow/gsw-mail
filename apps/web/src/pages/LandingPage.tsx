@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   Bot,
+  BookOpen,
+  Video,
+  Megaphone,
   CalendarDays,
   Check,
   Clock3,
@@ -137,7 +140,7 @@ export function LandingPage() {
     {showFreeAccountModal && freeOfferOpen() && <FreeForLifePromoModal onDismiss={dismissFreeAccountModal} />}
     <nav className="lp2-nav">
       <a className="lp2-brand" href="/"><BrandMark size={34}/><span>GSW Mail</span></a>
-      <div className="lp2-nav-links"><a href="#features">Features</a><a href="#workflows">Workflows</a><a href="#ownership">Built differently</a><a href="#faq">FAQ</a></div>
+      <div className="lp2-nav-links"><a href="#features">Features</a><a href="#ministry-ecosystem">Bible Study App</a><a href="#workflows">Workflows</a><a href="#faq">FAQ</a></div>
       <div className="lp2-nav-actions"><a href="/sign-in">Sign in</a><a className="lp2-button small" href="/sign-up">Start free</a></div>
     </nav>
 
@@ -145,7 +148,7 @@ export function LandingPage() {
       <div className="lp2-hero-copy">
         <span className="lp2-eyebrow">For pastors · Churches · Christian ministries</span>
         <h1>Email built for the work of ministry.</h1>
-        <p>Lead people, not another inbox. Bring church communication, ministry follow-ups, scheduling, and your team’s email together in one thoughtful workspace.</p>
+        <p>Lead people, not another inbox. Bring church communication, ministry follow-ups, scheduling, and your team’s email together in one thoughtful workspace. Pair it with the Bible Study App to engage your community and take your ministry beyond Sunday.</p>
         <div className="lp2-actions"><a className="lp2-button" href="/sign-up">Start free <ArrowRight size={17}/></a><a className="lp2-text-link" href="#product">See it work</a></div>
         <div className="lp2-hero-note"><Clock3 size={17}/><span>Write → Schedule → Outbox → Send</span></div>
       </div>
@@ -160,6 +163,23 @@ export function LandingPage() {
     <section id="features" className="lp2-section" data-reveal="up">
       <div className="lp2-section-heading"><span className="lp2-eyebrow">Ministry communication, made simpler</span><h2>More time for people. Less time managing messages.</h2><p>From Sunday announcements to pastoral follow-ups, GSW Mail keeps the details of communication together so your attention can stay on the people you serve.</p></div>
       <div className="lp2-feature-grid">{featureCards.map(([num,title,copy,Icon]) => <article key={title}><span>{num}</span><Icon size={24}/><h3>{title}</h3><p>{copy}</p></article>)}</div>
+    </section>
+
+    <section id="ministry-ecosystem" className="lp2-section" data-reveal="up">
+      <div className="lp2-section-heading">
+        <span className="lp2-eyebrow">GSW Mail + Bible Study App</span>
+        <h2>Connect with your community. Share the Word. Keep the conversation going.</h2>
+        <p>Your ministry doesn't stop when a service ends. The Bible Study App helps you bring people together around Scripture and live teaching, while GSW Mail helps you stay connected through thoughtful communication.</p>
+      </div>
+      <div className="lp2-feature-grid">
+        <article><span>01</span><BookOpen size={24}/><h3>Build an engaged community</h3><p>Create a place for your church or ministry to gather, study Scripture, share lessons, and continue conversations throughout the week.</p></article>
+        <article><span>02</span><Video size={24}/><h3>Stream your ministry</h3><p>Host live Bible studies and ministry sessions, then share your broadcast to connected social platforms such as YouTube and Facebook.</p></article>
+        <article><span>03</span><Megaphone size={24}/><h3>Turn engagement into follow-up</h3><p>Coming soon: connect your Bible Study App community with GSW Mail to create custom email campaigns for ministry updates, invitations, and follow-ups.</p></article>
+      </div>
+      <div className="lp2-actions">
+        <a className="lp2-button" href="https://bible.guidedstepswellness.com" target="_blank" rel="noopener noreferrer">Explore the Bible Study App <ArrowRight size={17}/></a>
+        <a className="lp2-text-link" href="/sign-up">Get started with GSW Mail</a>
+      </div>
     </section>
 
     <section className="lp2-schedule-section" data-reveal="split">
@@ -207,7 +227,7 @@ export function LandingPage() {
     <section className="lp2-final" data-reveal="cta">
       <span className="lp2-eyebrow">For the work you’ve been called to do</span>
       <h2>Ministry deserves thoughtful tools.</h2>
-      <p>Bring the messages, people, and plans of your ministry into one place—so more of your time can go toward serving others.</p>
+      <p>Lead your community with the Bible Study App, share your ministry through live streaming, and keep communication moving with GSW Mail. Custom cross-app email campaigns are coming soon.</p>
       <a className="lp2-button" href="/sign-up">Start free <ArrowRight size={17}/></a>
     </section>
 
