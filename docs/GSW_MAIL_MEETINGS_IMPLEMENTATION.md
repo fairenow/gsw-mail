@@ -16,6 +16,12 @@ Release gates: service auth, free/paid billing boundaries, cross-workspace and c
 
 Configuration and exact validation results are recorded alongside the completed code before review. No production activation or secrets are changed automatically.
 
+## Completed links remain the foundation
+
+The existing community reusable links, room invitations, deletion controls, guest/waiting-room behavior and native deep-link work are complete and are not reopened by this change. Existing community routes/functions are left untouched. The new work is the Mail-to-Bible service boundary, paid workspace authorization, organizer handoff and a meeting-only permission scope that cannot grant community/broadcast rights. References below to later recurring/native/calendar work concern this partner integration only; they are not unfinished base link features.
+
+Mail continues to use its existing meetingLink field, engine event storage, calendar invitations, and event detail Join action. It does not introduce another invitation/link storage system in Mail. The separate Bible partner-meeting records deliberately avoid manufacturing community ownership for a mailbox user.
+
 ## Implemented web milestone
 
 The HTTP service supports create and launch. Private web rooms live at `/meet/:meetingId`, deliberately separate from community `/live` rooms. Initial limits are 10 total admitted people, 60 minutes from host start, and one starting/active meeting per organizer. Different organizers can meet concurrently. These limits are enforced in transactional mutations and provider room creation.
