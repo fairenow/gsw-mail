@@ -36,19 +36,21 @@ export async function createAdminMailbox(actorUserId: string, rawInput: unknown)
       if (process.env.STRIPE_ENFORCE_SUBSCRIPTIONS === "true") {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${orgId}))`);
         const entitlement = await tx.execute(sql`
-          SELECT o.legacy_free_for_life AS legacy,
+          SELECT EXISTS (SELECT 1 FROM billing_mailbox_exemptions be WHERE be.organization_id=o.id) AS operator_exempt,
             s.status AS subscription_status, s.mailbox_quantity AS licensed_mailboxes,
             (SELECT count(*)::integer FROM email_accounts ea
               WHERE ea.workspace_id = o.id AND ea.account_status != 'disabled') AS used_mailboxes
           FROM organizations o LEFT JOIN billing_subscriptions s ON s.organization_id = o.id
           WHERE o.id = ${orgId}
         `);
-        const row = entitlement.rows[0] as {legacy?:boolean;subscription_status?:string;licensed_mailboxes?:number;used_mailboxes?:number}|undefined;
+        const row = entitlement.rows[0] as {operator_exempt?:boolean;subscription_status?:string;licensed_mailboxes?:number;used_mailboxes?:number}|undefined;
         if (!row) throw notFound("workspace not found");
-        if (!row.legacy) {
+        // One free mailbox per workspace for life, regardless of signup date.
+        // Only explicitly exempted operator workspaces bypass the paid-seat cap.
+        if (!row.operator_exempt && (row.used_mailboxes ?? 0) >= 1) {
           if (!["active","trialing"].includes(row.subscription_status ?? ""))
             throw new HttpError(402,"billing_subscription_required");
-          if ((row.used_mailboxes ?? 0) >= (row.licensed_mailboxes ?? 0))
+          if ((row.used_mailboxes ?? 0) >= 1 + (row.licensed_mailboxes ?? 0))
             throw new HttpError(402,"mailbox_license_limit_reached");
         }
       }
