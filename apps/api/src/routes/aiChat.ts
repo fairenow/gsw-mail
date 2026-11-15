@@ -1,3 +1,4 @@
+import { requireAiSubscription } from "../billing/aiAccess.js";
 import { startSelectedModelWarmup } from "../ai/providers/prewarm.js";
 import { editStoredImage } from "../files/imageEditing.js";
 import { wrapUntrustedContent } from "../ai/untrustedContent.js";
@@ -1015,6 +1016,12 @@ async function prepareNewConversation(input: {
 
 export default async function aiChatRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
+  app.addHook("preHandler", async req => {
+    const body = req.body && typeof req.body === "object" ? req.body as Record<string, unknown> : {};
+    const query = req.query && typeof req.query === "object" ? req.query as Record<string, unknown> : {};
+    const accountId = z.uuid().optional().parse(body.accountId ?? query.accountId);
+    await requireAiSubscription(req.user!.id, accountId);
+  });
 
   // Explicit background authorization is kept separate from interactive AI
   // grants. No offline credential is issued by these endpoints; requests remain

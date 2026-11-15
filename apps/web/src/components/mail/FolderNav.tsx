@@ -1,3 +1,4 @@
+import { useAppShell } from "../AppShell";
 import type { ReactNode } from "react";
 import { FOLDERS, FOLDER_ICON, type Folder } from "../folders";
 import type { MailFolder } from "../../api";
@@ -19,6 +20,7 @@ export function FolderNav({ folder, counts, customFolders = [], collapsed, secti
   onOpenSection?: (section: "contacts" | "calendar" | "settings" | "files" | "chat" | "scheduled") => void;
   onPrefetchSection?: (section: "contacts" | "calendar" | "settings" | "files" | "chat" | "scheduled") => void;
 }) {
+  const { aiAccess, aiAccessLoading } = useAppShell();
   const renderCustom = (parentId: string | null, depth = 0): ReactNode => childrenOf(customFolders, parentId).map((item) => {
     const customName = item.name as Folder;
     return <div key={item.id}>
@@ -54,7 +56,7 @@ export function FolderNav({ folder, counts, customFolders = [], collapsed, secti
       {renderCustom(null)}
       <div className="gsw-folder-nav-divider" />
       {onOpenSection ? <>
-        <button className={`gsw-folder gsw-folder-link ${section === "chat" ? "active" : ""}`} onPointerEnter={() => onPrefetchSection?.("chat")} onFocus={() => onPrefetchSection?.("chat")} onClick={() => onOpenSection("chat")} title={collapsed ? "Chat" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><MessageCircle size={18} strokeWidth={1.75} /></span><span>Chat</span></button>
+        <div className="gsw-chat-nav-row"><button className={`gsw-folder gsw-folder-link ${section === "chat" ? "active" : ""}`} disabled={!aiAccess} onPointerEnter={() => aiAccess && onPrefetchSection?.("chat")} onFocus={() => aiAccess && onPrefetchSection?.("chat")} onClick={() => aiAccess && onOpenSection("chat")} title={!aiAccess ? "AI subscription required" : collapsed ? "Chat" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><MessageCircle size={18} strokeWidth={1.75} /></span><span>Chat</span></button>{!aiAccess && !aiAccessLoading && <a className="gsw-chat-upgrade-badge" href="/control-center#billing" aria-label="Upgrade AI to unlock Chat">Upgrade</a>}</div>
         <button className={`gsw-folder gsw-folder-link ${section === "scheduled" ? "active" : ""}`} onPointerEnter={() => onPrefetchSection?.("scheduled")} onFocus={() => onPrefetchSection?.("scheduled")} onClick={() => onOpenSection("scheduled")} title={collapsed ? "Scheduled Work" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><ListTodo size={18} strokeWidth={1.75} /></span><span>Scheduled Work</span></button>
         <button className={`gsw-folder gsw-folder-link ${section === "contacts" ? "active" : ""}`} onPointerEnter={() => onPrefetchSection?.("contacts")} onFocus={() => onPrefetchSection?.("contacts")} onClick={() => onOpenSection("contacts")} title={collapsed ? "Contacts" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><ContactRound size={18} strokeWidth={1.75} /></span><span>Contacts</span></button>
         <button className={`gsw-folder gsw-folder-link ${section === "calendar" ? "active" : ""}`} onPointerEnter={() => onPrefetchSection?.("calendar")} onFocus={() => onPrefetchSection?.("calendar")} onClick={() => onOpenSection("calendar")} title={collapsed ? "Calendar" : undefined}><span className="gsw-folder-icon" aria-hidden="true"><CalendarDays size={18} strokeWidth={1.75} /></span><span>Calendar</span></button>

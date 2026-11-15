@@ -317,7 +317,7 @@ export interface ProductSettings {
   contacts: Record<string, unknown>;
   ai: {
     enabled: boolean;
-    modelProvider: "kimi" | "qwen" | "gpt-oss-120b" | "deepseek-v4.1-flash" | "openai" | "claude";
+    modelProvider: "kimi" | "openai" | "claude";
     mailRead: boolean;
     draftMutation: boolean;
     emailSend: boolean;
@@ -768,6 +768,7 @@ export const api = {
   importContacts: async (body: unknown) => { const result = await post<{ id: string; filename: string; rowCount: number; createdCount: number; updatedCount: number; skippedCount: number; duplicateCount: number; failedCount: number }>("/product/contact-imports", body, interactiveTimeout); clearContactsCache(); return result; },
   contactImports: () => cachedGet<{ imports: { id: string; filename: string; rowCount: number; createdCount: number; updatedCount: number; skippedCount: number; duplicateCount: number; failedCount: number; createdAt: string }[] }>("/product/contact-imports", 60_000, 10 * 60_000),
   contactImportRows: (id: string) => get<{ rows: { rowNumber: number; raw: Record<string, string>; status: string; error?: string | null }[] }>(`/product/contact-imports/${id}/rows`),
+  aiAccess: (accountId: string) => get<{ allowed: boolean }>(`/product/ai-access?accountId=${encodeURIComponent(accountId)}`),
   calendars: (accountId?: string) => cachedGet<{ calendars: CalendarSummary[] }>(`/product/calendars${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ""}`, 60_000, 10 * 60_000),
   calendarEvents: (accountId: string, after: string, before: string) => cachedGet<{ events: CalendarEvent[] }>(`${calendarPrefix(accountId)}after=${encodeURIComponent(after)}&before=${encodeURIComponent(before)}`, 30_000, 5 * 60_000),
   createPrivateMeeting: (body: { accountId: string; externalEventId: string; title: string; scheduledAt: string; timezone: string }) => post<{ meetingId: string; joinUrl: string; status: "scheduled" }>("/product/calendar-meetings", body),
