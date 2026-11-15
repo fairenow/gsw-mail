@@ -1,3 +1,4 @@
+import { persistMailboxCredential } from "./mailboxCredentialVault.js";
 import { withInternalMailboxIdentity } from "./internalMailboxAuthorization.js";
 import { createHash, randomBytes } from "node:crypto";
 import { fromNodeHeaders } from "better-auth/node";
@@ -145,13 +146,18 @@ export async function getStalwartAccessToken(input: StalwartTokenRequest, reques
   }
 }
 
-async function getStalwartAccessTokenUncached(input: StalwartTokenRequest, request: typeof fetch = fetch): Promise<string> {
+export async function authorizeRenewableStalwartMailbox(input: StalwartTokenRequest & { productUserId: string }, request: typeof fetch = fetch): Promise<void> {
+  if (!canAttemptInteractiveMailboxAuthorization(input.headers)) throw new Error("mailbox_session_required");
+  await getStalwartAccessTokenUncached(input, request, { productUserId: input.productUserId });
+}
+
+async function getStalwartAccessTokenUncached(input: StalwartTokenRequest, request: typeof fetch = fetch, renewal?: { productUserId: string }): Promise<string> {
   if (!config.auth.oauthClientId || !config.auth.oauthClientSecret) {
     throw new Error("Better Auth Stalwart OAuth client is not configured");
   }
   const cacheKey = `${input.authUserId}:${input.accountId}:${config.auth.stalwartAudience}`;
   const cached = cache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
+  if (!renewal && cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
   if (cached) cache.delete(cacheKey);
 
   const verifier = randomBytes(32).toString("base64url");
@@ -162,7 +168,7 @@ async function getStalwartAccessTokenUncached(input: StalwartTokenRequest, reque
     response_type: "code",
     client_id: config.auth.oauthClientId,
     redirect_uri: config.auth.oauthRedirectUri,
-    scope: "openid email",
+    scope: renewal ? "openid email offline_access" : "openid email",
     resource: config.auth.stalwartAudience,
     state,
     code_challenge: challenge,
@@ -189,7 +195,7 @@ async function getStalwartAccessTokenUncached(input: StalwartTokenRequest, reque
     oauthClientId: config.auth.oauthClientId,
     redirectUri: config.auth.oauthRedirectUri,
     resource: config.auth.stalwartAudience,
-    scope: "openid email",
+    scope: renewal ? "openid email offline_access" : "openid email",
     cookiePresent,
     sessionBeforeAuthorize,
   });
@@ -271,7 +277,7 @@ async function getStalwartAccessTokenUncached(input: StalwartTokenRequest, reque
     signal: AbortSignal.timeout(10_000),
   });
   if (!tokenResponse.ok) throw new Error(`Better Auth OAuth token exchange failed: HTTP ${tokenResponse.status}`);
-  const token = await tokenResponse.json() as { access_token?: string; expires_in?: number };
+  const token = await tokenResponse.json() as { access_token?: string; refresh_token?: string; expires_in?: number };
   if (!token.access_token) throw new Error("Better Auth OAuth token response was invalid");
   const tokenMetadata = decodeStalwartTokenMetadata(token.access_token);
   console.info("[oauth] token_received", {
@@ -289,6 +295,10 @@ async function getStalwartAccessTokenUncached(input: StalwartTokenRequest, reque
     oauth_token_scope: tokenMetadata?.scope,
     oauth_token_exp: tokenMetadata?.exp,
   });
+  if (renewal) {
+    if (!token.refresh_token) throw new Error("renewable_mailbox_authorization_unavailable");
+    await persistMailboxCredential({ productUserId: renewal.productUserId, authUserId: input.authUserId, accountId: input.accountId, clientId: config.auth.oauthClientId, accessToken: token.access_token, refreshToken: token.refresh_token });
+  }
   const expiresAt = Date.now() + Math.max(60, (token.expires_in ?? config.auth.tokenTtlSeconds) - 60) * 1000;
   cache.set(cacheKey, { token: token.access_token, expiresAt });
   if (cache.size > 1024) cache.delete(cache.keys().next().value!);

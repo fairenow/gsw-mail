@@ -1,3 +1,4 @@
+import { ensureBookingMailboxAuthorization } from "../booking/authorization.js";
 import { readFile } from "node:fs/promises";
 import { parseEventLinkRequest } from "../booking/request.js";
 import { DemoEngine } from "../engine/demo.js";
@@ -537,5 +538,62 @@ test("the public booking URL has a direct-load SPA route without shadowing API r
         r.source === "/product/:path*" &&
         r.destination.includes("railway.app/product/"),
     ),
+  );
+});
+
+test("event link save verifies a durable mailbox grant instead of relying on an interactive token cache", async () => {
+  const input = {
+    productUserId: "owner",
+    authUserId: "auth-owner",
+    accountId: randomUUID(),
+    headers: { cookie: "test-owner-session" },
+  };
+  const engine = new DemoEngine(),
+    calls: string[] = [];
+  let saved = false;
+  const credential = {
+    clientId: "first-party",
+    address: "owner@example.test",
+    accessToken: "test-access",
+    refreshToken: "test-refresh",
+  };
+  const dependencies = {
+    load: async (principal: { authUserId: string; accountId: string }) => {
+      assert.equal(principal.authUserId, input.authUserId);
+      assert.equal(principal.accountId, input.accountId);
+      return saved ? credential : null;
+    },
+    renew: async (
+      principal: Parameters<typeof ensureBookingMailboxAuthorization>[0],
+    ) => {
+      assert.equal(principal.productUserId, "owner");
+      assert.equal(principal.headers.cookie, "test-owner-session");
+      calls.push("renew");
+      saved = true;
+    },
+    engine: async (principal: {
+      headers: Record<string, string>;
+      permission?: string;
+    }) => {
+      assert.deepEqual(principal.headers, {});
+      assert.equal(principal.permission, "manage");
+      calls.push("offline-engine");
+      return engine;
+    },
+  };
+  assert.equal(
+    await ensureBookingMailboxAuthorization(input, dependencies),
+    engine,
+  );
+  assert.deepEqual(calls, ["renew", "offline-engine"]);
+  await ensureBookingMailboxAuthorization(input, dependencies);
+  assert.equal(calls.filter((c) => c === "renew").length, 1);
+  await assert.rejects(
+    ensureBookingMailboxAuthorization(input, {
+      ...dependencies,
+      load: async () => null,
+      renew: async () => {},
+    }),
+    /could not authorize background bookings/,
   );
 });

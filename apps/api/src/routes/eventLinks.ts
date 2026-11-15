@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requireUser } from "../auth/middleware.js";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { pool } from "../db/client.js";
-import { getUserEngine } from "../engine/index.js";
+import { ensureBookingMailboxAuthorization } from "../booking/authorization.js";
 import {
   HttpError,
   badRequest,
@@ -119,23 +119,15 @@ export default async function eventLinks(app: FastifyInstance) {
     if (account.status !== "active" || !req.authUserId)
       throw forbidden("Sign in to the mailbox to manage event links");
     if (settings.enabled) {
-      const engine = await getUserEngine({
+      const engine = await ensureBookingMailboxAuthorization({
         productUserId: req.user!.id,
         authUserId: req.authUserId,
         accountId,
         headers: req.headers as Record<string, string>,
-        permission: "manage",
       });
       const calendars = await engine.listCalendars(accountId);
       if (!calendars.some((c) => c.engineId === settings.calendarId))
         throw badRequest("Choose a calendar belonging to this mailbox");
-      await getUserEngine({
-        productUserId: req.user!.id,
-        authUserId: req.authUserId,
-        accountId,
-        headers: {},
-        permission: "manage",
-      });
       if (settings.generateMeeting) {
         if (process.env.GSW_MEETINGS_ENABLED !== "true")
           throw serviceUnavailable("Meeting generation is unavailable");

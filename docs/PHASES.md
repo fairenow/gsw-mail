@@ -287,3 +287,5 @@ Public Event Link URLs have an explicit /book/:slug SPA rewrite on Vercel so inv
 Booking conflict checks use Stalwart native bounded recurrence expansion and provider-computed UTC bounds, with paging and query-state validation. Monthly reads include the whole displayed month plus timezone margins. Partial or unexpandable results remain unavailable instead of exposing busy times.
 
 Booking reads retain an explicit timezone/duration fallback for calendar servers that omit computed UTC fields. Missing or invalid time bounds still fail closed; diagnostics use only predefined availability categories.
+
+Saving an enabled Event Link establishes an owner-bound offline_access authorization through the first-party mailbox broker and verifies the encrypted renewable credential vault before publishing. An interactive in-memory token is no longer sufficient proof of background availability. Existing mailbox permission, identity, audience, JWT and revocation checks remain enforced.
