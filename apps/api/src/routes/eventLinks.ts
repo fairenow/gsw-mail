@@ -1,3 +1,4 @@
+import { JmapError } from "../engine/jmap.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/middleware.js";
@@ -5,6 +6,7 @@ import { requireAccountPermission } from "../auth/authorize.js";
 import { pool } from "../db/client.js";
 import { getUserEngine } from "../engine/index.js";
 import {
+  HttpError,
   badRequest,
   conflict,
   forbidden,
@@ -51,7 +53,18 @@ export async function publicEventLinks(app: FastifyInstance) {
       try {
         return await availableDays(await findLink(slug), month, duration);
       } catch (e) {
-        if (e instanceof Error && "status" in e) throw e;
+        if (e instanceof HttpError) throw e;
+        req.log.warn(
+          {
+            reason:
+              e instanceof JmapError
+                ? e.type
+                : e instanceof Error
+                  ? e.name
+                  : "unknown",
+          },
+          "booking availability verification failed",
+        );
         throw serviceUnavailable(
           "Availability is temporarily unavailable. Please try again later.",
         );

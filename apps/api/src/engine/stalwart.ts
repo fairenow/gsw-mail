@@ -1,4 +1,3 @@
-import { calendarStartInstant } from "../mobile/notificationPolicy.js";
 import { randomUUID } from "node:crypto";
 import { normalizeMessageIdValue } from "../lib/messageId.js";
 import { JmapClient, JmapError, type JmapMethodCall, type JmapSession } from "./jmap.js";
@@ -67,8 +66,8 @@ interface JmapCalendar {
 
 interface JmapCalendarEvent {
   uid?: string;
-  recurrenceRules?: unknown;
-  recurrenceOverrides?: unknown;
+  utcStart?: string;
+  utcEnd?: string;
   freeBusyStatus?: string;
   status?: string;
   id: string;
@@ -990,31 +989,26 @@ export class StalwartEngine implements MailEngine {
   }
 
   async listBookingCalendarEvents(engineAccountId: EngineAccountId, after: string, before: string): Promise<EngineCalendarEvent[]> {
+    const from = new Date(after), to = new Date(before);
+    if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || to <= from) throw Error("Invalid booking calendar range");
     const { accountId } = await this.accountIdOf(engineAccountId);
     const result: EngineCalendarEvent[] = [];
+    let queryState: string | undefined;
     for (let position = 0; position < 5000;) {
       const responses = await this.client.call([
-        ["CalendarEvent/query", {accountId, position, limit:200, calculateTotal:true, sort:[{property:"start",isAscending:true}]}, "bookingQuery"],
-        ["CalendarEvent/get", {accountId, "#ids":{resultOf:"bookingQuery",name:"CalendarEvent/query",path:"/ids"}, properties:["id","uid","calendarIds","virtualLocations","title","start","timeZone","duration","showWithoutTime","recurrenceRules","recurrenceOverrides","freeBusyStatus","status"]}, "bookingGet"]
+        ["CalendarEvent/query", {accountId,filter:{after:from.toISOString().slice(0,19),before:to.toISOString().slice(0,19)},expandRecurrences:true,timeZone:"Etc/UTC",position,limit:200,calculateTotal:true,sort:[{property:"start",isAscending:true}]}, "bookingQuery"],
+        ["CalendarEvent/get", {accountId,timeZone:"Etc/UTC","#ids":{resultOf:"bookingQuery",name:"CalendarEvent/query",path:"/ids"},properties:["id","uid","calendarIds","title","utcStart","utcEnd","virtualLocations","freeBusyStatus","status"]}, "bookingGet"]
       ]);
-      const query = responses[0]?.[1] as {ids?:string[];total?:number};
+      const query = responses[0]?.[1] as {ids?:string[];total?:number;queryState?:string};
       const payload = responses[1]?.[1] as {list?:JmapCalendarEvent[];notFound?:string[]};
       if (!Array.isArray(query?.ids) || !Array.isArray(payload?.list) || payload.notFound?.length || query.ids.length !== payload.list.length) throw Error("Calendar availability could not be fully verified");
+      if (queryState && query.queryState && queryState !== query.queryState) throw Error("Calendar changed while checking availability");
+      queryState = query.queryState;
       for (const event of payload.list) {
         if (event.status === "cancelled" || event.freeBusyStatus === "free") continue;
-        if ((Array.isArray(event.recurrenceRules) ? event.recurrenceRules.length > 0 : !!event.recurrenceRules) || (event.recurrenceOverrides && Object.keys(event.recurrenceOverrides).length > 0)) throw Error("Recurring events require availability review");
-        const mapped = calendarEventToEngine(event);
-        if (!mapped.start || !mapped.end) throw Error("Calendar event duration could not be verified");
-        const start = calendarStartInstant(mapped.start, mapped.timeZone ?? "Etc/UTC");
-        const wallStart = /Z$|[+-]\d{2}:\d{2}$/.test(mapped.start) ? mapped.start : mapped.start+"Z";
-        const nominalEndValue = addDuration(wallStart,event.duration!)!;
-        const nominalStart = new Date(wallStart).getTime();
-        const nominalEnd = new Date(nominalEndValue).getTime();
-        const end = mapped.allDay
-          ? calendarStartInstant(nominalEndValue.slice(0,19), mapped.timeZone ?? "Etc/UTC")
-          : new Date(start.getTime() + nominalEnd - nominalStart);
-        if (!Number.isFinite(end.getTime()) || end <= start) throw Error("Calendar event duration could not be verified");
-        result.push({...mapped,start:start.toISOString(),end:end.toISOString()});
+        const start = new Date(event.utcStart ?? ""), end = new Date(event.utcEnd ?? "");
+        if (!event.id || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) throw Error("Calendar event times could not be verified");
+        result.push({...calendarEventToEngine(event),start:start.toISOString(),end:end.toISOString(),timeZone:"Etc/UTC"});
       }
       position += query.ids.length;
       if (!query.ids.length || (typeof query.total === "number" && position >= query.total)) return result;

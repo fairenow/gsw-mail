@@ -1,6 +1,6 @@
 # Event Link booking
 
-Status: implementation on `feature/event-link-booking-20261115`; not enabled in production until merged and deployed. No booking links or notification emails have been created on the live service by this change.
+Status: owner settings and public routing have been deployed. The Guided Steps Wellness Apps link was saved successfully. Native calendar occurrence verification is being released and verified; live email acceptance has not yet been claimed.
 
 ## Owner flow
 
@@ -31,7 +31,9 @@ Automatic approval reserves the slot immediately and queues calendar creation. A
 
 An account-scoped transaction advisory lock serializes reservations across every event link for a mailbox. Live calendar events and pending/approved/confirmed/attention bookings block overlapping slots. Idempotent guest retries use a request UUID and payload digest. Submitted organizer/account IDs are never accepted from public clients. Owner operations recheck mailbox manage permission. Guest endpoints reveal available intervals, not calendar titles, attendee details or OAuth state.
 
-The Stalwart booking reader pages beyond the normal 200-event UI limit, normalizes calendar timezones and all-day dates, and excludes cancelled/free events. Unverifiable durations, partial provider responses, calendars over the 5,000-event verification cap, and recurring calendar events currently make public availability unavailable. Recurring busy-event expansion is a release limitation, not an assumption that those intervals are free. Weekly booking availability itself is supported. Confirmed calendar events manually edited/deleted outside Event Link do not automatically cancel the corresponding reservation in this first release.
+The Stalwart booking reader uses bounded CalendarEvent/query requests with expandRecurrences and requests provider-computed utcStart/utcEnd. Recurring rules and overrides, all-day boundaries and DST resolution stay with the calendar server. Monthly checks span the entire displayed month with timezone margins; submission checks cover the selected local day. Pages beyond the normal 200-event UI limit are read up to a 5,000-occurrence cap; changing query state, partial responses, missing UTC bounds and provider expansion errors fail closed. Public responses expose only available intervals. Confirmed calendar events manually edited/deleted outside Event Link do not automatically cancel the corresponding reservation in this first release.
+
+Protocol reference: https://jmap.io/spec/calendars-draft/ (CalendarEvent/query and CalendarEvent/get).
 
 Public booking POST is limited to five requests per IP per hour, plus 100 new bookings per mailbox per day. There is a honeypot, bounded input sizes, strict schemas, a six-month horizon, minimum advance notice, hashed request payloads and no-store/noindex API responses. These controls reduce abuse; they do not verify ownership of a guest's email address. Booking metadata contains guest contact details and must be treated as private customer data.
 
@@ -39,6 +41,6 @@ Public booking POST is limited to five requests per IP per hour, plus 100 new bo
 
 Migration `0049_event_links.sql` creates event_links, event_bookings and event_booking_mail. Startup also performs the same additive idempotent schema setup, consistent with existing workers. No new credentials are required. The existing GSW meeting credentials are used only when the owner explicitly enables generated video links.
 
-The required local `npm run db:migrate --workspace apps/api` was attempted; the configured local PostgreSQL connection is unavailable. The exact schema is applied twice in the PGlite integration test to verify syntax, constraints and idempotence. Production migration and real mailbox/event/email acceptance still require deployment verification.
+The required local `npm run db:migrate --workspace apps/api` was attempted; the configured local PostgreSQL connection is unavailable. The exact schema is applied twice in the PGlite integration test to verify syntax, constraints and idempotence. Production schema availability is confirmed by the successful owner save. Real mailbox/event/email acceptance still needs verification.
 
 Validation covers slot policy, duration rules, date exclusions, advance notice, DST gaps and all-day DST boundaries; manual/auto approval, expiry, immutable retries and cross-link conflicts; tenant denial; calendar failure states; private public metadata; outbound queue staging/idempotence; and UTF-8/ICS escaping. Run API/web typechecks, API tests and the production web build. A local browser acceptance attempt was blocked by the environment's Chromium process/socket restriction, so desktop/mobile interactive acceptance remains outstanding.
