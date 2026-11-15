@@ -1001,6 +1001,7 @@ export class StalwartEngine implements MailEngine {
     update["/calendarIds"] = card.calendarIds;
     update["/description"] = input.description ?? null;
     update["/locations"] = input.location ? card.locations : null;
+    update["/virtualLocations"] = input.meetingLink ? card.virtualLocations : null;
     const responses = await this.client.call([["CalendarEvent/set", { accountId, update: { [eventId]: update }, sendSchedulingMessages: input.sendSchedulingMessages }, "ceu1"]]);
     const payload = responses[0]![1] as { notUpdated?: Record<string, { description?: string }> };
     if (payload.notUpdated?.[eventId]) throw new Error(payload.notUpdated[eventId].description ?? "Stalwart calendar event update failed");
@@ -1016,7 +1017,7 @@ export class StalwartEngine implements MailEngine {
     if (payload.notDestroyed?.[eventId]) throw new Error(payload.notDestroyed[eventId].description ?? "Stalwart calendar event deletion failed");
   }
 
-  private async getCalendarEvent(engineAccountId: EngineAccountId, eventId: string): Promise<EngineCalendarEvent | null> {
+  async getCalendarEvent(engineAccountId: EngineAccountId, eventId: string): Promise<EngineCalendarEvent | null> {
     const { accountId } = await this.accountIdOf(engineAccountId);
     const responses = await this.client.call([["CalendarEvent/get", { accountId, ids: [eventId], properties: ["id", "calendarIds", "title", "description", "start", "timeZone", "duration", "locations", "virtualLocations", "participants", "organizerCalendarAddress", "showWithoutTime"] }, "ceg2"]]);
     const payload = responses[0]![1] as { list?: JmapCalendarEvent[] };

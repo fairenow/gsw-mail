@@ -383,3 +383,11 @@ The /meet entry screen confirms organizer identity and clearly states that media
 The event modal includes a compact Generate text action beside Virtual meeting link. It calls the authenticated paid meeting API and inserts the returned ordinary join URL. Each open draft receives a UUID reused across retries; the first request payload is retained to avoid conflicting retries after edits. Existing/pasted links are preserved, Save waits for generation, and stale responses are ignored when closing/reopening or changing mailbox. No title is required for generation: the initial meeting title defaults to Private meeting.
 
 Unavailable-service and paid-access failures appear inline. This UI does not enable either backend flag or finish media/admission. Production requires both meeting services to be configured and enabled; meeting lifecycle and scheduling synchronization remain separate work.
+
+## Private meeting web lifecycle
+
+GSW Mail now opens verified organizers through Host meeting on a saved partner event. Invitation URLs grant guest entry only; organizer tickets and host/guest session tokens remain server-only or HttpOnly cookies. The Bible backend reserves a separate workspace-scoped occurrence, creates a LiveKit room, admits waiting guests, signs room-only participant grants, and enforces a 10-person/60-minute/one-workspace-meeting limit. Media starts only on the host's explicit Start action with a fresh signed entitlement; reconnecting to an existing occurrence does not require a new subscription purchase.
+
+Only authenticated, active owner memberships for the two existing founder accounts with a founder_operator_exception workspace grant receive operator meeting access. Other users still need the current paid entitlement. Calendar creates/edits synchronize title, time and timezone before the engine write; removing/deleting an owned link cancels it. Active meetings must end first. Guest copies of another organizer's link do not mutate that meeting. Engine getCalendarEvent remains mailbox-scoped.
+
+Duration scheduling plus a recovery sweep removes provider rooms; failed deletion remains marked for retry. Participant webhook reconciliation removes unauthorized identities. Existing community stream, recording and social features remain separate. Calendar invites include the ordinary meeting URL; no organizer credential is embedded.

@@ -276,6 +276,8 @@ export class DemoEngine implements MailEngine {
     return [];
   }
 
+  async getCalendarEvent(_accountId: EngineAccountId, _eventId: string): Promise<EngineCalendarEvent | null> { return null; }
+
   async createCalendarEvent(accountId: EngineAccountId, input: EngineCalendarEventInput): Promise<EngineCalendarEvent> {
     void accountId;
     return { engineId: `demo-event-${++seq}`, calendarIds: [input.calendarId], title: input.title, ...(input.description ? { description: input.description } : {}), start: input.start, end: new Date(new Date(input.start).getTime() + input.durationMinutes * 60_000).toISOString(), ...(input.location ? { location: input.location } : {}), ...(input.meetingLink ? { meetingLink: input.meetingLink } : {}), attendees: input.attendees, allDay: input.allDay };

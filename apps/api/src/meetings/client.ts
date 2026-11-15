@@ -17,13 +17,13 @@ const roomResponse = z.object({
 }).strict();
 
 export class MeetingServiceError extends Error {
-  constructor(readonly code: "meeting_service_unavailable" | "meeting_service_rejected" | "meeting_service_invalid_response") {
+  constructor(readonly code: "meeting_service_unavailable" | "meeting_service_rejected" | "meeting_service_invalid_response", readonly status?: number) {
     super(code);
   }
 }
 
 export type MeetingServiceConfig = { apiUrl: string; webOrigin: string; signingSecret: string };
-export type MeetingOrganizer = { userId: string; workspaceId: string; videoMeetings: true };
+export type MeetingOrganizer = { userId: string; workspaceId: string; videoMeetings: boolean };
 
 function trustedOrigin(value: string): string {
   const url = new URL(value);
@@ -38,12 +38,12 @@ export function createMeetingClient(config: MeetingServiceConfig, transport: typ
   const key = new TextEncoder().encode(config.signingSecret);
   if (key.byteLength < 32) throw new Error("Meeting signing secret must contain at least 32 bytes");
 
-  async function request(organizer: MeetingOrganizer, input: unknown, operation: "rooms.create" | "rooms.handoff", path: string) {
-      if (!organizer.userId || !organizer.workspaceId || organizer.videoMeetings !== true) throw new Error("Meeting organizer entitlement required");
+  async function request(organizer: MeetingOrganizer, input: unknown, operation: "rooms.create" | "rooms.handoff" | "rooms.update" | "rooms.cancel", path: string) {
+      if (!organizer.userId || !organizer.workspaceId || ((operation === "rooms.create" || operation === "rooms.handoff") && !organizer.videoMeetings)) throw new Error("Meeting organizer entitlement required");
       const body = JSON.stringify(input);
       const assertion = await new SignJWT({
         workspaceId: organizer.workspaceId,
-        videoMeetings: true,
+        videoMeetings: organizer.videoMeetings,
         operation,
         bodySha256: createHash("sha256").update(body).digest("hex"),
       }).setProtectedHeader({ alg: "HS256", typ: "JWT" })
@@ -58,7 +58,7 @@ export function createMeetingClient(config: MeetingServiceConfig, transport: typ
       } catch { throw new MeetingServiceError("meeting_service_unavailable"); }
       if (!response.ok) {
         await response.body?.cancel();
-        throw new MeetingServiceError(response.status >= 500 ? "meeting_service_unavailable" : "meeting_service_rejected");
+        throw new MeetingServiceError(response.status >= 500 ? "meeting_service_unavailable" : "meeting_service_rejected", response.status);
       }
       try {
         const reader = response.body?.getReader();
@@ -88,8 +88,14 @@ export function createMeetingClient(config: MeetingServiceConfig, transport: typ
         return result;
       } catch { throw new MeetingServiceError("meeting_service_invalid_response"); }
     },
-    async issueHost(organizer: MeetingOrganizer, input: { meetingId: string; externalEventId: string }) {
-      const validated = z.object({ meetingId: z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/), externalEventId: z.string().min(1).max(200) }).strict().parse(input);
+    async updateRoom(organizer: MeetingOrganizer, input: { meetingId: string; title: string; scheduledAt: string; timezone: string }) {
+      return request(organizer, input, "rooms.update", "rooms/update");
+    },
+    async cancelRoom(organizer: MeetingOrganizer, meetingId: string) {
+      return request(organizer, {meetingId}, "rooms.cancel", "rooms/cancel");
+    },
+    async issueHost(organizer: MeetingOrganizer, input: { meetingId: string; externalEventId?: string }) {
+      const validated = z.object({ meetingId: z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/), externalEventId: z.string().min(1).max(200).optional() }).strict().parse(input);
       const raw = await request(organizer, validated, "rooms.handoff", "host");
       try {
         const result = z.object({ ticket: z.string().regex(/^[a-f0-9]{64}$/), meetingId: z.string(), expiresAt: z.number().int() }).strict().parse(raw);

@@ -220,6 +220,8 @@ export interface MailEngine {
 
   listCalendarEvents(accountId: EngineAccountId, after: string, before: string): Promise<EngineCalendarEvent[]>;
 
+  getCalendarEvent(accountId: EngineAccountId, eventId: string): Promise<EngineCalendarEvent | null>;
+
   createCalendarEvent(accountId: EngineAccountId, input: EngineCalendarEventInput): Promise<EngineCalendarEvent>;
 
   updateCalendarEvent(accountId: EngineAccountId, eventId: string, input: EngineCalendarEventInput): Promise<EngineCalendarEvent>;
