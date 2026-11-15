@@ -127,14 +127,22 @@ export function createBookingService(
       end: r.ends_at.toISOString(),
     }));
   }
-  async function calendarEvents(link: EventLinkRow, day: string) {
+  async function calendarEvents(
+    link: EventLinkRow,
+    day: string,
+    until?: string,
+  ) {
     const engine = await engineFor(link);
+    const start = new Date(day + "T00:00:00Z"),
+      end = new Date((until ?? day) + "T00:00:00Z");
+    start.setUTCDate(start.getUTCDate() - 2);
+    end.setUTCDate(end.getUTCDate() + (until ? 2 : 3));
     return {
       engine,
       events: await engine.listBookingCalendarEvents(
         link.account_id,
-        day + "T00:00:00Z",
-        day + "T23:59:59Z",
+        start.toISOString(),
+        end.toISOString(),
       ),
     };
   }
@@ -150,7 +158,13 @@ export function createBookingService(
       month > bounds.last.slice(0, 7)
     )
       throw badRequest("Choose a month in the next six months");
-    const { events } = await calendarEvents(link, month + "-01");
+    const { events } = await calendarEvents(
+      link,
+      month + "-01",
+      new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 1))
+        .toISOString()
+        .slice(0, 10),
+    );
     const busy: Interval[] = [
       ...events.map((e) => ({ start: e.start, end: e.end! })),
       ...(await bookingBusy(pool, link.account_id)),

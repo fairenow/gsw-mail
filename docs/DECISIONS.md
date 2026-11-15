@@ -294,3 +294,5 @@ Settings now includes mailbox-owner Event Link management with fixed dated slots
 Event Link submission normalizes empty optional date lines and ignores drafts from the inactive scheduling mode. Active fields remain strictly validated; errors name the field and row instead of returning an opaque invalid request.
 
 Public Event Link URLs have an explicit /book/:slug SPA rewrite on Vercel so invitations work on direct navigation, not only client-side navigation.
+
+Booking conflict checks use Stalwart native bounded recurrence expansion and provider-computed UTC bounds, with paging and query-state validation. Monthly reads include the whole displayed month plus timezone margins. Partial or unexpandable results remain unavailable instead of exposing busy times.
