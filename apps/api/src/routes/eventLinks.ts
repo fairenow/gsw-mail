@@ -1,3 +1,4 @@
+import { verifyBookingDecisionToken } from "../booking/decisionToken.js";
 import { JmapError } from "../engine/jmap.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -32,6 +33,65 @@ export async function publicEventLinks(app: FastifyInstance) {
     reply.header("x-robots-tag", "noindex, nofollow");
     return payload;
   });
+  const decisionRequest = z
+    .object({
+      token: z.string().max(2000),
+      decision: z.enum(["approve", "decline"]).optional(),
+    })
+    .strict();
+  const resolveDecision = async (raw: unknown) => {
+    const input = decisionRequest.parse(raw);
+    const claims = verifyBookingDecisionToken(input.token);
+    if (!claims)
+      throw forbidden(
+        "This approval link is invalid or expired. Open the latest booking email.",
+      );
+    const { rows } = await pool.query<{
+      name: string;
+      email: string;
+      starts_at: Date;
+      status: string;
+      hold_until: Date;
+      settings: { name: string; timeZone: string };
+    }>(
+      "SELECT b.name,b.email,b.starts_at,b.status,b.hold_until,b.settings FROM event_bookings b JOIN event_links l ON l.id=b.link_id WHERE b.id=$1 AND b.account_id=$2 AND l.user_id=$3 AND l.settings->>'enabled'='true'",
+      [claims.id, claims.accountId, claims.userId],
+    );
+    const booking = rows[0];
+    if (!booking) throw notFound("This booking is no longer available.");
+    await requireAccountPermission(claims.userId, claims.accountId, "manage");
+    return { input, claims, booking };
+  };
+  app.post(
+    "/product/event-links/decision-preview",
+    { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
+    async (req) => {
+      const { booking } = await resolveDecision(req.body);
+      return {
+        name: booking.name,
+        email: booking.email,
+        title: booking.settings.name,
+        timeZone: booking.settings.timeZone,
+        start: booking.starts_at,
+        status: booking.status,
+        expiresAt: booking.hold_until,
+      };
+    },
+  );
+  app.post(
+    "/product/event-links/decision",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (req) => {
+      const { input, claims } = await resolveDecision(req.body);
+      if (!input.decision) throw badRequest("Choose approve or decline.");
+      return decideBooking(
+        claims.userId,
+        claims.accountId,
+        claims.id,
+        input.decision,
+      );
+    },
+  );
   app.get(
     "/product/event-links/public/:slug",
     { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } },

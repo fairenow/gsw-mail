@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { api, type Account, type CalendarSummary } from "../api";
 import {
   meetingDurations,
-  type EventBooking,
   type EventLinkSettingsData,
   type SavedEventLink,
 } from "../booking";
@@ -52,7 +51,6 @@ export function EventLinkSettings() {
 }
 function MailboxEventLinks({ account }: { account: Account }) {
   const [links, setLinks] = useState<SavedEventLink[]>([]),
-    [bookings, setBookings] = useState<EventBooking[]>([]),
     [calendars, setCalendars] = useState<CalendarSummary[]>([]),
     [form, setForm] = useState(defaults),
     [id, setId] = useState<string | undefined>(),
@@ -62,12 +60,8 @@ function MailboxEventLinks({ account }: { account: Account }) {
     [slugEdited, setSlugEdited] = useState(false);
   const canManage = account.permissions.includes("manage");
   const load = async () => {
-    const [l, b] = await Promise.all([
-      api.eventLinks(account.id),
-      api.eventBookings(account.id),
-    ]);
+    const l = await api.eventLinks(account.id);
     setLinks(l.links);
-    setBookings(b.bookings);
   };
   useEffect(() => {
     if (!canManage) {
@@ -77,7 +71,6 @@ function MailboxEventLinks({ account }: { account: Account }) {
     let active = true;
     void Promise.all([
       api.eventLinks(account.id),
-      api.eventBookings(account.id),
       api.calendars(account.id).catch(() => {
         if (active)
           setNotice(
@@ -86,10 +79,9 @@ function MailboxEventLinks({ account }: { account: Account }) {
         return { calendars: [] };
       }),
     ])
-      .then(([l, b, c]) => {
+      .then(([l, c]) => {
         if (!active) return;
         setLinks(l.links);
-        setBookings(b.bookings);
         setCalendars(c.calendars);
         setForm((f) => ({
           ...f,
@@ -140,26 +132,6 @@ function MailboxEventLinks({ account }: { account: Account }) {
       setNotice(`Saved. Your booking link is ${saved.url}`);
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Could not save event link");
-    } finally {
-      setBusy(false);
-    }
-  };
-  const decide = async (
-    booking: EventBooking,
-    decision: "approve" | "decline",
-  ) => {
-    setBusy(true);
-    setNotice("");
-    try {
-      await api.decideBooking(account.id, booking.id, decision);
-      await load();
-      setNotice(
-        decision === "approve"
-          ? "Approved. Calendar creation and confirmation emails are processing."
-          : "Declined. Notification emails are queued.",
-      );
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : "Could not process request");
     } finally {
       setBusy(false);
     }
@@ -639,115 +611,7 @@ function MailboxEventLinks({ account }: { account: Account }) {
           )}
         </fieldset>
       </form>
-      <section className="gsw-settings-card event-link-requests">
-        <div className="event-link-request-heading">
-          <h2>Booking requests</h2>
-          <button
-            className="gsw-secondary-btn"
-            disabled={busy}
-            onClick={() => {
-              setBusy(true);
-              void load()
-                .catch((e) => setNotice(e.message))
-                .finally(() => setBusy(false));
-            }}
-          >
-            Refresh
-          </button>
-        </div>
-        {!bookings.length && (
-          <p>No bookings yet. Share your event link to receive requests.</p>
-        )}
-        {bookings.map((b) => (
-          <article key={b.id}>
-            <div>
-              <h3>
-                {b.link_name} · {b.name}
-              </h3>
-              <p>
-                {new Date(b.starts_at).toLocaleString()} ·{" "}
-                {Math.round(
-                  (Date.parse(b.ends_at) - Date.parse(b.starts_at)) / 60000,
-                )}{" "}
-                minutes
-              </p>
-              <strong>
-                {
-                  (
-                    {
-                      pending: "Awaiting approval",
-                      approved: "Creating calendar event",
-                      creating: "Creating calendar event",
-                      confirmed: "Confirmed",
-                      declined: "Declined",
-                      expired: "Expired",
-                      attention: "Needs calendar review",
-                    } as Record<string, string>
-                  )[b.status]
-                }
-              </strong>
-              <p>
-                <a href={`mailto:${b.email}`}>{b.email}</a>
-                {b.phone && ` · ${b.phone}`}
-              </p>
-              {b.message && <p>{b.message}</p>}
-              {b.status === "pending" && (
-                <small>
-                  Approve before {new Date(b.hold_until).toLocaleString()}.
-                </small>
-              )}
-              {b.email_needs_attention && (
-                <>
-                  <p role="alert">
-                    An email needs attention. Retry uses the original send
-                    request to prevent duplicate delivery.
-                  </p>
-                  <button
-                    className="gsw-secondary-btn"
-                    disabled={busy}
-                    onClick={() => {
-                      setBusy(true);
-                      void api
-                        .retryBookingEmail(account.id, b.id)
-                        .then(load)
-                        .catch((e) => setNotice(e.message))
-                        .finally(() => setBusy(false));
-                    }}
-                  >
-                    Retry email delivery
-                  </button>
-                </>
-              )}
-              {b.status === "attention" && (
-                <p role="alert">
-                  Calendar creation could not be verified. Check the calendar
-                  before declining this request.
-                </p>
-              )}
-            </div>
-            {["pending", "attention"].includes(b.status) && (
-              <div className="event-link-request-actions">
-                {b.status === "pending" && (
-                  <button
-                    className="gsw-primary-btn"
-                    disabled={busy}
-                    onClick={() => void decide(b, "approve")}
-                  >
-                    Approve
-                  </button>
-                )}
-                <button
-                  className="gsw-secondary-btn"
-                  disabled={busy}
-                  onClick={() => void decide(b, "decline")}
-                >
-                  Decline
-                </button>
-              </div>
-            )}
-          </article>
-        ))}
-      </section>
+      <p>Approve or decline booking requests from the email sent to this mailbox. Confirmed meetings appear in your calendar.</p>
     </div>
   );
 }

@@ -1,8 +1,8 @@
+const BookingDecisionPage = lazy(() => import("./pages/BookingDecisionPage").then(module => ({ default: module.BookingDecisionPage })));
 const BookingPage = lazy(() => import("./pages/BookingPage").then(module => ({ default: module.BookingPage })));
 import { lazy, Suspense, useEffect, useState } from "react";
 const ContactsPage = lazy(() => import("./pages/ContactsPage").then(module => ({ default: module.ContactsPage })));
 const MailPage = lazy(() => import("./pages/MailPage").then(module => ({ default: module.MailPage })));
-const SettingsPage = lazy(() => import("./pages/SettingsPage").then(module => ({ default: module.SettingsPage })));
 import { AppShell } from "./components/AppShell";
 const SetupPage = lazy(() => import("./pages/SetupPage").then(module => ({ default: module.SetupPage })));
 const ControlCenterPage = lazy(() => import("./pages/ControlCenterPage").then(module => ({ default: module.ControlCenterPage })));
@@ -47,6 +47,7 @@ function RouteLoading() {
 }
 
 function renderRoute(path: string) {
+  if (path === "/booking/decision") return <BookingDecisionPage />;
   if (/^\/book\/[a-z0-9-]+$/.test(path)) return <BookingPage />;
   if (path === "/") return <LandingPage />;
   if (path === "/privacy") return <LegalPage kind="privacy" />;
@@ -59,7 +60,7 @@ function renderRoute(path: string) {
   if (path === "/settings/mcp-mailbox-recovery") return <McpMailboxRecoveryPage />;
   if (path === "/setup") return <SetupPage />;
   if (path === "/control-center") return <ControlCenterPage />;
-  const page = /^\/campaigns\/[0-9a-f-]{36}$/i.test(path) ? <CampaignReviewPage /> : path === "/settings" ? <SettingsPage /> : path === "/contacts" ? <ContactsPage /> : path === "/calendar" ? <CalendarPage /> : path === "/files" ? <MailPage initialSection="files" /> : <MailPage />;
+  const page = /^\/campaigns\/[0-9a-f-]{36}$/i.test(path) ? <CampaignReviewPage /> : path === "/settings" ? <MailPage key="settings" initialSection="settings" /> : path === "/contacts" ? <ContactsPage /> : path === "/calendar" ? <CalendarPage /> : path === "/files" ? <MailPage initialSection="files" /> : <MailPage />;
   return <AppShell><Suspense fallback={<RouteLoading />}>{page}</Suspense></AppShell>;
 }
 

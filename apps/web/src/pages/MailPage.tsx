@@ -506,7 +506,7 @@ export function MailPage({ initialSection = "chat" }: { initialSection?: Workspa
   const runUndo = async () => { if (!lastSend) return; try { const result = await api.cancelSend(lastSend.sendId); setLastSend({ ...lastSend, status: result.status }); if (account) void loadFolderCounts(account.id); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } };
 
   return <>
-    <main className={`gsw-mail-body ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+    <main className={`gsw-mail-body ${workspaceSection === "settings" ? "gsw-settings-workspace" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       {foldersOpen && <button className="gsw-folder-backdrop" aria-label="Close folders" onClick={() => setFoldersOpen(false)} />}
       <MailSidebar account={account} profileImageUrl={profileImageUrl} folder={folder} counts={folderCounts} composeOpen={compose} mobileHidden={!foldersOpen} collapsed={sidebarCollapsed} section={workspaceSection === "mail" ? "mail" : workspaceSection} onSelectFolder={selectFolder} onOpenSection={openWorkspaceSection} onPrefetchSection={prefetchWorkspaceSection} onToggleCompose={() => { setWorkspaceSection("mail"); setFoldersOpen(false); if (compose) { void saveDraft(true); setCompose(false); } else openCompose(); }} />
       <section className={`gsw-message-list ${mobileView !== "messages" ? "" : "mobile-open"}`} aria-label={`${folder} messages`}>

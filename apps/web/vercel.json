@@ -5,6 +5,10 @@
       "destination": "/docs/index.html"
     },
     {
+      "source": "/booking/decision",
+      "destination": "/index.html"
+    },
+    {
       "source": "/book/:slug",
       "destination": "/index.html"
     },
