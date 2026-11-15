@@ -281,3 +281,5 @@ Release validation must include a real organizer and guest, blocked pre-admissio
 Settings now includes mailbox-owner Event Link management with fixed dated slots or weekly availability windows, public six-month calendar booking, manual/automatic approval, required-field policy and queued confirmations to both parties. Booking reservations serialize across a mailbox; live-calendar conflicts are rechecked before calendar creation. Public booking metadata and credential scope remain isolated. See EVENT_LINK_BOOKING.md for schema rollout, failure handling, conservative recurring-event restrictions and outstanding live acceptance. This implementation is not a claim of production rollout.
 
 Event Link submission normalizes empty optional date lines and ignores drafts from the inactive scheduling mode. Active fields remain strictly validated; errors name the field and row instead of returning an opaque invalid request.
+
+Public Event Link URLs have an explicit /book/:slug SPA rewrite on Vercel so invitations work on direct navigation, not only client-side navigation.
