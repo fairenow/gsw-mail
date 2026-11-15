@@ -34,6 +34,7 @@ export interface SubmitSendInput {
   subject?: string | undefined;
   textBody?: string | undefined;
   htmlBody?: string | undefined;
+  preserveTextBody?: boolean | undefined;
   templateKey?: string | undefined;
   replyTo?: string | undefined;
   inReplyTo?: string | undefined;
@@ -87,6 +88,7 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
     userId: input.userId,
     bodyHtml: input.htmlBody,
     bodyText: input.textBody,
+    preserveTextBody: input.preserveTextBody,
     templateKey: requestedTemplateKey,
     senderName: input.account.displayName ?? undefined,
     senderEmail: input.account.address,

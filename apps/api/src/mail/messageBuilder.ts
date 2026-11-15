@@ -5,6 +5,7 @@ import { renderTemplateForUser } from "./templateService.js";
 export interface BuildOutgoingMessageInput {
   bodyHtml?: string | undefined;
   bodyText?: string | undefined;
+  preserveTextBody?: boolean | undefined;
   templateKey: MailTemplateKey;
   senderName?: string | undefined;
   senderEmail: string;
@@ -14,6 +15,7 @@ export interface BuildOutgoingMessageForUserInput {
   userId: string;
   bodyHtml?: string | undefined;
   bodyText?: string | undefined;
+  preserveTextBody?: boolean | undefined;
   templateKey: string;
   senderName?: string | undefined;
   senderEmail: string;
@@ -35,9 +37,9 @@ export interface BuiltOutgoingMessage {
  * compose experience before the draft is saved. The API must not fetch or append a
  * second signature while rendering a branded template.
  */
-const composeBody = (input: { bodyHtml?: string | undefined; bodyText?: string | undefined }): { html: string; text: string } => {
+const composeBody = (input: { bodyHtml?: string | undefined; bodyText?: string | undefined; preserveTextBody?: boolean | undefined }): { html: string; text: string } => {
   const html = sanitizeRichText(input.bodyHtml ?? "").trim();
-  const text = html ? richTextToPlainText(html) : (input.bodyText ?? "");
+  const text = input.preserveTextBody && input.bodyText !== undefined ? input.bodyText : html ? richTextToPlainText(html) : (input.bodyText ?? "");
   return { html, text };
 };
 

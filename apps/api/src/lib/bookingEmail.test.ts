@@ -1,3 +1,4 @@
+import { buildOutgoingMessage } from "../mail/messageBuilder.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -129,7 +130,9 @@ test("email scanner GETs cannot decide a booking and invalid POST tokens fail be
   app.setErrorHandler((error, _req, reply) =>
     reply
       .code((error as { status?: number }).status ?? 500)
-      .send({ error: error instanceof Error ? error.message : "Request failed" }),
+      .send({
+        error: error instanceof Error ? error.message : "Request failed",
+      }),
   );
   await app.register(publicEventLinks);
   try {
@@ -154,4 +157,28 @@ test("email scanner GETs cannot decide a booking and invalid POST tokens fail be
   } finally {
     await app.close();
   }
+});
+
+test("outbound message preparation preserves booking plain-text actions and styled HTML", () => {
+  const notice = bookingNotice(
+    link,
+    booking,
+    "pending",
+    "owner@example.test",
+    true,
+  );
+  const rendered = buildOutgoingMessage({
+    bodyHtml: notice.html,
+    bodyText: notice.text,
+    preserveTextBody: true,
+    templateKey: "none",
+    senderEmail: "owner@example.test",
+  });
+  assert.equal(rendered.text, notice.text);
+  assert.match(
+    rendered.html,
+    /href="https:\/\/mail.guidedstepswellness.com\/booking\/decision#token=/,
+  );
+  assert.match(rendered.html, /background:\s*#995d00/);
+  assert.doesNotMatch(rendered.html, /<title>|<script>/);
 });

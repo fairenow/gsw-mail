@@ -522,6 +522,7 @@ export function createBookingService(
           subject: notice.subject,
           textBody: notice.text,
           htmlBody: notice.html,
+          preserveTextBody: true,
           templateKey: "none",
           attachments,
           clientRequestId: `event-booking-mail:${mail.id}`,
