@@ -401,3 +401,5 @@ Event Link submission normalizes empty optional date lines and ignores drafts fr
 Public Event Link URLs have an explicit /book/:slug SPA rewrite on Vercel so invitations work on direct navigation, not only client-side navigation.
 
 Booking conflict checks use Stalwart native bounded recurrence expansion and provider-computed UTC bounds, with paging and query-state validation. Monthly reads include the whole displayed month plus timezone margins. Partial or unexpandable results remain unavailable instead of exposing busy times.
+
+Booking reads retain an explicit timezone/duration fallback for calendar servers that omit computed UTC fields. Missing or invalid time bounds still fail closed; diagnostics use only predefined availability categories.
