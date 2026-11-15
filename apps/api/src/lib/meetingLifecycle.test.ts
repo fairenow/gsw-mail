@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { operatorMeetingAccess } from "../meetings/access.js";
 import { meetingStartUtc, partnerMeetingId } from "../meetings/calendarSync.js";
-test("operator meetings require the authenticated founder, active owner membership and explicit exemption", () => {
+test("operator meetings require an authenticated mailbox owner and verified founder workspace exemption", () => {
   const row = {
     email: "24hrautollc@gmail.com",
     authenticated: true,
@@ -70,6 +70,12 @@ test("operator entitlement SQL respects the real user_status column and workspac
       exempt: boolean;
     }>(OPERATOR_MEETING_QUERY, ["founder", "workspace"]);
     assert.equal(operatorMeetingAccess(result.rows[0]), true);
+    await db.exec("INSERT INTO users VALUES('mailbox','ramon@team.example.com','auth-mailbox','active')");
+    const mailbox = await db.query<{email:string;authenticated:boolean;active:boolean;owner:boolean;exempt:boolean}>(OPERATOR_MEETING_QUERY, ['mailbox', 'workspace']);
+    assert.equal(operatorMeetingAccess(mailbox.rows[0]), true);
+    await db.exec("UPDATE users SET user_status='disabled' WHERE id='mailbox'");
+    const disabled = await db.query<{email:string;authenticated:boolean;active:boolean;owner:boolean;exempt:boolean}>(OPERATOR_MEETING_QUERY, ['mailbox', 'workspace']);
+    assert.equal(operatorMeetingAccess(disabled.rows[0]), false);
     const other = await db.query<{
       email: string;
       authenticated: boolean;
