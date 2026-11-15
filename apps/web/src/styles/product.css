@@ -836,7 +836,7 @@
 }
 .gsw-settings-layout-horizontal .gsw-settings-nav {
   display: flex;
-  flex-flow: row nowrap;
+  flex-flow: row wrap;
   align-items: center;
   gap: 8px;
   width: 100%;

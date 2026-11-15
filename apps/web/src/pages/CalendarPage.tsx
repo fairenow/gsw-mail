@@ -144,10 +144,10 @@ export function CalendarPage({ embedded = false, active = true }: { embedded?: b
   useEffect(() => {
     if (!account) return;
     let cancelled = false;
-    const load = async () => {
+    const load = async (showLoading = true) => {
       const after = calendarBoundary(monthGridStart(month));
       const before = calendarBoundary(monthGridEnd(month));
-      setEventsLoading(true);
+      if (showLoading) setEventsLoading(true);
       try {
         if (active && syncAccount.current !== account.id && account.permissions.includes("send")) {
           syncAccount.current = account.id;
@@ -171,11 +171,14 @@ export function CalendarPage({ embedded = false, active = true }: { embedded?: b
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       } finally {
-        if (!cancelled) setEventsLoading(false);
+        if (!cancelled && showLoading) setEventsLoading(false);
       }
     };
     void load();
-    return () => { cancelled = true; };
+    const refresh = () => { if (active && document.visibilityState === "visible") void load(false); };
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener("focus", refresh); };
   }, [account, month, active]);
 
   const openNew = (day?: Date) => {

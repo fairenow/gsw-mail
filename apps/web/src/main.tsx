@@ -24,7 +24,7 @@ import { AuthGate } from "./AuthGate";
 import { App } from "./App";
 import { startEngagementAnalytics } from "./lib/engagementAnalytics";
 
-const PUBLIC_PATHS = new Set(["/", "/privacy", "/terms", "/support", "/account-deleted", "/calendar/rsvp"]);
+const PUBLIC_PATHS = new Set(["/", "/privacy", "/terms", "/support", "/account-deleted", "/calendar/rsvp", "/booking/decision"]);
 
 function Root() {
   const [path, setPath] = useState(() => window.location.pathname);

@@ -2385,3 +2385,10 @@
 @media (prefers-reduced-motion: reduce) {
   .gsw-chat-working-dots span { animation: none; opacity: .7; transform: none; }
 }
+
+.gsw-settings-workspace .gsw-message-list { display: none; }
+.gsw-settings-workspace { grid-template-columns: 240px minmax(0, 1fr); }
+.gsw-settings-workspace .gsw-reading-pane { grid-column: 2 / -1; display: block; }
+@media (max-width: 1099px) { .gsw-settings-workspace { grid-template-columns: minmax(0, 1fr); } .gsw-settings-workspace .gsw-reading-pane { grid-column: 1 / -1; } }
+
+.gsw-mail-body.gsw-settings-workspace.sidebar-collapsed { grid-template-columns: 76px minmax(0, 1fr); }

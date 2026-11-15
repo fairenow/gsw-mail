@@ -1,3 +1,4 @@
+import { bookingNotice } from "./notice.js";
 import { bookingInvite } from "./invite.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
@@ -192,48 +193,25 @@ export function createBookingService(
       [link.account_id],
     );
     if (!rows[0]) throw Error("Mailbox no longer exists");
-    const time = new Intl.DateTimeFormat("en-US", {
-      timeZone: b.settings.timeZone,
-      dateStyle: "full",
-      timeStyle: "short",
-    }).format(b.starts_at);
-    const title =
-      stage === "pending"
-        ? "Booking request received"
-        : stage === "confirmed"
-          ? "Booking confirmed"
-          : stage === "declined"
-            ? "Booking declined"
-            : stage === "expired"
-              ? "Booking request expired"
-              : "Booking needs attention";
-    const details = `${b.settings.name}\nWhen: ${time} (${b.settings.timeZone})\nDuration: ${(b.ends_at.getTime() - b.starts_at.getTime()) / 60000} minutes\n${b.settings.location ? `Location: ${b.settings.location}\n` : ""}${stage === "confirmed" && (b.meeting_url || b.settings.meetingUrl) ? `Meeting link: ${b.meeting_url || b.settings.meetingUrl}\n` : ""}`;
-    const status =
-      stage === "pending"
-        ? "Your request is awaiting organizer approval. This time is held for up to 24 hours; it is not confirmed yet."
-        : stage === "confirmed"
-          ? "Your booking is confirmed."
-          : stage === "attention"
-            ? "The organizer needs to review this booking before it can be confirmed."
-            : stage === "expired"
-              ? "The organizer did not approve this request before the hold expired. Please choose another time."
-              : "The organizer could not accept this request. Please choose another time.";
-    const guest = `${title}\n\nHello ${b.name},\n${status}\n\n${details}\nOrganizer: ${rows[0].address}\nBooking page: ${linkUrl(link.slug)}`;
-    const owner = `${title}\n\n${details}\nGuest: ${b.name}\nEmail: ${b.email}\nPhone: ${b.phone || "Not provided"}\nMessage: ${b.message || "Not provided"}\n\nReview bookings in Settings → Event Link:\n${origin}/settings?tab=event-link`;
-    for (const [recipient, body] of [
-      [b.email, guest],
-      [rows[0].address, owner],
-    ])
+    for (const recipient of [b.email, rows[0].address]) {
+      const notice = bookingNotice(
+        link,
+        b,
+        stage,
+        rows[0].address,
+        recipient === rows[0].address,
+      );
       await db.query(
         `INSERT INTO event_booking_mail(booking_id,notification_key,recipient,subject,body) VALUES($1,$2,$3,$4,$5) ON CONFLICT(notification_key) DO NOTHING`,
         [
           b.id,
           `${b.id}:${stage}:${recipient}`,
           recipient,
-          `${title}: ${b.settings.name}`,
-          body,
+          notice.subject,
+          notice.text,
         ],
       );
+    }
   }
   async function submitBooking(link: EventLinkRow, raw: unknown) {
     const input = bookingInputSchema.parse(raw);
@@ -527,14 +505,23 @@ export function createBookingService(
                 }),
               ]
             : undefined;
+        const stage = mail.notification_key.split(":")[1] ?? "attention";
+        const notice = bookingNotice(
+          link,
+          b,
+          stage,
+          account.address,
+          mail.recipient === account.address,
+        );
         const sent = await submitSend({
           userId: link.user_id,
           authUserId: link.auth_user_id,
           headers: {},
           account,
           to: [mail.recipient],
-          subject: mail.subject,
-          textBody: mail.body,
+          subject: notice.subject,
+          textBody: notice.text,
+          htmlBody: notice.html,
           templateKey: "none",
           attachments,
           clientRequestId: `event-booking-mail:${mail.id}`,
