@@ -59,3 +59,16 @@ test("rejects insecure endpoint configuration and weak secrets", () => {
   assert.throws(() => createMeetingClient({ ...config, apiUrl: "http://example.com" }));
   assert.throws(() => createMeetingClient({ ...config, signingSecret: "short" }));
 });
+
+test("host handoff signs a distinct operation and returns only a POST exchange destination", async () => {
+  const client = createMeetingClient(config, async (url, init) => {
+    assert.equal(url, "https://meetings.example.com/integrations/gsw-mail/host");
+    const { payload } = await jwtVerify(new Headers(init?.headers).get("authorization")!.slice(7), new TextEncoder().encode(config.signingSecret));
+    assert.equal(payload.operation, "rooms.handoff");
+    assert.equal(payload.videoMeetings, true);
+    return Response.json({ meetingId: "room-1", ticket: "a".repeat(64), expiresAt: Date.now() + 60000 });
+  });
+  const result = await client.issueHost(organizer, { meetingId: "room-1", externalEventId: "draft-1" });
+  assert.equal(result.exchangeUrl, "https://bible.example.com/api/meet/handoff");
+  assert.ok(!result.exchangeUrl.includes(result.ticket));
+});

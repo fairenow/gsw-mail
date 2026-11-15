@@ -57,3 +57,12 @@ The authenticated POST /product/calendar-meetings route derives organizer and wo
 GSW_MEETINGS_ENABLED defaults off on both backends. No composer controls are enabled. The receiving backend, host handoff, meeting entry, lifecycle synchronization and device acceptance must be released together before enabling customer use. See PRIVATE_MEETINGS_HANDOFF.md.
 
 Receiver branch: feature/private-meeting-api-20261114 in fairenow/bible-streaming-app. Invitation URLs use /meet/{meetingId}; the entry screen is not implemented yet, so do not enable this feature. Host grants and LiveKit provisioning remain pending.
+
+
+## Organizer handoff milestone
+
+POST /product/calendar-meetings/host rechecks mailbox manage permission, active status and paid access before requesting a ticket for the exact meeting and account-namespaced event. Ticket issuance uses a distinct rooms.handoff signed operation. The Bible backend validates organizer/workspace/event ownership and stores only ticket/session hashes. Tickets expire within 60 seconds and redeem once, atomically, into a two-hour meeting-scoped host session. This session proves identity; paid access must still be rechecked when media starts.
+
+The browser submits meetingId and ticket by form POST to /api/meet/handoff. That route accepts only GSW_MEETINGS_MAIL_ORIGIN, exchanges the ticket server-side, sets a Secure HttpOnly SameSite=Lax cookie scoped to /meet/{meetingId}, and redirects without ticket or session query parameters. Configure GSW_MEETINGS_API_URL, GSW_MEETINGS_WEB_ORIGIN, GSW_MEETINGS_MAIL_ORIGIN and GSW_MEETINGS_ENABLED on the Bible Next.js server; its handoff does not need the signing secret. GSW Mail now exposes typed web API methods and a POST-form helper, but no composer button is enabled.
+
+The /meet entry screen confirms organizer identity and clearly states that media/admission are not available. It is not a working meeting room. Remaining: LiveKit session startup, limits, guest waiting/admission, entitlement recheck, calendar synchronization/cancellation, and composer enablement. Keep both feature flags off.
