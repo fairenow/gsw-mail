@@ -3,10 +3,11 @@ import { pool } from "../db/client.js";
 import { forbidden } from "../lib/errors.js";
 import { hasPaidMeetingAccess } from "./entitlement.js";
 export const OPERATOR_MEETING_QUERY = `
- SELECT u.email,(u.auth_user_id IS NOT NULL) AS authenticated,(u.user_status='active') AS active,
- EXISTS(SELECT 1 FROM organization_memberships m WHERE m.user_id=u.id AND m.organization_id=$2 AND m.org_membership_role='owner' AND m.org_membership_status='active') AS owner,
+ SELECT founder.email,(u.auth_user_id IS NOT NULL) AS authenticated,(u.user_status='active') AS active,
+ EXISTS(SELECT 1 FROM organization_memberships m WHERE m.user_id=founder.id AND m.organization_id=$2 AND m.org_membership_role='owner' AND m.org_membership_status='active') AS owner,
  EXISTS(SELECT 1 FROM billing_mailbox_exemptions e WHERE e.organization_id=$2 AND e.reason='founder_operator_exception') AS exempt
- FROM users u WHERE u.id=$1`;
+ FROM users u JOIN users founder ON lower(founder.email) IN ('ramon.williams.jr@gmail.com','24hrautollc@gmail.com') AND founder.auth_user_id IS NOT NULL AND founder.user_status='active'
+ WHERE u.id=$1 AND EXISTS(SELECT 1 FROM organization_memberships m WHERE m.user_id=founder.id AND m.organization_id=$2 AND m.org_membership_role='owner' AND m.org_membership_status='active') LIMIT 1`;
 export function operatorMeetingAccess(
   row:
     | {
