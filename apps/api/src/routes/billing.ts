@@ -1,3 +1,4 @@
+import { hasFounderSubscriptionExemption } from "../billing/founderAccess.js";
 import type { FastifyInstance } from "fastify";
 import { z, ZodError } from "zod";
 import { HttpError } from "../lib/errors.js";
@@ -14,8 +15,11 @@ type StripeSession={url:string|null};
 
 export default async function billingRoutes(app:FastifyInstance){
   await requireUser(app,{optional:false});
-  const getStatus=async(userId:string,organizationId:string)=>{
-    await requireOrgPermission(userId,organizationId,["owner","admin"]);
+  const getStatus=async(userId:string,organizationId:string,readOnly=false)=>{
+    await requireOrgPermission(userId,organizationId,readOnly?["owner","admin","member"]:["owner","admin"]);
+    const role = await pool.query<{ role: string }>("SELECT org_membership_role AS role FROM organization_memberships WHERE user_id=$1 AND organization_id=$2 AND org_membership_status='active'",[userId,organizationId]);
+    const canManageBilling = ["owner","admin"].includes(role.rows[0]?.role ?? "");
+    const aiExempt = await hasFounderSubscriptionExemption(userId,organizationId);
     const result=await pool.query<{
       legacy:boolean; operator_exempt:boolean; provisioned:string; customer:string|null; subscription:string|null;
       status:string|null; interval:string|null; mailboxes:number|null; ai:number|null; period_end:Date|null;
@@ -27,15 +31,20 @@ export default async function billingRoutes(app:FastifyInstance){
       "LEFT JOIN billing_subscriptions s ON s.organization_id=o.id WHERE o.id=$1",[organizationId]);
     const row=result.rows[0];
     if(!row) throw new StripeBillingError(404,"workspace_not_found");
-    return {organizationId,legacyFreeForLife:row.operator_exempt,operatorExempt:row.operator_exempt,
+    return {organizationId,canManageBilling,aiExempt,legacyFreeForLife:row.operator_exempt,operatorExempt:row.operator_exempt,
       includedFreeMailboxes:FREE_MAILBOXES_PER_WORKSPACE,
       billableMailboxes:row.operator_exempt ? 0 : billableMailboxCount(Number(row.provisioned)),
       provisionedMailboxes:Number(row.provisioned),
-      stripeCustomerExists:Boolean(row.customer),
-      subscription:row.subscription ? {id:row.subscription,status:row.status,interval:row.interval,mailboxes:row.mailboxes,aiSeats:row.ai,currentPeriodEnd:row.period_end}:null,
+      stripeCustomerExists:canManageBilling && Boolean(row.customer),
+      subscription:canManageBilling && row.subscription ? {id:row.subscription,status:row.status,interval:row.interval,mailboxes:row.mailboxes,aiSeats:row.ai,currentPeriodEnd:row.period_end}:null,
       checkoutEnabled:stripeBillingConfig.checkoutEnabled && isStripeLiveReady(),
       stripeConfigured:isStripeLiveReady()};
   };
+  app.get("/product/billing-status",async (req,reply)=>{
+    reply.header("cache-control","no-store");
+    const {organizationId}=org.parse(req.query);
+    return getStatus(req.user!.id,organizationId,true);
+  });
   app.get("/admin/billing",async req=>{
     const {organizationId}=org.parse(req.query);
     return getStatus(req.user!.id,organizationId);
