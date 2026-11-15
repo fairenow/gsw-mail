@@ -1,75 +1,39 @@
-# GSW Mail private meetings implementation
+# GSW Mail private web meetings
 
-Status: signed client, authenticated paid creation route, and receiving Convex metadata API implemented on draft branches. Not enabled or deployed.
+GSW Mail schedules and purchases access; the Bible Study App hosts private LiveKit meeting rooms. There is no community ownership grant, public discovery, social output or recording.
 
-## Verified repository integration points
+## User flow
 
-- apps/web/src/pages/CalendarPage.tsx already has meetingLink in EventForm.
-- apps/api/src/routes/product.ts validates meetingLink on event creation/update.
-- apps/api/src/engine/types.ts supports meetingLink without changing MailEngine.
-- apps/api/src/engine/stalwart.ts maps meetingLink to CalendarEvent virtualLocations.
-- Calendar invitations use existing queued delivery; never send directly.
-- apps/api/src/auth/authorize.ts resolves mailbox membership and organizationId.
-- apps/api/src/routes/billing.ts reads billing_subscriptions and explicit mailbox exemptions.
-- One free mailbox is not a paid-meeting entitlement. Mailbox exemptions do not automatically grant meetings.
-- Bible Study communityLiveStreams requires studySpaceId and ownerUserId. Do not fabricate either for partner meetings.
+1. Generate in the event modal inserts a stable invitation URL. Save stores it through MailEngine virtualLocations and includes it in invitations.
+2. Open the saved event and select Host meeting. GSW Mail verifies mailbox permissions and paid/operator access, then issues a single-use 60-second handoff.
+3. The Bible web exchange sets a meeting-scoped Secure HttpOnly cookie. Select Start meeting, then Join meeting. Devices start off.
+4. Guests use the ordinary URL, enter their name and request admission. The organizer admits, mutes or removes them. Camera, microphone, screen share, chat and gallery use the room controls.
+5. End for everyone closes the occurrence and provider room. A subsequent start requires a fresh organizer handoff.
 
-## Contract v1
+## Access and limits
 
-GSW Mail calls an HTTPS Convex HTTP action, server to server. Use a dedicated signing secret, never a browser token or LiveKit secret. Each request uses a compact HS256 JWS bearer assertion with issuer gsw-mail, audience bible-study-meetings, a 60-second expiry, random jti, immutable organizer sub, workspaceId, operation, videoMeetings=true entitlement and SHA-256 digest of the exact body. Receiver verifies all claims, consumes jti atomically and validates current entitlement before mutation. Replayed requests fail; business retries use a new jti and the same event idempotency key.
+Creating links and issuing host handoffs require current paid access. The two known founder accounts are also allowed when authenticated, active, and owners of a workspace with the existing founder_operator_exception grant. Free mailboxes and unrelated exemptions do not qualify.
 
-Operations: POST rooms; POST rooms/{meetingId}/handoff; PATCH rooms/{meetingId}; POST rooms/{meetingId}/cancel. No caller-supplied public, recording or social-output settings.
+Initial limits: 10 participants including the host, 60 minutes per occurrence, one active occurrence per workspace. New starts require the handoff's billing assertion to remain fresh. Existing sessions can reconnect until their reserved duration ends. Expired host authorization instructs the organizer to open Host meeting again.
 
-Create body: externalEventId, title, scheduledAt (ISO timestamp), timezone. Identity comes from signed claims. Receiver uniqueness: integration + workspaceId + externalEventId. Same payload returns same room; conflicting payload returns 409. Updates are explicit.
+## Service configuration
 
-Create response: meetingId, joinUrl, status=scheduled. HTTPS joinUrl must match the configured Bible Study origin. Link creation never provisions media.
+Railway GSW Mail: GSW_MEETINGS_ENABLED, GSW_MEETINGS_SIGNING_SECRET, GSW_MEETINGS_API_URL (production Convex .site origin), GSW_MEETINGS_WEB_ORIGIN.
 
-Handoff response must contain a single-use, short-lived ticket. Exchange through a POST into a Secure HttpOnly SameSite session; never persist host tickets in event metadata, invitations, local storage or logs. Shared joinUrl only grants guest entry. Receiver stores only ticket hashes and redeems atomically.
+Convex: GSW_MEETINGS_ENABLED, the same dedicated GSW_MEETINGS_SIGNING_SECRET, GSW_MEETINGS_WEB_ORIGIN, and existing LIVEKIT_URL/API_KEY/API_SECRET.
 
-## Build order and acceptance
+Bible Next.js: GSW_MEETINGS_ENABLED, GSW_MEETINGS_API_URL, GSW_MEETINGS_WEB_ORIGIN, GSW_MEETINGS_MAIL_ORIGIN. The web proxy does not need the signing secret. Never prefix secrets with NEXT_PUBLIC_ or VITE_.
 
-1. Contract/client foundation (this change): signed requests, bounded network timeout, no credential forwarding on redirects, safe provider errors and strict response validation.
-2. Canonical Convex backend: separate partnerMeetingLinks/occurrences/participants/hostGrants; workspace and organizer indexes; HTTP signature verification and replay protection. Preserve existing community authorization.
-3. Paid access: explicit video_meetings entitlement, checked at create and start; define participant, duration, concurrency limits. Enable for an operator pilot only until limits are configured.
-4. GSW Mail authenticated routes: derive workspace from requireAccountPermission; verify calendar/event ownership; preserve stable draft externalEventId through retries; persist association after engine save. Do not accept organizer/workspace IDs from browser.
-5. Composer: Add video meeting, creation state/retry, copy/remove, ordinary guest URL saved in existing meetingLink. Organizer Join uses authenticated handoff rather than the guest URL.
-6. Event lifecycle: updates/cancellation, orphan recovery after calendar-save failure, recurring-event exceptions. Do not cancel active meetings implicitly.
-7. Focused Bible Study web room: guest waiting room, host admission/moderation, device check, screen sharing/chat/gallery. Backend denies discovery, public switches, recording and Egress.
-8. Mobile deep links after verified web flow; unsupported clients fall back to web.
-9. Real test: paid organizer plus accountless guest; cross-workspace denial, revoked entitlement, replay, concurrent retries and direct broadcast API denial.
+## Backend contract and lifecycle
 
-## Configuration
+Service assertions bind exact request bytes, organizer, workspace, operation and expiry. Each request ID is consumed atomically; business retries retain the event UUID. Create, handoff, update and cancel are distinct operations. The initial create payload is stable across retries; a subsequent explicit update changes title/timezone metadata.
 
-GSW_MEETINGS_API_URL: HTTPS Convex HTTP origin.
-GSW_MEETINGS_SIGNING_SECRET: dedicated minimum 32-byte secret shared only by backends.
-GSW_MEETINGS_WEB_ORIGIN: HTTPS Bible Study web origin.
-Feature flag defaults off. No changes to current subscription pricing.
+Partner links, occurrences, guests and host sessions are separate from community streams. Guest credentials stay in HttpOnly cookies. No media token is issued before host admission. Signed media grants are room-only and short-lived, with no roomAdmin or roomRecord permission. Guest admissions bind to one occurrence and never carry into another.
 
-## Rollout
+Calendar edits synchronize metadata before the engine save. Removing/deleting an organizer-owned meeting link cancels future access; active occurrences must end first. Non-organizer copies do not control the original room. A failed calendar save can leave a never-started link or updated metadata; retries remain safe and no media room starts as a side effect of saving.
 
-Draft branches first. No production schema migration, billing activation, LiveKit provisioning or customer traffic until backend and end-to-end gates pass.
+Timed cleanup and a recovery cron end expired occurrences, retry provider deletion and clean expired credentials. The existing verified LiveKit webhook routes partner room events to participant authorization reconciliation.
 
+## Validation
 
-## Private meeting integration foundation (2026-11-14)
-
-The authenticated POST /product/calendar-meetings route derives organizer and workspace from the signed-in mailbox owner, checks an active/trialing Core subscription with at least one paid mailbox and a future period end, and calls the Bible Study Convex HTTP API. Free mailbox access and mailbox exemptions do not grant meetings. Requests include short-lived body-bound assertions and a videoMeetings entitlement claim. The draft event UUID is namespaced by account ID for idempotency.
-
-GSW_MEETINGS_ENABLED defaults off on both backends. No composer controls are enabled. The receiving backend, host handoff, meeting entry, lifecycle synchronization and device acceptance must be released together before enabling customer use. See PRIVATE_MEETINGS_HANDOFF.md.
-
-Receiver branch: feature/private-meeting-api-20261114 in fairenow/bible-streaming-app. Invitation URLs use /meet/{meetingId}; the entry screen is not implemented yet, so do not enable this feature. Host grants and LiveKit provisioning remain pending.
-
-
-## Organizer handoff milestone
-
-POST /product/calendar-meetings/host rechecks mailbox manage permission, active status and paid access before requesting a ticket for the exact meeting and account-namespaced event. Ticket issuance uses a distinct rooms.handoff signed operation. The Bible backend validates organizer/workspace/event ownership and stores only ticket/session hashes. Tickets expire within 60 seconds and redeem once, atomically, into a two-hour meeting-scoped host session. This session proves identity; paid access must still be rechecked when media starts.
-
-The browser submits meetingId and ticket by form POST to /api/meet/handoff. That route accepts only GSW_MEETINGS_MAIL_ORIGIN, exchanges the ticket server-side, sets a Secure HttpOnly SameSite=Lax cookie scoped to /meet/{meetingId}, and redirects without ticket or session query parameters. Configure GSW_MEETINGS_API_URL, GSW_MEETINGS_WEB_ORIGIN, GSW_MEETINGS_MAIL_ORIGIN and GSW_MEETINGS_ENABLED on the Bible Next.js server; its handoff does not need the signing secret. GSW Mail now exposes typed web API methods and a POST-form helper, but no composer button is enabled.
-
-The /meet entry screen confirms organizer identity and clearly states that media/admission are not available. It is not a working meeting room. Remaining: LiveKit session startup, limits, guest waiting/admission, entitlement recheck, calendar synchronization/cancellation, and composer enablement. Keep both feature flags off.
-
-
-## Calendar meeting-link generation
-
-The event modal includes a compact Generate text action beside Virtual meeting link. It calls the authenticated paid meeting API and inserts the returned ordinary join URL. Each open draft receives a UUID reused across retries; the first request payload is retained to avoid conflicting retries after edits. Existing/pasted links are preserved, Save waits for generation, and stale responses are ignored when closing/reopening or changing mailbox. No title is required for generation: the initial meeting title defaults to Private meeting.
-
-Unavailable-service and paid-access failures appear inline. This UI does not enable either backend flag or finish media/admission. Production requires both meeting services to be configured and enabled; meeting lifecycle and scheduling synchronization remain separate work.
+Use backend isolation/admission/concurrency/cancellation/token-policy tests, web proxy cookie/CSRF tests, signed-client tests and operator/timezone tests. Run GSW API and web typechecks/build, the full API suite and the canonical Convex backend typecheck. Verify one real organizer/guest session after deployment with devices off before checking physical camera/audio sharing on target browsers.

@@ -269,3 +269,9 @@ The /meet entry screen confirms organizer identity and clearly states that media
 The event modal includes a compact Generate text action beside Virtual meeting link. It calls the authenticated paid meeting API and inserts the returned ordinary join URL. Each open draft receives a UUID reused across retries; the first request payload is retained to avoid conflicting retries after edits. Existing/pasted links are preserved, Save waits for generation, and stale responses are ignored when closing/reopening or changing mailbox. No title is required for generation: the initial meeting title defaults to Private meeting.
 
 Unavailable-service and paid-access failures appear inline. This UI does not enable either backend flag or finish media/admission. Production requires both meeting services to be configured and enabled; meeting lifecycle and scheduling synchronization remain separate work.
+
+## Private meeting web completion
+
+Implemented: organizer event handoff, explicit media startup, guest waiting/admission, mute/remove/end controls, camera/mic/screenshare/chat/gallery via LiveKit, 10-person/60-minute/one-active-workspace limits, duration cleanup/recovery, title/timezone updates, cancellation, invitation URL inclusion and narrow founder operator access. Native meeting UI is not required to use HTTPS links; the initial complete experience is web-based.
+
+Release validation must include a real organizer and guest, blocked pre-admission token requests, removed-guest denial, role/tenant isolation, start concurrency, limits, subscription expiry and cancellation. No new media API key is needed; existing LiveKit settings and webhook endpoint are reused. No new production database migration is required in GSW Mail.

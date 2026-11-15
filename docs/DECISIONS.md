@@ -280,3 +280,9 @@ The /meet entry screen confirms organizer identity and clearly states that media
 The event modal includes a compact Generate text action beside Virtual meeting link. It calls the authenticated paid meeting API and inserts the returned ordinary join URL. Each open draft receives a UUID reused across retries; the first request payload is retained to avoid conflicting retries after edits. Existing/pasted links are preserved, Save waits for generation, and stale responses are ignored when closing/reopening or changing mailbox. No title is required for generation: the initial meeting title defaults to Private meeting.
 
 Unavailable-service and paid-access failures appear inline. This UI does not enable either backend flag or finish media/admission. Production requires both meeting services to be configured and enabled; meeting lifecycle and scheduling synchronization remain separate work.
+
+## Private meeting lifecycle and operator access
+
+Use separate partner occurrence and guest registries, not hidden communities. Treat the existing organizer handoff's short-lived signed billing assertion as the authorization to start a new occurrence; require a fresh handoff when that authorization expires. Running meetings can finish within their reserved duration. Enforce workspace concurrency and guest admission transactionally; provider room tokens carry neither admin nor recording privileges. Ended/removed identities are rechecked on provider webhook events.
+
+Extend the existing authenticated founder workspace exemption to meeting access only for the two known founder accounts that are active owners of explicitly exempted workspaces. Do not grant meetings to arbitrary mailbox exemptions. Keep calendar-owned metadata in MailEngine; synchronize generated links through the signed API and refuse canceling active meetings. Limits initially remain fixed at 10 participants, 60 minutes and one active occurrence per workspace.
