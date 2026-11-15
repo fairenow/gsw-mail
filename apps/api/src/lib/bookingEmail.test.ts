@@ -129,7 +129,7 @@ test("email scanner GETs cannot decide a booking and invalid POST tokens fail be
   app.setErrorHandler((error, _req, reply) =>
     reply
       .code((error as { status?: number }).status ?? 500)
-      .send({ error: error.message }),
+      .send({ error: error instanceof Error ? error.message : "Request failed" }),
   );
   await app.register(publicEventLinks);
   try {
