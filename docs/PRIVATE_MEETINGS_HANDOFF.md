@@ -66,3 +66,10 @@ POST /product/calendar-meetings/host rechecks mailbox manage permission, active 
 The browser submits meetingId and ticket by form POST to /api/meet/handoff. That route accepts only GSW_MEETINGS_MAIL_ORIGIN, exchanges the ticket server-side, sets a Secure HttpOnly SameSite=Lax cookie scoped to /meet/{meetingId}, and redirects without ticket or session query parameters. Configure GSW_MEETINGS_API_URL, GSW_MEETINGS_WEB_ORIGIN, GSW_MEETINGS_MAIL_ORIGIN and GSW_MEETINGS_ENABLED on the Bible Next.js server; its handoff does not need the signing secret. GSW Mail now exposes typed web API methods and a POST-form helper, but no composer button is enabled.
 
 The /meet entry screen confirms organizer identity and clearly states that media/admission are not available. It is not a working meeting room. Remaining: LiveKit session startup, limits, guest waiting/admission, entitlement recheck, calendar synchronization/cancellation, and composer enablement. Keep both feature flags off.
+
+
+## Calendar meeting-link generation
+
+The event modal includes a compact Generate text action beside Virtual meeting link. It calls the authenticated paid meeting API and inserts the returned ordinary join URL. Each open draft receives a UUID reused across retries; the first request payload is retained to avoid conflicting retries after edits. Existing/pasted links are preserved, Save waits for generation, and stale responses are ignored when closing/reopening or changing mailbox. No title is required for generation: the initial meeting title defaults to Private meeting.
+
+Unavailable-service and paid-access failures appear inline. This UI does not enable either backend flag or finish media/admission. Production requires both meeting services to be configured and enabled; meeting lifecycle and scheduling synchronization remain separate work.

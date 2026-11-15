@@ -606,3 +606,10 @@
   color: var(--gsw-text-muted);
   border: 1px solid var(--gsw-border);
 }
+
+.gsw-calendar-meeting-field { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.gsw-calendar-meeting-label { display: flex; align-items: center; gap: 10px; min-height: 20px; }
+.gsw-calendar-form .gsw-calendar-generate-link { padding: 0; border: 0; border-radius: 2px; background: transparent; color: var(--gsw-accent-hover, #a15c00); font: inherit; font-size: 12px; font-weight: 600; line-height: 20px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.gsw-calendar-form .gsw-calendar-generate-link:disabled { opacity: .5; cursor: default; }
+.gsw-calendar-form .gsw-calendar-generate-link:focus-visible { outline: 2px solid var(--gsw-accent); outline-offset: 4px; }
+.gsw-calendar-meeting-error { color: var(--gsw-danger, #a52a2a); font-size: 12px; font-weight: 400; }
