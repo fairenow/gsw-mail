@@ -160,3 +160,35 @@ test("incomplete responses, recurrence expansion failures and invalid times fail
     [],
   );
 });
+
+test("older calendar servers without computed UTC fields use explicit timezone and duration safely", async () => {
+  const { engine } = createEngine([
+    {
+      id: "legacy",
+      start: "2026-11-20T10:00:00",
+      timeZone: "America/Detroit",
+      duration: "PT30M",
+    },
+    {
+      id: "all-day-legacy",
+      start: "2026-11-01T00:00:00",
+      timeZone: "America/Detroit",
+      duration: "P1D",
+      showWithoutTime: true,
+    },
+  ]);
+  const [event, day] = await engine.listBookingCalendarEvents(
+    "owner@example.test",
+    from,
+    until,
+  );
+  assert.equal(event?.start, "2026-11-20T15:00:00.000Z");
+  assert.equal(event?.end, "2026-11-20T15:30:00.000Z");
+  assert.equal(day?.start, "2026-11-01T04:00:00.000Z");
+  assert.equal(day?.end, "2026-11-02T05:00:00.000Z");
+});
+
+test("zero-duration calendar reminders do not block every booking day",async()=>{
+ const {engine}=createEngine([{id:'reminder',utcStart:'2026-11-20T10:00:00Z',utcEnd:'2026-11-20T10:00:00Z'}]);
+ assert.deepEqual(await engine.listBookingCalendarEvents('owner@example.test',from,until),[]);
+});

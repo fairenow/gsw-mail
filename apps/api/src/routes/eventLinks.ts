@@ -60,7 +60,15 @@ export async function publicEventLinks(app: FastifyInstance) {
               e instanceof JmapError
                 ? e.type
                 : e instanceof Error
-                  ? e.name
+                  ? [
+                      "Calendar availability could not be fully verified",
+                      "Calendar changed while checking availability",
+                      "Calendar event times could not be verified",
+                      "Calendar availability exceeds the verification limit",
+                      "Invalid booking calendar range",
+                    ].includes(e.message)
+                    ? e.message
+                    : e.name
                   : "unknown",
           },
           "booking availability verification failed",
