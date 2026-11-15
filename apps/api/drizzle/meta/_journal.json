@@ -344,6 +344,13 @@
       "when": 1794650400000,
       "tag": "0048_mailbox_free_allowance",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1794710400000,
+      "tag": "0049_event_links",
+      "breakpoints": true
     }
   ]
 }

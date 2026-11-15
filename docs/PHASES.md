@@ -275,3 +275,7 @@ Unavailable-service and paid-access failures appear inline. This UI does not ena
 Implemented: organizer event handoff, explicit media startup, guest waiting/admission, mute/remove/end controls, camera/mic/screenshare/chat/gallery via LiveKit, 10-person/60-minute/one-active-workspace limits, duration cleanup/recovery, title/timezone updates, cancellation, invitation URL inclusion and narrow founder operator access. Native meeting UI is not required to use HTTPS links; the initial complete experience is web-based.
 
 Release validation must include a real organizer and guest, blocked pre-admission token requests, removed-guest denial, role/tenant isolation, start concurrency, limits, subscription expiry and cancellation. No new media API key is needed; existing LiveKit settings and webhook endpoint are reused. No new production database migration is required in GSW Mail.
+
+## Event Link booking
+
+Settings now includes mailbox-owner Event Link management with fixed dated slots or weekly availability windows, public six-month calendar booking, manual/automatic approval, required-field policy and queued confirmations to both parties. Booking reservations serialize across a mailbox; live-calendar conflicts are rechecked before calendar creation. Public booking metadata and credential scope remain isolated. See EVENT_LINK_BOOKING.md for schema rollout, failure handling, conservative recurring-event restrictions and outstanding live acceptance. This implementation is not a claim of production rollout.
