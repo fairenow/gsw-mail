@@ -5,6 +5,10 @@
       "destination": "/docs/index.html"
     },
     {
+      "source": "/book/:slug",
+      "destination": "/index.html"
+    },
+    {
       "source": "/settings/mcp-mailbox-recovery",
       "destination": "/index.html"
     },

@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { parseEventLinkRequest } from "../booking/request.js";
 import { DemoEngine } from "../engine/demo.js";
 import test from "node:test";
@@ -515,5 +516,26 @@ test("event link submission normalizes blank exclusions and inactive scheduling 
         settings: { ...base, allowedDurations: [] },
       }),
     /Select at least one/,
+  );
+});
+
+test("the public booking URL has a direct-load SPA route without shadowing API routes", async () => {
+  const config = JSON.parse(
+    await readFile(
+      new URL("../../../web/vercel.json", import.meta.url),
+      "utf8",
+    ),
+  ) as { rewrites: { source: string; destination: string }[] };
+  assert.ok(
+    config.rewrites.some(
+      (r) => r.source === "/book/:slug" && r.destination === "/index.html",
+    ),
+  );
+  assert.ok(
+    config.rewrites.some(
+      (r) =>
+        r.source === "/product/:path*" &&
+        r.destination.includes("railway.app/product/"),
+    ),
   );
 });
