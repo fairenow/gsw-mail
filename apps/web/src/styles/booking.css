@@ -380,3 +380,7 @@
     padding: 40px 22px;
   }
 }
+
+.event-link-copy-card { display: grid; gap: 12px; padding: 20px; border: 1px solid var(--gsw-accent, #e99a18); border-radius: 16px; background: var(--gsw-accent-soft, #fff3d7); }
+.event-link-copy-card p { margin: 0; overflow-wrap: anywhere; user-select: all; }
+.event-link-copy-card .gsw-primary-btn { min-height: 52px; font-size: 17px; justify-content: center; background: #995d00; color: #fff; }

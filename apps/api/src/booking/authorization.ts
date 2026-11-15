@@ -20,7 +20,10 @@ export async function ensureBookingMailboxAuthorization(
     authUserId: input.authUserId,
     accountId: input.accountId,
   };
-  if (!(await dependencies.load(principal))) await dependencies.renew(input);
+  if (!(await dependencies.load(principal))) {
+    if (!input.headers.cookie) throw serviceUnavailable("Background booking authorization is required. Open Event Link in GSW Mail on the web and save the enabled link once for this mailbox. You can save a paused draft from the mobile app first.");
+    await dependencies.renew(input);
+  }
   if (!(await dependencies.load(principal)))
     throw serviceUnavailable(
       "Your mailbox could not authorize background bookings. Reconnect the mailbox and save this event link again.",
