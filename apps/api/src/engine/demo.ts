@@ -276,6 +276,8 @@ export class DemoEngine implements MailEngine {
     return [];
   }
 
+  async listBookingCalendarEvents(_accountId: EngineAccountId, _after: string, _before: string): Promise<EngineCalendarEvent[]> { return []; }
+
   async getCalendarEvent(_accountId: EngineAccountId, _eventId: string): Promise<EngineCalendarEvent | null> { return null; }
 
   async createCalendarEvent(accountId: EngineAccountId, input: EngineCalendarEventInput): Promise<EngineCalendarEvent> {

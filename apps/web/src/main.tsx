@@ -1,3 +1,4 @@
+import "./styles/booking.css";
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import "./styles/globals.css";
@@ -34,7 +35,7 @@ function Root() {
     return () => window.removeEventListener("popstate", sync);
   }, []);
 
-  const publicPath = PUBLIC_PATHS.has(path);
+  const publicPath = PUBLIC_PATHS.has(path) || /^\/book\/[a-z0-9-]+$/.test(path);
   // Preserve the verified session across workspace navigation. Explicit login and
   // password flows remain separate auth boundaries so switching accounts is safe.
   const authBoundary = ["/sign-in", "/sign-up", "/create-password"].includes(path) ? path : "workspace";

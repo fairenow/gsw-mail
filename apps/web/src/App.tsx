@@ -1,3 +1,4 @@
+const BookingPage = lazy(() => import("./pages/BookingPage").then(module => ({ default: module.BookingPage })));
 import { lazy, Suspense, useEffect, useState } from "react";
 const ContactsPage = lazy(() => import("./pages/ContactsPage").then(module => ({ default: module.ContactsPage })));
 const MailPage = lazy(() => import("./pages/MailPage").then(module => ({ default: module.MailPage })));
@@ -46,6 +47,7 @@ function RouteLoading() {
 }
 
 function renderRoute(path: string) {
+  if (/^\/book\/[a-z0-9-]+$/.test(path)) return <BookingPage />;
   if (path === "/") return <LandingPage />;
   if (path === "/privacy") return <LegalPage kind="privacy" />;
   if (path === "/terms") return <LegalPage kind="terms" />;

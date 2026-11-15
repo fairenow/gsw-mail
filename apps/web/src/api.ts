@@ -1,3 +1,4 @@
+import type { BookingSlots, EventBooking, EventLinkSettingsData, PublicEventLink, SavedEventLink } from "./booking";
 export interface OAuthConnectionEvent { action: string; resourceId: string | null; createdAt: string; metadata: Record<string,unknown> | null; }
 
 export interface McpApprovalRecord {
@@ -645,6 +646,14 @@ const setupProvisioningTimeout = 30_000;
 export type BulkMailAction = "archive" | "trash" | "restore" | "destroy" | "read" | "unread" | "star" | "unstar";
 
 export const api = {
+  eventLinks: (accountId:string) => get<{links:SavedEventLink[]}>(`/product/event-links?accountId=${encodeURIComponent(accountId)}`),
+  saveEventLink: (accountId:string,settings:EventLinkSettingsData,id?:string) => post<{id:string;url:string}>("/product/event-links",{accountId,settings,...(id?{id}:{})},30000),
+  eventBookings: (accountId:string) => get<{bookings:EventBooking[]}>(`/product/event-bookings?accountId=${encodeURIComponent(accountId)}`),
+  retryBookingEmail: (accountId:string,id:string) => post<{queued:boolean}>(`/product/event-bookings/${encodeURIComponent(id)}/retry-email`,{accountId}),
+  decideBooking: (accountId:string,id:string,decision:'approve'|'decline') => post<{status:string}>(`/product/event-bookings/${encodeURIComponent(id)}/decision`,{accountId,decision},30000),
+  publicEventLink: (slug:string) => get<PublicEventLink>(`/product/event-links/public/${encodeURIComponent(slug)}`),
+  publicBookingSlots: (slug:string,month:string,duration:number) => get<BookingSlots>(`/product/event-links/public/${encodeURIComponent(slug)}/slots?month=${encodeURIComponent(month)}&duration=${duration}`),
+  submitBooking: (slug:string,input:{requestId:string;start:string;duration:number;name:string;email:string;phone:string;message:string;website:string}) => post<{status:string}>(`/product/event-links/public/${encodeURIComponent(slug)}/book`,input,45000),
   connectedAppActivity: () => get<{events:OAuthConnectionEvent[]}>("/api/account/connected-apps/activity"),
   mcpApprovals: () => get<{ approvals: McpApprovalRecord[] }>("/product/mcp/approvals"),
   mcpDraftPreview: (id: string) => get<{ draft: McpDraftPreview; reviewedArgumentsDigest: string }>(`/product/mcp/approvals/${encodeURIComponent(id)}/draft`),

@@ -18,6 +18,7 @@ export interface EngineCalendar {
 }
 
 export interface EngineCalendarEvent {
+  uid?: string | undefined;
   timeZone?: string | undefined;
   engineId: string;
   calendarIds: string[];
@@ -32,6 +33,7 @@ export interface EngineCalendarEvent {
 }
 
 export interface EngineCalendarEventInput {
+  uid?: string | undefined;
   calendarId: string;
   title: string;
   description?: string | undefined;
@@ -219,6 +221,8 @@ export interface MailEngine {
   listCalendars(accountId: EngineAccountId): Promise<EngineCalendar[]>;
 
   listCalendarEvents(accountId: EngineAccountId, after: string, before: string): Promise<EngineCalendarEvent[]>;
+
+  listBookingCalendarEvents(accountId: EngineAccountId, after: string, before: string): Promise<EngineCalendarEvent[]>;
 
   getCalendarEvent(accountId: EngineAccountId, eventId: string): Promise<EngineCalendarEvent | null>;
 

@@ -1,3 +1,4 @@
+import { calendarStartInstant } from "../mobile/notificationPolicy.js";
 import { randomUUID } from "node:crypto";
 import { normalizeMessageIdValue } from "../lib/messageId.js";
 import { JmapClient, JmapError, type JmapMethodCall, type JmapSession } from "./jmap.js";
@@ -65,6 +66,11 @@ interface JmapCalendar {
 }
 
 interface JmapCalendarEvent {
+  uid?: string;
+  recurrenceRules?: unknown;
+  recurrenceOverrides?: unknown;
+  freeBusyStatus?: string;
+  status?: string;
   id: string;
   calendarIds?: Record<string, boolean>;
   title?: string;
@@ -95,6 +101,7 @@ const calendarEventToEngine = (event: JmapCalendarEvent): EngineCalendarEvent =>
   const meetingLink = Object.values(event.virtualLocations ?? {})[0]?.uri;
   const attendees = Object.values(event.participants ?? {}).map((participant) => participant.calendarAddress ?? participant.email ?? "").filter((address) => address && address !== event.organizerCalendarAddress).map((address) => address.replace(/^mailto:/i, ""));
   return {
+    uid: event.uid,
     engineId: event.id,
     calendarIds: Object.entries(event.calendarIds ?? {}).filter(([, included]) => included).map(([id]) => id),
     title: event.title ?? "Untitled event",
@@ -982,9 +989,43 @@ export class StalwartEngine implements MailEngine {
     });
   }
 
+  async listBookingCalendarEvents(engineAccountId: EngineAccountId, after: string, before: string): Promise<EngineCalendarEvent[]> {
+    const { accountId } = await this.accountIdOf(engineAccountId);
+    const result: EngineCalendarEvent[] = [];
+    for (let position = 0; position < 5000;) {
+      const responses = await this.client.call([
+        ["CalendarEvent/query", {accountId, position, limit:200, calculateTotal:true, sort:[{property:"start",isAscending:true}]}, "bookingQuery"],
+        ["CalendarEvent/get", {accountId, "#ids":{resultOf:"bookingQuery",name:"CalendarEvent/query",path:"/ids"}, properties:["id","uid","calendarIds","virtualLocations","title","start","timeZone","duration","showWithoutTime","recurrenceRules","recurrenceOverrides","freeBusyStatus","status"]}, "bookingGet"]
+      ]);
+      const query = responses[0]?.[1] as {ids?:string[];total?:number};
+      const payload = responses[1]?.[1] as {list?:JmapCalendarEvent[];notFound?:string[]};
+      if (!Array.isArray(query?.ids) || !Array.isArray(payload?.list) || payload.notFound?.length || query.ids.length !== payload.list.length) throw Error("Calendar availability could not be fully verified");
+      for (const event of payload.list) {
+        if (event.status === "cancelled" || event.freeBusyStatus === "free") continue;
+        if ((Array.isArray(event.recurrenceRules) ? event.recurrenceRules.length > 0 : !!event.recurrenceRules) || (event.recurrenceOverrides && Object.keys(event.recurrenceOverrides).length > 0)) throw Error("Recurring events require availability review");
+        const mapped = calendarEventToEngine(event);
+        if (!mapped.start || !mapped.end) throw Error("Calendar event duration could not be verified");
+        const start = calendarStartInstant(mapped.start, mapped.timeZone ?? "Etc/UTC");
+        const wallStart = /Z$|[+-]\d{2}:\d{2}$/.test(mapped.start) ? mapped.start : mapped.start+"Z";
+        const nominalEndValue = addDuration(wallStart,event.duration!)!;
+        const nominalStart = new Date(wallStart).getTime();
+        const nominalEnd = new Date(nominalEndValue).getTime();
+        const end = mapped.allDay
+          ? calendarStartInstant(nominalEndValue.slice(0,19), mapped.timeZone ?? "Etc/UTC")
+          : new Date(start.getTime() + nominalEnd - nominalStart);
+        if (!Number.isFinite(end.getTime()) || end <= start) throw Error("Calendar event duration could not be verified");
+        result.push({...mapped,start:start.toISOString(),end:end.toISOString()});
+      }
+      position += query.ids.length;
+      if (!query.ids.length || (typeof query.total === "number" && position >= query.total)) return result;
+      if (query.ids.length < 200 && query.total === undefined) return result;
+    }
+    throw Error("Calendar availability exceeds the verification limit");
+  }
+
   async createCalendarEvent(engineAccountId: EngineAccountId, input: EngineCalendarEventInput): Promise<EngineCalendarEvent> {
     const { session, accountId } = await this.accountIdOf(engineAccountId);
-    const responses = await this.client.call([["CalendarEvent/set", { accountId, create: { event: calendarEventCard(input, randomUUID(), session.accounts[accountId]?.name) }, sendSchedulingMessages: input.sendSchedulingMessages }, "ces1"]]);
+    const responses = await this.client.call([["CalendarEvent/set", { accountId, create: { event: calendarEventCard(input, input.uid ?? randomUUID(), session.accounts[accountId]?.name) }, sendSchedulingMessages: input.sendSchedulingMessages }, "ces1"]]);
     const payload = responses[0]![1] as { created?: Record<string, { id?: string }>; notCreated?: Record<string, { description?: string }> };
     const id = payload.created?.event?.id;
     if (!id) throw new Error(payload.notCreated?.event?.description ?? "Stalwart did not return a calendar event ID");
@@ -995,7 +1036,7 @@ export class StalwartEngine implements MailEngine {
 
   async updateCalendarEvent(engineAccountId: EngineAccountId, eventId: string, input: EngineCalendarEventInput): Promise<EngineCalendarEvent> {
     const { session, accountId } = await this.accountIdOf(engineAccountId);
-    const card = calendarEventCard(input, randomUUID(), session.accounts[accountId]?.name);
+    const card = calendarEventCard(input, input.uid ?? randomUUID(), session.accounts[accountId]?.name);
     delete card.uid;
     const update = Object.fromEntries(Object.entries(card).filter(([key]) => key !== "calendarIds").map(([key, value]) => [`/${key}`, value]));
     update["/calendarIds"] = card.calendarIds;

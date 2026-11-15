@@ -1,3 +1,5 @@
+import { ensureEventLinkSchema } from "./booking/schema.js";
+import { deliverBookingWork } from "./booking/service.js";
 import { ensureIntegrationSchema } from "./integrations/ensureSchema.js";
 import { createMobileNotificationWorker, ensureMobileNotificationSchema } from "./mobile/notificationWorker.js";
 import { ensureAutomationSummaryEmailSchema } from "./ai/automationSummaryEmail.js";
@@ -46,6 +48,7 @@ async function main() {
   if (brokerStatus === "invalid") app.log.warn("configured confidential Stalwart broker client needs administrator attention");
   await ensureScheduledSendSchema();
   await ensureCalendarRsvpSchema();
+  await ensureEventLinkSchema();
   await ensureCalendarEmailReminderSchema();
   await ensureMobileNotificationSchema();
   await ensureAutomationSummaryEmailSchema();
@@ -65,6 +68,11 @@ async function main() {
     error => app.log.error(error, "MCP payload retention cleanup failed"),
     count => app.log.info({ count }, "Expired MCP encrypted payloads removed"),
   );
+  let bookingTickRunning = false;
+  const bookingTick = async () => { if (bookingTickRunning) return; bookingTickRunning = true; try { await deliverBookingWork(); } catch (error) { app.log.error(error, "booking worker failed"); } finally { bookingTickRunning = false; } };
+  const bookingTimer = setInterval(() => { void bookingTick(); }, 15000);
+  bookingTimer.unref();
+  void bookingTick();
   worker.start();
   stopProposalNotifier = startProposalNotificationWorker(error => app.log.error(error, "proposal notification worker failed"));
   const reminderTimer = setInterval(() => { void deliverDueCalendarEmailReminders().catch(error => app.log.error(error, "calendar reminder worker failed")); }, 60_000);

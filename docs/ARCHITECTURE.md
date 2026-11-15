@@ -391,3 +391,7 @@ GSW Mail now opens verified organizers through Host meeting on a saved partner e
 Only authenticated, active owner memberships for the two existing founder accounts with a founder_operator_exception workspace grant receive operator meeting access. Other users still need the current paid entitlement. Calendar creates/edits synchronize title, time and timezone before the engine write; removing/deleting an owned link cancels it. Active meetings must end first. Guest copies of another organizer's link do not mutate that meeting. Engine getCalendarEvent remains mailbox-scoped.
 
 Duration scheduling plus a recovery sweep removes provider rooms; failed deletion remains marked for retry. Participant webhook reconciliation removes unauthorized identities. Existing community stream, recording and social features remain separate. Calendar invites include the ordinary meeting URL; no organizer credential is embedded.
+
+## Event Link booking
+
+Settings now includes mailbox-owner Event Link management with fixed dated slots or weekly availability windows, public six-month calendar booking, manual/automatic approval, required-field policy and queued confirmations to both parties. Booking reservations serialize across a mailbox; live-calendar conflicts are rechecked before calendar creation. Public booking metadata and credential scope remain isolated. See EVENT_LINK_BOOKING.md for schema rollout, failure handling, conservative recurring-event restrictions and outstanding live acceptance. This implementation is not a claim of production rollout.

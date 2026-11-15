@@ -27,6 +27,7 @@ export function scopedMailEngine(resolve: (accountId: string) => Promise<MailEng
     listAddressBooks: call("listAddressBooks"),
     listCalendars: call("listCalendars"),
     listCalendarEvents: call("listCalendarEvents"),
+    listBookingCalendarEvents: call("listBookingCalendarEvents"),
     getCalendarEvent: call("getCalendarEvent"),
     createCalendarEvent: call("createCalendarEvent"),
     updateCalendarEvent: call("updateCalendarEvent"),

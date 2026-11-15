@@ -1,3 +1,4 @@
+import eventLinks, { publicEventLinks } from "./routes/eventLinks.js";
 import integrationPublic from "./routes/integrationPublic.js";
 import billingRoutes from "./routes/billing.js";
 import stripeWebhook from "./routes/stripeWebhook.js";
@@ -174,6 +175,8 @@ export function buildApp() {
   app.register(publicAvatars);
   app.register(avatarLookup);
   app.register(calendarRsvpPublic);
+  app.register(publicEventLinks);
+  app.register(eventLinks);
   app.register(calendarRsvp);
   app.register(aiChat);
   app.register(aiAutomations);
