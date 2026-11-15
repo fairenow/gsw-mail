@@ -11,7 +11,7 @@ import {
   notFound,
   serviceUnavailable,
 } from "../lib/errors.js";
-import { eventLinkSchema } from "../booking/policy.js";
+import { parseEventLinkRequest } from "../booking/request.js";
 import {
   availableDays,
   decideBooking,
@@ -89,14 +89,7 @@ export default async function eventLinks(app: FastifyInstance) {
     };
   });
   app.post("/product/event-links", { bodyLimit: 50000 }, async (req) => {
-    const { accountId, id, settings } = z
-      .object({
-        accountId: z.uuid(),
-        id: z.uuid().optional(),
-        settings: eventLinkSchema,
-      })
-      .strict()
-      .parse(req.body);
+    const { accountId, id, settings } = parseEventLinkRequest(req.body);
     const account = await requireAccountPermission(
       req.user!.id,
       accountId,
