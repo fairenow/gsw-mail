@@ -18,7 +18,7 @@ export interface AiCapabilitySettings {
 
 export const defaultAiCapabilities: AiCapabilitySettings = {
   enabled: true,
-  modelProvider: "gpt-oss-120b",
+  modelProvider: "openai",
   mailRead: true,
   draftMutation: true,
   emailSend: true,
@@ -32,9 +32,9 @@ export async function getAiCapabilitySettings(userId: string): Promise<AiCapabil
   const [settings] = await db.select({ ai: userSettings.ai }).from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
   const ai = settings?.ai ?? {};
   const requestedProvider = ai.modelProvider;
-  const modelProvider: AiModelProvider = requestedProvider === "kimi" || requestedProvider === "openai" || requestedProvider === "claude" || requestedProvider === "qwen" || requestedProvider === "gpt-oss-120b" || requestedProvider === "deepseek-v4.1-flash" || requestedProvider === "qwen-modal"
+  const modelProvider: AiModelProvider = requestedProvider === "kimi" || requestedProvider === "openai" || requestedProvider === "claude"
     ? requestedProvider
-    : "gpt-oss-120b";
+    : "openai";
   return {
     enabled: ai.enabled !== false,
     modelProvider,

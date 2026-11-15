@@ -1,3 +1,4 @@
+import { hasAiSubscription } from "../billing/aiAccess.js";
 import { syncCalendarPushEvents } from "../mobile/notificationWorker.js";
 import { syncCalendarMeeting } from "../meetings/calendarSync.js";
 import { registerCalendarMeetingRoute } from "../meetings/calendarRoute.js";
@@ -51,6 +52,11 @@ const calendarEventSchema = z.object({ accountId: z.string().min(1), calendarId:
 export default async function productRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
   registerCalendarMeetingRoute(app);
+  app.get("/product/ai-access", async (req, reply) => {
+    const { accountId } = z.object({ accountId: z.uuid().optional() }).parse(req.query);
+    reply.header("cache-control", "no-store");
+    return { allowed: await hasAiSubscription(req.user!.id, accountId) };
+  });
 
   app.get("/product/settings", async (req) => {
     const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, req.user!.id)).limit(1);
@@ -62,9 +68,9 @@ export default async function productRoutes(app: FastifyInstance) {
       ai: {
         ...(settings?.ai ?? {}),
         enabled: settings?.ai?.enabled !== false,
-        modelProvider: settings?.ai?.modelProvider === "kimi" || settings?.ai?.modelProvider === "openai" || settings?.ai?.modelProvider === "claude" || settings?.ai?.modelProvider === "qwen" || settings?.ai?.modelProvider === "gpt-oss-120b" || settings?.ai?.modelProvider === "deepseek-v4.1-flash"
+        modelProvider: settings?.ai?.modelProvider === "kimi" || settings?.ai?.modelProvider === "openai" || settings?.ai?.modelProvider === "claude"
           ? settings.ai.modelProvider
-          : "qwen",
+          : "openai",
         mailRead: settings?.ai?.mailRead !== false,
         draftMutation: settings?.ai?.draftMutation !== false,
         emailSend: settings?.ai?.emailSend !== false,
@@ -81,19 +87,10 @@ export default async function productRoutes(app: FastifyInstance) {
     const input = settingsSchema.parse(req.body);
     const requestedModelProvider = input.ai?.modelProvider;
     if (requestedModelProvider !== undefined) {
-      if (requestedModelProvider !== "kimi" && requestedModelProvider !== "qwen" && requestedModelProvider !== "openai" && requestedModelProvider !== "claude" && requestedModelProvider !== "gpt-oss-120b" && requestedModelProvider !== "deepseek-v4.1-flash") {
-        throw badRequest("AI model must be Kimi, Qwen, GPT-OSS 120B, DeepSeek, OpenAI, or Claude.");
+      if (requestedModelProvider !== "kimi" && requestedModelProvider !== "openai" && requestedModelProvider !== "claude") {
+        throw badRequest("AI model must be OpenAI, Claude, or Kimi.");
       }
       if (requestedModelProvider === "kimi" && !config.ai.kimiApiKey) throw badRequest("Kimi is not configured for this GSW Mail deployment.");
-      if (requestedModelProvider === "qwen" && !config.ai.hetznerApiKey) {
-        throw badRequest("Qwen is not configured for this GSW Mail deployment.");
-      }
-      if (requestedModelProvider === "gpt-oss-120b" && (!config.ai.modalProxyToken || !config.ai.gptOssVllmBaseUrl)) {
-        throw badRequest("GPT-OSS 120B is not configured on Modal.");
-      }
-      if (requestedModelProvider === "deepseek-v4.1-flash" && (!config.ai.modalProxyToken || !process.env.DEEPSEEK_BASE_URL)) {
-        throw badRequest("DeepSeek is not configured on Modal.");
-      }
       if (requestedModelProvider === "openai" && (!config.ai.openaiApiKey || !config.ai.openaiModel)) {
         throw badRequest("OpenAI is not configured for this GSW Mail deployment.");
       }

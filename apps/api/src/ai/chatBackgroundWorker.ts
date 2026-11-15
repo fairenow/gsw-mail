@@ -1,3 +1,4 @@
+import { requireAiSubscription } from "../billing/aiAccess.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getAiCapabilitySettings } from "./capabilities.js";
@@ -37,6 +38,7 @@ async function workOnce() {
       const request=backgroundChatRequestSchema.parse(job.request);
       if(job.account_id)throw new Error("Offline mailbox tool execution is not authorized");
       if(!job.conversation_id)throw new Error("Missing durable conversation");
+      await requireAiSubscription(job.user_id, job.account_id ?? undefined);
       const settings=await getAiCapabilitySettings(job.user_id);
       if(!settings.enabled)throw new Error("GSW AI is disabled");
       const provider=getAiProvider(settings.modelProvider);

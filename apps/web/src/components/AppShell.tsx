@@ -7,6 +7,8 @@ import { AppTopBar, type AppTopBarOptions } from "./AppTopBar";
 type AppShellContextValue = {
   account: Account | null;
   accounts: Account[];
+  aiAccess: boolean;
+  aiAccessLoading: boolean;
   profileImageUrl: string;
   activeAgentTask: AiTaskRecord | null;
   setProfileImageUrl: (url: string) => void;
@@ -19,6 +21,24 @@ const AppShellContext = createContext<AppShellContextValue | null>(null);
 export function AppShell({ children }: { children: ReactNode }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [account, setAccount] = useState<Account | null>(null);
+  const [aiSubscription, setAiSubscription] = useState<{ accountId: string; allowed: boolean } | null>(null);
+  const aiAccess = Boolean(account && aiSubscription?.accountId === account.id && aiSubscription?.allowed === true);
+  const aiAccessLoading = Boolean(account && aiSubscription?.accountId !== account.id);
+  useEffect(() => {
+    if (!account) return;
+    let cancelled = false;
+    const accountId = account.id;
+    const refresh = async () => {
+      try {
+        const result = await api.aiAccess(accountId);
+        if (!cancelled) setAiSubscription({ accountId, allowed: result.allowed });
+      } catch { if (!cancelled) setAiSubscription({ accountId, allowed: false }); }
+    };
+    void refresh();
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 60000);
+    window.addEventListener("focus", refresh);
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener("focus", refresh); };
+  }, [account?.id]);
   const [profileImageUrl, setProfileImageUrl] = useState("");
   const [activeAgentTask, setActiveAgentTask] = useState<AiTaskRecord | null>(null);
   const [topBar, setTopBar] = useState<AppTopBarOptions>({
@@ -30,6 +50,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
+    if (!aiAccess) { setActiveAgentTask(null); return; }
     let cancelled = false;
     let timer: number | null = null;
 
@@ -70,7 +91,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       if (timer !== null) window.clearTimeout(timer);
       window.removeEventListener("gsw-agent-task-changed", handleTaskChange);
     };
-  }, [account?.id]);
+  }, [account?.id, aiAccess]);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,6 +125,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const value = useMemo<AppShellContextValue>(() => ({
     account,
     accounts,
+    aiAccess,
+    aiAccessLoading,
     profileImageUrl,
     activeAgentTask,
     setProfileImageUrl: (url) => {
@@ -120,7 +143,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     },
     selectAccount,
     configureTopBar,
-  }), [account, accounts, profileImageUrl, activeAgentTask, selectAccount, configureTopBar]);
+  }), [account, accounts, aiAccess, aiAccessLoading, profileImageUrl, activeAgentTask, selectAccount, configureTopBar]);
 
   return (
     <AppShellContext.Provider value={value}>

@@ -2392,3 +2392,10 @@
 @media (max-width: 1099px) { .gsw-settings-workspace { grid-template-columns: minmax(0, 1fr); } .gsw-settings-workspace .gsw-reading-pane { grid-column: 1 / -1; } }
 
 .gsw-mail-body.gsw-settings-workspace.sidebar-collapsed { grid-template-columns: 76px minmax(0, 1fr); }
+
+.gsw-folder:disabled { opacity: .55; cursor: not-allowed; }
+.gsw-chat-nav-row { display: flex; align-items: center; gap: 4px; }
+.gsw-chat-nav-row > .gsw-folder { flex: 1; min-width: 0; }
+.gsw-chat-upgrade-badge { flex-shrink: 0; margin-right: 8px; padding: 3px 8px; border-radius: 999px; background: var(--gsw-accent-soft); color: var(--gsw-accent-dark); font-size: 11px; font-weight: 700; text-decoration: none; }
+.gsw-sidebar.collapsed .gsw-chat-nav-row { flex-direction: column; }
+.gsw-sidebar.collapsed .gsw-chat-upgrade-badge { margin: 0 0 8px; padding: 3px; font-size: 9px; }

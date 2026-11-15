@@ -106,7 +106,13 @@ const scheduledConfirmation = (content: string) => {
   return Number.isNaN(date.getTime()) ? null : { title: match[1], date };
 };
 
-export function ChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () => void } = {}) {
+export function ChatPanel(props: { onOpenScheduledWork?: () => void } = {}) {
+  const { aiAccess, aiAccessLoading, account } = useAppShell();
+  if (!aiAccess) return <section className="gsw-future-chat"><h2>GSW Chat</h2>{aiAccessLoading ? <p role="status">Checking AI subscription…</p> : <><p>Chat requires an active AI subscription for this workspace.</p><a className="gsw-primary-btn" href="/control-center#billing">Upgrade AI</a><p>If you don’t manage billing, ask your workspace owner to add AI.</p></>}</section>;
+  return <SubscribedChatPanel key={account?.id} {...props} />;
+}
+
+function SubscribedChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: () => void } = {}) {
   const { account } = useAppShell();
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [mediaPreview, setMediaPreview] = useState<AiChatAttachment | null>(null);
