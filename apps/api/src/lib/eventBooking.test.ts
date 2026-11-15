@@ -1,3 +1,4 @@
+import { parseEventLinkRequest } from "../booking/request.js";
 import { DemoEngine } from "../engine/demo.js";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -459,4 +460,60 @@ test("booking persistence prevents duplicate/cross-link reservations and queues 
   } finally {
     await pg.close();
   }
+});
+
+test("event link submission normalizes blank exclusions and inactive scheduling drafts", () => {
+  const base = settings(),
+    accountId = randomUUID();
+  const parsed = parseEventLinkRequest({
+    accountId,
+    settings: {
+      ...base,
+      unavailableDates: ["", "  ", " 2026-12-25 "],
+      fixedSlots: [{ date: "", start: "09:00" }],
+    },
+  });
+  assert.deepEqual(parsed.settings.unavailableDates, ["2026-12-25"]);
+  assert.deepEqual(parsed.settings.fixedSlots, []);
+  const fixed = parseEventLinkRequest({
+    accountId,
+    settings: {
+      ...base,
+      mode: "fixed",
+      duration: 45,
+      fixedSlots: [{ date: "2026-12-01", start: "10:00" }],
+      allowedDurations: [],
+      windows: [{ day: 1, start: "", end: "" }],
+    },
+  });
+  assert.deepEqual(fixed.settings.allowedDurations, [45]);
+  assert.deepEqual(fixed.settings.windows, []);
+  assert.throws(
+    () =>
+      parseEventLinkRequest({
+        accountId,
+        settings: { ...base, unavailableDates: ["2026-02-31"] },
+      }),
+    /Unavailable date 1/,
+  );
+  assert.throws(
+    () =>
+      parseEventLinkRequest({
+        accountId,
+        settings: {
+          ...base,
+          mode: "fixed",
+          fixedSlots: [{ date: "", start: "09:00" }],
+        },
+      }),
+    /Exact slot 1/,
+  );
+  assert.throws(
+    () =>
+      parseEventLinkRequest({
+        accountId,
+        settings: { ...base, allowedDurations: [] },
+      }),
+    /Select at least one/,
+  );
 });
