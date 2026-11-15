@@ -56,17 +56,19 @@ export function ControlCenterPage() {
   useEffect(() => { void getAccountContext().then(setContext).catch(() => undefined); }, []);
   useEffect(() => { const onHash = () => setSection(sectionFromHash()); window.addEventListener("hashchange", onHash); return () => window.removeEventListener("hashchange", onHash); }, []);
 
-  const workspace = context?.workspaceMemberships[0];
+  const workspace = context?.workspaceMemberships.find(item => item.status === "active" && ["owner","admin"].includes(item.role)) ?? context?.workspaceMemberships.find(item => item.status === "active");
+  const canManageWorkspace = workspace?.role === "owner" || workspace?.role === "admin";
+  const visibleSection = canManageWorkspace ? section : "billing";
 
   useEffect(() => {
-    if (!workspace?.id) return;
+    if (!workspace?.id || !canManageWorkspace) return;
     let active = true;
     setAdminError("");
     fetch(`/admin/control-center?organizationId=${encodeURIComponent(workspace.id)}`, { credentials: "include", signal: AbortSignal.timeout(15000) })
       .then(async (response) => { const result = await response.json(); if (!response.ok) throw new Error(result.error ?? "Could not load workspace administration."); if (active) setAdmin(result as AdminSummary); })
       .catch((error) => { if (active) setAdminError(error instanceof Error ? error.message : "Could not load workspace administration."); });
     return () => { active = false; };
-  }, [workspace?.id]);
+  }, [workspace?.id, canManageWorkspace]);
 
   const selectedDomain = admin?.domains.find((domain) => domain.id === selectedDomainId) ?? admin?.domains[0];
   const filteredMailboxes = (admin?.mailboxes ?? []).filter(mailbox => !mailboxDomainFilter || mailbox.domainId === mailboxDomainFilter);
@@ -87,7 +89,7 @@ export function ControlCenterPage() {
   const pendingMailboxes = context.managedMailboxes.filter((mailbox) => mailbox.authSetupStatus === "pending").length;
   const navigate = (next: ControlSection) => { setSection(next); window.history.replaceState(null, "", `${window.location.pathname}#${next}`); };
   const reloadAdmin = async () => {
-    if (!workspace?.id) return;
+    if (!workspace?.id || !canManageWorkspace) return;
     const response = await fetch(`/admin/control-center?organizationId=${encodeURIComponent(workspace.id)}`, { credentials: "include", signal: AbortSignal.timeout(15000) });
     const result = await response.json(); if (!response.ok) throw new Error(result.error ?? "Could not refresh workspace administration."); setAdmin(result as AdminSummary);
   };
@@ -135,18 +137,20 @@ export function ControlCenterPage() {
     finally { setSetupBusy(false); }
   };
 
-  const navButton = (id: ControlSection, label: string, note?: string) => <button className={section === id ? "is-active" : ""} onClick={() => navigate(id)}><span>{label}</span>{note ? <small>{note}</small> : null}</button>;
+  const navButton = (id: ControlSection, label: string, note?: string) => <button className={visibleSection === id ? "is-active" : ""} onClick={() => navigate(id)}><span>{label}</span>{note ? <small>{note}</small> : null}</button>;
 
   return <main className="gsw-control-center">
     <aside className="gsw-control-nav">
       <BrandMark size={54} /><p className="gsw-setup-kicker">GSW Admin</p><h1>{workspace?.name ?? "Workspace"}</h1>
       <nav>
+        {canManageWorkspace && <>
         {navButton("overview", "Overview")}
         {navButton("domains", "Domains", admin?.domains.some((domain) => domain.status !== "verified") ? "Needs attention" : undefined)}
         {navButton("mailboxes", "Mailboxes", pendingMailboxes ? `${pendingMailboxes} to finish` : undefined)}
         {navButton("users", "Users", admin ? String(admin.users.length) : undefined)}
         {navButton("security", "Security")}
         {navButton("api", "API")}
+        </>}
         {navButton("billing", "Billing")}
         <button className="is-disabled" disabled><span>Settings</span><small>Coming soon</small></button>
       </nav>
@@ -154,11 +158,11 @@ export function ControlCenterPage() {
     </aside>
 
     <section className="gsw-control-main">
-      <header><div><p className="gsw-setup-kicker">Control center</p><h2>{workspace?.name ?? "Guided Steps Wellness"}</h2><p>{workspace?.role ?? "member"} · {adminEmail}</p></div><button className="gsw-btn gsw-btn-primary" onClick={() => void logout().then(() => window.location.assign("/sign-in"))}>Open Mail</button></header>
-      {adminError && <div className="gsw-control-alert"><strong>Some admin details could not load.</strong><span>{adminError}</span></div>}
+      <header><div><p className="gsw-setup-kicker">Control center</p><h2>{workspace?.name ?? "Guided Steps Wellness"}</h2><p>{workspace?.role ?? "member"} · {adminEmail}</p></div><button className="gsw-btn gsw-btn-primary" onClick={() => window.location.assign("/mail")}>Open Mail</button></header>
+      {canManageWorkspace && adminError && <div className="gsw-control-alert"><strong>Some admin details could not load.</strong><span>{adminError}</span></div>}
 
-      {section === "billing" && <AdminBillingPanel currentMailboxes={admin?.mailboxes.length ?? context.managedMailboxes.length} organizationId={workspace?.id ?? ""} />}
-      {section === "overview" && <>
+      {visibleSection === "billing" && <AdminBillingPanel currentMailboxes={admin?.mailboxes.length ?? context.managedMailboxes.length} organizationId={workspace?.id ?? ""} />}
+      {visibleSection === "overview" && <>
         <div className="gsw-control-stats">
           <button onClick={() => navigate("domains")}><strong>{managedDomains.length}</strong><span>Domains</span><small>{admin?.domains.some((domain) => domain.status !== "verified") ? "Review DNS readiness" : "All ready"}</small></button>
           <button onClick={() => navigate("mailboxes")}><strong>{context.managedMailboxes.length}</strong><span>Mailboxes</span><small>{pendingMailboxes ? `${pendingMailboxes} need login setup` : "All logins ready"}</small></button>
@@ -172,9 +176,9 @@ export function ControlCenterPage() {
         </div>
       </>}
 
-      {section === "domains" && workspace?.id && <DomainAdminPanel organizationId={workspace.id} onChanged={refreshControlCenter} />}
+      {visibleSection === "domains" && workspace?.id && <DomainAdminPanel organizationId={workspace.id} onChanged={refreshControlCenter} />}
 
-      {section === "mailboxes" && <section className="gsw-control-section">
+      {visibleSection === "mailboxes" && <section className="gsw-control-section">
         <div className="gsw-control-section-head"><div><p className="gsw-setup-kicker">Mailboxes</p><h3>Mailbox administration</h3><p>Create mailboxes on verified domains. Workspace owners/admins manage them but do not become mailbox identities themselves.</p></div></div>
         {workspace?.id && admin && <MailboxCreatePanel organizationId={workspace.id} domains={admin.domains} isFirstMailbox={context.managedMailboxes.length === 0} selectedDomainId={selectedDomain?.id ?? ""} onDomainChange={setSelectedDomainId} onCreated={refreshControlCenter} />}
         <label className="gsw-auth-field">Filter mailboxes by domain<select value={mailboxDomainFilter} onChange={event => setMailboxDomainFilter(event.target.value)}><option value="">All domains</option>{admin?.domains.map(domain => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></label>
@@ -184,16 +188,16 @@ export function ControlCenterPage() {
         </div>
       </section>}
 
-      {section === "users" && <section className="gsw-control-section">
+      {visibleSection === "users" && <section className="gsw-control-section">
         <div className="gsw-control-section-head"><div><p className="gsw-setup-kicker">Users</p><h3>People & mailbox access</h3><p>Admins are workspace identities; mailbox identities are created separately from verified-domain addresses.</p></div></div>
         <label className="gsw-auth-field">Filter users by domain<select value={mailboxDomainFilter} onChange={event => setMailboxDomainFilter(event.target.value)}><option value="">All domains</option>{admin?.domains.map(domain => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></label>
         <p>{filteredUsers.length} user{filteredUsers.length === 1 ? "" : "s"}</p>
         {admin ? <div className="gsw-user-grid">{filteredUsers.map((user) => <article className="gsw-user-card" key={user.membershipId}><div className="gsw-control-row-head"><div><h4>{user.name || user.email}</h4><p>{user.authEmail || user.email}</p></div><span className={`gsw-role-pill role-${user.role}`}>{humanStatus(user.role)}</span></div><div className="gsw-user-facts"><span><strong>Status</strong>{humanStatus(user.membershipStatus)}</span><span><strong>Verified</strong>{user.authEmailVerified || user.emailVerified ? "Yes" : "No"}</span><span><strong>Last login</strong>{formatDate(user.lastLoginAt)}</span></div><div className="gsw-access-block"><strong>Mailbox access</strong>{user.mailboxAccess.length ? user.mailboxAccess.map((access) => <div key={`${user.userId}-${access.accountId}`}><span>{access.address}</span><small>{humanStatus(access.role)}</small></div>) : <p>No mailbox access assigned.</p>}</div>{user.role !== "owner" && <button className="gsw-btn gsw-btn-ghost" disabled={deleteBusy} onClick={() => requestDelete({ type: "users", id: user.userId, label: user.email })}>Delete user from workspace</button>}</article>)}</div> : <div className="gsw-control-empty">Loading workspace users…</div>}
       </section>}
 
-      {section === "api" && workspace?.id && admin && <IntegrationDeliveryPanel key={workspace.id} organizationId={workspace.id} mailboxes={admin.mailboxes} />}
+      {visibleSection === "api" && workspace?.id && admin && <IntegrationDeliveryPanel key={workspace.id} organizationId={workspace.id} mailboxes={admin.mailboxes} />}
 
-      {section === "security" && <section className="gsw-control-section">
+      {visibleSection === "security" && <section className="gsw-control-section">
         <div className="gsw-control-section-head"><div><p className="gsw-setup-kicker">Security</p><h3>Recovery & recent activity</h3><p>Keep the workspace recoverable even if an individual mailbox cannot receive mail.</p></div></div>
         <div className="gsw-security-grid"><article className="gsw-security-card"><span className="gsw-security-icon">✓</span><div><strong>Workspace recovery email</strong><h4>{admin?.recoveryAdmin?.email ?? adminEmail}</h4><p>{admin?.recoveryAdmin?.emailVerified === false ? "Verification required" : "Verified workspace owner identity"}</p></div></article><article className="gsw-security-card"><span className="gsw-security-icon">#</span><div><strong>Mailbox credential recovery</strong><h4>6-digit OTP</h4><p>Codes expire after 10 minutes and are limited to five attempts.</p></div></article></div>
         <div className="gsw-audit-card"><div className="gsw-control-row-head"><div><h4>Recent security & admin activity</h4><p>Most recent workspace audit events.</p></div></div>{admin?.recentAudit.length ? admin.recentAudit.map((event) => <div className="gsw-audit-row" key={event.id}><div><strong>{humanStatus(event.action)}</strong><span>{humanStatus(event.resourceType)}{event.resourceId ? ` · ${event.resourceId.slice(0, 8)}` : ""}</span></div><time>{formatDate(event.createdAt)}</time></div>) : <p className="gsw-control-note">No recent audit events are available yet.</p>}</div>
