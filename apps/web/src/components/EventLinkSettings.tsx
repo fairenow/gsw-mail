@@ -82,10 +82,17 @@ function MailboxEventLinks({ account }: { account: Account }) {
       .then(([l, c]) => {
         if (!active) return;
         setLinks(l.links);
+        const first = l.links[0];
+        if (first) {
+          const { id: firstId, url: _url, ...settings } = first;
+          setId(firstId);
+          setForm(settings);
+          setSlugEdited(true);
+        }
         setCalendars(c.calendars);
         setForm((f) => ({
           ...f,
-          calendarId:
+          calendarId: f.calendarId ||
             c.calendars.find((c) => c.isDefault)?.engineId ??
             c.calendars[0]?.engineId ??
             "",
@@ -145,6 +152,14 @@ function MailboxEventLinks({ account }: { account: Account }) {
   if (loading) return <p role="status">Loading event links…</p>;
   return (
     <div className="event-link-settings" data-private>
+      <section className="event-link-copy-card" aria-label="Share booking link">
+        <strong>Your booking link</strong>
+        <p>{links.find(link => link.id === id)?.url ?? "Save a booking link to copy and share it here."}</p>
+        <button type="button" className="gsw-primary-btn" disabled={busy || !links.some(link => link.id === id)} onClick={() => {
+          const url = links.find(link => link.id === id)?.url;
+          if (url) void navigator.clipboard.writeText(url).then(() => setNotice("Booking link copied.")).catch(() => setNotice(`Copy this link: ${url}`));
+        }}>Copy Link</button>
+      </section>
       <p>
         Let guests book time with {account.address}. Calendar conflicts are
         checked across this mailbox’s calendars. Pending requests hold their
@@ -593,22 +608,7 @@ function MailboxEventLinks({ account }: { account: Account }) {
               Open booking page
             </a>
           )}
-          {id && (
-            <button
-              type="button"
-              className="gsw-secondary-btn"
-              onClick={() => {
-                const url = links.find((l) => l.id === id)?.url;
-                if (url)
-                  void navigator.clipboard
-                    .writeText(url)
-                    .then(() => setNotice("Booking link copied."))
-                    .catch(() => setNotice(`Copy this link: ${url}`));
-              }}
-            >
-              Copy link
-            </button>
-          )}
+
         </fieldset>
       </form>
       <p>Approve or decline booking requests from the email sent to this mailbox. Confirmed meetings appear in your calendar.</p>
