@@ -360,3 +360,19 @@ enforcement/alignment, preserves existing reporting settings and rejects
 multiple policies, duplicate tags and malformed required values. TXT
 matching for SPF and DKIM is unchanged. This avoids rewriting working DNS
 merely to match the onboarding template.
+
+
+## Private meeting integration foundation (2026-11-14)
+
+The authenticated POST /product/calendar-meetings route derives organizer and workspace from the signed-in mailbox owner, checks an active/trialing Core subscription with at least one paid mailbox and a future period end, and calls the Bible Study Convex HTTP API. Free mailbox access and mailbox exemptions do not grant meetings. Requests include short-lived body-bound assertions and a videoMeetings entitlement claim. The draft event UUID is namespaced by account ID for idempotency.
+
+GSW_MEETINGS_ENABLED defaults off on both backends. No composer controls are enabled. The receiving backend, host handoff, meeting entry, lifecycle synchronization and device acceptance must be released together before enabling customer use. See PRIVATE_MEETINGS_HANDOFF.md.
+
+
+## Organizer handoff milestone
+
+POST /product/calendar-meetings/host rechecks mailbox manage permission, active status and paid access before requesting a ticket for the exact meeting and account-namespaced event. Ticket issuance uses a distinct rooms.handoff signed operation. The Bible backend validates organizer/workspace/event ownership and stores only ticket/session hashes. Tickets expire within 60 seconds and redeem once, atomically, into a two-hour meeting-scoped host session. This session proves identity; paid access must still be rechecked when media starts.
+
+The browser submits meetingId and ticket by form POST to /api/meet/handoff. That route accepts only GSW_MEETINGS_MAIL_ORIGIN, exchanges the ticket server-side, sets a Secure HttpOnly SameSite=Lax cookie scoped to /meet/{meetingId}, and redirects without ticket or session query parameters. Configure GSW_MEETINGS_API_URL, GSW_MEETINGS_WEB_ORIGIN, GSW_MEETINGS_MAIL_ORIGIN and GSW_MEETINGS_ENABLED on the Bible Next.js server; its handoff does not need the signing secret. GSW Mail now exposes typed web API methods and a POST-form helper, but no composer button is enabled.
+
+The /meet entry screen confirms organizer identity and clearly states that media/admission are not available. It is not a working meeting room. Remaining: LiveKit session startup, limits, guest waiting/admission, entitlement recheck, calendar synchronization/cancellation, and composer enablement. Keep both feature flags off.

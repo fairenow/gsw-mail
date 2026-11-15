@@ -1,4 +1,5 @@
 import { syncCalendarPushEvents } from "../mobile/notificationWorker.js";
+import { registerCalendarMeetingRoute } from "../meetings/calendarRoute.js";
 import { replaceEventEmailReminders, cancelEventEmailReminders, getEventEmailReminderMinutes } from "../calendar/emailReminders.js";
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -48,6 +49,7 @@ const calendarEventSchema = z.object({ accountId: z.string().min(1), calendarId:
 
 export default async function productRoutes(app: FastifyInstance) {
   await requireUser(app, { optional: false });
+  registerCalendarMeetingRoute(app);
 
   app.get("/product/settings", async (req) => {
     const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, req.user!.id)).limit(1);
