@@ -92,10 +92,10 @@ function MailboxEventLinks({ account }: { account: Account }) {
         setCalendars(c.calendars);
         setForm((f) => ({
           ...f,
-          calendarId: f.calendarId ||
+          calendarId: f.calendarId || (
             c.calendars.find((c) => c.isDefault)?.engineId ??
             c.calendars[0]?.engineId ??
-            "",
+            ""),
         }));
       })
       .catch((e) => {
