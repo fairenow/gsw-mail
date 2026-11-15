@@ -97,6 +97,10 @@ const calendarQueryDate = (value: string): string => {
 };
 
 const calendarEventToEngine = (event: JmapCalendarEvent): EngineCalendarEvent => {
+  let start = event.start ?? "";
+  if (start && event.timeZone && !event.showWithoutTime) {
+    try { start = calendarStartInstant(start, event.timeZone).toISOString(); } catch { }
+  }
   const location = Object.values(event.locations ?? {})[0]?.name;
   const meetingLink = Object.values(event.virtualLocations ?? {})[0]?.uri;
   const attendees = Object.values(event.participants ?? {}).map((participant) => participant.calendarAddress ?? participant.email ?? "").filter((address) => address && address !== event.organizerCalendarAddress).map((address) => address.replace(/^mailto:/i, ""));
@@ -106,9 +110,9 @@ const calendarEventToEngine = (event: JmapCalendarEvent): EngineCalendarEvent =>
     calendarIds: Object.entries(event.calendarIds ?? {}).filter(([, included]) => included).map(([id]) => id),
     title: event.title ?? "Untitled event",
     ...(event.description ? { description: event.description } : {}),
-    start: event.start ?? "",
+    start,
     ...(event.timeZone ? {timeZone:event.timeZone}:{}),
-    ...(event.duration ? { end: addDuration(event.start, event.duration) } : {}),
+    ...(event.duration ? { end: addDuration(start, event.duration) } : {}),
     ...(location ? { location } : {}),
     ...(meetingLink ? { meetingLink } : {}),
     attendees,
