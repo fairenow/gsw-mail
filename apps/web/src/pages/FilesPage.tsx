@@ -296,7 +296,7 @@ export function FilesPage({ embedded = false }: { embedded?: boolean } = {}) {
           <button className={view === "starred" ? "active" : ""} onClick={() => setView("starred")}>Starred</button>
           <button className={view === "trash" ? "active" : ""} onClick={() => setView("trash")}>Trash</button>
           <button className={view === "shared" ? "active" : ""} onClick={() => setView("shared")}>Shared with me</button>
-          {usage && <div className="gsw-storage-card"><strong>{formatBytes(usage.usedBytes)} of {formatBytes(usage.quotaBytes)}</strong><div><span style={{ width: `${usagePercent}%` }} /></div><small>{usage.planKey === "free" ? "Free plan" : usage.planKey} storage</small></div>}
+          {usage && <div className="gsw-storage-card"><strong>{formatBytes(usage.usedBytes)} of {usage.quotaBytes >= 1_000_000_000 ? `${Number((usage.quotaBytes / 1_000_000_000).toFixed(2))} GB` : formatBytes(usage.quotaBytes)}</strong><div><span style={{ width: `${usagePercent}%` }} /></div><small>Included storage</small></div>}
         </aside>
 
         <section className="gsw-files-browser">

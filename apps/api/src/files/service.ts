@@ -2,6 +2,7 @@ import { signedAssetEdgeUrl } from "./edgeDelivery.js";
 import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { config } from "../config.js";
+import { MAILBOX_STORAGE_BYTES } from "../billing/pricing.js";
 import { db } from "../db/client.js";
 import { assets, fileNodes, userStorageQuotas } from "../db/schema.js";
 import { badRequest, notFound, serviceUnavailable } from "../lib/errors.js";
@@ -32,9 +33,17 @@ const userPrefix = (userId: string): string =>
 export async function getOrCreateStorageQuota(userId: string) {
   await db.insert(userStorageQuotas).values({
     userId,
-    planKey: "free",
-    quotaBytes: config.files.freeQuotaBytes,
-  }).onConflictDoNothing();
+    planKey: "standard",
+    quotaBytes: MAILBOX_STORAGE_BYTES,
+  }).onConflictDoUpdate({
+    target: userStorageQuotas.userId,
+    set: {
+      planKey: "standard",
+      quotaBytes: sql`greatest(${userStorageQuotas.quotaBytes}, ${MAILBOX_STORAGE_BYTES})`,
+      updatedAt: new Date(),
+    },
+    setWhere: eq(userStorageQuotas.planKey, "free"),
+  });
 
   const [row] = await db.select().from(userStorageQuotas).where(eq(userStorageQuotas.userId, userId)).limit(1);
   if (!row) throw new Error("storage quota unavailable");
