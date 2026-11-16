@@ -181,6 +181,24 @@ export function CalendarPage({ embedded = false, active = true }: { embedded?: b
     return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener("focus", refresh); };
   }, [account, month, active]);
 
+  const navigatePeriod = (direction: number) => {
+    if (view === "month") {
+      const next = new Date(month.getFullYear(), month.getMonth() + direction, 1);
+      setMonth(next);
+      setSelectedDay(next);
+      return;
+    }
+    const next = new Date(selectedDay);
+    next.setDate(next.getDate() + direction * (view === "week" ? 7 : 1));
+    setSelectedDay(next);
+    setMonth(monthStart(next));
+  };
+  const periodTitle = view === "day"
+    ? selectedDay.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })
+    : view === "week"
+      ? (() => { const first = startOfWeek(selectedDay); const last = new Date(first); last.setDate(last.getDate() + 6); return first.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " – " + last.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); })()
+      : month.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+
   const openNew = (day?: Date) => {
     resetMeetingGeneration();
     setEditingId(null);
@@ -375,20 +393,20 @@ export function CalendarPage({ embedded = false, active = true }: { embedded?: b
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   };
 
-  const modalEvents = dayModal ? events.filter((event) => dateKey(event.start) === dateKey(dayModal)) : [];
+  const modalEvents = dayModal ? events.filter((event) => eventTouchesDay(event, dayModal)) : [];
   const copyEventDetails = async (event: CalendarEvent) => {
     const detailText = [event.title, `${new Date(event.start).toLocaleDateString()} ${formatEventTime(event)}`, event.location, event.description, event.meetingLink].filter(Boolean).join("\n");
     await navigator.clipboard.writeText(detailText);
   };
 
   const wrap = (node: ReactNode) => embedded ? <div className="gsw-embedded-workspace gsw-embedded-calendar">{node}</div> : <MailWorkspace section="calendar">{node}</MailWorkspace>;
-  return wrap(<div className="gsw-product-shell"><main className="gsw-calendar-page">
+  return wrap(<div className="gsw-product-shell gsw-calendar-shell"><main className="gsw-calendar-page">
       <header className="gsw-calendar-header">
         <h1>Calendar</h1>
         <div className="gsw-calendar-period" aria-label="Calendar navigation">
-          <button type="button" className="gsw-secondary-btn" aria-label="Previous month" title="Previous month" onClick={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}><ChevronLeft size={20} aria-hidden="true" /></button>
-          <strong aria-live="polite">{month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</strong>
-          <button type="button" className="gsw-secondary-btn" aria-label="Next month" title="Next month" onClick={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}><ChevronRight size={20} aria-hidden="true" /></button>
+          <button type="button" className="gsw-secondary-btn" aria-label={`Previous ${view}`} title={`Previous ${view}`} onClick={() => navigatePeriod(-1)}><ChevronLeft size={20} aria-hidden="true" /></button>
+          <strong aria-live="polite">{periodTitle}</strong>
+          <button type="button" className="gsw-secondary-btn" aria-label={`Next ${view}`} title={`Next ${view}`} onClick={() => navigatePeriod(1)}><ChevronRight size={20} aria-hidden="true" /></button>
         </div>
         <div className="gsw-calendar-header-actions">
           <div className="gsw-calendar-view-toggle" role="group" aria-label="Calendar view">{(["day", "week", "month"] as CalendarView[]).map((item) => <button type="button" key={item} className={view === item ? "active" : ""} aria-label={item[0]!.toUpperCase() + item.slice(1)} aria-pressed={view === item} title={item[0]!.toUpperCase() + item.slice(1)} onClick={() => setView(item)}>{item[0]!.toUpperCase() + (view === item ? item.slice(1) : "")}</button>)}</div>
@@ -397,7 +415,7 @@ export function CalendarPage({ embedded = false, active = true }: { embedded?: b
       </header>
       {(eventsLoading || !defaultCalendar) && <p className="gsw-calendar-header-status" role="status">{eventsLoading ? "Loading events…" : "No calendar selected"}</p>}
       {error && <p className="gsw-errors">{error}</p>}
-      <div className="gsw-calendar-layout gsw-calendar-layout-full"><CalendarGrid events={events} loading={eventsLoading} month={month} selectedDay={selectedDay} view={view} onSelectDay={(day) => { setSelectedDay(day); if (view === "month") setDayModal(day); else setMonth(monthStart(day)); }} onOpen={setSelectedEvent} onDelete={remove} /></div>
+      <div className="gsw-calendar-layout gsw-calendar-layout-full"><CalendarGrid events={events} loading={eventsLoading} month={month} selectedDay={selectedDay} view={view} onNavigate={navigatePeriod} onSelectDay={(day) => { setSelectedDay(day); setDayModal(day); }} onOpen={setSelectedEvent} /></div>
       {dayModal && <div className="gsw-modal-backdrop gsw-calendar-day-backdrop" onMouseDown={() => setDayModal(null)}><section className="gsw-calendar-day-modal" role="dialog" aria-modal="true" aria-label={`Events for ${dayModal.toLocaleDateString()}`} onMouseDown={(event) => event.stopPropagation()}><div className="gsw-calendar-day-modal-head"><div><p className="gsw-eyebrow">Full day</p><h2>{dayModal.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</h2></div><button className="gsw-secondary-btn" onClick={() => setDayModal(null)}>Close</button></div><div className="gsw-calendar-day-modal-actions"><button className="gsw-primary-btn" onClick={() => { openNew(dayModal); setDayModal(null); }}><Plus size={16} aria-hidden="true" /> Add event</button></div><div className="gsw-calendar-day-modal-events">{eventsLoading ? <div className="gsw-calendar-grid-event-skeletons"><CalendarEventSkeleton compact={false} /><CalendarEventSkeleton compact={false} /><CalendarEventSkeleton compact={false} /></div> : modalEvents.length ? modalEvents.map((event) => <article key={event.engineId} role="button" tabIndex={0} onClick={() => setSelectedEvent(event)} onKeyDown={(keyEvent) => { if (keyEvent.key === "Enter" || keyEvent.key === " ") setSelectedEvent(event); }}><div className="gsw-calendar-day-modal-time">{formatEventTime(event)}</div><div className="gsw-calendar-day-modal-copy"><h3>{event.title}</h3>{event.location && <p className="gsw-calendar-event-meta">{event.location}</p>}{event.description && <p className="gsw-calendar-event-preview">{event.description}</p>}{event.meetingLink && <span className="gsw-calendar-event-link-hint">Meeting link available</span>}</div><div className="gsw-calendar-day-modal-event-actions"><span>View details</span></div></article>) : <div className="gsw-calendar-day-empty"><strong>No events</strong><p>This day is open.</p></div>}</div></section></div>}
       {selectedEvent && <div className="gsw-modal-backdrop gsw-calendar-event-backdrop" onMouseDown={() => setSelectedEvent(null)}><section className="gsw-calendar-event-modal" role="dialog" aria-modal="true" aria-label={selectedEvent.title} onMouseDown={(event) => event.stopPropagation()}><div className="gsw-calendar-event-modal-head"><div><p className="gsw-eyebrow">Event details</p><h2>{selectedEvent.title}</h2><p>{new Date(selectedEvent.start).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} · {formatEventTime(selectedEvent)}</p></div><button className="gsw-secondary-btn" onClick={() => setSelectedEvent(null)}>Back to day</button></div><div className="gsw-calendar-event-actionbar">{isPartnerMeeting(selectedEvent.meetingLink) && <button className="gsw-primary-btn" disabled={joiningHost} onClick={() => void hostMeeting(selectedEvent)}>{joiningHost ? "Opening…" : "Host meeting"}</button>}{selectedEvent.meetingLink && <a className="gsw-primary-btn" href={selectedEvent.meetingLink} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Join meeting</a>}<button className="gsw-secondary-btn" onClick={() => openEdit(selectedEvent)}><Pencil size={15} /> Edit</button>{selectedEvent.attendees.length > 0 && <button className="gsw-secondary-btn" onClick={() => openAttendeeEmail(selectedEvent)}><Mail size={15} /> Email attendees</button>}<button className="gsw-secondary-btn" onClick={() => void copyEventDetails(selectedEvent)}>Copy details</button><button className="gsw-calendar-delete-action" onClick={() => void remove(selectedEvent)}><Trash2 size={15} /> Delete</button></div>{hostError && <p role="alert">{hostError}</p>}<div className="gsw-calendar-event-details">{selectedEvent.location && <section><strong>Location</strong>{/^https?:\/\//.test(selectedEvent.location) ? <a href={selectedEvent.location} target="_blank" rel="noreferrer">{selectedEvent.location}</a> : <p>{selectedEvent.location}</p>}</section>}{selectedEvent.meetingLink && <section><strong>Meeting link</strong><a href={selectedEvent.meetingLink} target="_blank" rel="noreferrer">{selectedEvent.meetingLink}</a></section>}{selectedEvent.attendees.length > 0 && <section><strong>Attendees</strong><div className="gsw-calendar-rsvp-summary">{(() => { const accepted = rsvpStatuses.filter((item) => item.response === "accepted").length; return <span>{accepted} yes · {selectedEvent.attendees.length} invited</span>; })()}{rsvpLoading && <span>Refreshing responses…</span>}</div><div className="gsw-calendar-rsvp-list">{selectedEvent.attendees.map((attendee) => { const status = rsvpStatuses.find((item) => item.attendeeEmail.toLowerCase() === attendee.toLowerCase()); const response = status?.response ?? null; const label = response === "accepted" ? "Yes" : response === "declined" ? "No" : response === "tentative" ? "Maybe" : "Pending"; return <div className="gsw-calendar-rsvp-person" key={attendee}><span className="gsw-calendar-rsvp-email">{attendee}</span><span className={`gsw-calendar-rsvp-badge ${response ?? "pending"}`}>{label}</span></div>; })}</div></section>}{selectedEvent.description && <section><strong>Details</strong><p className="gsw-calendar-event-description"><LinkifiedText text={selectedEvent.description} /></p></section>}</div></section></div>}
       {emailEvent && <div className="gsw-modal-backdrop gsw-calendar-email-backdrop" onMouseDown={() => setEmailEvent(null)}><section className="gsw-calendar-email-modal" role="dialog" aria-modal="true" aria-label="Email attendees" onMouseDown={(event) => event.stopPropagation()}><div className="gsw-calendar-event-modal-head"><div><p className="gsw-eyebrow">GSW Mail</p><h2>Email attendees</h2><p>Choose who should receive the formatted meeting update.</p></div><button className="gsw-secondary-btn" onClick={() => setEmailEvent(null)}>Close</button></div><div className="gsw-calendar-email-recipients">{uniqueEmails(emailEvent.attendees).map((attendee) => <label key={attendee}><input type="checkbox" checked={emailRecipients.includes(attendee)} onChange={(event) => setEmailRecipients((current) => event.target.checked ? uniqueEmails([...current, attendee]) : current.filter((item) => item !== attendee))} /><span>{attendee}</span></label>)}</div><label className="gsw-calendar-email-add">Add an email or contact<div className="gsw-calendar-attendee-input"><input value={emailDraft} onChange={(event) => setEmailDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === ",") { event.preventDefault(); void addEmailRecipient(emailDraft); } }} placeholder="Name or person@example.com" /></div><small>Choose a contact below, or press Enter/comma to add an email.</small></label>{emailDraft.trim() && <div className="gsw-calendar-contact-suggestions">{contactOptions.flatMap((contact) => contact.emails.map((entry) => ({ name: contact.displayName || [contact.firstName, contact.lastName].filter(Boolean).join(" ") || entry.email, email: entry.email }))).filter((item) => `${item.name} ${item.email}`.toLowerCase().includes(emailDraft.trim().toLowerCase()) && !emailRecipients.includes(item.email.toLowerCase())).slice(0, 5).map((item) => <button type="button" key={item.email} onClick={() => { setEmailRecipients((current) => uniqueEmails([...current, item.email])); setEmailDraft(""); }}><strong>{item.name}</strong><span>{item.email}</span></button>)}</div>}{emailRecipients.filter((email) => !emailEvent.attendees.includes(email)).length > 0 && <div className="gsw-calendar-email-extra">{emailRecipients.filter((email) => !emailEvent.attendees.includes(email)).map((email) => <span key={email}>{email}<button type="button" onClick={() => setEmailRecipients((current) => current.filter((item) => item !== email))}>×</button></span>)}</div>}<div className="gsw-calendar-email-actions"><span>{emailRecipients.length} selected</span><button className="gsw-primary-btn" disabled={emailSending || emailRecipients.length === 0} onClick={() => void sendAttendeeUpdate()}>{emailSending ? "Sending…" : "Send update"}</button></div></section></div>}
@@ -405,13 +423,95 @@ export function CalendarPage({ embedded = false, active = true }: { embedded?: b
     </main></div>);
 }
 
-function CalendarGrid({ events, loading, month, selectedDay, view, onSelectDay, onOpen, onDelete }: { events: CalendarEvent[]; loading: boolean; month: Date; selectedDay: Date; view: CalendarView; onSelectDay: (day: Date) => void; onOpen: (event: CalendarEvent) => void; onDelete: (event: CalendarEvent) => void }) {
-  const dates = view === "day" ? [selectedDay] : view === "week" ? Array.from({ length: 7 }, (_, index) => { const day = startOfWeek(selectedDay); day.setDate(day.getDate() + index); return day; }) : monthGridDates(month);
-  return <section className={`gsw-calendar-grid gsw-calendar-grid-${view}`} aria-busy={loading}>{dates.map((day, index) => {
-    const key = dateKey(day);
-    const dayEvents = events.filter((event) => dateKey(event.start) === key);
-    const outsideMonth = view === "month" && (day.getMonth() !== month.getMonth() || day.getFullYear() !== month.getFullYear());
-    const monthEvents = dayEvents.slice(0, 2);
-    return <div className={`gsw-calendar-day${outsideMonth ? " gsw-calendar-day-outside-month" : ""}`} key={key} onClick={() => onSelectDay(day)}><header><strong>{day.toLocaleDateString(undefined, { weekday: view === "month" ? "short" : "long", month: "short", day: "numeric" })}</strong></header>{view === "month" ? <div className="gsw-calendar-month-events">{loading ? <>{index % 3 === 0 && <CalendarEventSkeleton />}{index % 7 === 0 && <CalendarEventSkeleton />}</> : <>{monthEvents.map((event) => <div className="gsw-calendar-month-event" key={event.engineId}><time>{event.allDay ? "All day" : new Date(event.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time><span>{event.title}</span></div>)}{dayEvents.length > 2 && <div className="gsw-calendar-more-events">+{dayEvents.length - 2} more</div>}</>}</div> : loading ? <div className="gsw-calendar-grid-event-skeletons"><CalendarEventSkeleton compact={false} /><CalendarEventSkeleton compact={false} /></div> : dayEvents.map((event) => <div className="gsw-calendar-grid-event" key={event.engineId}><button onClick={(click) => { click.stopPropagation(); onOpen(event); }}><time>{event.allDay ? "All day" : new Date(event.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time><span>{event.title}</span>{event.meetingLink && <small>Virtual</small>}</button><button className="gsw-calendar-grid-delete" onClick={(click) => { click.stopPropagation(); void onDelete(event); }}>Delete</button></div>)}</div>;
-  })}</section>;
+
+function eventTouchesDay(event: CalendarEvent, day: Date): boolean {
+  const key = dateKey(day);
+  if (event.allDay) {
+    const first = event.start.slice(0, 10);
+    const last = event.end?.slice(0, 10);
+    return key >= first && (last && last > first ? key < last : key === first);
+  }
+  const first = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+  const last = new Date(first); last.setDate(last.getDate() + 1);
+  const start = new Date(event.start).getTime();
+  const end = event.end ? new Date(event.end).getTime() : start + 60 * 60_000;
+  return start < last.getTime() && Math.max(end, start + 60_000) > first.getTime();
+}
+
+function timedDayEvents(events: CalendarEvent[], day: Date) {
+  const first = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+  const last = new Date(first); last.setDate(last.getDate() + 1);
+  const items = events.filter(event => !event.allDay && eventTouchesDay(event, day)).map(event => {
+    const start = new Date(event.start);
+    const end = event.end ? new Date(event.end) : new Date(start.getTime() + 60 * 60_000);
+    const from = start < first ? 0 : start.getHours() * 60 + start.getMinutes();
+    const until = end >= last ? 1440 : end.getHours() * 60 + end.getMinutes();
+    return { event, from, until: Math.min(1440, Math.max(from + 20, until)), lane: 0, lanes: 1 };
+  }).sort((a, b) => a.from - b.from || b.until - a.until);
+  let group: typeof items = [];
+  let ends: number[] = [];
+  let groupEnd = -1;
+  const finish = () => { group.forEach(item => { item.lanes = ends.length; }); };
+  for (const item of items) {
+    if (item.from >= groupEnd) { finish(); group = []; ends = []; groupEnd = -1; }
+    let lane = ends.findIndex(end => end <= item.from);
+    if (lane === -1) lane = ends.length;
+    ends[lane] = item.until;
+    item.lane = lane;
+    group.push(item);
+    groupEnd = Math.max(groupEnd, item.until);
+  }
+  finish();
+  return items;
+}
+
+function CalendarGrid({ events, loading, month, selectedDay, view, onSelectDay, onOpen, onNavigate }: {
+  events: CalendarEvent[]; loading: boolean; month: Date; selectedDay: Date; view: CalendarView;
+  onSelectDay: (day: Date) => void; onOpen: (event: CalendarEvent) => void; onNavigate: (direction: number) => void;
+}) {
+  const scroll = useRef<HTMLDivElement>(null);
+  const firstDay = view === "week" ? startOfWeek(selectedDay) : selectedDay;
+  const firstKey = dateKey(firstDay);
+  useEffect(() => { if (view !== "month" && scroll.current) scroll.current.scrollTop = 8 * 56; }, [view, firstKey]);
+  if (view === "month") {
+    const dates = monthGridDates(month);
+    return <section className="gsw-calendar-grid gsw-calendar-grid-month" style={{ gridTemplateRows: `repeat(${dates.length / 7}, minmax(90px, 1fr))` }} aria-busy={loading}>
+      {dates.map((day, index) => {
+        const key = dateKey(day);
+        const dayEvents = events.filter(event => eventTouchesDay(event, day));
+        const outside = day.getMonth() !== month.getMonth() || day.getFullYear() !== month.getFullYear();
+        return <div className={`gsw-calendar-day${outside ? " gsw-calendar-day-outside-month" : ""}`} key={key} onClick={() => onSelectDay(day)}>
+          <header><button type="button" aria-label={`Open events for ${day.toLocaleDateString()}`} onClick={click => { click.stopPropagation(); onSelectDay(day); }}>{day.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</button></header>
+          <div className="gsw-calendar-month-events">{loading ? <>{index % 3 === 0 && <CalendarEventSkeleton />}</> : <>{dayEvents.slice(0, 2).map(event => <div className="gsw-calendar-month-event" key={event.engineId}><time>{event.allDay ? "All day" : new Date(event.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time><span>{event.title}</span></div>)}{dayEvents.length > 2 && <div className="gsw-calendar-more-events">+{dayEvents.length - 2} more</div>}</>}</div>
+        </div>;
+      })}
+    </section>;
+  }
+  const dates = view === "day" ? [selectedDay] : Array.from({ length: 7 }, (_, index) => { const day = startOfWeek(selectedDay); day.setDate(day.getDate() + index); return day; });
+  const hasAllDay = dates.some(day => events.some(event => event.allDay && eventTouchesDay(event, day)));
+  const columns = `58px repeat(${dates.length}, minmax(${view === "week" ? "110px" : "0px"}, 1fr))`;
+  return <section className="gsw-calendar-timeline" aria-label={`${view} calendar`} aria-busy={loading}>
+    <div className="gsw-calendar-timeline-scroll" ref={scroll}>
+      <div className="gsw-calendar-timeline-heading" style={{ gridTemplateColumns: columns, minWidth: view === "week" ? 828 : undefined }}>
+        <div className="gsw-calendar-timezone">{hasAllDay ? "All day" : "Time"}</div>
+        {dates.map(day => <div className="gsw-calendar-timeline-day-head" key={dateKey(day)}>
+          <button type="button" onClick={() => onSelectDay(day)} aria-label={`Open events for ${day.toLocaleDateString()}`}>{day.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</button>
+          {hasAllDay && <div className="gsw-calendar-all-day-events">{events.filter(event => event.allDay && eventTouchesDay(event, day)).map(event => <button type="button" className="gsw-calendar-all-day-event" key={event.engineId} title={event.title} onClick={() => onOpen(event)}>{event.title}</button>)}</div>}
+        </div>)}
+      </div>
+      <div className="gsw-calendar-timeline-body" style={{ gridTemplateColumns: columns, minWidth: view === "week" ? 828 : undefined }}>
+        <div className="gsw-calendar-hours" aria-hidden="true">{Array.from({ length: 24 }, (_, hour) => <div key={hour}>{new Date(2000, 0, 1, hour).toLocaleTimeString([], { hour: "numeric" })}</div>)}</div>
+        {dates.map(day => <div className="gsw-calendar-time-column" key={dateKey(day)} onClick={() => onSelectDay(day)}>
+          {Array.from({ length: 24 }, (_, hour) => <div className="gsw-calendar-hour-line" key={hour} aria-hidden="true" />)}
+          {!loading && timedDayEvents(events, day).map(item => <button type="button" className="gsw-calendar-timed-event" key={item.event.engineId} title={`${item.event.title} · ${formatEventTime(item.event)}`}
+            style={{ top: item.from / 60 * 56, height: Math.max(18, (item.until - item.from) / 60 * 56), left: `calc(${item.lane / item.lanes * 100}% + 3px)`, width: `calc(${100 / item.lanes}% - 6px)` }}
+            onClick={click => { click.stopPropagation(); onOpen(item.event); }}>
+            <time>{new Date(item.event.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time><strong>{item.event.title}</strong>
+          </button>)}
+        </div>)}
+      </div>
+    </div>
+    <button type="button" className="gsw-calendar-edge-nav gsw-calendar-edge-prev" aria-label={`Previous ${view}`} title={`Previous ${view}`} onClick={() => onNavigate(-1)}><ChevronLeft size={22} aria-hidden="true" /></button>
+    <button type="button" className="gsw-calendar-edge-nav gsw-calendar-edge-next" aria-label={`Next ${view}`} title={`Next ${view}`} onClick={() => onNavigate(1)}><ChevronRight size={22} aria-hidden="true" /></button>
+  </section>;
 }
