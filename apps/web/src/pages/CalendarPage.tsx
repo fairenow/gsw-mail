@@ -506,7 +506,7 @@ function CalendarGrid({ events, loading, month, selectedDay, view, onSelectDay, 
           {!loading && timedDayEvents(events, day).map(item => <button type="button" className="gsw-calendar-timed-event" key={item.event.engineId} title={`${item.event.title} · ${formatEventTime(item.event)}`}
             style={{ top: item.from / 60 * 56, height: Math.max(18, (item.until - item.from) / 60 * 56), left: `calc(${item.lane / item.lanes * 100}% + 3px)`, width: `calc(${100 / item.lanes}% - 6px)` }}
             onClick={click => { click.stopPropagation(); onOpen(item.event); }}>
-            <time>{new Date(item.event.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time><strong>{item.event.title}</strong>
+            <strong>{item.event.title}</strong><time>{new Date(item.event.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>
           </button>)}
         </div>)}
       </div>

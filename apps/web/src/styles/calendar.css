@@ -798,16 +798,88 @@
 }
 .gsw-calendar-edge-prev { left: 4px; }
 .gsw-calendar-edge-next { right: 14px; }
-.gsw-calendar-timeline:hover .gsw-calendar-edge-nav,
-.gsw-calendar-timeline:focus-within .gsw-calendar-edge-nav { opacity: 1; pointer-events: auto; }
+
 .gsw-calendar-edge-nav:focus-visible,
 .gsw-calendar-timed-event:focus-visible,
 .gsw-calendar-timeline-day-head > button:focus-visible,
 .gsw-calendar-day header button:focus-visible { outline: 2px solid var(--gsw-accent); outline-offset: 2px; }
-@media (hover: none) {
-  .gsw-calendar-edge-nav { opacity: 1; pointer-events: auto; }
-}
+
 @media (max-width: 700px) {
   .gsw-calendar-shell .gsw-calendar-page { padding: 12px; }
   .gsw-calendar-layout-full > .gsw-calendar-grid-month { grid-template-columns: repeat(7, minmax(80px, 1fr)); }
+}
+
+.gsw-calendar-timeline {
+  box-sizing: border-box;
+  padding-inline: 24px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.gsw-calendar-timeline-scroll {
+  box-sizing: border-box;
+  border: 1px solid var(--gsw-border);
+  border-radius: 14px;
+  background: var(--gsw-surface);
+}
+.gsw-calendar-edge-nav,
+.gsw-calendar-edge-nav:hover,
+.gsw-calendar-edge-nav:focus {
+  width: 32px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  opacity: 0;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.gsw-calendar-edge-prev { left: -8px; }
+.gsw-calendar-edge-next { right: -8px; }
+.gsw-calendar-edge-nav:hover,
+.gsw-calendar-edge-nav:focus-visible { opacity: 1; }
+.gsw-calendar-timed-event {
+  container-type: size;
+  container-name: calendar-event;
+  padding: 2px 4px;
+  gap: 1px;
+}
+.gsw-calendar-timed-event strong {
+  display: block;
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  -webkit-line-clamp: unset;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: clamp(9px, 7cqw, 12px);
+  line-height: 1.15;
+}
+.gsw-calendar-timed-event time {
+  display: block;
+  flex: 0 0 auto;
+  width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: clamp(8px, 6cqw, 10px);
+  line-height: 1.1;
+}
+@container calendar-event (max-height: 30px) {
+  .gsw-calendar-timed-event time { display: none; }
+}
+@container calendar-event (min-height: 48px) {
+  .gsw-calendar-timed-event strong {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+@container calendar-event (min-height: 76px) {
+  .gsw-calendar-timed-event strong { -webkit-line-clamp: 3; }
 }
