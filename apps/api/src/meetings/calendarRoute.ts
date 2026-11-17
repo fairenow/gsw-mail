@@ -27,8 +27,6 @@ export function registerCalendarMeetingRoute(app: FastifyInstance) {
     const meetingId = partnerMeetingId(event?.meetingLink);
     if (!event || !meetingId) throw notFound("No generated meeting is attached to this event.");
     const start = meetingStartUtc(event.start, event.timeZone ?? "Etc/UTC");
-    const end = event.end ? Date.parse(meetingStartUtc(event.end, event.timeZone ?? "Etc/UTC")) : Date.parse(start) + 3600000;
-    if (end <= Date.now()) throw badRequest("This event has ended. Use Host meeting if you need to reopen the room.");
     const client = createMeetingClient({ apiUrl: process.env.GSW_MEETINGS_API_URL ?? "", webOrigin: process.env.GSW_MEETINGS_WEB_ORIGIN ?? "", signingSecret: process.env.GSW_MEETINGS_SIGNING_SECRET ?? "" });
     await client.issueHost(organizer, { meetingId });
     await pool.query("UPDATE meeting_owner_codes SET nonce=$4,consumed_at=NULL,attempts=0,native_request_id=NULL,native_session=NULL,native_expires_at=NULL WHERE meeting_id=$1 AND account_id=$2 AND user_id=$3 AND (consumed_at IS NOT NULL OR attempts>=10 OR expires_at<=now())", [meetingId,input.accountId,req.user!.id,randomUUID()]);
