@@ -1,4 +1,7 @@
-import { createOwnerCode } from "./ownerCode.js";
+import { createOwnerCode, bookingOwnerCode } from "./ownerCode.js";
+import { getUserEngine } from "../engine/index.js";
+import { meetingStartUtc, partnerMeetingId } from "./calendarSync.js";
+import { badRequest, notFound } from "../lib/errors.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { meetingOrganizer } from "./access.js";
@@ -11,6 +14,26 @@ const inputSchema = z.object({
 }).strict();
 
 export function registerCalendarMeetingRoute(app: FastifyInstance) {
+  app.post("/product/calendar-meetings/owner-code", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (req, reply) => {
+    reply.header("cache-control", "no-store");
+    if (process.env.GSW_MEETINGS_ENABLED !== "true") throw serviceUnavailable("meetings_disabled");
+    const input = z.object({ accountId: z.uuid(), eventId: z.string().min(1).max(500) }).strict().parse(req.body);
+    const organizer = await meetingOrganizer(req.user!.id, input.accountId);
+    if (!req.authUserId) throw notFound();
+    const engine = await getUserEngine({ productUserId: req.user!.id, authUserId: req.authUserId, accountId: input.accountId, headers: req.headers as Record<string, string>, permission: "manage" });
+    const event = await engine.getCalendarEvent(input.accountId, input.eventId);
+    const meetingId = partnerMeetingId(event?.meetingLink);
+    if (!event || !meetingId) throw notFound("No generated meeting is attached to this event.");
+    const start = meetingStartUtc(event.start, event.timeZone ?? "Etc/UTC");
+    const end = event.end ? Date.parse(meetingStartUtc(event.end, event.timeZone ?? "Etc/UTC")) : Date.parse(start) + 3600000;
+    if (end <= Date.now()) throw badRequest("This event has ended. Use Host meeting if you need to reopen the room.");
+    const client = createMeetingClient({ apiUrl: process.env.GSW_MEETINGS_API_URL ?? "", webOrigin: process.env.GSW_MEETINGS_WEB_ORIGIN ?? "", signingSecret: process.env.GSW_MEETINGS_SIGNING_SECRET ?? "" });
+    await client.issueHost(organizer, { meetingId });
+    const result = await createOwnerCode(meetingId, input.accountId, req.user!.id, start);
+    const code = await bookingOwnerCode(event.meetingLink ?? null, input.accountId, req.user!.id);
+    if (!code) throw badRequest("This code was already used, expired, or locked. Select Host meeting to enter securely.");
+    return { ...result, ownerCode: code };
+  });
   app.post("/product/calendar-meetings/host", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req, reply) => {
     reply.header("cache-control", "no-store");
     if (process.env.GSW_MEETINGS_ENABLED !== "true") throw serviceUnavailable("meetings_disabled");

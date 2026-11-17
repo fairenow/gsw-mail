@@ -1,4 +1,5 @@
 import { HOST_CODE_SCHEMA } from "./meetings/ownerCode.js";
+import { backfillMeetingOwnerCodes } from "./meetings/backfillOwnerCodes.js";
 import { ensureEventLinkSchema } from "./booking/schema.js";
 import { deliverBookingWork } from "./booking/service.js";
 import { ensureIntegrationSchema } from "./integrations/ensureSchema.js";
@@ -86,6 +87,7 @@ async function main() {
   stopChatWorker=startChatExecutionWorker();
   stopFileOrganizer = startOrganizationWorker(error => app.log.error(error, "file organization worker failed"));
   await app.listen({ port: config.port, host: "0.0.0.0" });
+  void backfillMeetingOwnerCodes().then(counts => app.log.info(counts, "meeting organizer code backfill complete")).catch(() => app.log.error("meeting organizer code backfill failed"));
 }
 
 const shutdown = async (signal: string) => {
