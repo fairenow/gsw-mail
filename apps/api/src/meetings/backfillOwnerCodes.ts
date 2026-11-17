@@ -6,7 +6,7 @@ import { meetingStartUtc, partnerMeetingId } from "./calendarSync.js";
 import { createOwnerCode } from "./ownerCode.js";
 
 export async function backfillMeetingOwnerCodes() {
-  const counts = { created: 0, existing: 0, skipped: 0, failed: 0, mailboxesScanned: 0, mailboxesUnavailable: 0 };
+  const counts = { created: 0, existing: 0, skipped: 0, failed: 0, failureReasons: {} as Record<string, number>, mailboxesScanned: 0, mailboxesUnavailable: 0 };
   if (process.env.GSW_MEETINGS_ENABLED !== "true") return counts;
   const lock = await pool.connect();
   const acquired = await lock.query<{ acquired: boolean }>("SELECT pg_try_advisory_lock(hashtext('meeting-owner-code-backfill')) AS acquired");
@@ -26,7 +26,11 @@ export async function backfillMeetingOwnerCodes() {
       counts.created++;
     } catch (error) {
       const status = (error as { status?: number }).status;
-      if (status === 403 || status === 404) counts.skipped++; else counts.failed++;
+      if (status === 403 || status === 404) counts.skipped++; else {
+        counts.failed++;
+        const reason = status ? `http_${status}` : error instanceof Error ? error.name : "unknown";
+        counts.failureReasons[reason] = (counts.failureReasons[reason] ?? 0) + 1;
+      }
     }
   };
   try {
