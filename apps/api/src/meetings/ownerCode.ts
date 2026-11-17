@@ -10,9 +10,12 @@ CREATE TABLE IF NOT EXISTS meeting_owner_codes (
  expires_at timestamptz NOT NULL, attempts integer NOT NULL DEFAULT 0, consumed_at timestamptz
 );
 CREATE INDEX IF NOT EXISTS meeting_owner_codes_expiry_idx ON meeting_owner_codes(expires_at);
+ALTER TABLE meeting_owner_codes ADD COLUMN IF NOT EXISTS native_request_id uuid;
+ALTER TABLE meeting_owner_codes ADD COLUMN IF NOT EXISTS native_session text;
+ALTER TABLE meeting_owner_codes ADD COLUMN IF NOT EXISTS native_expires_at timestamptz;
 `;
-type CodeRow = { meeting_id: string; account_id: string; user_id: string; nonce: string; expires_at: Date; attempts: number; consumed_at: Date | null };
-function codeFor(row: CodeRow) {
+export type CodeRow = { meeting_id: string; account_id: string; user_id: string; nonce: string; expires_at: Date; attempts: number; consumed_at: Date | null };
+export function codeFor(row: CodeRow) {
   const secret = process.env.GSW_MEETINGS_SIGNING_SECRET ?? "";
   if (Buffer.byteLength(secret) < 32) throw Error("Meeting signing configuration unavailable");
   const digest = createHmac("sha256", secret).update(JSON.stringify(["owner-code-v1", row.meeting_id, row.account_id, row.user_id, row.nonce])).digest("hex");

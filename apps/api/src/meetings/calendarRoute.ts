@@ -1,3 +1,5 @@
+import { pool } from "../db/client.js";
+import { randomUUID } from "node:crypto";
 import { createOwnerCode, bookingOwnerCode } from "./ownerCode.js";
 import { getUserEngine } from "../engine/index.js";
 import { meetingStartUtc, partnerMeetingId } from "./calendarSync.js";
@@ -29,6 +31,7 @@ export function registerCalendarMeetingRoute(app: FastifyInstance) {
     if (end <= Date.now()) throw badRequest("This event has ended. Use Host meeting if you need to reopen the room.");
     const client = createMeetingClient({ apiUrl: process.env.GSW_MEETINGS_API_URL ?? "", webOrigin: process.env.GSW_MEETINGS_WEB_ORIGIN ?? "", signingSecret: process.env.GSW_MEETINGS_SIGNING_SECRET ?? "" });
     await client.issueHost(organizer, { meetingId });
+    await pool.query("UPDATE meeting_owner_codes SET nonce=$4,consumed_at=NULL,attempts=0,native_request_id=NULL,native_session=NULL,native_expires_at=NULL WHERE meeting_id=$1 AND account_id=$2 AND user_id=$3 AND (consumed_at IS NOT NULL OR attempts>=10 OR expires_at<=now())", [meetingId,input.accountId,req.user!.id,randomUUID()]);
     const result = await createOwnerCode(meetingId, input.accountId, req.user!.id, start);
     const code = await bookingOwnerCode(event.meetingLink ?? null, input.accountId, req.user!.id);
     if (!code) throw badRequest("This code was already used, expired, or locked. Select Host meeting to enter securely.");

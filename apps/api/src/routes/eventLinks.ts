@@ -1,3 +1,4 @@
+import { redeemNativeOwnerCode } from "../meetings/nativeOwnerCode.js";
 import { redeemOwnerCode } from "../meetings/ownerCode.js";
 import { verifyBookingDecisionToken } from "../booking/decisionToken.js";
 import { JmapError } from "../engine/jmap.js";
@@ -42,6 +43,17 @@ export async function publicEventLinks(app: FastifyInstance) {
       if (result) return result;
     } catch {}
     return reply.code(401).send({ code: "owner_code_invalid" });
+  });
+  app.post("/product/calendar-meetings/verify-owner-native", { bodyLimit: 768, config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {
+    if (process.env.GSW_MEETINGS_ENABLED !== "true") throw serviceUnavailable("meetings_disabled");
+    const input = z.object({ meetingId: z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/), code: z.string().regex(/^[0-9]{8}$/), requestId: z.uuid() }).strict().parse(req.body);
+    try {
+      const session = await redeemNativeOwnerCode(input.meetingId, input.code, input.requestId);
+      if (session) return session;
+      return reply.code(401).send({code:"owner_code_invalid"});
+    } catch {
+      return reply.code(503).send({code:"meeting_verification_unavailable"});
+    }
   });
   const decisionRequest = z
     .object({
