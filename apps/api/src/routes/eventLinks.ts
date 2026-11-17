@@ -1,3 +1,4 @@
+import { redeemOwnerCode } from "../meetings/ownerCode.js";
 import { verifyBookingDecisionToken } from "../booking/decisionToken.js";
 import { JmapError } from "../engine/jmap.js";
 import type { FastifyInstance } from "fastify";
@@ -32,6 +33,15 @@ export async function publicEventLinks(app: FastifyInstance) {
     reply.header("cache-control", "no-store");
     reply.header("x-robots-tag", "noindex, nofollow");
     return payload;
+  });
+  app.post("/product/calendar-meetings/verify-owner", { bodyLimit: 512, config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {
+    if (process.env.GSW_MEETINGS_ENABLED !== "true") throw serviceUnavailable("meetings_disabled");
+    const input = z.object({ meetingId: z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/), code: z.string().regex(/^[0-9]{8}$/) }).strict().parse(req.body);
+    try {
+      const result = await redeemOwnerCode(input.meetingId, input.code);
+      if (result) return result;
+    } catch {}
+    return reply.code(401).send({ code: "owner_code_invalid" });
   });
   const decisionRequest = z
     .object({

@@ -15,6 +15,7 @@ export function bookingNotice(
   stage: string,
   organizer: string,
   owner: boolean,
+  ownerCode?: string,
 ) {
   const title =
     (
@@ -64,6 +65,9 @@ export function bookingNotice(
       ["Phone", b.phone || "Not provided"],
       ["Message", b.message || "Not provided"],
     );
+  if (owner && stage === "confirmed" && ownerCode) {
+    details.push(["Private organizer code", ownerCode], ["Organizer access", "Open the meeting link and enter this one-time code under Organizer access. Valid until 24 hours after the scheduled start. Keep it private; it grants host access. You can also use Host meeting from your GSW Mail calendar."]);
+  }
   const actions: [string, string][] = [];
   if (
     owner &&

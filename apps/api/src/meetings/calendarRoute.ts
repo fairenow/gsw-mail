@@ -1,3 +1,4 @@
+import { createOwnerCode } from "./ownerCode.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { meetingOrganizer } from "./access.js";
@@ -22,7 +23,8 @@ export function registerCalendarMeetingRoute(app: FastifyInstance) {
       });
     } catch { throw serviceUnavailable("meeting_handoff_unavailable"); }
   });
-  app.post("/product/calendar-meetings", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async req => {
+  app.post("/product/calendar-meetings", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req, reply) => {
+    reply.header("cache-control", "no-store");
     if (process.env.GSW_MEETINGS_ENABLED !== "true") throw serviceUnavailable("meetings_disabled");
     const input = inputSchema.parse(req.body);
     const organizer = await meetingOrganizer(req.user!.id, input.accountId);
@@ -31,9 +33,10 @@ export function registerCalendarMeetingRoute(app: FastifyInstance) {
       client = createMeetingClient({ apiUrl: process.env.GSW_MEETINGS_API_URL ?? "", webOrigin: process.env.GSW_MEETINGS_WEB_ORIGIN ?? "", signingSecret: process.env.GSW_MEETINGS_SIGNING_SECRET ?? "" });
     } catch { throw serviceUnavailable("meetings_not_configured"); }
     try {
-      return await client.createRoom(organizer, {
+      const room = await client.createRoom(organizer, {
         externalEventId: `${input.accountId}:${input.externalEventId}`, title: input.title, scheduledAt: input.scheduledAt, timezone: input.timezone,
       });
+      return { ...room, ...await createOwnerCode(room.meetingId, input.accountId, req.user!.id, input.scheduledAt) };
     } catch (error) {
       if (error instanceof MeetingServiceError) throw serviceUnavailable(error.code);
       throw error;

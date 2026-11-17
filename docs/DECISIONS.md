@@ -322,3 +322,10 @@ The explicit founder_operator_exception workspace flag also grants hosted AI wit
 ### Mobile Event Link sharing (2026-11-15)
 
 The native mobile Settings Event Link editor consumes the existing owner-scoped APIs. Web and native select the first saved link and place a prominent Copy Link action above the editor, copying only the persisted URL. Native uses Expo Clipboard already present in the app. A mobile mailbox without an established renewable booking grant can save a paused draft and finish the existing cookie-bound web authorization once; the API reports that prerequisite explicitly without bypassing the credential vault. Booking approvals remain in email and calendar events use the existing worker. No schema change. Tests and browser checks skipped per user preference.
+
+
+## Meeting organizer verification codes
+
+New calendar-generated private meetings return an owner-only 8-digit, one-time code. Generated Event Link bookings include it only in the confirmed organizer email, never guest mail, calendar descriptions or ICS. Codes are derived with a domain-separated HMAC using the meeting signing secret and a stored random nonce. API startup ensures the meeting_owner_codes table; expiry is 24 hours after scheduled creation time (or at least 24 hours after generation). Ten atomic, meeting-scoped attempts lock the code. Redemption rechecks mailbox permission and paid meeting entitlement before using the existing signed Bible host-ticket exchange. The Bible web server stores the resulting session in its meeting-scoped HttpOnly cookie; no code or host ticket is placed in a URL. Existing signed-in Host meeting remains the recovery path for expired/used/locked codes. No Convex or native module changes are required. Existing meetings retain their signed-in handoff.
+
+Validation: API and web typechecks, six booking-email tests, and one real in-memory PostgreSQL organizer-code test passed locally. No production meeting, live email send, mobile build, or OTA was triggered for validation.

@@ -1,3 +1,4 @@
+import { createOwnerCode, bookingOwnerCode } from "../meetings/ownerCode.js";
 import { bookingNotice } from "./notice.js";
 import { bookingInvite } from "./invite.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -420,6 +421,7 @@ export function createBookingService(
               scheduledAt: b.starts_at.toISOString(),
               timezone: b.settings.timeZone,
             });
+            await createOwnerCode(room.meetingId, link.account_id, link.user_id, b.starts_at.toISOString());
             meetingLink = room.joinUrl;
           }
           b.meeting_url = meetingLink || null;
@@ -512,6 +514,8 @@ export function createBookingService(
           stage,
           account.address,
           mail.recipient === account.address,
+          mail.recipient === account.address && stage === "confirmed"
+            ? await bookingOwnerCode(b.meeting_url, link.account_id, link.user_id) : undefined,
         );
         const sent = await submitSend({
           userId: link.user_id,

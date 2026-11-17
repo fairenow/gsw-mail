@@ -182,3 +182,14 @@ test("outbound message preparation preserves booking plain-text actions and styl
   assert.match(rendered.html, /background:\s*#995d00/);
   assert.doesNotMatch(rendered.html, /<title>|<script>/);
 });
+
+test("private organizer codes appear only in confirmed owner emails", () => {
+  const confirmed = { ...booking, status: "confirmed", meeting_url: "https://example.test/meet/room" };
+  const owner = bookingNotice(link, confirmed, "confirmed", "owner@example.test", true, "00123456");
+  const guest = bookingNotice(link, confirmed, "confirmed", "owner@example.test", false, "00123456");
+  const pending = bookingNotice(link, booking, "pending", "owner@example.test", true, "00123456");
+  assert.match(owner.text, /Private organizer code: 00123456/);
+  assert.match(owner.html, /00123456/);
+  assert.doesNotMatch(guest.text + guest.html, /00123456|Private organizer code/);
+  assert.doesNotMatch(pending.text + pending.html, /00123456|Private organizer code/);
+});

@@ -1,3 +1,4 @@
+import { HOST_CODE_SCHEMA } from "./meetings/ownerCode.js";
 import { ensureEventLinkSchema } from "./booking/schema.js";
 import { deliverBookingWork } from "./booking/service.js";
 import { ensureIntegrationSchema } from "./integrations/ensureSchema.js";
@@ -49,6 +50,7 @@ async function main() {
   await ensureScheduledSendSchema();
   await ensureCalendarRsvpSchema();
   await ensureEventLinkSchema();
+  await pool.query(HOST_CODE_SCHEMA);
   await ensureCalendarEmailReminderSchema();
   await ensureMobileNotificationSchema();
   await ensureAutomationSummaryEmailSchema();
