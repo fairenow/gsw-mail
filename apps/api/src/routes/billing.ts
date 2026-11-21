@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { hasFounderSubscriptionExemption } from "../billing/founderAccess.js";
 import type { FastifyInstance } from "fastify";
 import { z, ZodError } from "zod";
@@ -50,6 +51,33 @@ export default async function billingRoutes(app:FastifyInstance){
   app.get("/admin/billing",async req=>{
     const {organizationId}=org.parse(req.query);
     return getStatus(req.user!.id,organizationId);
+  });
+
+  // Redeem an issued, single-use 128-bit partnership token. Secrets are never logged or stored in plaintext.
+  app.post("/admin/billing/awaken/redeem", { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } }, async (req, reply) => {
+    reply.header("cache-control", "no-store");
+    const input = org.extend({ code: z.string().trim().regex(/^[0-9a-fA-F]{32}$/) }).strict().parse(req.body);
+    await requireOrgPermission(req.user!.id, input.organizationId, ["owner"]);
+    const codeHash = createHash("sha256").update(input.code.toLowerCase(), "utf8").digest("hex");
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const {rows} = await client.query<{id:string}>(
+        "SELECT id FROM billing_partner_codes WHERE partner_key='AWAKEN_LIFETIME_MAILBOX' AND code_hash=$1 AND redeemed_at IS NULL AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>now()) FOR UPDATE",
+        [codeHash]);
+      if (!rows[0]) throw new StripeBillingError(400,"invalid_or_redeemed_partner_code");
+      const existing = await client.query("SELECT 1 FROM billing_partner_grants WHERE organization_id=$1", [input.organizationId]);
+      if (existing.rowCount) throw new StripeBillingError(409,"partner_grant_already_assigned");
+      await client.query("UPDATE billing_partner_codes SET redeemed_at=now(),redeemed_organization_id=$2 WHERE id=$1", [rows[0].id,input.organizationId]);
+      await client.query(
+        "INSERT INTO billing_partner_grants (organization_id,partner_key,code_id) VALUES ($1,'AWAKEN_LIFETIME_MAILBOX',$2)",
+        [input.organizationId,rows[0].id]);
+      await client.query("COMMIT");
+      return { redeemed: true, includedFreeMailboxes: 1, partner: "Awaken Network" };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally { client.release(); }
   });
   app.post("/admin/billing/checkout",async(req,reply)=>{
     const input=selection.parse(req.body);
