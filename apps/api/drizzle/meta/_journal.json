@@ -351,6 +351,13 @@
       "when": 1794710400000,
       "tag": "0049_event_links",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1795262400000,
+      "tag": "0050_awaken_partner_mailbox",
+      "breakpoints": true
     }
   ]
 }

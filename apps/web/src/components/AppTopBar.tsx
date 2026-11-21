@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { ChevronLeft, ChevronRight, Menu, Search, X } from "lucide-react";
 import type { Account } from "../api";
 import { AccountMenu } from "./mail/AccountMenu";
+import { QuickMeetingLink } from "./QuickMeetingLink";
 
 export type AppTopBarOptions = {
   search: string;
@@ -51,7 +52,7 @@ export function AppTopBar({ account, accounts, profileImageUrl, search, searchPl
         <input ref={searchInput} onKeyDown={(event) => { if (event.key === "Escape") closeSearch(); }} value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder={searchPlaceholder} aria-label={searchPlaceholder} disabled={searchDisabled} />
         <button type="button" className="gsw-icon-btn gsw-search-close" aria-label="Close search" onClick={closeSearch}><X size={20} /></button>
       </form>
-      <div className="gsw-topnav-end"><AccountMenu account={account} accounts={accounts} profileImageUrl={profileImageUrl} onSelect={onSelectAccount ?? (() => undefined)} /></div>
+      <div className="gsw-topnav-end"><QuickMeetingLink account={account} /><AccountMenu account={account} accounts={accounts} profileImageUrl={profileImageUrl} onSelect={onSelectAccount ?? (() => undefined)} /></div>
     </header>
   );
 }

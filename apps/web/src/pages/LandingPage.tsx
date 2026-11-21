@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import {
   ArrowRight,
   Bot,
@@ -18,11 +18,9 @@ import {
   UsersRound,
 } from "lucide-react";
 import { BrandMark } from "../components/auth/BrandMark";
-import { FreeForLifePromoModal } from "../components/FreeForLifePromoModal";
 import "../styles/landing-v2.css";
 
-// The first mailbox is free for every customer, without a signup deadline.
-const FREE_ACCOUNT_PROMO_SESSION_KEY = "gsw-mail-first-mailbox-free";
+// The public lifetime-free promotion is retired; special verified entitlements remain private.
 
 const capabilityItems = [
   ["One place for ministry email", "Move between church, ministry, and personal accounts without changing apps.", Layers3],
@@ -98,22 +96,6 @@ function OutboxFlow() {
 
 export function LandingPage() {
   const pageRef = useRef<HTMLElement>(null);
-  const [showFreeAccountModal, setShowFreeAccountModal] = useState(false);
-  useEffect(() => {
-    try {
-      if (sessionStorage.getItem(FREE_ACCOUNT_PROMO_SESSION_KEY) === "dismissed") return;
-    } catch { /* Private browsing can disable session storage. */ }
-    const timer = window.setTimeout(() => {
-      setShowFreeAccountModal(true);
-    }, 7_000);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  const dismissFreeAccountModal = () => {
-    setShowFreeAccountModal(false);
-    try { sessionStorage.setItem(FREE_ACCOUNT_PROMO_SESSION_KEY, "dismissed"); } catch { /* Storage is optional. */ }
-  };
-
   useEffect(() => {
     const root = pageRef.current;
     if (!root) return;
@@ -134,20 +116,19 @@ export function LandingPage() {
   }, []);
 
   return <main ref={pageRef} className="lp2">
-    {showFreeAccountModal && <FreeForLifePromoModal onDismiss={dismissFreeAccountModal} />}
     <nav className="lp2-nav">
       <a className="lp2-brand" href="/"><BrandMark size={34}/><span>GSW Mail</span></a>
       <div className="lp2-nav-links"><a href="#features">Features</a><a href="#ministry-ecosystem">Bible Study App</a><a href="#workflows">Workflows</a><a href="#faq">FAQ</a></div>
-      <div className="lp2-nav-actions"><a href="/sign-in">Sign in</a><a className="lp2-button small" href="/sign-up">Start free</a></div>
+      <div className="lp2-nav-actions"><a href="/sign-in">Sign in</a><a className="lp2-button small" href="/sign-up">Get started</a></div>
     </nav>
 
     <section className="lp2-hero lp2-hero-animated" data-reveal="hero">
       <div className="lp2-hero-copy">
         <span className="lp2-eyebrow">For pastors · Churches · Christian ministries</span>
         <h1>Email built for the work of ministry.</h1>
-        <p>Lead people, not another inbox. Bring church communication, ministry follow-ups, scheduling, and your team’s email together in one thoughtful workspace. Pair it with the Bible Study App to engage your community and take your ministry beyond Sunday. Your first mailbox is free for life.</p>
-        <div className="lp2-actions"><a className="lp2-button" href="/sign-up">Start free <ArrowRight size={17}/></a><a className="lp2-text-link" href="#product">See it work</a></div>
-        <div className="lp2-hero-note"><Clock3 size={17}/><span>First mailbox free for life · Additional mailboxes $15/year each</span></div>
+        <p>Lead people, not another inbox. Bring church communication, ministry follow-ups, scheduling, and your team’s email together in one thoughtful workspace. Pair it with the Bible Study App to engage your community and take your ministry beyond Sunday. Pay only for the mailboxes you need.</p>
+        <div className="lp2-actions"><a className="lp2-button" href="/sign-up">Get started <ArrowRight size={17}/></a><a className="lp2-text-link" href="#product">See it work</a></div>
+        <div className="lp2-hero-note"><Clock3 size={17}/><span>Mailboxes $2.50/month or $15/year each · Special partner benefits available</span></div>
       </div>
       <div id="product" className="lp2-hero-product"><ProductMockup/></div>
     </section>
@@ -225,7 +206,7 @@ export function LandingPage() {
       <span className="lp2-eyebrow">For the work you’ve been called to do</span>
       <h2>Ministry deserves thoughtful tools.</h2>
       <p>Lead your community with the Bible Study App, share your ministry through live streaming, and keep communication moving with GSW Mail. Custom cross-app email campaigns are coming soon.</p>
-      <a className="lp2-button" href="/sign-up">Start free <ArrowRight size={17}/></a>
+      <a className="lp2-button" href="/sign-up">Get started <ArrowRight size={17}/></a>
     </section>
 
     <footer className="lp2-footer"><a className="lp2-brand" href="/"><BrandMark size={28}/><span>GSW Mail</span></a><div><a href="/support">Support</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/sign-in">Sign in</a></div><span>Guided Steps Wellness: The Community · Est. 2025</span></footer>

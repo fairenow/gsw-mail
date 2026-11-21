@@ -96,3 +96,18 @@ select {
   background: var(--gsw-accent-light);
   color: var(--gsw-text-heading);
 }
+
+
+/* Quick private meeting action in authenticated header */
+.gsw-quick-meeting-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:999px;background:#ed881e;color:#fff;font-weight:700;padding:10px 15px;white-space:nowrap;cursor:pointer}
+.gsw-quick-meeting-button:disabled{opacity:.5;cursor:not-allowed}
+.gsw-quick-meeting-backdrop{position:fixed;inset:0;z-index:9999;background:rgba(10,20,30,.55);display:flex;align-items:center;justify-content:center;padding:20px}
+.gsw-quick-meeting-modal{width:min(100%,520px);background:var(--gsw-surface,#fff);color:var(--gsw-text,#1d2925);border-radius:18px;box-shadow:0 16px 60px #0004;padding:24px;display:grid;gap:15px}
+.gsw-quick-meeting-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.gsw-quick-meeting-head h2{margin:0;font-size:1.35rem}
+.gsw-quick-meeting-head button,.gsw-quick-meeting-field button{background:transparent;border:0;cursor:pointer;color:inherit;padding:8px}
+.gsw-quick-meeting-field{display:grid;gap:6px;font-weight:600}
+.gsw-quick-meeting-field span{display:flex;align-items:center;border:1px solid #aeb8b2;border-radius:10px;min-width:0}
+.gsw-quick-meeting-field input{background:transparent;border:0;min-width:0;flex:1;padding:12px;color:inherit;font-size:14px}
+.gsw-quick-meeting-retry{background:#ed881e;color:white;border:0;border-radius:999px;padding:11px 16px;font-weight:650;cursor:pointer}
+@media(max-width:720px){.gsw-quick-meeting-button{height:40px;width:40px;padding:0;flex-shrink:0}.gsw-quick-meeting-button span{display:none}}

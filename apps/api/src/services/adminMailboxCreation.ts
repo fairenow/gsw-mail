@@ -37,20 +37,22 @@ export async function createAdminMailbox(actorUserId: string, rawInput: unknown)
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${orgId}))`);
         const entitlement = await tx.execute(sql`
           SELECT EXISTS (SELECT 1 FROM billing_mailbox_exemptions be WHERE be.organization_id=o.id) AS operator_exempt,
+            (o.legacy_free_for_life OR EXISTS (SELECT 1 FROM organization_memberships om JOIN users u ON u.id=om.user_id WHERE om.organization_id=o.id AND om.org_membership_role='owner' AND om.org_membership_status='active' AND u.legacy_free_for_life) OR EXISTS (SELECT 1 FROM billing_partner_grants g WHERE g.organization_id=o.id AND g.revoked_at IS NULL)) AS included_free,
             s.status AS subscription_status, s.mailbox_quantity AS licensed_mailboxes,
             (SELECT count(*)::integer FROM email_accounts ea
               WHERE ea.workspace_id = o.id AND ea.account_status != 'disabled') AS used_mailboxes
           FROM organizations o LEFT JOIN billing_subscriptions s ON s.organization_id = o.id
           WHERE o.id = ${orgId}
         `);
-        const row = entitlement.rows[0] as {operator_exempt?:boolean;subscription_status?:string;licensed_mailboxes?:number;used_mailboxes?:number}|undefined;
+        const row = entitlement.rows[0] as {operator_exempt?:boolean;included_free?:boolean;subscription_status?:string;licensed_mailboxes?:number;used_mailboxes?:number}|undefined;
         if (!row) throw notFound("workspace not found");
-        // One free mailbox per workspace for life, regardless of signup date.
-        // Only explicitly exempted operator workspaces bypass the paid-seat cap.
-        if (!row.operator_exempt && (row.used_mailboxes ?? 0) >= 1) {
+        // Legacy and approved Awaken workspaces retain one included mailbox.
+        // New standard workspaces require a paid mailbox license from the first seat.
+        const included = row.included_free ? 1 : 0;
+        if (!row.operator_exempt && (row.used_mailboxes ?? 0) >= included) {
           if (!["active","trialing"].includes(row.subscription_status ?? ""))
             throw new HttpError(402,"billing_subscription_required");
-          if ((row.used_mailboxes ?? 0) >= 1 + (row.licensed_mailboxes ?? 0))
+          if ((row.used_mailboxes ?? 0) >= included + (row.licensed_mailboxes ?? 0))
             throw new HttpError(402,"mailbox_license_limit_reached");
         }
       }

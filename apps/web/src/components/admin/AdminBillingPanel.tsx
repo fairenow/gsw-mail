@@ -8,7 +8,7 @@ const PRICES = {
 const dollars = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 
 type BillingState = {
-  organizationId:string; legacyFreeForLife:boolean; operatorExempt?:boolean; aiExempt?:boolean; canManageBilling?:boolean; includedFreeMailboxes?:number; billableMailboxes?:number; provisionedMailboxes:number; checkoutEnabled:boolean; stripeConfigured:boolean;
+  organizationId:string; legacyFreeForLife:boolean; awakenPartner?:boolean; operatorExempt?:boolean; aiExempt?:boolean; canManageBilling?:boolean; includedFreeMailboxes?:number; billableMailboxes?:number; provisionedMailboxes:number; checkoutEnabled:boolean; stripeConfigured:boolean;
   subscription:null|{id:string;status:string|null;interval:string|null;mailboxes:number|null;aiSeats:number|null;currentPeriodEnd:string|null};
 };
 export function AdminBillingPanel({ currentMailboxes, organizationId }: { currentMailboxes: number; organizationId:string }) {
@@ -16,6 +16,9 @@ export function AdminBillingPanel({ currentMailboxes, organizationId }: { curren
   const [billingState, setBillingState] = useState<BillingState|null>(null);
   const [billingError, setBillingError] = useState("");
   const [billingBusy, setBillingBusy] = useState(false);
+  const [awakenCode, setAwakenCode] = useState("");
+  const [awakenError, setAwakenError] = useState("");
+  const [awakenBusy, setAwakenBusy] = useState(false);
   useEffect(() => {
     if (!organizationId) return;
     const controller=new AbortController();
@@ -24,6 +27,19 @@ export function AdminBillingPanel({ currentMailboxes, organizationId }: { curren
       .catch((err:unknown)=>{if(!controller.signal.aborted)setBillingError(err instanceof Error?err.message:"Billing unavailable");});
     return ()=>controller.abort();
   },[organizationId]);
+  const redeemAwakenCode = async () => {
+    if (!/^[a-f0-9]{32}$/i.test(awakenCode.trim()) || awakenBusy) { setAwakenError("Enter your 32-character partner code."); return; }
+    setAwakenBusy(true); setAwakenError("");
+    try {
+      const response = await fetch("/admin/billing/awaken/redeem", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ organizationId, code: awakenCode.trim() }) });
+      const result = await response.json() as {error?:string};
+      if (!response.ok) throw new Error(result.error === "invalid_or_redeemed_partner_code" ? "This code is invalid, expired, or already used." : result.error ?? "Could not verify partnership.");
+      setAwakenCode("");
+      const stateResponse = await fetch("/product/billing-status?organizationId=" + encodeURIComponent(organizationId), { credentials: "include", cache: "no-store" });
+      if (stateResponse.ok) setBillingState(await stateResponse.json() as BillingState);
+    } catch (error) { setAwakenError(error instanceof Error ? error.message : "Could not redeem code."); }
+    finally { setAwakenBusy(false); }
+  };
   const openBilling = async (path:"checkout"|"portal") => {
     setBillingBusy(true);setBillingError("");
     try {
@@ -42,17 +58,28 @@ export function AdminBillingPanel({ currentMailboxes, organizationId }: { curren
   const aiExempt = billingState?.aiExempt === true;
   const minimumMailboxes = Math.max(1, currentMailboxes, billingState?.provisionedMailboxes ?? 0);
   useEffect(() => { setMailboxes(value => Math.max(value, minimumMailboxes)); }, [minimumMailboxes]);
-  const freeMailboxes = operatorExempt ? mailboxes : Math.min(mailboxes, billingState?.includedFreeMailboxes ?? 1);
+  const freeMailboxes = operatorExempt ? mailboxes : Math.min(mailboxes, billingState?.includedFreeMailboxes ?? 0);
   const paidMailboxes = Math.max(0, mailboxes - freeMailboxes);
   const total = paidMailboxes * PRICES[interval].mailbox + (aiExempt ? 0 : aiMailboxes * PRICES[interval].ai);
   const period = interval === "month" ? "month" : "year";
 
   return <div style={{ maxWidth: 930, margin: "0 auto", paddingBottom: 36 }}>
     <div style={{ marginBottom: 25 }}>
-      <p className="gsw-setup-kicker">{aiExempt ? "Grandfathered founder workspace" : "Your first mailbox is free for life"}</p>
+      <p className="gsw-setup-kicker">{aiExempt ? "Grandfathered founder workspace" : billingState?.awakenPartner ? "Awaken Network partner" : billingState?.includedFreeMailboxes ? "Grandfathered lifetime mailbox" : "Transparent mailbox pricing"}</p>
       <h2 style={{ margin: "6px 0 9px" }}>Your mail, your way.</h2>
-      <p style={{ opacity: .78, lineHeight: 1.6 }}>{aiExempt ? "Your grandfathered founder workspace includes unlimited mailboxes and hosted AI without a paid subscription." : "Every workspace includes one lifetime-free mailbox with 5 GB email storage. Additional mailboxes cost $15/year each when billed annually. Domain management is free, and hosted AI is optional."}</p>
+      <p style={{ opacity: .78, lineHeight: 1.6 }}>{aiExempt ? "Your grandfathered founder workspace includes unlimited mailboxes and hosted AI without a paid subscription." : billingState?.includedFreeMailboxes ? "Your workspace includes one mailbox under an existing lifetime or verified partnership benefit. Additional mailboxes cost $15/year each when billed annually." : "Mailboxes cost $2.50/month or $15/year each, with 5 GB storage per mailbox. Domain administration is free and hosted AI is optional."}</p>
     </div>
+
+    {!billingState?.awakenPartner && !operatorExempt && <details style={{border:"1px solid var(--gsw-border,#d8dcd8)",borderRadius:14,padding:16,marginBottom:20}}>
+      <summary style={{cursor:"pointer",fontWeight:650}}>Awaken Network partnership</summary>
+      <p style={{opacity:.8}}>Eligible Awaken Network church plants may redeem one included ministry mailbox while the partnership remains active. Other mailboxes follow standard pricing.</p>
+      <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
+        <input aria-label="Awaken Network partner code" type="password" autoComplete="off" value={awakenCode} onChange={event=>setAwakenCode(event.target.value)} placeholder="Enter partner code" maxLength={32} style={{flex:"1 1 190px",padding:12,borderRadius:10,border:"1px solid #aaa"}} />
+        <button type="button" className="gsw-btn gsw-btn-primary" disabled={awakenBusy||!billingState?.canManageBilling} onClick={()=>void redeemAwakenCode()}>{awakenBusy?"Verifying…":"Verify code"}</button>
+      </div>
+      {awakenError && <p role="alert" style={{color:"#a33"}}>{awakenError}</p>}
+      {!billingState?.canManageBilling && <small>Ask your workspace owner to redeem the partnership code.</small>}
+    </details>}
     <div style={{ display: "flex", gap: 6, padding: 5, borderRadius: 999, background: "var(--gsw-surface-muted, rgba(127,127,127,.10))", width: "fit-content", marginBottom: 20 }}>
       {(["month", "year"] as const).map(value => <button key={value} type="button" aria-pressed={interval === value} onClick={() => setInterval(value)} style={{ border: "none", cursor: "pointer", padding: "10px 19px", borderRadius: 999, fontWeight: 650, color: interval === value ? "#fff" : "inherit", background: interval === value ? "#206d5b" : "transparent" }}>{value === "month" ? "Monthly" : "Annually"}</button>)}
     </div>
@@ -60,7 +87,7 @@ export function AdminBillingPanel({ currentMailboxes, organizationId }: { curren
       <article style={{ border: "1px solid var(--gsw-border, #d8dcd8)", borderRadius: 20, padding: 23 }}>
         <p className="gsw-setup-kicker">Additional GSW Mail mailboxes</p>
         <h3 style={{ margin: "12px 0 4px", fontSize: 30 }}>{dollars(operatorExempt ? 0 : PRICES[interval].mailbox)}<small style={{ fontSize: 14, fontWeight: 450 }}>/mailbox/{period}</small></h3>
-        <p style={{ opacity: .74, marginBottom: 16 }}>{operatorExempt ? "All mailboxes in this workspace are included under the operator exception." : "Your first mailbox is free for life. This price applies only to each additional mailbox."}</p>
+        <p style={{ opacity: .74, marginBottom: 16 }}>{operatorExempt ? "All mailboxes in this workspace are included under the operator exception." : billingState?.includedFreeMailboxes ? "One mailbox is included under your existing entitlement. This rate applies to additional mailboxes." : "Each provisioned mailbox uses one paid license."}</p>
         <div style={{ lineHeight: 2 }}>✓ Email, calendar and contacts<br/>✓ 5 GB email storage per mailbox<br/>✓ Files and productivity tools<br/>✓ API access with fair usage limits<br/>✓ Plugins for ChatGPT, Claude and other AI providers</div>
       </article>
       <article style={{ border: "1px solid #81a99c", borderRadius: 20, padding: 23, background: "rgba(52,137,109,.055)" }}>
@@ -74,12 +101,12 @@ export function AdminBillingPanel({ currentMailboxes, organizationId }: { curren
       <h3 style={{ marginTop: 0 }}>See how your subscription scales</h3>
       <p style={{ opacity: .75, marginBottom: 23 }}>Adjust the number of mailboxes and choose how many should have AI.</p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 20 }}>
-        <label style={{ display: "grid", gap: 10 }}>Mailboxes <strong style={{ fontSize: 26 }}>{mailboxes}</strong><input type="range" min={minimumMailboxes} max={Math.max(50, minimumMailboxes)} value={mailboxes} onChange={event => { const next = Number(event.target.value); setMailboxes(next); setAiMailboxes(value => Math.min(value, next)); }} /><small>One mailbox is free for life; each includes 5 GB storage</small></label>
+        <label style={{ display: "grid", gap: 10 }}>Mailboxes <strong style={{ fontSize: 26 }}>{mailboxes}</strong><input type="range" min={minimumMailboxes} max={Math.max(50, minimumMailboxes)} value={mailboxes} onChange={event => { const next = Number(event.target.value); setMailboxes(next); setAiMailboxes(value => Math.min(value, next)); }} /><small>Each mailbox includes 5 GB storage</small></label>
         <label style={{ display: "grid", gap: 10 }}>Mailboxes with AI <strong style={{ fontSize: 26 }}>{aiExempt ? mailboxes : aiMailboxes}</strong><input type="range" disabled={aiExempt} min={0} max={mailboxes} value={aiExempt ? mailboxes : aiMailboxes} onChange={event => setAiMailboxes(Number(event.target.value))} /><small>Choose AI only for the mailboxes that need it</small></label>
       </div>
       <div style={{ marginTop: 26, borderTop: "1px solid var(--gsw-border, #d8dcd8)", paddingTop: 20, display: "grid", gap: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><span>{freeMailboxes} × Included free {freeMailboxes === 1 ? "mailbox" : "mailboxes"}</span><strong>{dollars(0)}</strong></div>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><span>{paidMailboxes} × Additional mailboxes</span><strong>{dollars(paidMailboxes * PRICES[interval].mailbox)}</strong></div>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><span>{paidMailboxes} × Billable mailboxes</span><strong>{dollars(paidMailboxes * PRICES[interval].mailbox)}</strong></div>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><span>{aiExempt ? mailboxes : aiMailboxes} × {aiExempt ? "Included AI access" : "AI add-ons"}</span><strong>{dollars((aiExempt ? 0 : aiMailboxes * PRICES[interval].ai))}</strong></div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, paddingTop: 8 }}><strong>Estimated total / {period}</strong><strong style={{ fontSize: 32, color: "#258b71" }}>{dollars(total)}</strong></div>
       </div>
