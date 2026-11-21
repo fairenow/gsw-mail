@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import {
   ArrowRight,
   Bot,
@@ -20,7 +20,7 @@ import {
 import { BrandMark } from "../components/auth/BrandMark";
 import "../styles/landing-v2.css";
 
-// The first mailbox is free for every customer, without a signup deadline.
+// The public lifetime-free promotion is retired; special verified entitlements remain private.
 
 const capabilityItems = [
   ["One place for ministry email", "Move between church, ministry, and personal accounts without changing apps.", Layers3],
@@ -206,7 +206,7 @@ export function LandingPage() {
       <span className="lp2-eyebrow">For the work you’ve been called to do</span>
       <h2>Ministry deserves thoughtful tools.</h2>
       <p>Lead your community with the Bible Study App, share your ministry through live streaming, and keep communication moving with GSW Mail. Custom cross-app email campaigns are coming soon.</p>
-      <a className="lp2-button" href="/sign-up">Start free <ArrowRight size={17}/></a>
+      <a className="lp2-button" href="/sign-up">Get started <ArrowRight size={17}/></a>
     </section>
 
     <footer className="lp2-footer"><a className="lp2-brand" href="/"><BrandMark size={28}/><span>GSW Mail</span></a><div><a href="/support">Support</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/sign-in">Sign in</a></div><span>Guided Steps Wellness: The Community · Est. 2025</span></footer>
