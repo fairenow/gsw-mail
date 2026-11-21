@@ -19,6 +19,10 @@ export function SetupPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [awakenCode, setAwakenCode] = useState("");
+  const [awakenBusy, setAwakenBusy] = useState(false);
+  const [awakenRedeemed, setAwakenRedeemed] = useState(false);
+  const [awakenError, setAwakenError] = useState("");
   const [viewStep, setViewStep] = useState<number | null>(null);
 
   const refreshSetup = async () => {
@@ -38,6 +42,21 @@ export function SetupPage() {
   const stepIndex = Math.min(viewStep ?? completedStep, completedStep);
   const goBack = () => { setError(""); setNotice(""); setViewStep(Math.max(0, stepIndex - 1)); };
   const goForward = () => { setError(""); setNotice(""); setViewStep(Math.min(completedStep, stepIndex + 1)); };
+
+  const redeemPartner = async () => {
+    if (awakenBusy || !/^[a-f0-9]{32}$/i.test(awakenCode.trim())) { setAwakenError("Enter the 32-character partner code."); return; }
+    setAwakenBusy(true); setAwakenError("");
+    try {
+      const response = await fetch("/admin/billing/awaken/redeem", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationId: setup?.workspace.id, code: awakenCode.trim() }),
+      });
+      const data = await response.json() as {error?:string};
+      if (!response.ok) throw new Error(data.error === "invalid_or_redeemed_partner_code" ? "The partner code is invalid or already redeemed." : data.error || "Partnership verification failed.");
+      setAwakenCode(""); setAwakenRedeemed(true);
+    } catch (reason) { setAwakenError(reason instanceof Error ? reason.message : "Partnership verification failed."); }
+    finally { setAwakenBusy(false); }
+  };
 
   const saveWorkspace = async () => {
     setBusy(true); setError(""); setNotice("");
@@ -74,6 +93,15 @@ export function SetupPage() {
     {stepIndex === 0 && <section className="gsw-setup-section">
       <h2>Name your workspace</h2>
       <label>Workspace name<input value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} placeholder="Guided Steps Wellness" /></label>
+      <details className="gsw-setup-partner" style={{marginTop:18,padding:16,border:"1px solid var(--gsw-border,#ccc)",borderRadius:12}}>
+        <summary style={{cursor:"pointer",fontWeight:650}}>Awaken Network partnership</summary>
+        <p>Eligible Awaken Network church plants receive one included ministry mailbox for the duration of their active partnership.</p>
+        {awakenRedeemed ? <p role="status">Awaken benefit verified for this workspace.</p> : <>
+          <label>Partner code<input type="password" autoComplete="off" maxLength={32} value={awakenCode} placeholder="32-character partner code" onChange={event=>setAwakenCode(event.target.value)} /></label>
+          <button type="button" className="gsw-btn gsw-btn-quiet gsw-btn-block" disabled={awakenBusy} onClick={()=>void redeemPartner()}>{awakenBusy?"Verifying…":"Verify Awaken code"}</button>
+          {awakenError && <p role="alert" className="gsw-login-error">{awakenError}</p>}
+        </>}
+      </details>
       <button className="gsw-btn gsw-btn-primary gsw-btn-block" disabled={busy || !workspaceName.trim()} onClick={() => void saveWorkspace()}>{busy ? "Saving…" : completedStep > 0 ? "Save and continue" : "Continue"}</button>
     </section>}
 
