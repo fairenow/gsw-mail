@@ -5,7 +5,7 @@ import { HttpError } from "../lib/errors.js";
 import { pool } from "../db/client.js";
 import { requireUser } from "../auth/middleware.js";
 import { requireOrgPermission } from "../auth/authorize.js";
-import { billableMailboxCount, FREE_MAILBOXES_PER_WORKSPACE, quoteBilling } from "../billing/pricing.js";
+import { billableMailboxCount, quoteBilling } from "../billing/pricing.js";
 import { isStripeLiveReady, stripeBillingConfig, stripePriceId, stripeRequest, StripeBillingError } from "../billing/stripeService.js";
 
 const org=z.object({organizationId:z.string().uuid()}).strict();
@@ -21,9 +21,11 @@ export default async function billingRoutes(app:FastifyInstance){
     const canManageBilling = ["owner","admin"].includes(role.rows[0]?.role ?? "");
     const aiExempt = await hasFounderSubscriptionExemption(userId,organizationId);
     const result=await pool.query<{
-      legacy:boolean; operator_exempt:boolean; provisioned:string; customer:string|null; subscription:string|null;
+      legacy:boolean; operator_exempt:boolean; included_free:boolean; awaken_partner:boolean; provisioned:string; customer:string|null; subscription:string|null;
       status:string|null; interval:string|null; mailboxes:number|null; ai:number|null; period_end:Date|null;
     }>("SELECT o.legacy_free_for_life AS legacy, EXISTS (SELECT 1 FROM billing_mailbox_exemptions e WHERE e.organization_id=o.id) AS operator_exempt, "+
+      "(o.legacy_free_for_life OR EXISTS (SELECT 1 FROM organization_memberships om JOIN users u ON u.id=om.user_id WHERE om.organization_id=o.id AND om.org_membership_role='owner' AND om.org_membership_status='active' AND u.legacy_free_for_life) OR EXISTS (SELECT 1 FROM billing_partner_grants g WHERE g.organization_id=o.id AND g.revoked_at IS NULL)) AS included_free, "+
+      "EXISTS (SELECT 1 FROM billing_partner_grants g WHERE g.organization_id=o.id AND g.revoked_at IS NULL) AS awaken_partner, "+
       "(SELECT count(*)::text FROM email_accounts ea WHERE ea.workspace_id=o.id AND ea.account_status != 'disabled') AS provisioned, "+
       "c.stripe_customer_id AS customer,s.stripe_subscription_id AS subscription,s.status,s.billing_interval AS interval, "+
       "s.mailbox_quantity AS mailboxes,s.ai_quantity AS ai,s.current_period_end AS period_end "+
@@ -31,9 +33,9 @@ export default async function billingRoutes(app:FastifyInstance){
       "LEFT JOIN billing_subscriptions s ON s.organization_id=o.id WHERE o.id=$1",[organizationId]);
     const row=result.rows[0];
     if(!row) throw new StripeBillingError(404,"workspace_not_found");
-    return {organizationId,canManageBilling,aiExempt,legacyFreeForLife:row.operator_exempt,operatorExempt:row.operator_exempt,
-      includedFreeMailboxes:FREE_MAILBOXES_PER_WORKSPACE,
-      billableMailboxes:row.operator_exempt ? 0 : billableMailboxCount(Number(row.provisioned)),
+    return {organizationId,canManageBilling,aiExempt,legacyFreeForLife:row.included_free && !row.awaken_partner,awakenPartner:row.awaken_partner,operatorExempt:row.operator_exempt,
+      includedFreeMailboxes:row.included_free ? 1 : 0,
+      billableMailboxes:row.operator_exempt ? 0 : billableMailboxCount(Number(row.provisioned),row.included_free ? 1 : 0),
       provisionedMailboxes:Number(row.provisioned),
       stripeCustomerExists:canManageBilling && Boolean(row.customer),
       subscription:canManageBilling && row.subscription ? {id:row.subscription,status:row.status,interval:row.interval,mailboxes:row.mailboxes,aiSeats:row.ai,currentPeriodEnd:row.period_end}:null,
@@ -57,9 +59,9 @@ export default async function billingRoutes(app:FastifyInstance){
     if(state.subscription && ["active","trialing","past_due","incomplete"].includes(state.subscription.status||""))
       throw new StripeBillingError(409,"existing_subscription_use_portal");
     if(input.mailboxes<state.provisionedMailboxes) throw new StripeBillingError(422,"mailboxes_below_provisioned");
-    const quote = quoteBilling(input.mailboxes,input.aiSeats,input.interval);
+    const quote = quoteBilling(input.mailboxes,input.aiSeats,input.interval,state.includedFreeMailboxes);
     if (quote.paidMailboxes === 0 && input.aiSeats === 0)
-      throw new StripeBillingError(409,"first_mailbox_is_free_no_checkout_required");
+      throw new StripeBillingError(409,"no_billable_items_no_checkout_required");
     const url=new URL(stripeBillingConfig.publicUrl);
     if(url.protocol!=="https:"||url.username||url.password||url.search||url.hash)throw new StripeBillingError(503,"billing_return_url_invalid");
     const existing=await pool.query<{stripe_customer_id:string}>(
