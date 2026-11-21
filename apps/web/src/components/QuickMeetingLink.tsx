@@ -1,0 +1,56 @@
+import { useState } from "react";
+import { Check, Copy, Plus, X } from "lucide-react";
+import { api, type Account } from "../api";
+
+type Meeting = { joinUrl: string; ownerCode: string; ownerCodeExpiresAt: string };
+export function QuickMeetingLink({ account }: { account: Account | null }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [meeting, setMeeting] = useState<Meeting | null>(null);
+  const [copied, setCopied] = useState<"link" | "code" | null>(null);
+  const create = async () => {
+    if (!account || busy) return;
+    setBusy(true);
+    setError("");
+    setMeeting(null);
+    try {
+      const result = await api.createPrivateMeeting({
+        accountId: account.id,
+        externalEventId: crypto.randomUUID(),
+        title: "Quick meeting",
+        scheduledAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Etc/UTC",
+      });
+      const url = new URL(result.joinUrl);
+      if (url.origin !== "https://bible.guidedstepswellness.com" || !/^\/meet\/[a-zA-Z0-9_-]+$/.test(url.pathname) || url.search || url.hash) throw new Error("Unexpected meeting link returned.");
+      if (!/^[0-9]{8}$/.test(result.ownerCode)) throw new Error("Invalid organizer code.");
+      setMeeting(result);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not create meeting.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const copy = async (value: string, what: "link" | "code") => {
+    try { await navigator.clipboard.writeText(value); setCopied(what); }
+    catch { setError("Copy failed. Select and copy the text manually."); }
+  };
+  return <>
+    <button type="button" className="gsw-quick-meeting-button" onClick={() => { setOpen(true); setMeeting(null); setError(""); setCopied(null); void create(); }} disabled={!account} aria-label="Create meeting link" title="Create meeting link">
+      <Plus size={17}/><span>Meeting Link</span>
+    </button>
+    {open && <div className="gsw-quick-meeting-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setOpen(false); }}>
+      <section className="gsw-quick-meeting-modal" role="dialog" aria-modal="true" aria-label="New meeting link">
+        <div className="gsw-quick-meeting-head"><h2>New meeting link</h2><button type="button" onClick={() => setOpen(false)} aria-label="Close"><X size={20}/></button></div>
+        {busy ? <p>Creating your private meeting…</p> : meeting ? <>
+          <p>Share the meeting link with guests. Keep the organizer code private.</p>
+          {([["link", "Meeting link", meeting.joinUrl], ["code", "Organizer code", meeting.ownerCode]] as const).map(([key,label,value]) => <label key={key} className="gsw-quick-meeting-field">{label}<span><input readOnly value={value} onFocus={event => event.currentTarget.select()} /><button type="button" title={"Copy " + label.toLowerCase()} aria-label={"Copy " + label.toLowerCase()} onClick={() => void copy(value,key)}>{copied === key ? <Check size={18}/> : <Copy size={18}/>}</button></span></label>)}
+          <small>Organizer codes are sensitive, one-time credentials. Do not include them in guest invitations.</small>
+          <button type="button" className="gsw-quick-meeting-retry" onClick={() => void create()}>Create another link</button>
+        </> : <button type="button" className="gsw-quick-meeting-retry" onClick={() => void create()}>Retry meeting creation</button>}
+        {error && <p role="alert" style={{color:"#ad3434"}}>{error}</p>}
+      </section>
+    </div>}
+  </>;
+}
