@@ -17,3 +17,7 @@ CREATE TABLE IF NOT EXISTS billing_partner_grants (
   revoked_at timestamptz
 );
 CREATE INDEX IF NOT EXISTS billing_partner_codes_partner_key_idx ON billing_partner_codes(partner_key);
+
+-- A grandfathered/partner mailbox can purchase an AI add-on without purchasing Core again.
+ALTER TABLE billing_subscriptions DROP CONSTRAINT IF EXISTS billing_subscriptions_ai_quantity_check;
+ALTER TABLE billing_subscriptions ADD CONSTRAINT billing_subscriptions_ai_quantity_nonnegative CHECK (ai_quantity >= 0);
