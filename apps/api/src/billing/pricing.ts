@@ -1,7 +1,7 @@
 /**
  * GSW Mail launch pricing. All amounts in USD cents.
  * Domain administration, domain creation and MCP integrations are free.
- * One mailbox per workspace is included free for life; each additional mailbox is a Core billing unit.
+ * Standard workspaces pay for every mailbox; grandfathered or approved partner workspaces include one.
  * Paid AI is optional per licensed mailbox; outside model providers connected via MCP are not billable AI seats.
  */
 export type BillingInterval = "month" | "year";
@@ -10,7 +10,7 @@ export const BILLING_PRICES = {
   mailbox: { month: 250, year: 1500 },
   ai: { month: 2500, year: 12500 },
 } as const;
-export const FREE_MAILBOXES_PER_WORKSPACE = 1;
+export const FREE_MAILBOXES_PER_WORKSPACE = 0;
 export const MAILBOX_STORAGE_BYTES = 5_000_000_000;
 
 export function billableMailboxCount(totalMailboxes: number, freeMailboxes = FREE_MAILBOXES_PER_WORKSPACE): number {
