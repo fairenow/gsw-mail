@@ -21,6 +21,7 @@ export const DEPLOYMENT_MIGRATIONS = [
   "0047_mailbox_storage_minimum.sql",
   "0048_mailbox_free_allowance.sql",
   "0050_awaken_partner_mailbox.sql",
+  "0051_awaken_partner_code_seed.sql",
 ] as const;
 
 export async function runDeploymentMigrations(connectionString: string): Promise<void> {
