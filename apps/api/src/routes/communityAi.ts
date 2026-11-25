@@ -104,7 +104,8 @@ export async function communityAiRoutes(app:FastifyInstance){
      try{
       const plan=parsed.data;
       const preview=await callCommunityBridge(communityContext,accountId,"community.audience.preview",JSON.stringify({eventId:plan.eventId,eventIds:plan.eventIds,audienceType:plan.audienceType,offset:0}));
-      const content="I prepared the campaign for your review. No campaign has been saved and no email has been sent.";
+      const count=z.object({totalMatchingContacts:z.number().int().nonnegative(),eligibleOnThisPage:z.number().int().nonnegative(),hasMore:z.boolean()}).passthrough().parse(preview);
+      const content="I found "+count.totalMatchingContacts+" distinct matching contacts in the selected Community audience. "+count.eligibleOnThisPage+" eligible recipients are on the first page"+(count.hasMore?"; additional pages still need review.":".")+" I've prepared the campaign for your review. No campaign has been saved and no email has been sent.";
       await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model});
       return {conversationId:conversation.id,content,model:result.model,toolActivity:activity,campaignProposal:{...plan,preview}};
      }catch{history.push({role:"tool",tool_call_id:call.id,content:"Community audience could not be verified. Do not claim recipients are available."});continue;}

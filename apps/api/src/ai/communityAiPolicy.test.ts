@@ -41,3 +41,15 @@ test("calendar writes require calendar.write consent and exact reviewed executio
  assert.equal(communityAiToolAllowed(event,new Set(["calendar.write"])),false);
  assert.equal(communityAiActionAllowed({...event,requiredScopes:[]},new Set(["calendar.write"])),false);
 });
+
+import { communityBridgeTools,communityBridgeNames,campaignPlanTool,callCommunityBridge } from "./communityBridge.js";
+test("Community bridge exposes only known read capabilities, not arbitrary remote execution",async()=>{
+ assert.equal(communityBridgeNames.size,5);
+ assert.equal(communityBridgeNames.has("community.admin.me"),true);
+ assert.equal(communityBridgeNames.has("community.events.read"),true);
+ assert.equal(communityBridgeNames.has("community.campaign.prepare"),false);
+ assert.equal(communityBridgeNames.has("community.events.delete"),false);
+ assert.ok(communityBridgeTools.every(t=>t.function.name.startsWith("community__")));
+ assert.equal(campaignPlanTool.function.name,"community__campaign__prepare");
+ await assert.rejects(callCommunityBridge("untrusted","account","community.events.delete","{}"),/Unsupported Community tool/);
+});
