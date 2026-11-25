@@ -58,7 +58,8 @@ export default async function productRoutes(app: FastifyInstance) {
     return { allowed: await hasAiSubscription(req.user!.id, accountId) };
   });
 
-  app.get("/product/settings", async (req) => {
+  app.get("/product/settings", async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
     const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, req.user!.id)).limit(1);
     const [signature] = await db.select().from(emailSignatures).where(eq(emailSignatures.userId, req.user!.id)).limit(1);
     return {
@@ -124,7 +125,8 @@ export default async function productRoutes(app: FastifyInstance) {
     return saved;
   });
 
-  app.put("/product/signature", async (req) => {
+  app.put("/product/signature", async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
     const input = signatureSchema.parse(req.body);
     const signatureHtml = sanitizeRichText(input.signatureHtml);
     const signatureText = richTextToPlainText(signatureHtml);
