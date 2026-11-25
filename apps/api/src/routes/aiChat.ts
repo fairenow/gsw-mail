@@ -1,3 +1,4 @@
+import {executeAiTurn} from "../ai/executionEngine.js";
 import { requireAiSubscription } from "../billing/aiAccess.js";
 import { startSelectedModelWarmup } from "../ai/providers/prewarm.js";
 import { editStoredImage } from "../files/imageEditing.js";
@@ -161,11 +162,12 @@ type ChatStreamStatus = {
 
 type ChatStreamEvent =
   | ChatStreamStatus
+  | { type: "delta"; text:string }
   | { type: "result"; response: ChatTurnResult }
   | { type: "error"; message: string }
   | { type: "pending"; commandId: string; status: string };
 
-type ChatStreamEmitter = (event: ChatStreamStatus) => void;
+type ChatStreamEmitter = (event: ChatStreamStatus | {type:"delta";text:string}) => void;
 
 const toolLabel = (toolName: string): string => {
   switch (toolName) {
@@ -539,45 +541,33 @@ async function runConversationTurn(input: {
       throw new Error(message);
     }
 
-    for (let turn = 0; turn < 6; turn += 1) {
-      input.emit?.({
-        type: "status",
-        phase: "thinking",
-        label: turn === 0 ? "Thinking" : "Reviewing what I found",
-      });
-
-      console.info(JSON.stringify({event:"gsw.chat.stage",stage:"provider.start",runId:run.id,turn,provider:provider.id,toolCount:tools?.length ?? 0}));
-      let result: Awaited<ReturnType<typeof provider.run>>;
-      try {
-        result = await provider.run({ messages: input.providerMessages, tools });
-      } catch (error) {
-        reportChatError(error,{operation:"provider.run",category:"chat",correlationId:run.id});
-        throw error;
-      }
-      console.info(JSON.stringify({event:"gsw.chat.stage",stage:"provider.complete",runId:run.id,turn,provider:provider.id,toolCallCount:result.toolCalls.length}));
-      model = result.model;
-
-      if (result.toolCalls.length === 0) {
-        const content = result.content ?? "I couldn't produce a response.";
-        await appendAiMessage({
-          conversationId: input.conversationId,
-          role: "assistant",
-          content,
-          provider: provider.id,
-          model,
-          metadata: { toolActivity, attachments: generatedAttachments },
-        });
-        await completeAiRun(run.id, { model, metadata: { toolActivity, toolTurns: turn } });
-        return {
-          conversationId: input.conversationId,
-          message: { role: "assistant" as const, content, ...(generatedAttachments.length ? { attachments: generatedAttachments } : {}) },
-          intervention: null,
-          model,
-          capabilities: capabilities(Boolean(input.accountId)),
-          toolActivity,
-        };
-      }
-
+    const execution=await executeAiTurn<ChatTurnResult,undefined>({
+      provider,messages:input.providerMessages,maxToolRounds:6,maxCallsPerRound:4,
+      prepareRound:async(turn,final)=>{
+        await requireAiSubscription(input.userId,input.accountId);
+        if(!(await getAiCapabilitySettings(input.userId)).enabled)throw forbidden("GSW AI is disabled in Settings.");
+        if(input.accountId)await requireAccountPermission(input.userId,input.accountId,"read");
+        input.emit?.({type:"status",phase:"thinking",label:turn===0?"Thinking":final?"Summarizing verified results":"Reviewing what I found"});
+        console.info(JSON.stringify({event:"gsw.chat.stage",stage:"provider.start",runId:run.id,turn,provider:provider.id,toolCount:final?0:tools?.length??0}));
+        return {tools,context:undefined};
+      },
+      onRoundResult:({round:turn,result})=>{
+        console.info(JSON.stringify({event:"gsw.chat.stage",stage:"provider.complete",runId:run.id,turn,provider:provider.id,toolCallCount:result.toolCalls.length}));
+        model=result.model;
+      },
+      onRejectedCall:call=>toolActivity.push({name:call.function.name.replaceAll("__","."),ok:false}),
+      ...(input.emit?{onDelta:(text:string)=>input.emit?.({type:"delta",text})}:{}),
+      finalization:{prompt:[
+            "Execution has reached the current tool-round budget.",
+            "Write a concise user-facing progress report using ONLY verified tool outputs in this conversation.",
+            "Include what was completed, what remains, and a specific next step.",
+            "Do not claim unverified changes, emails sent, files saved, or mailbox-wide coverage.",
+            "If the job is not finished, state that this request has stopped at the processing limit; do not claim work continues unattended.",
+            "Never ask the user to approve or request the next batch when they already asked to review the whole inbox.",
+            "Do not call tools; do not tell the user to narrow their request.",
+          ].join("\n"),onError:error=>{reportChatError(error,{operation:"chat.progress_summary",category:"chat",correlationId:run.id});}},
+      onTool:async({round:turn,call,respond})=>{
+      await requireAiSubscription(input.userId,input.accountId);
       if (!toolContext) {
         const content = "Select a mailbox before asking me to inspect your mail.";
         await appendAiMessage({
@@ -598,14 +588,7 @@ async function runConversationTurn(input: {
         };
       }
 
-      input.providerMessages.push({
-        role: "assistant",
-        content: result.content,
-        tool_calls: result.toolCalls,
-        ...(result.reasoningContent !== undefined ? { reasoning_content: result.reasoningContent } : {}),
-      });
 
-      for (const call of result.toolCalls.slice(0, 4)) {
         console.info(JSON.stringify({event:"gsw.chat.stage",stage:"tool.selected",runId:run.id,turn,tool:call.function.name.replaceAll("__","."),toolCallId:call.id}));
         const definition = agentMailRegistry.definition(call.function.name);
         const semanticName = call.function.name.replaceAll("__", ".");
@@ -614,10 +597,7 @@ async function runConversationTurn(input: {
 
         if (readCallKey && seenReadCalls.has(readCallKey)) {
           toolActivity.push({ name: semanticName, ok: true });
-          input.providerMessages.push({
-            role: "tool",
-            tool_call_id: call.id,
-            content: JSON.stringify({
+          respond(JSON.stringify({
               ok: true,
               toolCallId: call.id,
               data: {
@@ -625,9 +605,8 @@ async function runConversationTurn(input: {
                 reason: "duplicate_read_call",
                 message: "This exact read operation already ran earlier in this request. Reuse the previous tool result instead of calling it again.",
               },
-            }),
-          });
-          continue;
+            }),);
+          return undefined;
         }
         if (readCallKey) seenReadCalls.add(readCallKey);
 
@@ -777,41 +756,42 @@ async function runConversationTurn(input: {
         const providerResult = outcome.result.ok
           ? outcome.result
           : { ok: false, error: { message: "The operation failed. Do not claim it succeeded." } };
-        input.providerMessages.push({
-          role: "tool",
-          tool_call_id: call.id,
-          content: providerResult.ok ? wrapUntrustedContent(JSON.stringify(providerResult), "tool", 150_000) : JSON.stringify(providerResult),
-        });
+        respond(providerResult.ok ? wrapUntrustedContent(JSON.stringify(providerResult), "tool", 150_000) : JSON.stringify(providerResult),);
+
+        return undefined;
       }
-    }
+    });
+    if(execution.kind==="stopped")return execution.value;
+    await requireAiSubscription(input.userId,input.accountId);
+    if(!(await getAiCapabilitySettings(input.userId)).enabled)throw forbidden("GSW AI is disabled in Settings.");
+    if(input.accountId)await requireAccountPermission(input.userId,input.accountId,"read");
+    if (execution.kind === "completed"&&!execution.limitReached) {
+        const result=execution.result,turn=execution.round;
+        const content = result.content ?? "I couldn't produce a response.";
+        await appendAiMessage({
+          conversationId: input.conversationId,
+          role: "assistant",
+          content,
+          provider: provider.id,
+          model,
+          metadata: { toolActivity, attachments: generatedAttachments },
+        });
+        await completeAiRun(run.id, { model, metadata: { toolActivity, toolTurns: turn } });
+        return {
+          conversationId: input.conversationId,
+          message: { role: "assistant" as const, content, ...(generatedAttachments.length ? { attachments: generatedAttachments } : {}) },
+          intervention: null,
+          model,
+          capabilities: capabilities(Boolean(input.accountId)),
+          toolActivity,
+        };
+      }
+
 
     console.warn("[gsw-chat] tool attempts exhausted", { runId: run.id, failedTools: toolActivity.filter((item) => !item.ok).map((item) => item.name) });
     const createdFiles = [...new Map(generatedAttachments.map((item) => [item.assetId, item])).values()];
     const anyFailedTools = toolActivity.some((item) => !item.ok);
-    // A long request is not a failed file operation. Give the model one
-    // tool-free chance to summarize verified accomplishments and next steps.
-    // The finalization run has no tools, so it cannot repeat side effects.
-    let content = "";
-    try {
-      const finalization = await provider.run({
-        messages: [...input.providerMessages, {
-          role: "user",
-          content: [
-            "Execution has reached the current tool-round budget.",
-            "Write a concise user-facing progress report using ONLY verified tool outputs in this conversation.",
-            "Include what was completed, what remains, and a specific next step.",
-            "Do not claim unverified changes, emails sent, files saved, or mailbox-wide coverage.",
-            "If the job is not finished, state that this request has stopped at the processing limit; do not claim work continues unattended.",
-            "Never ask the user to approve or request the next batch when they already asked to review the whole inbox.",
-            "Do not call tools; do not tell the user to narrow their request.",
-          ].join("\n"),
-        }],
-        tools: [],
-      });
-      content = finalization.content?.trim() || "";
-    } catch (finalizationError) {
-      reportChatError(finalizationError,{operation:"chat.progress_summary",category:"chat",correlationId:run.id});
-    }
+    let content=execution.kind==="completed"?execution.result.content?.trim()??"":"";
     if (!content) {
       const completed = toolActivity.filter((item) => item.ok).map((item) => item.name);
       const failed = toolActivity.filter((item) => !item.ok).map((item) => item.name);
@@ -1483,7 +1463,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
         providerMessages: prepared.providerMessages,
         emit: (event) => {
           stream.send(event);
-          if (reserved && (event.phase === "thinking" || event.phase === "tool_started")) {
+          if (reserved && event.type==="status" && (event.phase === "thinking" || event.phase === "tool_started")) {
             void updateChatCommandActivity(reserved.key, {
               label:event.label,phase:event.phase,updatedAt:new Date().toISOString(),
             }).catch(err => req.log.warn({err},"Could not persist chat activity"));

@@ -1,3 +1,4 @@
+import {readChatTextSse} from "./textSse.js";
 import { config } from "../../config.js";
 import { HttpError } from "../../lib/errors.js";
 import { gswSystemPrompt } from "./prompt.js";
@@ -35,6 +36,7 @@ async function attempt(input: AiProviderRunInput) {
     throw new HttpError(503, "Hetzner AI is not configured. Add HETZNER_INFERENCE_KEY to the API service.");
   }
 
+  const stream=Boolean(input.onTextDelta&&!input.tools?.length);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.ai.timeoutMs);
   try {
@@ -50,11 +52,12 @@ async function attempt(input: AiProviderRunInput) {
         ...(input.tools?.length ? { tools: input.tools, tool_choice: "auto" } : {}),
         temperature: 0.35,
         max_tokens: 4096,
-        stream: false,
+        stream,
       }),
-      signal: controller.signal,
+      signal: input.signal?AbortSignal.any([controller.signal,input.signal]):controller.signal,
     });
 
+    if(response.ok&&stream&&response.body&&response.headers.get("content-type")?.includes("text/event-stream"))return {content:await readChatTextSse(response.body,input.onTextDelta!),toolCalls:[],model:config.ai.hetznerModel};
     const body = await response.json().catch(() => ({})) as HetznerChatResponse;
     if (!response.ok) {
       const providerMessage = body.error?.message?.trim() || `Hetzner inference returned HTTP ${response.status}`;
@@ -74,6 +77,7 @@ async function attempt(input: AiProviderRunInput) {
     return { content, toolCalls, model: config.ai.hetznerModel };
   } catch (error) {
     if (error instanceof HttpError || error instanceof HetznerAttemptError) throw error;
+    if(stream)throw new HttpError(502,"Streaming inference did not complete; no automatic retry");
     if (error instanceof Error && error.name === "AbortError") throw new HetznerAttemptError("AI chat timed out.", true, 504);
     throw new HetznerAttemptError("AI chat is temporarily unavailable.", true, 502);
   } finally {

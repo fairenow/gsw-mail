@@ -1,5 +1,7 @@
 import { setAutomationSummaryEmailPreference } from "../automationSummaryEmail.js";
 import { z } from "zod";
+import {checkCommunityAutomationGrant,validateCommunityAutomationScopes} from "../communityAutomationGrant.js";
+import {getAutomation} from "../automationService.js";
 import { grantAiScope } from "../agentState.js";
 import { createAutomation, deleteAutomation, listAutomations, updateAutomation, approveAutomationSending, revokeAutomationSending } from "../automationService.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
@@ -21,6 +23,7 @@ const createInput = z.object({
   timeZone: z.string().trim().min(1).max(100),
   schedule: scheduleSchema,
   emailSummaryToOwner: z.boolean().default(false),
+  communityEventId:z.string().regex(/^[a-z0-9]{10,128}$/i).optional(),
   allowedScopes: z.array(z.enum(["mail.read", "mail.write", "calendar.read", "contacts.read", "templates.read", "signatures.read", "files.read", "files.write", "campaign.read", "campaign.write", "research.use", "browser.read", "tasks.read", "settings.read", "workspace.read", "domain.read", "alias.read"])).default(["mail.read"]),
 });
 
@@ -81,6 +84,7 @@ export const automationCreateTool: AgentToolDefinition = {
         required: ["frequency", "hour", "minute"],
         additionalProperties: false,
       },
+      communityEventId:{type:"string",description:"Only in The Community: exact event ID for a reviewed read-only event aggregate report. Omit for ordinary native Mail tasks."},
       emailSummaryToOwner: { type: "boolean", description: "Explicitly opt in to emailing each completed scheduled report only to the attached mailbox owner. Never emails other recipients." },
       allowedScopes: {
         type: "array",
@@ -99,6 +103,13 @@ export const automationCreateTool: AgentToolDefinition = {
     let createdAutomationId: string | null = null;
     try {
       const input = createInput.parse(rawInput);
+      if(input.communityEventId!==undefined&&input.communityEventId!==ctx.communityAutomationGrant?.eventGrant?.eventId)throw new Error("Event grant is missing or changed");
+      if(ctx.communityAutomationClientId){
+        if(!ctx.communityAutomationGrant||ctx.communityAutomationGrant.clientId!==ctx.communityAutomationClientId||input.emailSummaryToOwner)throw new Error("Connected automation requires exact reviewed read-only authorization");
+        const requested=validateCommunityAutomationScopes(input.allowedScopes);
+        if(requested.length!==ctx.communityAutomationGrant.scopes.length||!requested.every(s=>ctx.communityAutomationGrant!.scopes.includes(s)))throw new Error("Automation scope review changed");
+        await checkCommunityAutomationGrant(ctx.userId,ctx.accountId,ctx.communityAutomationGrant);
+      }
       stage = "persist_automation";
       const automation = await createAutomation({
         userId: ctx.userId,
@@ -109,6 +120,7 @@ export const automationCreateTool: AgentToolDefinition = {
         timeZone: input.timeZone,
         schedule: input.schedule,
         allowedScopes: input.allowedScopes,
+        ...(ctx.communityAutomationGrant?{communityGrant:ctx.communityAutomationGrant}:{}),
       });
       createdAutomationId = automation.id;
       stage = "configure_email_summary";
@@ -159,7 +171,7 @@ export const automationListTool: AgentToolDefinition = {
     try {
       const automations = await listAutomations(ctx.userId);
       return success(ctx, toolCallId, startedAt, {
-        automations: automations.slice(0, 100).map((automation) => ({
+        automations: automations.filter(a=>!ctx.communityAutomationClientId||a.accountId===ctx.accountId&&a.communityGrant?.clientId===ctx.communityAutomationClientId).slice(0, 100).map((automation) => ({
           id: automation.id,
           title: automation.title,
           instruction: automation.instruction,
@@ -221,6 +233,7 @@ export const automationUpdateTool: AgentToolDefinition = {
         schedule: scheduleSchema.optional(),
       }).parse(rawInput);
       const { automationId, ...patch } = input;
+      if(ctx.communityAutomationClientId){const existing=await getAutomation(ctx.userId,automationId);if(existing.communityGrant?.clientId!==ctx.communityAutomationClientId||existing.accountId!==ctx.accountId||Object.keys(patch).length!==1||patch.status!=="paused")throw new Error("Only pausing a connected-app automation in this mailbox is authorized");}
       const automation = await updateAutomation(ctx.userId, automationId, patch);
       return success(ctx, toolCallId, startedAt, {
         id: automation.id,

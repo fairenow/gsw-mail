@@ -9,6 +9,8 @@ export interface AgentExecutionContext {
   conversationId?: string | undefined;
   timeZone?: string | undefined;
   scheduledIdempotencyKey?: string | undefined;
+  communityAutomationGrant?: import("../communityAutomationGrant.js").CommunityAutomationGrant | undefined;
+  communityAutomationClientId?: string | undefined;
 }
 
 export interface AgentToolResult<T = unknown> {

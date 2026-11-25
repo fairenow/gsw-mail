@@ -1,0 +1,4 @@
+import {test} from "node:test";import assert from "node:assert/strict";import {readChatTextSse} from "./textSse.js";
+const body=(chunks:string[])=>new ReadableStream<Uint8Array>({start(c){for(const x of chunks)c.enqueue(new TextEncoder().encode(x));c.close();}});
+test("stream splits arbitrary frames and never emits reasoning",async()=>{const parts:string[]=[];const result=await readChatTextSse(body(['data: {"choices":[{"delta":{"reasoning_content":"private","content":"Hel','lo"}}]}\n\ndata: {"choices":[{"delta":{"content":" world"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n']),x=>parts.push(x));assert.equal(result,"Hello world");assert.equal(parts.join(""),result);});
+test("incomplete streams and tool calls cannot be accepted as final text",async()=>{for(const x of ['data: {"choices":[{"delta":{"content":"partial"}}]}\n','data: {"choices":[{"delta":{"tool_calls":[]}}]}\n'])await assert.rejects(readChatTextSse(body([x]),()=>{}));});

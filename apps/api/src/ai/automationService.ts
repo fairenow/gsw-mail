@@ -18,6 +18,7 @@ export interface CreateAutomationInput {
   timeZone: string;
   schedule: AutomationSchedule;
   allowedScopes?: string[] | undefined;
+  communityGrant?: import("./communityAutomationGrant.js").CommunityAutomationGrant | undefined;
 }
 
 export async function createAutomation(input: CreateAutomationInput) {
@@ -30,6 +31,7 @@ export async function createAutomation(input: CreateAutomationInput) {
     accountId: input.accountId ?? null,
     title: `Scheduled: ${input.title.trim().slice(0, 100)}`,
     status: "active",
+    ...(input.communityGrant?{communityClientId:input.communityGrant.clientId}:{}),
     lastMessageAt: new Date(),
   }).returning();
   if (!conversation) throw new Error("failed to create automation conversation");
@@ -56,6 +58,7 @@ export async function createAutomation(input: CreateAutomationInput) {
     timeZone: input.timeZone,
     schedule: input.schedule,
     allowedScopes: input.allowedScopes ?? ["mail.read"],
+    ...(input.communityGrant?{communityGrant:input.communityGrant}:{}),
     nextRunAt,
   }).returning();
   if (!automation) throw new Error("failed to create automation");
@@ -169,6 +172,7 @@ export async function completeAutomationRun(input: {
   timeZone: string;
   result: string;
   conversationId?: string | null;
+  claimedAt?: Date | null;
 }) {
   const now = new Date();
   const nextRunAt = input.schedule.frequency === "once"
@@ -190,16 +194,17 @@ export async function completeAutomationRun(input: {
       lastError: null,
       ...(input.conversationId ? { conversationId: input.conversationId } : {}),
       updatedAt: now,
-    }).where(eq(aiAutomations.id, input.automationId));
+    }).where(and(eq(aiAutomations.id,input.automationId),eq(aiAutomations.status,"active"),...(input.claimedAt?[eq(aiAutomations.runningAt,input.claimedAt)]:[])));
   });
 }
-
 export async function failAutomationRun(input: {
   automationId: string;
   runId: string;
   schedule: AutomationSchedule;
   timeZone: string;
   error: unknown;
+  claimedAt?: Date | null;
+  pause?: boolean;
 }) {
   const now = new Date();
   const message = input.error instanceof Error ? input.error.message : String(input.error);
@@ -215,22 +220,22 @@ export async function failAutomationRun(input: {
     }).where(eq(aiAutomationRuns.id, input.runId));
 
     await tx.update(aiAutomations).set({
-      status: nextRunAt ? "active" : "failed",
+      status: input.pause?"paused":nextRunAt ? "active" : "failed",
       nextRunAt: nextRunAt ?? now,
       lastRunAt: now,
       runningAt: null,
       lastError: message.slice(0, 4000),
       updatedAt: now,
-    }).where(eq(aiAutomations.id, input.automationId));
+    }).where(and(eq(aiAutomations.id,input.automationId),eq(aiAutomations.status,"active"),...(input.claimedAt?[eq(aiAutomations.runningAt,input.claimedAt)]:[])));
   });
 }
-
 export async function approveAutomationSending(input: {
   userId: string;
   automationId: string;
   allowedRecipients: string[];
 }) {
   const existing = await getAutomation(input.userId, input.automationId);
+  if (existing.communityGrant) throw badRequest("Connected-app automations cannot authorize unattended sending");
   if (!existing.accountId) throw badRequest("a mailbox is required for scheduled sending");
   const recipients = [...new Set(input.allowedRecipients.map(value => value.trim().toLowerCase()))];
   if (recipients.length === 0 || recipients.length > 100 ||

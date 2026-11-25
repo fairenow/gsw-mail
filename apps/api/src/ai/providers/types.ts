@@ -20,6 +20,8 @@ export type AiProviderMessage =
 export interface AiProviderRunInput {
   messages: AiProviderMessage[];
   tools?: ProviderToolDefinition[] | undefined;
+  onTextDelta?: ((text:string)=>void) | undefined;
+  signal?: AbortSignal | undefined;
 }
 
 export interface AiProviderRunResult {

@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS event_bookings (
  hold_until timestamptz NOT NULL,event_id text,meeting_url text,claimed_at timestamptz,
  created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(link_id,request_id)
 );
+ALTER TABLE event_bookings ADD COLUMN IF NOT EXISTS community_verified boolean NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS event_bookings_calendar_idx ON event_bookings(account_id,starts_at,ends_at);
 CREATE INDEX IF NOT EXISTS event_bookings_work_idx ON event_bookings(status,created_at);
 CREATE TABLE IF NOT EXISTS event_booking_mail (

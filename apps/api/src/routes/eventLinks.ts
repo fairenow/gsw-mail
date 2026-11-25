@@ -1,3 +1,5 @@
+import { communityProofSchema,verifyCommunityRegistration } from "../booking/communityRegistration.js";
+import { bookingInputSchema } from "../booking/policy.js";
 import { redeemNativeOwnerCode } from "../meetings/nativeOwnerCode.js";
 import { redeemOwnerCode } from "../meetings/ownerCode.js";
 import { verifyBookingDecisionToken } from "../booking/decisionToken.js";
@@ -7,7 +9,6 @@ import { z } from "zod";
 import { requireUser } from "../auth/middleware.js";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { pool } from "../db/client.js";
-import { ensureBookingMailboxAuthorization } from "../booking/authorization.js";
 import {
   HttpError,
   badRequest,
@@ -16,18 +17,14 @@ import {
   notFound,
   serviceUnavailable,
 } from "../lib/errors.js";
-import { parseEventLinkRequest } from "../booking/request.js";
+import { saveManagedEventLink,listManagedEventLinks } from "../booking/manageLinks.js";
 import {
   availableDays,
   decideBooking,
   findLink,
-  linkUrl,
   publicLink,
   submitBooking,
-  withCalendarLock,
-  type EventLinkRow,
 } from "../booking/service.js";
-import { meetingOrganizer } from "../meetings/access.js";
 const accountQuery = z.object({ accountId: z.uuid() });
 export async function publicEventLinks(app: FastifyInstance) {
   app.addHook("onSend", async (_req, reply, payload) => {
@@ -169,90 +166,18 @@ export async function publicEventLinks(app: FastifyInstance) {
     },
     async (req, reply) => {
       const { slug } = z.object({ slug: z.string().max(70) }).parse(req.params);
-      const result = await submitBooking(await findLink(slug), req.body);
+      const {communityProof,...raw}=bookingInputSchema.extend({communityProof:communityProofSchema.optional()}).strict().parse(req.body);
+      const link=await findLink(slug);
+      if(communityProof)await verifyCommunityRegistration({linkId:link.id,requestId:raw.requestId,email:raw.email,proof:communityProof});
+      const result = await submitBooking(link,raw,Boolean(communityProof));
       return reply.code(201).send(result);
     },
   );
 }
 export default async function eventLinks(app: FastifyInstance) {
   await requireUser(app, { optional: false });
-  app.get("/product/event-links", async (req) => {
-    const { accountId } = accountQuery.parse(req.query);
-    await requireAccountPermission(req.user!.id, accountId, "manage");
-    const { rows } = await pool.query<EventLinkRow>(
-      "SELECT * FROM event_links WHERE account_id=$1 ORDER BY created_at",
-      [accountId],
-    );
-    return {
-      links: rows.map((r) => ({
-        id: r.id,
-        ...r.settings,
-        url: linkUrl(r.slug),
-      })),
-    };
-  });
-  app.post("/product/event-links", { bodyLimit: 50000 }, async (req) => {
-    const { accountId, id, settings } = parseEventLinkRequest(req.body);
-    const account = await requireAccountPermission(
-      req.user!.id,
-      accountId,
-      "manage",
-    );
-    if (account.status !== "active" || !req.authUserId)
-      throw forbidden("Sign in to the mailbox to manage event links");
-    if (settings.enabled) {
-      const engine = await ensureBookingMailboxAuthorization({
-        productUserId: req.user!.id,
-        authUserId: req.authUserId,
-        accountId,
-        headers: req.headers as Record<string, string>,
-      });
-      const calendars = await engine.listCalendars(accountId);
-      if (!calendars.some((c) => c.engineId === settings.calendarId))
-        throw badRequest("Choose a calendar belonging to this mailbox");
-      if (settings.generateMeeting) {
-        if (process.env.GSW_MEETINGS_ENABLED !== "true")
-          throw serviceUnavailable("Meeting generation is unavailable");
-        await meetingOrganizer(req.user!.id, accountId);
-      }
-    }
-    try {
-      return await withCalendarLock(accountId, async (db) => {
-        if (id) {
-          const result = await db.query<EventLinkRow>(
-            "UPDATE event_links SET slug=$3,settings=$4,user_id=$5,auth_user_id=$6,updated_at=now() WHERE id=$1 AND account_id=$2 RETURNING *",
-            [
-              id,
-              accountId,
-              settings.slug,
-              settings,
-              req.user!.id,
-              req.authUserId,
-            ],
-          );
-          if (!result.rows[0]) throw notFound();
-          return { id, url: linkUrl(settings.slug) };
-        }
-        const count = await db.query<{ count: string }>(
-          "SELECT count(*) FROM event_links WHERE account_id=$1",
-          [accountId],
-        );
-        if (Number(count.rows[0]?.count) >= 20)
-          throw badRequest("This mailbox already has 20 event links");
-        const result = await db.query<EventLinkRow>(
-          "INSERT INTO event_links(account_id,user_id,auth_user_id,slug,settings) VALUES($1,$2,$3,$4,$5) RETURNING *",
-          [accountId, req.user!.id, req.authUserId, settings.slug, settings],
-        );
-        return { id: result.rows[0]!.id, url: linkUrl(settings.slug) };
-      });
-    } catch (e) {
-      if ((e as { code?: string }).code === "23505")
-        throw conflict(
-          "This booking link name is already taken. Please choose another slug.",
-        );
-      throw e;
-    }
-  });
+  app.get("/product/event-links", async req=>listManagedEventLinks(req.user!.id,accountQuery.parse(req.query).accountId));
+  app.post("/product/event-links", { bodyLimit: 50000 }, async (req) => saveManagedEventLink({userId:req.user!.id,authUserId:req.authUserId,headers:req.headers as Record<string,string>},req.body));
   app.get("/product/event-bookings", async (req) => {
     const { accountId } = accountQuery.parse(req.query);
     await requireAccountPermission(req.user!.id, accountId, "manage");

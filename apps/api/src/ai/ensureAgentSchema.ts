@@ -172,6 +172,7 @@ export async function ensureAiAgentSchema(): Promise<void> {
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     );
   `);
+  await pool.query(`ALTER TABLE "ai_automations" ADD COLUMN IF NOT EXISTS "community_grant" jsonb;`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "ai_automations_user_idx" ON "ai_automations" ("user_id", "status", "next_run_at");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "ai_automations_due_idx" ON "ai_automations" ("status", "next_run_at");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "ai_automations_account_idx" ON "ai_automations" ("account_id", "status");`);

@@ -128,6 +128,8 @@ function SubscribedChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: ()
   const [, setActivityCollapsed] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [partialText,setPartialText]=useState("");
+  useEffect(()=>{if(!sending)setPartialText("");},[sending]);
   const [reconnecting, setReconnecting] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [activeCommandId, setActiveCommandId] = useState<string | null>(null);
@@ -281,6 +283,8 @@ function SubscribedChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: ()
   }, [conversationId, conversationLoading]);
 
   const handleStreamEvent = (event: AiChatStreamEvent) => {
+    if(event.type==="delta"){setConnecting(false);setPartialText(old=>(old+event.text).slice(0,120000));return;}
+    if(event.type==="result"||event.type==="error")setPartialText("");
     if (event.type !== "status") return;
     setConnecting(false);
     if (event.phase === "tool_completed") {
@@ -818,6 +822,7 @@ function SubscribedChatPanel({ onOpenScheduledWork }: { onOpenScheduledWork?: ()
           <button className="gsw-chat-copy" type="button" aria-label={message.role === "user" ? "Copy prompt" : "Copy full response"} title={message.role === "user" ? "Copy prompt" : "Copy full response"} onClick={() => void navigator.clipboard.writeText(message.role === "assistant" ? cleanAssistantText(message.content) : message.content)}><Copy size={14} strokeWidth={1.8} /></button>
         </article>;
       })}
+      {sending&&partialText&&<article className="gsw-chat-message assistant"><div className="gsw-chat-message-label">GSW · response in progress</div><div className="gsw-chat-message-body" style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{partialText}</div></article>}
       {executionActivities.length > 0 && <section className="gsw-chat-execution" aria-live="polite" style={{ maxHeight: 104, overflow: "hidden" }}>
         <div className="gsw-chat-execution-toggle">
           <span className="gsw-chat-execution-title">{sending && (connecting || reconnecting) ? "Connecting to GSW…" : sending ? <>GSW is working <span className="gsw-chat-working-dots" aria-hidden="true"><span /><span /><span /></span></> : "Work summary"}</span>

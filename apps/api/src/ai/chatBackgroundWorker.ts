@@ -1,3 +1,4 @@
+import {executeAiTurn} from "./executionEngine.js";
 import { requireAiSubscription } from "../billing/aiAccess.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -26,10 +27,12 @@ async function workOnce() {
     if(!job)return;
     console.info("[chat-worker] job claimed",{executionId:job.id,commandId:job.command_id,attempt:job.attempts});
     let leaseLost=false;
+    const abort=new AbortController();
     const heartbeat=setInterval(()=>{
       void heartbeatChatExecution(job.id,owner,LEASE_SECONDS).then(ok=>{
-        if(!ok){leaseLost=true;console.warn("[chat-worker] lease lost",{executionId:job.id});}
+        if(!ok){leaseLost=true;abort.abort();console.warn("[chat-worker] lease lost",{executionId:job.id});}
       }).catch(err=>{
+        leaseLost=true;abort.abort();
         console.error("[chat-worker] heartbeat failed",{executionId:job.id,errorType:err instanceof Error?err.name:"unknown"});
       });
     },30_000);
@@ -47,16 +50,20 @@ async function workOnce() {
       await updateChatExecutionStage(job.id,owner,"Waiting for model response");
       let deadline: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<never>((_, reject) => {
-        deadline = setTimeout(() => reject(new Error("Model inference deadline exceeded")), 150_000);
+        deadline = setTimeout(() => {abort.abort();reject(new Error("Model inference deadline exceeded"));}, 150_000);
       });
       let result: Awaited<ReturnType<typeof provider.run>>;
       try {
-        result = await Promise.race([provider.run({messages}), timeout]);
+        const execution=await Promise.race([executeAiTurn<never,undefined>({provider,messages,maxToolRounds:1,maxCallsPerRound:1,signal:abort.signal,prepareRound:async()=>{await requireAiSubscription(job.user_id);if(!(await getAiCapabilitySettings(job.user_id)).enabled)throw new Error("GSW AI is disabled");return {tools:[],context:undefined};},onTool:async()=>{throw new Error("Background model-only execution cannot dispatch tools");}}),timeout]);
+        if(execution.kind!=="completed")throw new Error("Model-only response did not complete");
+        result=execution.result;
       } finally {
         if (deadline) clearTimeout(deadline);
       }
       await updateChatExecutionStage(job.id,owner,"Saving completed response");
       if(leaseLost)throw new Error("Worker lost its lease");
+      await requireAiSubscription(job.user_id);
+      if(!(await getAiCapabilitySettings(job.user_id)).enabled)throw new Error("GSW AI is disabled");
       const content=result.content?.trim();
       if(!content || result.toolCalls?.length)throw new Error("Model-only worker returned no usable reply");
       const response={

@@ -14,6 +14,11 @@ function changeMonth(month: string, delta: number) {
 const displayDuration = (n: number) => (n === 60 ? "1 hour" : `${n} minutes`);
 export function BookingPage() {
   const slug = decodeURIComponent(window.location.pathname.split("/")[2] ?? "");
+  const community=useMemo(()=>{
+   const params=new URLSearchParams(window.location.hash.slice(1)),id=params.get("registration"),proof=params.get("proof");
+   if(!id||!proof||!/^[a-f0-9-]{36}$/i.test(id)||!/^\d{13}\.[A-Za-z0-9_-]{43}$/.test(proof))return null;
+   return {id,proof};
+  },[]);
   const [link, setLink] = useState<PublicEventLink | null>(null),
     [month, setMonth] = useState(""),
     [duration, setDuration] = useState(30),
@@ -48,8 +53,8 @@ export function BookingPage() {
     return [...new Set([visitorZone, "UTC", ...supported])];
   }, []);
   const requestId = useMemo(
-    () => crypto.randomUUID(),
-    [start, duration, guest.name, guest.email, guest.phone, guest.message],
+    () => community?.id??crypto.randomUUID(),
+    [community,start, duration, guest.name, guest.email, guest.phone, guest.message],
   );
   useEffect(() => {
     let active = true;
@@ -102,13 +107,13 @@ export function BookingPage() {
     };
   }, [link, month, duration, slug, attempt]);
   useEffect(() => {
-    if (!success) return;
+    if (!success||community) return;
     const timer = window.setTimeout(
       () => window.location.assign("https://mail.guidedstepswellness.com"),
       15000,
     );
     return () => window.clearTimeout(timer);
-  }, [success]);
+  }, [success,community]);
   const submit = async () => {
     if (!start) return;
     setBusy(true);
@@ -119,6 +124,7 @@ export function BookingPage() {
         start,
         duration,
         ...guest,
+        ...(community?{communityProof:community.proof}:{}),
       });
       if (
         !["pending", "approved", "creating", "confirmed"].includes(
@@ -181,8 +187,7 @@ export function BookingPage() {
               · {displayDuration(duration)}
             </p>
             <p>
-              Check your inbox and spam folder. You’ll return to the GSW Mail
-              home page in 15 seconds.
+              {community?"Check your inbox and return to your Community registration when you are ready.":"Check your inbox and spam folder. You’ll return to the GSW Mail home page in 15 seconds."}
             </p>
             <a
               className="gsw-primary-btn"
@@ -194,7 +199,7 @@ export function BookingPage() {
         ) : (
           <>
             <section className="booking-intro">
-              <p className="gsw-eyebrow">BOOK A MEETING</p>
+              <p className="gsw-eyebrow">{community?"COMMUNITY APPOINTMENT":"BOOK A MEETING"}</p>{community&&<p>Use the same email address as your Community registration.</p>}
               <h1>{link?.name ?? "Schedule a meeting"}</h1>
               {link && (
                 <>
