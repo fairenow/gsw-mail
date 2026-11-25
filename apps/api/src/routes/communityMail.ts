@@ -43,7 +43,7 @@ async function prepare(header:string|undefined,input:Compose,scope="mail.send") 
   const {identity,account}=await authorize(header,input.accountId,scope);
   const mail=createMailService({userId:identity.userId,authUserId:identity.authUserId,headers:{}});
   let to=input.to,subject=input.subject,inReplyTo:string|undefined,references:string|undefined;
-  const mode=input.replyMessageId?"reply":"new";
+  const mode:"reply"|"new"=input.replyMessageId?"reply":"new";
   if(input.replyMessageId){
     if(!identity.oauthScopes.has("mail.read"))throw forbidden();
     const source=await mail.readMessage(account.id,input.replyMessageId,false);
