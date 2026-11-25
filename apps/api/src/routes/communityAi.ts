@@ -1,3 +1,4 @@
+import {runModelRound,assistantToolMessage} from "../ai/modelRound.js";
 import type { FastifyInstance } from "fastify";
 import { createHash,randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -102,7 +103,7 @@ export async function communityAiRoutes(app:FastifyInstance){
   for(let round=0;round<5;round++){
    const auth=await authorize(req.headers.authorization,accountId);
    const permitted=await listMcpPermittedTools({userId:auth.identity.userId,accountId,oauthScopes:auth.identity.oauthScopes,tools:agentMailRegistry.definitions().filter(t=>communityAiToolAllowed(t,auth.identity.oauthScopes)||communityAiProposalAllowed(t,auth.identity.oauthScopes)||communityAiActionAllowed(t,auth.identity.oauthScopes))});
-   const result=await provider.run({messages:history,tools:round===4?[]:[...agentMailRegistry.providerDefinitions(t=>permitted.has(t.name)),...(communityContext?[...communityBridgeTools,campaignPlanTool,eventPlanTool,eventFilePlanTool]:[])]});
+   const result=await runModelRound(provider,{messages:history,tools:round===4?[]:[...agentMailRegistry.providerDefinitions(t=>permitted.has(t.name)),...(communityContext?[...communityBridgeTools,campaignPlanTool,eventPlanTool,eventFilePlanTool]:[])]});
    if(!result.toolCalls.length){
     await authorize(req.headers.authorization,accountId);
     const content=result.content??"No response.";
@@ -110,7 +111,7 @@ export async function communityAiRoutes(app:FastifyInstance){
     return {conversationId:conversation.id,content,model:result.model,toolActivity:activity};
    }
    if(round===4||result.toolCalls.length>4)throw serviceUnavailable("AI tool limit reached");
-   history.push({role:"assistant",content:result.content,tool_calls:result.toolCalls,...(result.reasoningContent!==undefined?{reasoning_content:result.reasoningContent}:{})});
+   history.push(assistantToolMessage(result));
    for(const call of result.toolCalls){
     const current=await authorize(req.headers.authorization,accountId),name=call.function.name.replaceAll("__",".");
     if(communityContext&&communityBridgeNames.has(name)){

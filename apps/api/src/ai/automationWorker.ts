@@ -1,3 +1,4 @@
+import {runModelRound,assistantToolMessage} from "./modelRound.js";
 import { deliverAutomationSummaryEmail } from "./automationSummaryEmail.js";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
@@ -122,18 +123,13 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
           let model = "";
           const toolDefinitions = agentMailRegistry.providerDefinitions(tool => toolNames.has(tool.name));
           for (let round = 0; round < 8; round += 1) {
-            const response = await provider.run({ messages, tools: toolDefinitions });
+            const response = await runModelRound(provider,{ messages, tools: toolDefinitions });
             model = response.model;
             if (!response.toolCalls.length) {
               content = response.content?.trim() || "The scheduled task completed without a written result.";
               break;
             }
-            messages.push({
-              role: "assistant",
-              content: response.content,
-              tool_calls: response.toolCalls,
-        ...(response.reasoningContent !== undefined ? { reasoning_content: response.reasoningContent } : {}),
-            });
+            messages.push(assistantToolMessage(response));
             for (const call of response.toolCalls.slice(0, 8)) {
               const semanticName = call.function.name.replaceAll("__", ".");
               const definition = agentMailRegistry.definition(semanticName);

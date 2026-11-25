@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {readChatTextSse} from "./textSse.js";
 import { config } from "../../config.js";
 import { HttpError } from "../../lib/errors.js";
 import { gswSystemPrompt } from "./prompt.js";
@@ -11,14 +12,16 @@ export const kimiProvider: AiProvider = {
   id: "kimi",
   async run(input) {
     if (!config.ai.kimiApiKey) throw new HttpError(503, "Kimi is not configured. Add KIMI_API_KEY to the API service.");
+    const stream=Boolean(input.onTextDelta&&!input.tools?.length);
     try {
       const response = await fetch(`${config.ai.kimiBaseUrl.replace(/\/$/, "")}/chat/completions`, {
         method: "POST",
         headers: { authorization: `Bearer ${config.ai.kimiApiKey}`, "content-type": "application/json" },
-        body: JSON.stringify({ model: config.ai.kimiModel, messages: [{ role: "system", content: gswSystemPrompt }, ...input.messages], ...(input.tools?.length ? { tools: input.tools, tool_choice: "auto" } : {}), reasoning_effort: "low", max_completion_tokens: 16384, stream: false }),
-        signal: AbortSignal.timeout(config.ai.timeoutMs),
+        body: JSON.stringify({ model: config.ai.kimiModel, messages: [{ role: "system", content: gswSystemPrompt }, ...input.messages], ...(input.tools?.length ? { tools: input.tools, tool_choice: "auto" } : {}), reasoning_effort: "low", max_completion_tokens: 16384, stream }),
+        signal: input.signal?AbortSignal.any([input.signal,AbortSignal.timeout(config.ai.timeoutMs)]):AbortSignal.timeout(config.ai.timeoutMs),
       });
       if (!response.ok) throw new HttpError(response.status === 429 ? 429 : 502, "Kimi could not complete this request. Check the provider configuration and account availability.");
+      if(stream&&response.body&&response.headers.get("content-type")?.includes("text/event-stream"))return {content:await readChatTextSse(response.body,input.onTextDelta!),toolCalls:[],model:config.ai.kimiModel};
       const parsed = completion.safeParse(await response.json());
       if (!parsed.success) throw new HttpError(502, "Kimi returned an invalid response or tool call.");
       const choice = parsed.data.choices[0]!;

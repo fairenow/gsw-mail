@@ -1,3 +1,4 @@
+import {runModelRound,assistantToolMessage} from "../ai/modelRound.js";
 import { requireAiSubscription } from "../billing/aiAccess.js";
 import { startSelectedModelWarmup } from "../ai/providers/prewarm.js";
 import { editStoredImage } from "../files/imageEditing.js";
@@ -549,7 +550,7 @@ async function runConversationTurn(input: {
       console.info(JSON.stringify({event:"gsw.chat.stage",stage:"provider.start",runId:run.id,turn,provider:provider.id,toolCount:tools?.length ?? 0}));
       let result: Awaited<ReturnType<typeof provider.run>>;
       try {
-        result = await provider.run({ messages: input.providerMessages, tools });
+        result = await runModelRound(provider,{ messages: input.providerMessages, tools });
       } catch (error) {
         reportChatError(error,{operation:"provider.run",category:"chat",correlationId:run.id});
         throw error;
@@ -598,12 +599,7 @@ async function runConversationTurn(input: {
         };
       }
 
-      input.providerMessages.push({
-        role: "assistant",
-        content: result.content,
-        tool_calls: result.toolCalls,
-        ...(result.reasoningContent !== undefined ? { reasoning_content: result.reasoningContent } : {}),
-      });
+      input.providerMessages.push(assistantToolMessage(result));
 
       for (const call of result.toolCalls.slice(0, 4)) {
         console.info(JSON.stringify({event:"gsw.chat.stage",stage:"tool.selected",runId:run.id,turn,tool:call.function.name.replaceAll("__","."),toolCallId:call.id}));
@@ -793,7 +789,7 @@ async function runConversationTurn(input: {
     // The finalization run has no tools, so it cannot repeat side effects.
     let content = "";
     try {
-      const finalization = await provider.run({
+      const finalization = await runModelRound(provider,{
         messages: [...input.providerMessages, {
           role: "user",
           content: [
