@@ -1,5 +1,5 @@
 import {runModelRound,assistantToolMessage} from "../ai/modelRound.js";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance,FastifyRequest } from "fastify";
 import { createHash,randomUUID } from "node:crypto";
 import { z } from "zod";
 import { verifyMcpBearer } from "../mcp/verifyBearer.js";
@@ -16,7 +16,7 @@ import { withToolBoundary } from "../ai/toolBoundary.js";
 import { wrapUntrustedContent } from "../ai/untrustedContent.js";
 import { communityAiClientAllowed,communityAiToolAllowed,communityAiProposalAllowed,communityAiActionAllowed,parseCommunityActionArguments } from "../ai/communityAiPolicy.js";
 import { communityConversation,communityTranscript,listCommunityConversations } from "../ai/communityConversations.js";
-import { appendAiMessage,reserveAiIdempotency,completeAiIdempotency,failAiIdempotency } from "../ai/agentState.js";
+import { appendAiMessage,reserveAiIdempotency,completeAiIdempotency,failAiIdempotency,startAiRun,completeAiRun,failAiRun,recordAiToolCall,recordAiToolResult } from "../ai/agentState.js";
 import { communityBridgeTools,communityBridgeNames,callCommunityBridge,campaignPlanTool,eventPlanTool,eventFilePlanTool } from "../ai/communityBridge.js";
 import { signCommunityReview,verifyCommunityReview } from "../mail/communityReview.js";
 import { communityFileMetadata } from "../files/communityExport.js";
@@ -83,7 +83,8 @@ export async function communityAiRoutes(app:FastifyInstance){
   const input=account.extend({conversationId:z.string().uuid()}).strict().parse(req.body),auth=await authorize(req.headers.authorization,input.accountId);
   return {messages:await communityTranscript(auth.owner,input.conversationId)};
  });
- app.post("/integrations/community/v1/chat",{bodyLimit:256*1024,config:{rateLimit:{max:8,timeWindow:"1 minute"}}},async req=>{
+ type Progress={type:"status";label:string}|{type:"delta";text:string};
+ const runChat=async(req:FastifyRequest,emit?:(event:Progress)=>void,signal?:AbortSignal)=>{
   const parsed=inputSchema.safeParse(req.body);if(!parsed.success)throw badRequest("Invalid chat request");
   const {accountId,conversationId,messages,communityContext,pageContext}=parsed.data;
   const initial=await authorize(req.headers.authorization,accountId);
@@ -99,21 +100,27 @@ export async function communityAiRoutes(app:FastifyInstance){
    ...previous.slice(-16),{role:"user",content:prompt}
   ];
   const activity:Array<{name:string;ok:boolean}>=[];
+  const run=await startAiRun({conversationId:conversation.id,userId:initial.identity.userId,accountId,provider:provider.id,metadata:{route:"community.chat",clientId:initial.identity.clientId}});
+  const finish=async<T extends {model:string}>(value:T)=>{await completeAiRun(run.id,{model:value.model,metadata:{route:"community.chat",toolActivity:activity}});return value;};
   try{
   for(let round=0;round<5;round++){
+   signal?.throwIfAborted();
+   emit?.({type:"status",label:round===0?"Thinking":"Reviewing verified results"});
    const auth=await authorize(req.headers.authorization,accountId);
    const permitted=await listMcpPermittedTools({userId:auth.identity.userId,accountId,oauthScopes:auth.identity.oauthScopes,tools:agentMailRegistry.definitions().filter(t=>communityAiToolAllowed(t,auth.identity.oauthScopes)||communityAiProposalAllowed(t,auth.identity.oauthScopes)||communityAiActionAllowed(t,auth.identity.oauthScopes))});
-   const result=await runModelRound(provider,{messages:history,tools:round===4?[]:[...agentMailRegistry.providerDefinitions(t=>permitted.has(t.name)),...(communityContext?[...communityBridgeTools,campaignPlanTool,eventPlanTool,eventFilePlanTool]:[])]});
+   const result=await runModelRound(provider,{messages:history,tools:round===4?[]:[...agentMailRegistry.providerDefinitions(t=>permitted.has(t.name)),...(communityContext?[...communityBridgeTools,campaignPlanTool,eventPlanTool,eventFilePlanTool]:[])]},{...(signal?{signal}:{}),...(emit?{onDelta:(text:string)=>emit({type:"delta",text})}:{})});
    if(!result.toolCalls.length){
     await authorize(req.headers.authorization,accountId);
     const content=result.content??"No response.";
     await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model});
-    return {conversationId:conversation.id,content,model:result.model,toolActivity:activity};
+    return finish({conversationId:conversation.id,content,model:result.model,toolActivity:activity});
    }
    if(round===4||result.toolCalls.length>4)throw serviceUnavailable("AI tool limit reached");
    history.push(assistantToolMessage(result));
    for(const call of result.toolCalls){
+    signal?.throwIfAborted();
     const current=await authorize(req.headers.authorization,accountId),name=call.function.name.replaceAll("__",".");
+    emit?.({type:"status",label:"Checking authorized tools"});
     if(communityContext&&communityBridgeNames.has(name)){
      try{
       const data=await callCommunityBridge(communityContext,accountId,name,call.function.arguments);
@@ -134,7 +141,7 @@ export async function communityAiRoutes(app:FastifyInstance){
       const {metadata}=await communityFileMetadata(current.identity.userId,parsed.data.assetId);
       const content="I prepared the event file attachment for review. No file has been copied or shared.";
       await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model});
-      return {conversationId:conversation.id,content,model:result.model,toolActivity:activity,fileProposal:{eventId:event.event.id,eventTitle:event.event.title,...metadata}};
+      return finish({conversationId:conversation.id,content,model:result.model,toolActivity:activity,fileProposal:{eventId:event.event.id,eventTitle:event.event.title,...metadata}});
      }catch{history.push({role:"tool",tool_call_id:call.id,content:"Event or file access could not be verified, or file type/size is unsupported."});continue;}
     }
     if(communityContext&&name==="community.events.prepare"){
@@ -151,7 +158,7 @@ export async function communityAiRoutes(app:FastifyInstance){
       }
       const content=plan.eventId?"I prepared the requested event edits. Review and save them in the Community Events editor.":"I prepared a private event draft. Review and save it in the Community Events editor. Nothing has been published.";
       await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model});
-      return {conversationId:conversation.id,content,model:result.model,toolActivity:activity,eventProposal:plan};
+      return finish({conversationId:conversation.id,content,model:result.model,toolActivity:activity,eventProposal:plan});
      }catch{history.push({role:"tool",tool_call_id:call.id,content:"Event access or creation/edit permission could not be verified."});continue;}
     }
     if(communityContext&&name==="community.campaign.prepare"){
@@ -164,7 +171,7 @@ export async function communityAiRoutes(app:FastifyInstance){
       const count=z.object({totalMatchingContacts:z.number().int().nonnegative(),eligibleOnThisPage:z.number().int().nonnegative(),hasMore:z.boolean()}).passthrough().parse(preview);
       const content="I found "+count.totalMatchingContacts+" distinct matching contacts in the selected Community audience. "+count.eligibleOnThisPage+" eligible recipients are on the first page"+(count.hasMore?"; additional pages still need review.":".")+" I've prepared the campaign for your review. No campaign has been saved and no email has been sent.";
       await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model});
-      return {conversationId:conversation.id,content,model:result.model,toolActivity:activity,campaignProposal:{...plan,preview}};
+      return finish({conversationId:conversation.id,content,model:result.model,toolActivity:activity,campaignProposal:{...plan,preview}});
      }catch{history.push({role:"tool",tool_call_id:call.id,content:"Community audience could not be verified. Do not claim recipients are available."});continue;}
     }
     const policy=await resolveMcpUserToolPermission({userId:current.identity.userId,accountId,oauthScopes:current.identity.oauthScopes,toolName:name});
@@ -178,7 +185,7 @@ export async function communityAiRoutes(app:FastifyInstance){
      const content="I prepared a draft for your review. No message has been saved or sent.";
      const token=signCommunityReview({id:randomUUID(),digest:draftDigest(current.owner,conversation.id,draft.data),expiresAt:Date.now()+10*60_000},reviewKey());
      await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model});
-     return {conversationId:conversation.id,content,model:result.model,toolActivity:activity,proposal:{draft:draft.data,reviewToken:token}};
+     return finish({conversationId:conversation.id,content,model:result.model,toolActivity:activity,proposal:{draft:draft.data,reviewToken:token}});
     }
     if(communityAiActionAllowed(policy.tool,current.identity.oauthScopes)){
      const argumentsValue=parseCommunityActionArguments(call.function.arguments);
@@ -187,22 +194,42 @@ export async function communityAiRoutes(app:FastifyInstance){
      const content="Review the proposed "+name.replaceAll("."," ").replaceAll("_"," ")+" action. No change has been made.";
      const reviewToken=signCommunityReview({id:randomUUID(),digest:actionDigest(current.owner,conversation.id,name,raw),expiresAt:Date.now()+10*60_000},reviewKey());
      await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model});
-     return {conversationId:conversation.id,content,model:result.model,toolActivity:activity,actionProposal:{name,description:policy.tool.description,rawArguments:raw,reviewToken,external:policy.tool.risk==="external"}};
+     return finish({conversationId:conversation.id,content,model:result.model,toolActivity:activity,actionProposal:{name,description:policy.tool.description,rawArguments:raw,reviewToken,external:policy.tool.risk==="external"}});
     }
     if(!communityAiToolAllowed(policy.tool,current.identity.oauthScopes)){history.push({role:"tool",tool_call_id:call.id,content:"Tool unavailable"});continue;}
-    const data=await withToolBoundary(t=>communityAiToolAllowed(t,current.identity.oauthScopes)&&permitted.has(t.name),()=>executeAuthorizedCapability({toolName:name,rawArguments:call.function.arguments,context:{...createMcpExecutionContext(current.identity,accountId),conversationId:conversation.id}}));
+    const recorded=await recordAiToolCall({runId:run.id,conversationId:conversation.id,providerToolCallId:call.id,toolName:name,risk:policy.tool.risk,requiredScopes:[...policy.tool.requiredScopes],argumentsJson:call.function.arguments});
+    const data=await withToolBoundary(t=>communityAiToolAllowed(t,current.identity.oauthScopes)&&permitted.has(t.name),()=>executeAuthorizedCapability({toolName:name,rawArguments:call.function.arguments,toolCallId:recorded.id,context:{...createMcpExecutionContext(current.identity,accountId),conversationId:conversation.id}}));
+    await recordAiToolResult(recorded.id,data.ok?{ok:true,data:data.data}:{ok:false,error:{code:"tool_failed",message:"Authorized read did not complete",retryable:false}});
     activity.push({name,ok:data.ok});
     history.push({role:"tool",tool_call_id:call.id,content:wrapUntrustedContent(JSON.stringify(data.ok?data.data:{error:"Operation failed"})??"No result","tool",14000)});
    }
   }
   throw serviceUnavailable("AI response unavailable");
   }catch(error){
-   if(error instanceof CommunityAccessError)throw error;
+   await failAiRun(run.id,new Error("Delegated AI request did not complete")).catch(()=>undefined);
+   if(error instanceof CommunityAccessError||signal?.aborted)throw error;
    const safe=reportChatError(error,{operation:"community.inference",category:"chat",correlationId:req.id,retryable:true});
    const content="GSW AI could not finish this request. No email was sent. Reference: "+safe.incidentId;
    await appendAiMessage({conversationId:conversation.id,role:"assistant",content}).catch(()=>undefined);
    return {conversationId:conversation.id,content,model:initial.settings.modelProvider,toolActivity:activity,errorCode:safe.code,incidentId:safe.incidentId};
   }
+ };
+ const limits={bodyLimit:256*1024,config:{rateLimit:{max:8,timeWindow:"1 minute"}}};
+ app.post("/integrations/community/v1/chat",limits,req=>runChat(req));
+ app.post("/integrations/community/v1/chat/stream",limits,async(req,reply)=>{
+  const input=inputSchema.parse(req.body);
+  await authorize(req.headers.authorization,input.accountId);
+  reply.hijack();reply.raw.statusCode=200;
+  reply.raw.setHeader("Content-Type","text/event-stream; charset=utf-8");
+  reply.raw.setHeader("Cache-Control","no-store, no-transform");
+  reply.raw.setHeader("X-Accel-Buffering","no");reply.raw.flushHeaders?.();
+  const abort=new AbortController();
+  reply.raw.on("close",()=>{if(!reply.raw.writableEnded)abort.abort();});
+  const send=(event:unknown)=>{if(!reply.raw.destroyed&&!reply.raw.writableEnded)reply.raw.write("data: "+JSON.stringify(event)+"\n\n");};
+  const heartbeat=setInterval(()=>send({type:"heartbeat"}),15000);
+  try{send({type:"result",response:await runChat(req,send,abort.signal)});}
+  catch(error){const safe=reportChatError(error,{operation:"community.stream",category:"chat",correlationId:req.id});send({type:"error",code:error instanceof CommunityAccessError?error.code:"ai_request_failed",incidentId:safe.incidentId});}
+  finally{clearInterval(heartbeat);if(!reply.raw.destroyed&&!reply.raw.writableEnded)reply.raw.end();}
  });
  app.post("/integrations/community/v1/chat/save-draft",{bodyLimit:256*1024},async req=>{
   const input=account.extend({conversationId:z.string().uuid(),draft:draftSchema,reviewToken:z.string().max(2048),confirm:z.literal(true)}).strict().parse(req.body);
