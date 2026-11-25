@@ -162,11 +162,12 @@ type ChatStreamStatus = {
 
 type ChatStreamEvent =
   | ChatStreamStatus
+  | { type: "delta"; text:string }
   | { type: "result"; response: ChatTurnResult }
   | { type: "error"; message: string }
   | { type: "pending"; commandId: string; status: string };
 
-type ChatStreamEmitter = (event: ChatStreamStatus) => void;
+type ChatStreamEmitter = (event: ChatStreamStatus | {type:"delta";text:string}) => void;
 
 const toolLabel = (toolName: string): string => {
   switch (toolName) {
@@ -550,7 +551,7 @@ async function runConversationTurn(input: {
       console.info(JSON.stringify({event:"gsw.chat.stage",stage:"provider.start",runId:run.id,turn,provider:provider.id,toolCount:tools?.length ?? 0}));
       let result: Awaited<ReturnType<typeof provider.run>>;
       try {
-        result = await runModelRound(provider,{ messages: input.providerMessages, tools });
+        result = await runModelRound(provider,{ messages: input.providerMessages, tools },{...(input.emit?{onDelta:(text:string)=>input.emit?.({type:"delta",text})}:{})});
       } catch (error) {
         reportChatError(error,{operation:"provider.run",category:"chat",correlationId:run.id});
         throw error;
@@ -803,7 +804,7 @@ async function runConversationTurn(input: {
           ].join("\n"),
         }],
         tools: [],
-      });
+      },{...(input.emit?{onDelta:(text:string)=>input.emit?.({type:"delta",text})}:{})});
       content = finalization.content?.trim() || "";
     } catch (finalizationError) {
       reportChatError(finalizationError,{operation:"chat.progress_summary",category:"chat",correlationId:run.id});
@@ -1479,7 +1480,7 @@ export default async function aiChatRoutes(app: FastifyInstance) {
         providerMessages: prepared.providerMessages,
         emit: (event) => {
           stream.send(event);
-          if (reserved && (event.phase === "thinking" || event.phase === "tool_started")) {
+          if (reserved && event.type==="status" && (event.phase === "thinking" || event.phase === "tool_started")) {
             void updateChatCommandActivity(reserved.key, {
               label:event.label,phase:event.phase,updatedAt:new Date().toISOString(),
             }).catch(err => req.log.warn({err},"Could not persist chat activity"));

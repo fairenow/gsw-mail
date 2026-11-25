@@ -1,3 +1,4 @@
+import {readFinalTextSse} from "./finalTextSse.js";
 import { config } from "../../config.js";
 import { HttpError } from "../../lib/errors.js";
 import { gswSystemPrompt } from "./prompt.js";
@@ -68,6 +69,7 @@ export const anthropicProvider: AiProvider = {
       throw new HttpError(503, "Anthropic is not configured. Add ANTHROPIC_MODEL to the API service.");
     }
 
+    const stream=Boolean(input.onTextDelta&&!input.tools?.length);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), config.ai.timeoutMs);
     try {
@@ -80,6 +82,7 @@ export const anthropicProvider: AiProvider = {
         },
         body: JSON.stringify({
           model: model,
+          ...(stream?{stream:true}:{}),
           max_tokens: 1600,
           system: gswSystemPrompt,
           messages: toMessages(input.messages),
@@ -91,9 +94,10 @@ export const anthropicProvider: AiProvider = {
             })),
           } : {}),
         }),
-        signal: controller.signal,
+        signal: input.signal?AbortSignal.any([controller.signal,input.signal]):controller.signal,
       });
 
+      if(response.ok&&stream&&response.body&&response.headers.get("content-type")?.includes("text/event-stream"))return {content:await readFinalTextSse(response.body,"anthropic",input.onTextDelta!),toolCalls:[],model};
       const body = await response.json().catch(() => ({})) as AnthropicResponse;
       if (!response.ok) {
         throw new HttpError(response.status === 429 ? 429 : 502, body.error?.message?.trim() || `Anthropic returned HTTP ${response.status}`);

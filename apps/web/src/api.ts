@@ -306,6 +306,7 @@ export interface AiTaskDetail {
 }
 
 export type AiChatStreamEvent =
+  | {type:"delta";text:string}
   | { type: "status"; phase: "thinking" | "tool_started" | "tool_completed"; label: string; toolName?: string; ok?: boolean }
   | { type: "result"; response: AiChatResponse }
   | { type: "error"; message: string };
