@@ -16,15 +16,15 @@ export function sealEventGrant(input:{eventId:string;accountId:string;token:stri
 const counts=z.record(z.string().max(40),z.number().int().nonnegative().max(1000));
 const bucket=z.object({counts,truncated:z.boolean(),sampleSize:z.number().int().min(0).max(1000)}).strict();
 const snapshotSchema=z.object({event:z.object({id:z.string(),title:z.string().max(500),startTime:z.number(),endTime:z.number(),status:z.string().max(40),capacity:z.number().nullable()}).strict(),registrations:bucket,appointments:z.object({counts,truncated:z.boolean()}).strict(),volunteers:bucket.nullable(),sponsors:bucket.nullable(),asOf:z.number(),addressesWithheld:z.literal(true)}).strict();
-export async function readCommunityEventSnapshot(grant:CommunityEventGrant,accountId:string){
+export async function readCommunityEventSnapshot(grant:CommunityEventGrant,accountId:string,options:{fetcher?:typeof fetch;endpoint?:string}={}){
  const data=z.object({token:tokenSchema,eventId:z.string(),accountId:z.uuid()}).strict().parse(decryptMcpPayload({approvalId:grant.approvalId,argumentsDigest:grant.digest,key:key(),payload:grant.payload}));
  if(data.eventId!==grant.eventId||data.accountId!==accountId)throw forbidden("Event grant mismatch");
- const endpoint=process.env.GSW_COMMUNITY_UNSUBSCRIBE_CHECK_URL;
+ const endpoint=options.endpoint??process.env.GSW_COMMUNITY_UNSUBSCRIBE_CHECK_URL;
  if(!endpoint)throw serviceUnavailable("Community event gateway unavailable");
  const url=new URL(endpoint);
  if(url.protocol!=="https:"||url.username||url.password||url.search||url.hash||url.pathname!=="/gsw-mail/campaign-eligibility")throw serviceUnavailable("Community event gateway unavailable");
  url.pathname="/gsw-mail/event-automation-snapshot";
- const response=await fetch(url,{method:"POST",redirect:"error",signal:AbortSignal.timeout(15000),headers:{Authorization:"Bearer "+data.token,"Content-Type":"application/json"},body:JSON.stringify({eventId:data.eventId,accountId})});
+ const response=await (options.fetcher??fetch)(url,{method:"POST",redirect:"error",signal:AbortSignal.timeout(15000),headers:{Authorization:"Bearer "+data.token,"Content-Type":"application/json"},body:JSON.stringify({eventId:data.eventId,accountId})});
  if(!response.ok)throw forbidden("Community event grant revoked, expired or unavailable");
  const snapshot=snapshotSchema.parse(await response.json());
  if(snapshot.event.id!==grant.eventId)throw forbidden("Community event mismatch");
