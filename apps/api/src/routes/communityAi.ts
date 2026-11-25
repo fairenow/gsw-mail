@@ -98,12 +98,12 @@ export async function communityAiRoutes(app:FastifyInstance){
      continue;
     }
     if(communityContext&&name==="community.campaign.prepare"){
-     const schema=z.object({eventId:z.string().min(1).max(128).optional(),audienceType:z.enum(["event_registrants","volunteers","sponsors","partners","subscribers","all_registrants"]),title:z.string().trim().min(1).max(160),subject:z.string().trim().min(1).max(998).refine(v=>!/[\r\n]/.test(v)),textBody:z.string().trim().min(1).max(60000)}).strict();
+     const schema=z.object({eventId:z.string().min(1).max(128).optional(),eventIds:z.array(z.string().min(1).max(128)).min(1).max(10).optional(),audienceType:z.enum(["event_registrants","volunteers","sponsors","partners","subscribers","all_registrants"]),title:z.string().trim().min(1).max(160),subject:z.string().trim().min(1).max(998).refine(v=>!/[\r\n]/.test(v)),textBody:z.string().trim().min(1).max(60000)}).strict();
      const parsed=schema.safeParse(parseCommunityActionArguments(call.function.arguments));
-     if(!parsed.success||!current.identity.oauthScopes.has("campaign.write")){history.push({role:"tool",tool_call_id:call.id,content:"Invalid campaign proposal or missing campaign permission"});continue;}
+     if(!parsed.success||(parsed.data.eventId&&parsed.data.eventIds)||(parsed.data.eventIds&&new Set(parsed.data.eventIds).size!==parsed.data.eventIds.length)||!current.identity.oauthScopes.has("campaign.write")){history.push({role:"tool",tool_call_id:call.id,content:"Invalid campaign proposal or missing campaign permission"});continue;}
      try{
       const plan=parsed.data;
-      const preview=await callCommunityBridge(communityContext,accountId,"community.audience.preview",JSON.stringify({eventId:plan.eventId,audienceType:plan.audienceType,offset:0}));
+      const preview=await callCommunityBridge(communityContext,accountId,"community.audience.preview",JSON.stringify({eventId:plan.eventId,eventIds:plan.eventIds,audienceType:plan.audienceType,offset:0}));
       const content="I prepared the campaign for your review. No campaign has been saved and no email has been sent.";
       await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model});
       return {conversationId:conversation.id,content,model:result.model,toolActivity:activity,campaignProposal:{...plan,preview}};
