@@ -3,8 +3,8 @@ import { z } from "zod";
 
 export const renderedMessageDigest = (rendered:{html:string;text:string;templateKey:string}):string =>
   createHash("sha256").update(JSON.stringify([rendered.templateKey,rendered.text,rendered.html])).digest("hex");
-export const communitySendDigest = (input:{userId:string;clientId:string;accountId:string;senderAddress:string;senderName:string|null;to:string;subject:string;renderDigest:string}):string =>
-  createHash("sha256").update(JSON.stringify([input.userId,input.clientId,input.accountId,input.senderAddress,input.senderName,input.to,input.subject,input.renderDigest])).digest("hex");
+export const communitySendDigest = (input:{userId:string;clientId:string;accountId:string;senderAddress:string;senderName:string|null;to:string;subject:string;renderDigest:string;threading?:string|undefined}):string =>
+  createHash("sha256").update(JSON.stringify([input.userId,input.clientId,input.accountId,input.senderAddress,input.senderName,input.to,input.subject,input.renderDigest,input.threading??null])).digest("hex");
 
 const claims = z.object({id:z.string().uuid(),digest:z.string().regex(/^[0-9a-f]{64}$/),expiresAt:z.number().int()}).strict();
 type ReviewClaims=z.infer<typeof claims>;
