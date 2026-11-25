@@ -916,6 +916,7 @@ export const aiConversations = pgTable(
     userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     accountId: uuid("account_id").references(() => emailAccounts.id, { onDelete: "set null" }),
     workspaceId: uuid("workspace_id").references(() => organizations.id, { onDelete: "set null" }),
+    communityClientId: text("community_client_id"),
     title: text("title"),
     status: text("status").default("active").notNull(),
     lastMessageAt: timestamp("last_message_at", { withTimezone: true }).defaultNow().notNull(),

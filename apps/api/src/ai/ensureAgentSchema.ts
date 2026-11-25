@@ -15,6 +15,7 @@ export async function ensureAiAgentSchema(): Promise<void> {
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     );
   `);
+  await pool.query(`ALTER TABLE "ai_conversations" ADD COLUMN IF NOT EXISTS "community_client_id" text;`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "ai_conversations_user_idx" ON "ai_conversations" ("user_id", "last_message_at");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "ai_conversations_account_idx" ON "ai_conversations" ("account_id", "last_message_at");`);
 

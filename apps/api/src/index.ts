@@ -15,6 +15,7 @@ import { ensureAiAgentSchema } from "./ai/ensureAgentSchema.js";
 import { startChatExecutionWorker } from "./ai/chatBackgroundWorker.js";
 import { ensureBackgroundMailboxGrantSchema } from "./ai/backgroundMailboxGrants.js";
 import { ensureRenewableStalwartBrokerClient } from "./auth/ensureRenewableStalwartBrokerClient.js";
+import { ensureCommunityOAuthClient } from "./auth/ensureCommunityOAuthClient.js";
 import { ensureInboxTriageSchema } from "./ai/ensureInboxTriageSchema.js";
 import { ensureChatExecutionSchema } from "./ai/ensureChatExecutionSchema.js";
 import { getOutboundWorker } from "./outbound/worker.js";
@@ -56,6 +57,8 @@ async function main() {
   await ensureMobileNotificationSchema();
   await ensureAutomationSummaryEmailSchema();
   await ensureAiAgentSchema();
+  const communityClientStatus=await ensureCommunityOAuthClient();
+  app.log.info({status:communityClientStatus},"Community OAuth registration");
   await ensureInboxTriageSchema();
   await ensureChatExecutionSchema();
   await ensureBackgroundMailboxGrantSchema();
