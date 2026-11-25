@@ -67,6 +67,7 @@ import { JmapError } from "./engine/jmap.js";
 import { mcpProtectedResourceMetadata } from "./mcp/resourceMetadata.js";
 import { mcpRoutes } from "./mcp/routes.js";
 import { communityAiRoutes } from "./routes/communityAi.js";
+import { communityMailRoutes } from "./routes/communityMail.js";
 
 const MAIL_ATTACHMENT_BODY_LIMIT = 30 * 1024 * 1024;
 
@@ -79,6 +80,7 @@ export function buildApp() {
   app.register(mcpProtectedResourceMetadata);
   app.register(mcpRoutes);
   app.register(communityAiRoutes);
+  app.register(communityMailRoutes);
   app.register(mcpAccessProfile);
   const metadataResponse = async (handler: (request: Request) => Promise<Response>, req: { url: string; headers: Record<string, string | string[] | undefined> }, reply: { code: (status: number) => { header: (name: string, value: string) => unknown; send: (body: Buffer) => unknown } }) => {
     const response = await handler(new Request(`${config.auth.baseUrl}${req.url}`, { headers: req.headers as Record<string, string> }));
