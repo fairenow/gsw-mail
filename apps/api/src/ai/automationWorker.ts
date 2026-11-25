@@ -86,6 +86,7 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
           if (!aiSettings.enabled) throw new Error("GSW AI is disabled for this user");
           const provider = getAiProvider(aiSettings.modelProvider);
           if (!automation.conversationId) throw new Error("automation conversation is unavailable");
+          const conversationId=automation.conversationId;
 
           const aiRun = await startAiRun({
             conversationId: automation.conversationId,
@@ -186,7 +187,7 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
                   }
                   const ledger = await recordAiToolCall({
                     runId: aiRun.id,
-                    conversationId: automation.conversationId,
+                    conversationId,
                     providerToolCallId: call.id,
                     toolName: definition.name,
                     risk: definition.risk,
@@ -217,7 +218,7 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
                         authUserId: grant?.authUserId??automation.userId,
                         accountId: automation.accountId ?? "",
                         headers: {},
-                        conversationId: automation.conversationId??undefined,
+                        conversationId,
                         timeZone: automation.timeZone,
                         ...(stableSendKey ? { scheduledIdempotencyKey: stableSendKey } : {}),
                       }});
