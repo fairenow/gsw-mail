@@ -27,3 +27,11 @@ export async function communityRecipientEligible(recipient:Recipient):Promise<bo
     return result.eligible===true;
   }catch{return false;}
 }
+
+export function validCampaignSchedule(at:number,now=Date.now()){
+ return Number.isSafeInteger(at)&&at>=now-60_000&&at<=now+365*86400000;
+}
+type LaunchFingerprint={userId:string;clientId:string;consentId:string|null;hash:string;scheduledAt:number};
+export function sameCampaignLaunch(previous:LaunchFingerprint,next:LaunchFingerprint){
+ return previous.userId===next.userId&&previous.clientId===next.clientId&&previous.consentId!==null&&previous.consentId===next.consentId&&previous.hash===next.hash&&previous.scheduledAt===next.scheduledAt;
+}
