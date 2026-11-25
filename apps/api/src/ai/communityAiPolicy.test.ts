@@ -33,3 +33,11 @@ test("reviewed write parity remains scoped and excludes sending, administration 
  assert.equal(parseCommunityActionArguments("[]"),null);
  assert.equal(parseCommunityActionArguments("{"),null);
 });
+
+test("calendar writes require calendar.write consent and exact reviewed execution",()=>{
+ const event={name:"calendar.events.create",requiredScopes:["calendar.write"],risk:"external"};
+ assert.equal(communityAiActionAllowed(event,new Set(["calendar.read"])),false);
+ assert.equal(communityAiActionAllowed(event,new Set(["calendar.write"])),true);
+ assert.equal(communityAiToolAllowed(event,new Set(["calendar.write"])),false);
+ assert.equal(communityAiActionAllowed({...event,requiredScopes:[]},new Set(["calendar.write"])),false);
+});
