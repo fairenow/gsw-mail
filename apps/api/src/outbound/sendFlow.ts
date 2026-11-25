@@ -5,6 +5,7 @@ import { badRequest, conflict } from "../lib/errors.js";
 import { generateMessageId } from "../lib/messageId.js";
 import type { AccessibleAccount } from "../auth/authorize.js";
 import { buildOutgoingMessageForUser } from "../mail/messageBuilder.js";
+import { renderedMessageDigest } from "../mail/communityReview.js";
 import { templateKeyAllowedForAddress } from "../lib/templatePolicy.js";
 import { isCustomTemplateKey } from "../mail/templateService.js";
 import { checkSuppressions } from "./delivery.js";
@@ -35,6 +36,8 @@ export interface SubmitSendInput {
   textBody?: string | undefined;
   htmlBody?: string | undefined;
   preserveTextBody?: boolean | undefined;
+  /** Internal, reviewed delegated send only: fail before reservation if rendering changed. */
+  expectedRenderDigest?: string | undefined;
   templateKey?: string | undefined;
   replyTo?: string | undefined;
   inReplyTo?: string | undefined;
@@ -93,6 +96,7 @@ export async function submitSend(input: SubmitSendInput): Promise<SubmitSendResu
     senderName: input.account.displayName ?? undefined,
     senderEmail: input.account.address,
   });
+  if (input.expectedRenderDigest !== undefined && renderedMessageDigest(rendered) !== input.expectedRenderDigest) throw conflict("Email template or content changed after review. Review the message again.");
   const templateKey = rendered.templateKey;
 
   const reserve = await reserveSendOperation({

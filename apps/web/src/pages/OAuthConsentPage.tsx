@@ -27,6 +27,7 @@ const scopeDescriptions: Record<string, { title: string; description: string }> 
     title: "See your email address",
     description: "Share your GSW Account email address and whether it is verified.",
   },
+  "ai.infer": {title: "Use your GSW Mail AI", description: "Use your selected model and AI subscription in this app. Mail access requires separate permission."},
   offline_access: {
     title: "Stay signed in",
     description: "Maintain authorized access without asking you to sign in every time.",
@@ -34,6 +35,7 @@ const scopeDescriptions: Record<string, { title: string; description: string }> 
 };
 
 const productScopeNames = [
+  "ai.infer",
   "mail.read","mail.write","mail.send","mail.bulk_write",
   "calendar.read","calendar.write","contacts.read","contacts.write",
   "templates.read","templates.write","signatures.read","signatures.write",

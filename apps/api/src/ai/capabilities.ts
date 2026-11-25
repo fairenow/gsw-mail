@@ -32,7 +32,7 @@ export async function getAiCapabilitySettings(userId: string): Promise<AiCapabil
   const [settings] = await db.select({ ai: userSettings.ai }).from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
   const ai = settings?.ai ?? {};
   const requestedProvider = ai.modelProvider;
-  const modelProvider: AiModelProvider = requestedProvider === "kimi" || requestedProvider === "openai" || requestedProvider === "claude"
+  const modelProvider: AiModelProvider = requestedProvider === "kimi" || requestedProvider === "openai" || requestedProvider === "claude" || requestedProvider === "qwen" || requestedProvider === "gpt-oss-120b" || requestedProvider === "deepseek-v4.1-flash" || requestedProvider === "qwen-modal"
     ? requestedProvider
     : "openai";
   return {

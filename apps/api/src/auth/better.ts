@@ -107,7 +107,7 @@ export const auth = betterAuth({
         page: "/oauth/select-account",
         shouldRedirect: async ({ user }) => requiresMailboxAccountSelection(user.id),
       },
-      scopes: [...GSW_OIDC_SUPPORTED_SCOPES, ...aiScopes, ...legacyMcpOAuthScopes],
+      scopes: [...GSW_OIDC_SUPPORTED_SCOPES, ...aiScopes, ...legacyMcpOAuthScopes, "ai.infer"],
       validAudiences: [config.auth.stalwartAudience, process.env.GSW_MCP_RESOURCE_URL ?? `${config.auth.baseUrl.replace(/\/$/, "")}/mcp`],
       accessTokenExpiresIn: config.auth.tokenTtlSeconds,
       refreshTokenReuseInterval: 30,

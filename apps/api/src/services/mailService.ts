@@ -45,7 +45,7 @@ const textToRichHtml = (value: string): string => value
   .map((paragraph) => `<p>${escapeHtml(paragraph.trim()).replaceAll("\n", "<br>")}</p>`)
   .join("");
 
-async function resolveComposePreferences(userId: string, address: string, mode: DraftMode) {
+export async function resolveComposePreferences(userId: string, address: string, mode: DraftMode) {
   const [[settings], [signature]] = await Promise.all([
     db.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1),
     db.select().from(emailSignatures).where(eq(emailSignatures.userId, userId)).limit(1),

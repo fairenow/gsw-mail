@@ -20,7 +20,7 @@ export function requireFreshExternalMcpConsent(
   if (!clientId || firstPartyClientIds.has(clientId)) return authorizeUrl;
 
   const requested = new Set((url.searchParams.get("scope") ?? "").split(/\s+/).filter(Boolean));
-  const isMcpRequest = [...requested].some(scope => (aiScopes as readonly string[]).includes(scope)) ||
+  const isMcpRequest = [...requested].some(scope => (aiScopes as readonly string[]).includes(scope) || scope === "ai.infer") ||
     url.searchParams.getAll("resource").some(resource => {
       try { return new URL(resource).pathname.replace(/\/$/, "") === "/mcp"; }
       catch { return false; }

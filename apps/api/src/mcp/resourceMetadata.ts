@@ -2,10 +2,10 @@ import type { FastifyInstance } from "fastify";
 import { config } from "../config.js";
 import { aiScopes } from "../ai/permissions/types.js";
 
-export const mcpAdvertisedScopes = [...aiScopes];
+export const mcpAdvertisedScopes = [...aiScopes, "ai.infer"];
 
 // Never advertise a scope that the authorization server will reject.
-const validOAuthScopes = new Set<string>(aiScopes);
+const validOAuthScopes = new Set<string>([...aiScopes, "ai.infer"]);
 for (const scope of mcpAdvertisedScopes) {
   if (!validOAuthScopes.has(scope)) throw new Error(`MCP advertises unsupported OAuth scope: ${scope}`);
 }
