@@ -1,6 +1,7 @@
 import {sealEventGrant,readCommunityEventSnapshot} from "../ai/communityEventAutomation.js";
 import {createCommunityAutomationGrant} from "../ai/communityAutomationGrant.js";
-import {runModelRound,assistantToolMessage} from "../ai/modelRound.js";
+import {executeAiTurn} from "../ai/executionEngine.js";
+type DelegatedTurnResult={conversationId:string;content:string;model:string;toolActivity:Array<{name:string;ok:boolean}>;proposal?:unknown;actionProposal?:unknown;campaignProposal?:unknown;eventProposal?:unknown;fileProposal?:unknown};
 import type { FastifyInstance,FastifyRequest } from "fastify";
 import { createHash,randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -105,21 +106,20 @@ export async function communityAiRoutes(app:FastifyInstance){
   const run=await startAiRun({conversationId:conversation.id,userId:initial.identity.userId,accountId,provider:provider.id,metadata:{route:"community.chat",clientId:initial.identity.clientId}});
   const finish=async<T extends {model:string}>(value:T)=>{await completeAiRun(run.id,{model:value.model,metadata:{route:"community.chat",toolActivity:activity}});return value;};
   try{
-  for(let round=0;round<5;round++){
+  const execution=await executeAiTurn<DelegatedTurnResult,Set<string>>({
+   provider,messages:history,maxToolRounds:4,maxCallsPerRound:4,
+   ...(signal?{signal}:{}),...(emit?{onDelta:(text:string)=>emit({type:"delta",text})}:{}),
+   finalization:{prompt:"The tool-round budget is exhausted. Summarize only verified results, identify incomplete work, and do not claim any unreviewed action was taken."},
+   prepareRound:async(round,final)=>{
    signal?.throwIfAborted();
    emit?.({type:"status",label:round===0?"Thinking":"Reviewing verified results"});
    const auth=await authorize(req.headers.authorization,accountId);
    const permitted=await listMcpPermittedTools({userId:auth.identity.userId,accountId,oauthScopes:auth.identity.oauthScopes,tools:agentMailRegistry.definitions().filter(t=>communityAiToolAllowed(t,auth.identity.oauthScopes)||communityAiProposalAllowed(t,auth.identity.oauthScopes)||communityAiActionAllowed(t,auth.identity.oauthScopes))});
-   const result=await runModelRound(provider,{messages:history,tools:round===4?[]:[...agentMailRegistry.providerDefinitions(t=>permitted.has(t.name)),...(communityContext?[...communityBridgeTools,campaignPlanTool,eventPlanTool,eventFilePlanTool]:[])]},{...(signal?{signal}:{}),...(emit?{onDelta:(text:string)=>emit({type:"delta",text})}:{})});
-   if(!result.toolCalls.length){
-    await authorize(req.headers.authorization,accountId);
-    const content=result.content??"No response.";
-    await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model});
-    return await finish({conversationId:conversation.id,content,model:result.model,toolActivity:activity});
-   }
-   if(round===4||result.toolCalls.length>4)throw serviceUnavailable("AI tool limit reached");
-   history.push(assistantToolMessage(result));
-   for(const call of result.toolCalls){
+
+    return {context:permitted,tools:final?[]:[...agentMailRegistry.providerDefinitions(t=>permitted.has(t.name)),...(communityContext?[...communityBridgeTools,campaignPlanTool,eventPlanTool,eventFilePlanTool]:[])]};
+   },
+   onRejectedCall:call=>activity.push({name:call.function.name.replaceAll("__","."),ok:false}),
+   onTool:async({context:permitted,result,call,respond})=>{
     signal?.throwIfAborted();
     const current=await authorize(req.headers.authorization,accountId),name=call.function.name.replaceAll("__",".");
     emit?.({type:"status",label:"Checking authorized tools"});
@@ -127,13 +127,13 @@ export async function communityAiRoutes(app:FastifyInstance){
      try{
       const data=await callCommunityBridge(communityContext,accountId,name,call.function.arguments);
       activity.push({name,ok:true});
-      history.push({role:"tool",tool_call_id:call.id,content:wrapUntrustedContent(JSON.stringify(data),"tool",18000)});
-     }catch{activity.push({name,ok:false});history.push({role:"tool",tool_call_id:call.id,content:"Community data access denied or unavailable"});}
-     continue;
+      respond(wrapUntrustedContent(JSON.stringify(data),"tool",18000));
+     }catch{activity.push({name,ok:false});respond("Community data access denied or unavailable");}
+     return undefined;
     }
     if(communityContext&&name==="community.files.prepare_attachment"){
      const parsed=z.object({eventId:z.string().min(1).max(128),assetId:z.uuid()}).strict().safeParse(parseCommunityActionArguments(call.function.arguments));
-     if(!parsed.success||!permitted.has("files.read")){history.push({role:"tool",tool_call_id:call.id,content:"File access unavailable or invalid identifiers"});continue;}
+     if(!parsed.success||!permitted.has("files.read")){respond("File access unavailable or invalid identifiers");return undefined;}
      try{
       const profile=z.object({permissions:z.object({events:z.object({edit:z.boolean()})})}).passthrough().parse(await callCommunityBridge(communityContext,accountId,"community.admin.me","{}"));
       if(!profile.permissions.events.edit)throw new Error("Event edit denied");
@@ -144,12 +144,12 @@ export async function communityAiRoutes(app:FastifyInstance){
       const content="I prepared the event file attachment for review. No file has been copied or shared.";
       await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model});
       return await finish({conversationId:conversation.id,content,model:result.model,toolActivity:activity,fileProposal:{eventId:event.event.id,eventTitle:event.event.title,...metadata}});
-     }catch{history.push({role:"tool",tool_call_id:call.id,content:"Event or file access could not be verified, or file type/size is unsupported."});continue;}
+     }catch{respond("Event or file access could not be verified, or file type/size is unsupported.");return undefined;}
     }
     if(communityContext&&name==="community.events.prepare"){
      const iso=z.string().datetime({offset:true});
      const parsed=z.object({eventId:z.string().min(1).max(128).optional(),title:z.string().trim().min(1).max(200).optional(),description:z.string().max(10000).optional(),start:iso.optional(),end:iso.optional(),locationName:z.string().max(200).optional(),locationAddress:z.string().max(500).optional(),isOnline:z.boolean().optional(),onlineUrl:z.string().url().refine(s=>s.startsWith("https://")).optional(),capacity:z.number().int().positive().optional(),allowVolunteers:z.boolean().optional(),allowSponsors:z.boolean().optional(),allowPartners:z.boolean().optional()}).strict().safeParse(parseCommunityActionArguments(call.function.arguments));
-     if(!parsed.success||(!parsed.data.eventId&&(!parsed.data.title||parsed.data.description===undefined||!parsed.data.start||!parsed.data.end||!parsed.data.locationName))||(parsed.data.start&&parsed.data.end&&Date.parse(parsed.data.start)>=Date.parse(parsed.data.end))){history.push({role:"tool",tool_call_id:call.id,content:"Invalid event proposal. For creation specify all required fields, exact times and location."});continue;}
+     if(!parsed.success||(!parsed.data.eventId&&(!parsed.data.title||parsed.data.description===undefined||!parsed.data.start||!parsed.data.end||!parsed.data.locationName))||(parsed.data.start&&parsed.data.end&&Date.parse(parsed.data.start)>=Date.parse(parsed.data.end))){respond("Invalid event proposal. For creation specify all required fields, exact times and location.");return undefined;}
      try{
       const profile=z.object({permissions:z.object({events:z.object({create:z.boolean(),edit:z.boolean()})})}).passthrough().parse(await callCommunityBridge(communityContext,accountId,"community.admin.me","{}"));
       const plan=parsed.data;
@@ -161,12 +161,12 @@ export async function communityAiRoutes(app:FastifyInstance){
       const content=plan.eventId?"I prepared the requested event edits. Review and save them in the Community Events editor.":"I prepared a private event draft. Review and save it in the Community Events editor. Nothing has been published.";
       await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model});
       return await finish({conversationId:conversation.id,content,model:result.model,toolActivity:activity,eventProposal:plan});
-     }catch{history.push({role:"tool",tool_call_id:call.id,content:"Event access or creation/edit permission could not be verified."});continue;}
+     }catch{respond("Event access or creation/edit permission could not be verified.");return undefined;}
     }
     if(communityContext&&name==="community.campaign.prepare"){
      const schema=z.object({eventId:z.string().min(1).max(128).optional(),eventIds:z.array(z.string().min(1).max(128)).min(1).max(10).optional(),audienceType:z.enum(["event_registrants","volunteers","sponsors","partners","subscribers","all_registrants"]),title:z.string().trim().min(1).max(160),subject:z.string().trim().min(1).max(998).refine(v=>!/[\r\n]/.test(v)),textBody:z.string().trim().min(1).max(60000)}).strict();
      const parsed=schema.safeParse(parseCommunityActionArguments(call.function.arguments));
-     if(!parsed.success||(parsed.data.eventId&&parsed.data.eventIds)||(parsed.data.eventIds&&new Set(parsed.data.eventIds).size!==parsed.data.eventIds.length)||!current.identity.oauthScopes.has("campaign.write")){history.push({role:"tool",tool_call_id:call.id,content:"Invalid campaign proposal or missing campaign permission"});continue;}
+     if(!parsed.success||(parsed.data.eventId&&parsed.data.eventIds)||(parsed.data.eventIds&&new Set(parsed.data.eventIds).size!==parsed.data.eventIds.length)||!current.identity.oauthScopes.has("campaign.write")){respond("Invalid campaign proposal or missing campaign permission");return undefined;}
      try{
       const plan=parsed.data;
       const preview=await callCommunityBridge(communityContext,accountId,"community.audience.preview",JSON.stringify({eventId:plan.eventId,eventIds:plan.eventIds,audienceType:plan.audienceType,offset:0}));
@@ -174,16 +174,16 @@ export async function communityAiRoutes(app:FastifyInstance){
       const content="I found "+count.totalMatchingContacts+" distinct matching contacts in the selected Community audience. "+count.eligibleOnThisPage+" eligible recipients are on the first page"+(count.hasMore?"; additional pages still need review.":".")+" I've prepared the campaign for your review. No campaign has been saved and no email has been sent.";
       await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model});
       return await finish({conversationId:conversation.id,content,model:result.model,toolActivity:activity,campaignProposal:{...plan,preview}});
-     }catch{history.push({role:"tool",tool_call_id:call.id,content:"Community audience could not be verified. Do not claim recipients are available."});continue;}
+     }catch{respond("Community audience could not be verified. Do not claim recipients are available.");return undefined;}
     }
     const policy=await resolveMcpUserToolPermission({userId:current.identity.userId,accountId,oauthScopes:current.identity.oauthScopes,toolName:name});
     if(!permitted.has(name)||!policy.allowed||call.function.arguments.length>100000){
-     activity.push({name,ok:false});history.push({role:"tool",tool_call_id:call.id,content:"Tool unavailable or not authorized"});continue;
+     activity.push({name,ok:false});respond("Tool unavailable or not authorized");return undefined;
     }
     if(communityAiProposalAllowed(policy.tool,current.identity.oauthScopes)){
      let raw:unknown;try{raw=JSON.parse(call.function.arguments);}catch{raw=null;}
      const draft=draftSchema.safeParse(raw);
-     if(!draft.success){history.push({role:"tool",tool_call_id:call.id,content:"Use exact recipient array, subject and plain-text body only."});continue;}
+     if(!draft.success){respond("Use exact recipient array, subject and plain-text body only.");return undefined;}
      const content="I prepared a draft for your review. No message has been saved or sent.";
      const token=signCommunityReview({id:randomUUID(),digest:draftDigest(current.owner,conversation.id,draft.data),expiresAt:Date.now()+10*60_000},reviewKey());
      await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model});
@@ -191,20 +191,31 @@ export async function communityAiRoutes(app:FastifyInstance){
     }
     if(communityAiActionAllowed(policy.tool,current.identity.oauthScopes)){
      const argumentsValue=parseCommunityActionArguments(call.function.arguments);
-     if(!argumentsValue){history.push({role:"tool",tool_call_id:call.id,content:"Invalid action arguments"});continue;}
+     if(!argumentsValue){respond("Invalid action arguments");return undefined;}
      const raw=JSON.stringify(argumentsValue);
      const content="Review the proposed "+name.replaceAll("."," ").replaceAll("_"," ")+" action. No change has been made.";
      const reviewToken=signCommunityReview({id:randomUUID(),digest:actionDigest(current.owner,conversation.id,name,raw),expiresAt:Date.now()+10*60_000},reviewKey());
      await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model});
      return await finish({conversationId:conversation.id,content,model:result.model,toolActivity:activity,actionProposal:{name,description:policy.tool.description,rawArguments:raw,reviewToken,external:policy.tool.risk==="external"}});
     }
-    if(!communityAiToolAllowed(policy.tool,current.identity.oauthScopes)){history.push({role:"tool",tool_call_id:call.id,content:"Tool unavailable"});continue;}
+    if(!communityAiToolAllowed(policy.tool,current.identity.oauthScopes)){respond("Tool unavailable");return undefined;}
     const recorded=await recordAiToolCall({runId:run.id,conversationId:conversation.id,providerToolCallId:call.id,toolName:name,risk:policy.tool.risk,requiredScopes:[...policy.tool.requiredScopes],argumentsJson:call.function.arguments});
     const data=await withToolBoundary(t=>communityAiToolAllowed(t,current.identity.oauthScopes)&&permitted.has(t.name),()=>executeAuthorizedCapability({toolName:name,rawArguments:call.function.arguments,toolCallId:recorded.id,context:{...createMcpExecutionContext(current.identity,accountId),conversationId:conversation.id,communityAutomationClientId:current.identity.clientId}}));
     await recordAiToolResult(recorded.id,data.ok?{ok:true,data:data.data}:{ok:false,error:{code:"tool_failed",message:"Authorized read did not complete",retryable:false}});
     activity.push({name,ok:data.ok});
-    history.push({role:"tool",tool_call_id:call.id,content:wrapUntrustedContent(JSON.stringify(data.ok?data.data:{error:"Operation failed"})??"No result","tool",14000)});
+    respond(wrapUntrustedContent(JSON.stringify(data.ok?data.data:{error:"Operation failed"})??"No result","tool",14000));
+
+    return undefined;
    }
+  });
+  if(execution.kind==="stopped")return execution.value;
+  if(execution.kind==="completed"){
+    const result=execution.result;
+    await authorize(req.headers.authorization,accountId);
+    const content=result.content??"No response.";
+    await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model});
+    return await finish({conversationId:conversation.id,content,model:result.model,toolActivity:activity});
+
   }
   throw serviceUnavailable("AI response unavailable");
   }catch(error){

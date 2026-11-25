@@ -4,7 +4,7 @@ import {checkCommunityAutomationGrant,communityScheduledToolAllowed} from "./com
 import {requireAiSubscription} from "../billing/aiAccess.js";
 import {executeAuthorizedCapability} from "./authorizedCapability.js";
 import {withToolBoundary} from "./toolBoundary.js";
-import {runModelRound,assistantToolMessage} from "./modelRound.js";
+import {executeAiTurn} from "./executionEngine.js";
 import { deliverAutomationSummaryEmail } from "./automationSummaryEmail.js";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
@@ -134,16 +134,12 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
           let content = "";
           let model = "";
           const toolDefinitions = agentMailRegistry.providerDefinitions(tool => toolNames.has(tool.name));
-          for (let round = 0; round < 8; round += 1) {
-            await verifyGrant();
-            const response = await runModelRound(provider,{ messages, tools: toolDefinitions });
-            model = response.model;
-            if (!response.toolCalls.length) {
-              content = response.content?.trim() || "The scheduled task completed without a written result.";
-              break;
-            }
-            messages.push(assistantToolMessage(response));
-            for (const call of response.toolCalls.slice(0, 8)) {
+          const execution=await executeAiTurn<never,undefined>({
+            provider,messages,maxToolRounds:8,maxCallsPerRound:8,
+            prepareRound:async()=>{await verifyGrant();return {tools:toolDefinitions,context:undefined};},
+            onRoundResult:({result})=>{model=result.model;},
+            finalization:{prompt:"The scheduled task has reached its tool-round budget. Summarize only verified results and identify unfinished work. Do not claim unverified actions.",onError:()=>undefined},
+            onTool:async({call,respond})=>{
               const semanticName = call.function.name.replaceAll("__", ".");
               const definition = agentMailRegistry.definition(semanticName);
               let output: unknown;
@@ -238,10 +234,12 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
                   }
                 }
               }
-              messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(output).slice(0, 40_000) });
+              respond(wrapUntrustedContent(JSON.stringify(output)??"No result","tool",40000));
+
+              return undefined;
             }
-            if (round === 7) content = "The scheduled task reached its tool execution limit. Review its results and narrow the task.";
-          }
+          });
+          content=execution.kind==="completed"?execution.result.content?.trim()||"The scheduled task completed without a written result.":"The scheduled task reached its tool execution limit. Review its verified results.";
           await verifyGrant();
           if(grant?.eventGrant&&automation.accountId)await readCommunityEventSnapshot(grant.eventGrant,automation.accountId);
           const result = { content, model };
