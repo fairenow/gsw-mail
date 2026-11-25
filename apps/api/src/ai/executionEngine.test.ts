@@ -35,3 +35,6 @@ test("revocation before next round or missing response stops execution",async()=
 test("repeated tool IDs are rejected before replay",async()=>{
  let count=0;await assert.rejects(executeAiTurn({provider:provider([requests(call("a")),requests(call("a"))]),messages:[],maxToolRounds:2,maxCallsPerRound:1,prepareRound:prepare,onTool:async({respond})=>{count++;respond("ok");}}),/Repeated/);assert.equal(count,1);
 });
+
+test("abort during a tool response prevents subsequent calls and final inference",async()=>{const abort=new AbortController();let count=0;await assert.rejects(executeAiTurn({provider:provider([requests(call("a"),call("b"))]),messages:[],signal:abort.signal,maxToolRounds:2,maxCallsPerRound:2,prepareRound:prepare,onTool:async({respond})=>{count++;respond("verified");abort.abort();}}),{name:"AbortError"});assert.equal(count,1);});
+test("finalization failure can return an explicit exhausted result without re-running tools",async()=>{let count=0;const result=await executeAiTurn({provider:provider([requests(call("a"))]),messages:[],maxToolRounds:1,maxCallsPerRound:1,prepareRound:prepare,onTool:async({respond})=>{count++;respond("verified");},finalization:{onError:()=>undefined}});assert.deepEqual(result,{kind:"exhausted",model:"test"});assert.equal(count,1);});
