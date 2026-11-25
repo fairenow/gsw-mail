@@ -216,11 +216,11 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
                         authUserId: grant?.authUserId??automation.userId,
                         accountId: automation.accountId ?? "",
                         headers: {},
-                        conversationId: automation.conversationId,
+                        conversationId: automation.conversationId??undefined,
                         timeZone: automation.timeZone,
                         ...(stableSendKey ? { scheduledIdempotencyKey: stableSendKey } : {}),
                       }});
-                      output=liveDelegated?await withToolBoundary(t=>communityScheduledToolAllowed({...t,risk:agentMailRegistry.definition(t.name)?.risk},liveDelegated),executeTool):await executeTool();
+                      output=liveDelegated?await withToolBoundary(t=>communityScheduledToolAllowed({...t,risk:agentMailRegistry.definition(t.name)?.risk??"external"},liveDelegated),executeTool):await executeTool();
                       const result = output as { ok: boolean; data?: unknown; error?: { code: string; message: string; retryable: boolean } };
                       await recordAiToolResult(ledger.id, result);
                       if (definition.risk !== "read") {

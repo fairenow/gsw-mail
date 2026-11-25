@@ -1,3 +1,4 @@
+import {forbidden} from "../lib/errors.js";
 import { additionalAdminTools, adminToolRisk, executeAdditionalAdminTool } from "./adminTools.js";
 import { adminScopes } from "./accessProfile.js";
 import { withToolBoundary } from "../ai/toolBoundary.js";
@@ -314,6 +315,7 @@ export async function mcpRoutes(app:FastifyInstance, dependencies: {verifyBearer
         return wrap({content:[{type:"text",text:JSON.stringify({accounts})}]});
       }
       const accountId=typeof params.accountId==="string"?params.accountId:"";
+      if(identity.clientId===process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID&&name.startsWith("automations.")&&name!=="automations.list")throw forbidden("Use the connected AI workspace to review scheduled tasks");
       const policy=await resolveMcpUserToolPermission({userId:identity.userId,accountId,oauthScopes:identity.oauthScopes,toolName:name});
       if(!policy.allowed) {
         if(policy.reason==="oauth_scope_missing") {

@@ -8,7 +8,7 @@ import { mcpOutboundIdempotencyKey } from "./outboundIdempotency.js";
  * Credential brokerage remains a separate Phase 2 concern.
  */
 export function createMcpExecutionContext(
-  identity: { userId: string; authUserId: string },
+  identity: { userId: string; authUserId: string; clientId?:string },
   accountId: string,
   options?: { toolName: string; reservedActionKey: string },
 ): AgentExecutionContext {
@@ -20,6 +20,7 @@ export function createMcpExecutionContext(
     authUserId: identity.authUserId,
     accountId,
     headers: {},
+    ...(identity.clientId&&identity.clientId===process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID?{communityAutomationClientId:identity.clientId}:{}),
     ...(outboundKey ? { scheduledIdempotencyKey: outboundKey } : {}),
   };
 }
