@@ -22,6 +22,8 @@ export async function communityRecipientEligible(recipient:Recipient):Promise<bo
     communityRecipientFooter(recipient.communityUnsubscribeToken);
     const endpoint=httpsUrl(process.env.GSW_COMMUNITY_UNSUBSCRIBE_CHECK_URL);
     const response=await fetch(endpoint,{method:"POST",redirect:"error",signal:AbortSignal.timeout(8000),headers:{"Content-Type":"application/json"},body:JSON.stringify({token:recipient.communityUnsubscribeToken,email:recipient.email})});
-    return response.ok&&(await response.json()).eligible===true;
+    if(!response.ok)return false;
+    const result=await response.json() as {eligible?:unknown};
+    return result.eligible===true;
   }catch{return false;}
 }
