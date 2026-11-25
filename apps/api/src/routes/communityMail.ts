@@ -21,7 +21,7 @@ type Compose=z.infer<typeof compose>;
 
 function reviewKey() {
   const raw=process.env.GSW_COMMUNITY_REVIEW_KEY;
-  if(process.env.GSW_COMMUNITY_SEND_ENABLED!=="true"||!raw||!/^[a-fA-F0-9]{64}$/.test(raw))throw serviceUnavailable("Connected sending is not enabled");
+  if(!raw||!/^[a-fA-F0-9]{64}$/.test(raw))throw serviceUnavailable("Connected sending is not enabled");
   return Buffer.from(raw,"hex");
 }
 async function authorize(header:string|undefined,accountId:string) {

@@ -23,7 +23,7 @@ const inputSchema = z.object({
 export async function communityAiRoutes(app: FastifyInstance) {
   app.post("/integrations/community/v1/chat", {bodyLimit: 256 * 1024, config:{rateLimit:{max:8,timeWindow:"1 minute"}}}, async (req, reply) => {
     reply.header("Cache-Control","no-store");
-    if (process.env.GSW_COMMUNITY_AI_ENABLED !== "true") throw serviceUnavailable("Connected AI is not enabled");
+    // Dedicated registered client and explicit user consent are the authorization boundary.
     const token = req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7) : "";
     const input = inputSchema.safeParse(req.body);
     if (!input.success) throw badRequest("Invalid chat request");

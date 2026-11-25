@@ -9,7 +9,8 @@ import {
   contacts,
   outboundMessages,
 } from "../db/schema.js";
-import { badRequest, notFound } from "../lib/errors.js";
+import { badRequest, notFound, conflict } from "../lib/errors.js";
+import { COMMUNITY_AUDIENCE_TAG, communityRecipientFooter, communityRecipientEligible, communitySnapshotDigest } from "./communityCampaignPolicy.js";
 import { createMailService } from "../services/mailService.js";
 import { getAssetForUser } from "../files/service.js";
 import { attachExistingAssetToDraft } from "../mail/draftAttachmentStore.js";
@@ -27,6 +28,7 @@ export async function createCampaign(input: {
   audienceTags: string[];
 }) {
   const audienceTags = normalizeTags(input.audienceTags);
+  if (audienceTags.includes(COMMUNITY_AUDIENCE_TAG)) throw badRequest("Reserved audience tag");
   if (!audienceTags.length) throw badRequest("campaign audience needs at least one contact tag");
 
   const tagged = await db.select({
@@ -90,6 +92,22 @@ export async function createCampaign(input: {
   });
 }
 
+/** External audience snapshot: no implicit import into the user's address book. */
+export async function createCommunityCampaign(input:{id:string;userId:string;accountId:string;title:string;subject:string;textBody:string;recipients:{email:string;displayName:string;unsubscribeToken:string}[]}) {
+  const recipients=input.recipients.map(r=>({email:r.email.trim().toLowerCase(),displayName:r.displayName,firstName:r.displayName.trim().split(/\s+/)[0]||null,communityUnsubscribeToken:r.unsubscribeToken}));
+  if(!recipients.length||recipients.length>100||new Set(recipients.map(r=>r.email)).size!==recipients.length)throw badRequest("Select 1–100 unique eligible recipients");
+  const digest=communitySnapshotDigest(input.title,input.subject,input.textBody,recipients);
+  return db.transaction(async tx=>{
+    const [created]=await tx.insert(aiCampaigns).values({id:input.id,userId:input.userId,accountId:input.accountId,title:input.title,subject:input.subject,textBody:input.textBody,audienceTags:[COMMUNITY_AUDIENCE_TAG],recipientCount:recipients.length,status:"draft"}).onConflictDoNothing({target:aiCampaigns.id}).returning();
+    if(created){await tx.insert(aiCampaignRecipients).values(recipients.map(r=>({...r,campaignId:created.id})));return created;}
+    const [existing]=await tx.select().from(aiCampaigns).where(and(eq(aiCampaigns.id,input.id),eq(aiCampaigns.userId,input.userId),eq(aiCampaigns.accountId,input.accountId))).for("update");
+    if(!existing||!existing.audienceTags.includes(COMMUNITY_AUDIENCE_TAG))throw conflict("Campaign request conflict");
+    const rows=await tx.select().from(aiCampaignRecipients).where(eq(aiCampaignRecipients.campaignId,existing.id));
+    if(communitySnapshotDigest(existing.title,existing.subject,existing.textBody??"",rows)!==digest)throw conflict("Campaign request changed; use a new request ID");
+    return existing;
+  });
+}
+
 export async function listCampaigns(userId: string, limit = 50) {
   return db.select().from(aiCampaigns)
     .where(eq(aiCampaigns.userId, userId))
@@ -123,6 +141,7 @@ export async function replaceCampaignAudience(input: {
     const [campaign] = await tx.select().from(aiCampaigns).where(and(eq(aiCampaigns.id,input.campaignId), eq(aiCampaigns.userId,input.userId), eq(aiCampaigns.accountId,input.accountId))).for("update");
     if (!campaign) throw notFound("campaign not found");
     if (campaign.status !== "draft") throw badRequest("only draft campaign audiences can be edited");
+    if (campaign.audienceTags.includes(COMMUNITY_AUDIENCE_TAG)) throw badRequest("Community audiences must be selected in The Community; create a new snapshot to change recipients");
     const selected = await tx.select({ id: contacts.id, displayName: contacts.displayName, firstName: contacts.firstName }).from(contacts)
       .where(and(eq(contacts.ownerUserId,input.userId),inArray(contacts.id,unique)));
     if (selected.length !== unique.length) throw badRequest("some contacts are not available");
@@ -181,7 +200,7 @@ const campaignReviewHash = (campaign: typeof aiCampaigns.$inferSelect, recipient
   createHash("sha256").update(JSON.stringify({
     id:campaign.id,subject:campaign.subject,textBody:campaign.textBody,
     htmlBody:campaign.htmlBody,attachmentAssetIds:[...campaign.attachmentAssetIds].sort(),
-    recipients:recipients.map(r=>({email:r.email,contactId:r.contactId,firstName:r.firstName,displayName:r.displayName})).sort((a,b)=>a.email.localeCompare(b.email)),
+    recipients:recipients.map(r=>({email:r.email,contactId:r.contactId,firstName:r.firstName,displayName:r.displayName,communityUnsubscribeToken:r.communityUnsubscribeToken})).sort((a,b)=>a.email.localeCompare(b.email)),
   })).digest("hex");
 
 export async function previewCampaign(input: {userId:string; accountId:string; campaignId:string}) {
@@ -264,11 +283,16 @@ export async function launchCampaign(ctx: AgentExecutionContext, campaignId: str
 
   await runInBatches(recipients.filter((recipient) => recipient.status === "pending" || recipient.status === "failed"), 4, async (recipient) => {
     try {
+      const isCommunity=claimedCampaign.audienceTags.includes(COMMUNITY_AUDIENCE_TAG);
+      if(isCommunity && !(await communityRecipientEligible(recipient))) throw new Error("Community recipient is no longer eligible or consent verification is unavailable");
+      const footer=isCommunity?communityRecipientFooter(recipient.communityUnsubscribeToken):"";
+      const personalizedText=personalize(claimedCampaign.textBody,recipient);
       const draft = await mail.createDraft(ctx.accountId, {
         to: [recipient.email],
         subject: personalize(campaign.subject, recipient),
-        textBody: personalize(campaign.textBody, recipient),
-        htmlBody: personalize(campaign.htmlBody, recipient),
+        textBody: isCommunity ? [personalizedText,footer].filter(Boolean).join("\n\n") : personalizedText,
+        // Community snapshots intentionally use the native default rich template, not arbitrary legacy HTML.
+        htmlBody: isCommunity ? undefined : personalize(claimedCampaign.htmlBody, recipient),
         mode: "new",
       });
       for (const assetId of attachmentAssetIds) {

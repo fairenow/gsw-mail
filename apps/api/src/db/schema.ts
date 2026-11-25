@@ -1157,6 +1157,7 @@ export const aiCampaignRecipients = pgTable(
     email: text("email").notNull(),
     displayName: text("display_name"),
     firstName: text("first_name"),
+    communityUnsubscribeToken: text("community_unsubscribe_token"),
     status: text("status").default("pending").notNull(),
     sendId: uuid("send_id").references(() => outboundMessages.id, { onDelete: "set null" }),
     errorMessage: text("error_message"),

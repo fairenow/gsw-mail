@@ -229,6 +229,7 @@ export async function ensureAiAgentSchema(): Promise<void> {
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     );
   `);
+  await pool.query(`ALTER TABLE "ai_campaign_recipients" ADD COLUMN IF NOT EXISTS "community_unsubscribe_token" text;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "ai_campaign_recipients_unique_idx" ON "ai_campaign_recipients" ("campaign_id", "email");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "ai_campaign_recipients_campaign_idx" ON "ai_campaign_recipients" ("campaign_id", "status");`);
 
