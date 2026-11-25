@@ -23,6 +23,7 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
   const [section, setSection] = useState<Section>(()=>new URLSearchParams(window.location.search).get("tab")==="event-link"?"Event Link":"General");
   const [settings, setSettings] = useState<ProductSettings | null>(null);
   const [signature, setSignature] = useState<ProductSettings["signature"] | null>(null);
+  const [savingSignature, setSavingSignature] = useState(false);
   const [templates, setTemplates] = useState<EmailTemplateOption[]>([]);
   const [templateChoice, setTemplateChoice] = useState("none");
   const [notice, setNotice] = useState("");
@@ -65,12 +66,31 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
   if (!settings || !signature) return wrap(<div className="gsw-product-loading gsw-product-loading-inline">Loading settings...</div>);
 
   const saveSignature = async () => {
+    if (savingSignature) return;
+    const requested = { ...signature };
+    setSavingSignature(true);
+    setNotice("");
     try {
-      const saved = await api.saveSignature(signature);
+      await api.saveSignature(requested);
+      // A successful PUT alone does not prove that the persisted signature
+      // survives a fresh read. Bypass the settings cache before reporting success.
+      const persisted = await api.freshSettings();
+      const saved = persisted.signature;
+      const { sanitizeHtml } = await import("../lib/richText");
+      if (sanitizeHtml(saved.signatureHtml) !== sanitizeHtml(requested.signatureHtml) ||
+        saved.enabled !== requested.enabled || saved.onNew !== requested.onNew ||
+        saved.onReply !== requested.onReply || saved.onForward !== requested.onForward ||
+        saved.position !== requested.position) {
+        setNotice("Signature was changed during saving or could not be verified. Review the editor and try again.");
+        return;
+      }
       setSignature(saved);
-      setNotice("Signature saved");
+      setSettings(persisted);
+      setNotice("Signature saved and verified");
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : String(err));
+      setNotice("Signature could not be verified: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setSavingSignature(false);
     }
   };
   const saveSettings = async (body: { general?: Record<string, unknown>; compose?: Record<string, unknown>; contacts?: Record<string, unknown>; ai?: Record<string, unknown> }) => {
@@ -144,7 +164,7 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
       }}>Remove</button>}</span></span><small>Original image is stored in GSW Files. PNG, JPEG, WEBP, or GIF. Maximum 10 MB.</small>
       <label className="gsw-switch"><input type="checkbox" checked={settings.general.profileImagePublic === true} disabled={!settings.general.profileImageAssetId} onChange={(event) => setSettings({ ...settings, general: { ...settings.general, profileImagePublic: event.target.checked } })} /><span>Make my profile image public</span></label>
       <small>When enabled, other GSW users can see your picture beside messages and contacts, and the picture URL can be viewed by anyone with the link. No other files or profile details are shared. Save general settings to apply.</small></label><button className="gsw-primary-btn" onClick={() => void saveSettings({ general: settings.general })}>Save general settings</button></div>}
-      {section === "Signature" && <div className="gsw-settings-card"><div className="gsw-settings-card-head"><div><h2>Default signature</h2><p>Paste from Gmail, Outlook, Word, a website, or another editor. Unsafe scripts and links are removed.</p></div><label className="gsw-switch"><input type="checkbox" checked={signature.enabled} onChange={(event) => setSignature({ ...signature, enabled: event.target.checked })} /><span>Enabled</span></label></div><RichTextEditor value={signature.signatureHtml} onChange={(value) => setSignature({ ...signature, signatureHtml: value })} placeholder="Write your signature" minHeight={190} /><div className="gsw-option-grid"><label><input type="checkbox" checked={signature.onNew} onChange={(event) => setSignature({ ...signature, onNew: event.target.checked })} /> New messages</label><label><input type="checkbox" checked={signature.onReply} onChange={(event) => setSignature({ ...signature, onReply: event.target.checked })} /> Replies</label><label><input type="checkbox" checked={signature.onForward} onChange={(event) => setSignature({ ...signature, onForward: event.target.checked })} /> Forwards</label><label>Placement<select value={signature.position} onChange={(event) => setSignature({ ...signature, position: event.target.value as ProductSettings["signature"]["position"] })}><option value="beforeQuotedText">Before quoted history</option><option value="afterQuotedText">After quoted history</option></select></label></div><p className="gsw-muted">Plaintext preview: {signature.signatureText || "Your signature text will appear here."}</p><button className="gsw-primary-btn" onClick={() => void saveSignature()}>Save signature</button></div>}
+      {section === "Signature" && <div className="gsw-settings-card"><div className="gsw-settings-card-head"><div><h2>Default signature</h2><p>Paste from Gmail, Outlook, Word, a website, or another editor. Unsafe scripts and links are removed.</p></div><label className="gsw-switch"><input type="checkbox" checked={signature.enabled} onChange={(event) => setSignature({ ...signature, enabled: event.target.checked })} /><span>Enabled</span></label></div><RichTextEditor value={signature.signatureHtml} onChange={(value) => setSignature({ ...signature, signatureHtml: value })} placeholder="Write your signature" minHeight={190} /><div className="gsw-option-grid"><label><input type="checkbox" checked={signature.onNew} onChange={(event) => setSignature({ ...signature, onNew: event.target.checked })} /> New messages</label><label><input type="checkbox" checked={signature.onReply} onChange={(event) => setSignature({ ...signature, onReply: event.target.checked })} /> Replies</label><label><input type="checkbox" checked={signature.onForward} onChange={(event) => setSignature({ ...signature, onForward: event.target.checked })} /> Forwards</label><label>Placement<select value={signature.position} onChange={(event) => setSignature({ ...signature, position: event.target.value as ProductSettings["signature"]["position"] })}><option value="beforeQuotedText">Before quoted history</option><option value="afterQuotedText">After quoted history</option></select></label></div><p className="gsw-muted">Plaintext preview: {signature.signatureText || "Your signature text will appear here."}</p><button className="gsw-primary-btn" disabled={savingSignature} onClick={() => void saveSignature()}>{savingSignature ? "Saving…" : "Save signature"}</button></div>}
       {section === "Compose" && <div className="gsw-settings-card"><h2>Compose preferences</h2><label className="gsw-setting-row"><span><strong>Rich text by default</strong><small>Keep formatting when pasting into new messages.</small></span><input type="checkbox" checked={settings.compose.defaultFormat !== "plain"} onChange={(event) => setSettings({ ...settings, compose: { ...settings.compose, defaultFormat: event.target.checked ? "rich" : "plain" } })} /></label><button className="gsw-primary-btn" onClick={() => void saveSettings({ compose: settings.compose })}>Save compose settings</button></div>}
       {section === "Contacts" && <div className="gsw-settings-card"><h2>Contact capture</h2><label className="gsw-setting-row"><span><strong>Create contacts from sent mail</strong><small>New recipients become lightweight contacts and existing contacts gain engagement history.</small></span><input type="checkbox" checked={settings.contacts.autoCreateFromSent !== false} onChange={(event) => setSettings({ ...settings, contacts: { ...settings.contacts, autoCreateFromSent: event.target.checked } })} /></label><button className="gsw-secondary-btn gsw-inline-btn" type="button" onClick={() => window.dispatchEvent(new CustomEvent("gsw-workspace-open", { detail: { section: "contacts" } }))}>Open contacts</button><button className="gsw-primary-btn" onClick={() => void saveSettings({ contacts: settings.contacts })}>Save contact settings</button></div>}
       {section === "AI" && <div className="gsw-settings-card"><div className="gsw-settings-card-head"><div><h2>GSW AI</h2><p>Choose the AI model you want GSW to use, then control which capabilities it can request. OpenAI is the default for new accounts.</p></div><label className="gsw-switch"><input type="checkbox" checked={settings.ai.enabled !== false} onChange={(event) => setSettings({ ...settings, ai: { ...settings.ai, enabled: event.target.checked } })} /><span>AI enabled</span></label></div>
