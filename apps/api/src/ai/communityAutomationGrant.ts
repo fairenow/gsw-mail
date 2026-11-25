@@ -8,7 +8,7 @@ import {getAiCapabilitySettings,isAiScopeGloballyEnabled} from "./capabilities.j
 import {listActiveAiScopes} from "./agentState.js";
 import {forbidden} from "../lib/errors.js";
 import {communityAiToolAllowed} from "./communityAiPolicy.js";
-export type CommunityAutomationGrant={clientId:string;consentId:string;authUserId:string;scopes:string[]};
+export type CommunityAutomationGrant={clientId:string;consentId:string;authUserId:string;scopes:string[];eventGrant?:import("./communityEventAutomation.js").CommunityEventGrant};
 export const unattendedReadScopes=["mail.read","calendar.read","contacts.read","templates.read","signatures.read","files.read","campaign.read","tasks.read"] as const;
 const safeScopes=new Set<string>(unattendedReadScopes);
 export function validateCommunityAutomationScopes(scopes:readonly string[]){
