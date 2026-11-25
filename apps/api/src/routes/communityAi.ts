@@ -6,7 +6,7 @@ import { resolveMcpAccessProfile } from "../mcp/accessProfile.js";
 import { resolveMcpUserToolPermission } from "../mcp/resolvePermissions.js";
 import { createMcpExecutionContext } from "../mcp/executionContext.js";
 import { requireAccountPermission } from "../auth/authorize.js";
-import { requireAiSubscription } from "../billing/aiAccess.js";
+import { getAiEntitlement } from "../billing/aiAccess.js";
 import { getAiCapabilitySettings } from "../ai/capabilities.js";
 import { getAiProvider,type AiProviderMessage } from "../ai/providers/index.js";
 import { agentMailRegistry } from "../ai/tools/registry.js";
@@ -18,7 +18,8 @@ import { communityConversation,communityTranscript,listCommunityConversations } 
 import { appendAiMessage,reserveAiIdempotency,completeAiIdempotency,failAiIdempotency } from "../ai/agentState.js";
 import { communityBridgeTools,communityBridgeNames,callCommunityBridge,campaignPlanTool } from "../ai/communityBridge.js";
 import { signCommunityReview,verifyCommunityReview } from "../mail/communityReview.js";
-import { forbidden,unauthorized,serviceUnavailable,badRequest,conflict } from "../lib/errors.js";
+import { reportChatError } from "../ai/chatSafeErrors.js";
+import { HttpError,forbidden,serviceUnavailable,badRequest,conflict } from "../lib/errors.js";
 
 const account=z.object({accountId:z.string().uuid()});
 const inputSchema=account.extend({communityContext:z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),conversationId:z.string().uuid().optional(),messages:z.array(z.object({role:z.enum(["user","assistant"]),content:z.string().trim().min(1).max(12000)}).strict()).min(1).max(16)}).strict().refine(input=>input.messages.at(-1)?.role==="user");
@@ -36,19 +37,40 @@ function draftDigest(owner:Owner,conversationId:string,draft:Draft){
 function actionDigest(owner:Owner,conversationId:string,name:string,raw:string){
  return createHash("sha256").update(JSON.stringify(["community-ai-action-v1",owner.userId,owner.clientId,owner.accountId,conversationId,name,raw])).digest("hex");
 }
-async function authorize(header:string|undefined,accountId:string){
+class CommunityAccessError extends HttpError{
+ constructor(status:number,public readonly code:string){super(status,code);}
+}
+async function access(header:string|undefined,accountId:string){
  const identity=await verifyMcpBearer(header?.startsWith("Bearer ")?header.slice(7):"");
- if(!identity)throw unauthorized();
- if(!communityAiClientAllowed(identity.clientId,identity.oauthScopes,process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID))throw forbidden();
- if((await resolveMcpAccessProfile(identity.userId,identity.authUserId)).mode!=="mailbox")throw forbidden();
- await requireAccountPermission(identity.userId,accountId,"read");
- await requireAiSubscription(identity.userId,accountId);
- const settings=await getAiCapabilitySettings(identity.userId);
- if(!settings.enabled)throw forbidden("GSW AI is disabled");
- return {identity,settings,owner:{userId:identity.userId,clientId:identity.clientId,accountId}};
+ if(!identity)throw new CommunityAccessError(401,"reconnect_required");
+ if(identity.clientId!==process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID)throw new CommunityAccessError(403,"client_denied");
+ if((await resolveMcpAccessProfile(identity.userId,identity.authUserId)).mode!=="mailbox")throw new CommunityAccessError(403,"mailbox_required");
+ let mailbox:Awaited<ReturnType<typeof requireAccountPermission>>;
+ try{mailbox=await requireAccountPermission(identity.userId,accountId,"read");}catch(e){if(e instanceof HttpError&&[403,404].includes(e.status))throw new CommunityAccessError(403,"mailbox_denied");throw e;}
+ const [entitlement,settings]=await Promise.all([getAiEntitlement(identity.userId,accountId),getAiCapabilitySettings(identity.userId)]);
+ const consent=identity.oauthScopes.has("ai.infer");
+ const reason=!consent?"ai_consent_required":mailbox.status!=="active"||mailbox.authSetupStatus!=="ready"?"mailbox_not_ready":!entitlement.allowed?"ai_subscription_required":!settings.enabled?"ai_disabled":"ready";
+ return {identity,settings,owner:{userId:identity.userId,clientId:identity.clientId,accountId},status:{ready:reason==="ready",reason,mailbox:{address:mailbox.address,displayName:mailbox.displayName,status:mailbox.status,authSetupStatus:mailbox.authSetupStatus,role:mailbox.role},entitlement,aiEnabled:settings.enabled,modelProvider:settings.modelProvider,scopes:[...identity.oauthScopes]}};
+}
+async function authorize(header:string|undefined,accountId:string){
+ const result=await access(header,accountId);
+ if(!result.status.ready)throw new CommunityAccessError(403,result.status.reason);
+ if(!communityAiClientAllowed(result.identity.clientId,result.identity.oauthScopes,process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID))throw new CommunityAccessError(403,"ai_consent_required");
+ return result;
 }
 export async function communityAiRoutes(app:FastifyInstance){
  app.addHook("onRequest",async(_req,reply)=>{reply.header("Cache-Control","no-store");});
+ app.setErrorHandler((error,req,reply)=>{
+  if(error instanceof CommunityAccessError)return reply.code(error.status).send({code:error.code});
+  if(error instanceof z.ZodError)return reply.code(400).send({code:"invalid_request"});
+  const safe=reportChatError(error,{operation:"community.chat",category:"chat",correlationId:req.id,retryable:true});
+  const status=error instanceof HttpError?error.status:500;
+  return reply.code(status).send({code:status===429?"rate_limited":status===409?"review_conflict":status===401?"reconnect_required":status===403?"permission_denied":"ai_request_failed",incidentId:safe.incidentId});
+ });
+ app.post("/integrations/community/v1/chat/status",async req=>{
+  const input=account.strict().parse(req.body),result=await access(req.headers.authorization,input.accountId);
+  return result.status;
+ });
  app.post("/integrations/community/v1/chat/conversations",async req=>{
   const input=account.strict().parse(req.body),auth=await authorize(req.headers.authorization,input.accountId);
   return {conversations:await listCommunityConversations(auth.owner)};
@@ -71,6 +93,7 @@ export async function communityAiRoutes(app:FastifyInstance){
    ...previous.slice(-16),{role:"user",content:prompt}
   ];
   const activity:Array<{name:string;ok:boolean}>=[];
+  try{
   for(let round=0;round<5;round++){
    const auth=await authorize(req.headers.authorization,accountId);
    const permitted=new Set<string>();
@@ -139,6 +162,13 @@ export async function communityAiRoutes(app:FastifyInstance){
    }
   }
   throw serviceUnavailable("AI response unavailable");
+  }catch(error){
+   if(error instanceof CommunityAccessError)throw error;
+   const safe=reportChatError(error,{operation:"community.inference",category:"chat",correlationId:req.id,retryable:true});
+   const content="GSW AI could not finish this request. No email was sent. Reference: "+safe.incidentId;
+   await appendAiMessage({conversationId:conversation.id,role:"assistant",content}).catch(()=>undefined);
+   return {conversationId:conversation.id,content,model:initial.settings.modelProvider,toolActivity:activity,errorCode:safe.code,incidentId:safe.incidentId};
+  }
  });
  app.post("/integrations/community/v1/chat/save-draft",{bodyLimit:256*1024},async req=>{
   const input=account.extend({conversationId:z.string().uuid(),draft:draftSchema,reviewToken:z.string().max(2048),confirm:z.literal(true)}).strict().parse(req.body);

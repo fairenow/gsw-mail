@@ -53,3 +53,15 @@ test("Community bridge exposes only known read capabilities, not arbitrary remot
  assert.equal(campaignPlanTool.function.name,"community__campaign__prepare");
  await assert.rejects(callCommunityBridge("untrusted","account","community.events.delete","{}"),/Unsupported Community tool/);
 });
+
+import { classifyAiEntitlement } from "../billing/aiAccess.js";
+test("AI subscription status recognizes founder exemptions without Stripe subscriptions",()=>{
+ assert.equal(classifyAiEntitlement(true,[]).source,"founder_exemption");
+ assert.equal(classifyAiEntitlement(true,[]).allowed,true);
+ assert.equal(classifyAiEntitlement(false,[]).allowed,false);
+ const active={status:"active",ai_quantity:1,current_period_end:new Date("2027-01-01T00:00:00Z"),current:true};
+ assert.equal(classifyAiEntitlement(false,[active]).source,"subscription");
+ assert.equal(classifyAiEntitlement(false,[{...active,current:false}]).allowed,false);
+ assert.equal(classifyAiEntitlement(false,[{...active,status:"past_due"}]).allowed,false);
+ assert.equal(classifyAiEntitlement(false,[{...active,ai_quantity:0}]).allowed,false);
+});
