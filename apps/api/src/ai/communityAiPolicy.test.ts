@@ -18,7 +18,7 @@ test("AI cannot send or mutate, even with broad OAuth scopes",()=>{
 
 test("native draft creation may be proposed, but sending cannot",()=>{const scopes=new Set(["mail.write","mail.send"]);assert.equal(communityAiProposalAllowed({name:"mail.create_draft",requiredScopes:["mail.write"],risk:"reversible_write"},scopes),true);assert.equal(communityAiProposalAllowed({name:"mail.send_draft",requiredScopes:["mail.send"],risk:"external"},scopes),false);});
 
-test("reviewed write parity remains scoped and excludes sending, administration and background grants",()=>{
+test("reviewed write parity remains scoped and excludes unreviewed sending, administration and background grants",()=>{
  const scopes=new Set(["mail.write","mail.send","contacts.write","calendar.read","files.write","campaign.send","automations.write"]);
  assert.equal(communityAiActionAllowed({name:"mail.update_draft",requiredScopes:["mail.write"],risk:"reversible_write"},scopes),true);
  assert.equal(communityAiActionAllowed({name:"contacts.create",requiredScopes:["contacts.write"],risk:"reversible_write"},scopes),true);
@@ -64,4 +64,14 @@ test("AI subscription status recognizes founder exemptions without Stripe subscr
  assert.equal(classifyAiEntitlement(false,[{...active,current:false}]).allowed,false);
  assert.equal(classifyAiEntitlement(false,[{...active,status:"past_due"}]).allowed,false);
  assert.equal(classifyAiEntitlement(false,[{...active,ai_quantity:0}]).allowed,false);
+});
+
+import {validateCommunityAutomationScopes,communityScheduledToolAllowed} from "./communityAutomationGrant.js";
+test("delegated scheduled automation has an explicit read-only ceiling",()=>{
+ assert.deepEqual(validateCommunityAutomationScopes(["mail.read","calendar.read"]),["mail.read","calendar.read"]);
+ for(const scopes of [[],["mail.send"],["mail.write"],["mail.read","mail.read"],["automations.write"]])assert.throws(()=>validateCommunityAutomationScopes(scopes));
+ assert.equal(communityScheduledToolAllowed({name:"mail.read",risk:"read",requiredScopes:["mail.read"]},new Set(["mail.read"])),true);
+ assert.equal(communityScheduledToolAllowed({name:"mail.create_draft",risk:"reversible_write",requiredScopes:["mail.read"]},new Set(["mail.read"])),false);
+ assert.equal(communityScheduledToolAllowed({name:"mail.read",risk:"read",requiredScopes:["mail.read"]},new Set()),false);
+ assert.equal(communityAiActionAllowed({name:"automations.create",risk:"external",requiredScopes:["automations.write"]},new Set(["automations.write"])),true);
 });

@@ -1,3 +1,7 @@
+import {checkCommunityAutomationGrant,communityScheduledToolAllowed} from "./communityAutomationGrant.js";
+import {requireAiSubscription} from "../billing/aiAccess.js";
+import {executeAuthorizedCapability} from "./authorizedCapability.js";
+import {withToolBoundary} from "./toolBoundary.js";
 import {runModelRound,assistantToolMessage} from "./modelRound.js";
 import { deliverAutomationSummaryEmail } from "./automationSummaryEmail.js";
 import { and, desc, eq } from "drizzle-orm";
@@ -71,6 +75,10 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
         const automationRun = await beginAutomationRun(automation.id, automation.conversationId);
         let aiRunId: string | undefined;
         try {
+          const grant=automation.communityGrant;
+          const verifyGrant=async()=>{if(!grant)return null;if(!automation.accountId)throw new Error("Connected automation mailbox unavailable");const latest=await getAutomation(automation.userId,automation.id);if(latest.status!=="active"||JSON.stringify(latest.communityGrant)!==JSON.stringify(grant)||latest.accountId!==automation.accountId)throw new Error("Connected automation paused or changed");return checkCommunityAutomationGrant(automation.userId,automation.accountId,grant);};
+          const delegatedScopes=await verifyGrant();
+          await requireAiSubscription(automation.userId,automation.accountId??undefined);
           const aiSettings = await getAiCapabilitySettings(automation.userId);
           if (!aiSettings.enabled) throw new Error("GSW AI is disabled for this user");
           const provider = getAiProvider(aiSettings.modelProvider);
@@ -94,15 +102,15 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
           if (automation.accountId) {
             await requireAccountPermission(automation.userId, automation.accountId, "read");
           }
-          const mailboxSnapshot = automation.allowedScopes.includes("mail.read") && activeScopes.includes("mail.read")
+          const mailboxSnapshot = automation.allowedScopes.includes("mail.read") && activeScopes.includes("mail.read") && (!delegatedScopes||delegatedScopes.has("mail.read"))
             ? await buildMailboxSnapshot(automation.accountId)
             : "Mailbox reading is not authorized for this scheduled task.";
           const authorizedTools = scheduledToolDefinitions(
             agentMailRegistry.definitions(),
             automation.allowedScopes,
             activeScopes,
-            automation.sendPolicy?.enabled === true,
-          ).filter(tool => automation.accountId || !tool.requiredScopes.some(scope => scope.startsWith("mail.")));
+            !grant&&automation.sendPolicy?.enabled === true,
+          ).filter(tool => (automation.accountId || !tool.requiredScopes.some(scope => scope.startsWith("mail.")))&&(!delegatedScopes||communityScheduledToolAllowed(tool,delegatedScopes)));
           const toolNames = new Set(authorizedTools.map(tool => tool.name));
           const messages: AiProviderMessage[] = [{
             role: "user",
@@ -123,6 +131,7 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
           let model = "";
           const toolDefinitions = agentMailRegistry.providerDefinitions(tool => toolNames.has(tool.name));
           for (let round = 0; round < 8; round += 1) {
+            await verifyGrant();
             const response = await runModelRound(provider,{ messages, tools: toolDefinitions });
             model = response.model;
             if (!response.toolCalls.length) {
@@ -138,12 +147,13 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
                 output = { ok: false, error: "Tool not authorized for unattended execution." };
               } else {
                 // Recheck mutable grants and membership immediately before each tool.
+                const liveDelegated=await verifyGrant();
                 const current = await listActiveAiScopes(automation.userId, automation.accountId ?? undefined);
                 const freshSettings = await getAiCapabilitySettings(automation.userId);
                 const grantedNow = current.map(grant => grant.scope).filter(scope => freshSettings.enabled && isAiScopeGloballyEnabled(freshSettings, scope));
                 if (definition.risk !== "read" && definition.name !== "mail.send_draft" && writeCount >= 5) {
                   output = { ok: false, error: "Scheduled write limit (5 actions per run) reached." };
-                } else if (!scheduledToolDefinitions([definition], automation.allowedScopes, grantedNow, automation.sendPolicy?.enabled === true).length) {
+                } else if (!scheduledToolDefinitions([definition], automation.allowedScopes, grantedNow, !grant&&automation.sendPolicy?.enabled === true).length||(liveDelegated&&!communityScheduledToolAllowed(definition,liveDelegated))) {
                   output = { ok: false, error: "Scheduled permission has been revoked." };
                 } else {
                   if (automation.accountId) await requireAccountPermission(automation.userId, automation.accountId, definition.requiredScopes.some(scope => scope === "mail.write" || scope === "mail.send") ? "send" : "read");
@@ -201,15 +211,16 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
                   if (execute) {
                     if (definition.risk !== "read" && definition.name !== "mail.send_draft") writeCount += 1;
                     try {
-                      output = await agentMailRegistry.execute(call.function.name, call.function.arguments, {
+                      const executeTool=()=>executeAuthorizedCapability({toolName:call.function.name,rawArguments:call.function.arguments,toolCallId:call.id,context:{
                         userId: automation.userId,
-                        authUserId: automation.userId,
+                        authUserId: grant?.authUserId??automation.userId,
                         accountId: automation.accountId ?? "",
                         headers: {},
                         conversationId: automation.conversationId,
                         timeZone: automation.timeZone,
                         ...(stableSendKey ? { scheduledIdempotencyKey: stableSendKey } : {}),
-                      }, call.id);
+                      }});
+                      output=liveDelegated?await withToolBoundary(t=>communityScheduledToolAllowed({...t,risk:agentMailRegistry.definition(t.name)?.risk},liveDelegated),executeTool):await executeTool();
                       const result = output as { ok: boolean; data?: unknown; error?: { code: string; message: string; retryable: boolean } };
                       await recordAiToolResult(ledger.id, result);
                       if (definition.risk !== "read") {
@@ -227,6 +238,7 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
             }
             if (round === 7) content = "The scheduled task reached its tool execution limit. Review its results and narrow the task.";
           }
+          await verifyGrant();
           const result = { content, model };
           await appendAiMessage({
             conversationId: automation.conversationId,
@@ -253,7 +265,7 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
             result: content,
             conversationId: automation.conversationId,
           });
-          if (automation.accountId) {
+          if (automation.accountId&&!grant) {
             try {
               const delivery = await deliverAutomationSummaryEmail({
                 automationId:automation.id,runId:automationRun.id,accountId:automation.accountId,
