@@ -256,16 +256,20 @@ async function runInBatches<T>(items: T[], size: number, fn: (item: T) => Promis
   }
 }
 
-export async function launchCampaign(ctx: AgentExecutionContext, campaignId: string, expectedReviewHash: string) {
+export async function launchCampaign(ctx: AgentExecutionContext, campaignId: string, expectedReviewHash: string, options?:{scheduled?:boolean;checkAuthorization:()=>Promise<void>}) {
   const { campaign, recipients: initialRecipients } = await getCampaign(ctx.userId, campaignId);
   if (campaign.accountId !== ctx.accountId) throw badRequest("campaign belongs to a different mailbox");
   if (campaign.status === "launched") return { campaign, sent: initialRecipients.filter((recipient) => recipient.status === "queued").length, failed: initialRecipients.filter((recipient) => recipient.status === "failed").length, replay: true };
   if (campaign.status === "launching") throw badRequest("campaign is already launching");
+  const expectedStatus=options?.scheduled?"scheduled":"draft";
+  if(campaign.status!==expectedStatus)throw badRequest("Campaign is not available for this launch");
+  if(campaign.audienceTags.includes(COMMUNITY_AUDIENCE_TAG)&&!options)throw badRequest("Launch this Community campaign from its reviewed Community workspace");
+  await options?.checkAuthorization();
 
   // Atomically claim the draft before external sends. A concurrent edit or launch
   // must not race with recipient snapshot execution.
   const [claimed] = await db.update(aiCampaigns).set({ status: "launching", lastError: null, updatedAt: new Date() })
-    .where(and(eq(aiCampaigns.id, campaign.id), eq(aiCampaigns.userId, ctx.userId), eq(aiCampaigns.accountId, ctx.accountId), eq(aiCampaigns.status, "draft"))).returning({ id: aiCampaigns.id });
+    .where(and(eq(aiCampaigns.id, campaign.id), eq(aiCampaigns.userId, ctx.userId), eq(aiCampaigns.accountId, ctx.accountId), eq(aiCampaigns.status, expectedStatus))).returning({ id: aiCampaigns.id });
   if (!claimed) throw badRequest("campaign is no longer a draft; refresh its status before retrying");
   // Reload the snapshot only after the draft is claimed. Audience edits lock the
   // same campaign row, so in-flight selections cannot leak into an approved send.
@@ -283,6 +287,7 @@ export async function launchCampaign(ctx: AgentExecutionContext, campaignId: str
 
   await runInBatches(recipients.filter((recipient) => recipient.status === "pending" || recipient.status === "failed"), 4, async (recipient) => {
     try {
+      await options?.checkAuthorization();
       const isCommunity=claimedCampaign.audienceTags.includes(COMMUNITY_AUDIENCE_TAG);
       if(isCommunity && !(await communityRecipientEligible(recipient))) throw new Error("Community recipient is no longer eligible or consent verification is unavailable");
       const footer=isCommunity?communityRecipientFooter(recipient.communityUnsubscribeToken):"";
@@ -298,6 +303,8 @@ export async function launchCampaign(ctx: AgentExecutionContext, campaignId: str
       for (const assetId of attachmentAssetIds) {
         await attachExistingAssetToDraft({ accountId:ctx.accountId,draftEngineId:draft.engineId,userId:ctx.userId,assetId });
       }
+      await options?.checkAuthorization();
+      if(isCommunity&&!(await communityRecipientEligible(recipient)))throw new Error("Recipient eligibility changed before queueing");
       const result = await mail.sendDraft(ctx.accountId, draft.engineId, `campaign:${campaign.id}:${recipient.id}`);
       await db.update(aiCampaignRecipients).set({
         status: "queued",

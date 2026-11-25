@@ -3,7 +3,8 @@ import { z } from "zod";
 import { verifyMcpBearer } from "../mcp/verifyBearer.js";
 import { resolveMcpAccessProfile } from "../mcp/accessProfile.js";
 import { requireAccountPermission } from "../auth/authorize.js";
-import { createCommunityCampaign, getCampaign, listCampaigns, previewCampaign, launchCampaign, getCampaignDeliveryStates } from "../ai/campaignService.js";
+import { createCommunityCampaign, getCampaign, listCampaigns, previewCampaign, getCampaignDeliveryStates } from "../ai/campaignService.js";
+import { enqueueCommunityCampaign,cancelCommunityCampaign,communityCampaignJob } from "../ai/communityCampaignQueue.js";
 import { COMMUNITY_AUDIENCE_TAG } from "../ai/communityCampaignPolicy.js";
 import { badRequest, forbidden, unauthorized, notFound } from "../lib/errors.js";
 const account=z.object({accountId:z.string().uuid()});
@@ -40,15 +41,19 @@ export async function communityCampaignRoutes(app:FastifyInstance){
    return previewCampaign({...input,userId:identity.userId});
  });
  app.post("/integrations/community/v1/campaigns/launch",{config:{rateLimit:{max:2,timeWindow:"1 minute"}}},async(req)=>{
-   const input=account.extend({campaignId:z.string().uuid(),reviewHash:z.string().regex(/^[a-f0-9]{64}$/),confirm:z.literal(true)}).strict().parse(req.body);
+   const input=account.extend({campaignId:z.string().uuid(),reviewHash:z.string().regex(/^[a-f0-9]{64}$/),scheduledAt:z.number().int(),confirm:z.literal(true)}).strict().parse(req.body);
    const identity=await auth(req.headers.authorization,input.accountId,"campaign.send");
    await owned(identity.userId,input.accountId,input.campaignId);
-   const result=await launchCampaign({userId:identity.userId,authUserId:identity.authUserId,accountId:input.accountId,headers:{}},input.campaignId,input.reviewHash);
-   return {status:result.campaign.status,queued:result.sent,failed:result.failed};
+   return enqueueCommunityCampaign({...identity,accountId:input.accountId},input.campaignId,input.reviewHash,input.scheduledAt);
+ });
+ app.post("/integrations/community/v1/campaigns/cancel",async(req)=>{
+   const input=account.extend({campaignId:z.string().uuid()}).strict().parse(req.body);
+   const identity=await auth(req.headers.authorization,input.accountId,"campaign.send");
+   return cancelCommunityCampaign({...identity,accountId:input.accountId},input.campaignId);
  });
  app.post("/integrations/community/v1/campaigns/report",async(req)=>{
    const input=account.extend({campaignId:z.string().uuid()}).strict().parse(req.body);const identity=await auth(req.headers.authorization,input.accountId,"campaign.read");
    await owned(identity.userId,input.accountId,input.campaignId);
-   return getCampaignDeliveryStates({...input,userId:identity.userId});
+   return {...await getCampaignDeliveryStates({...input,userId:identity.userId}),job:await communityCampaignJob({...identity,accountId:input.accountId},input.campaignId)};
  });
 }
