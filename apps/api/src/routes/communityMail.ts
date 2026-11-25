@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { exportCommunityFile } from "../files/communityExport.js";
 import { verifyMcpBearer } from "../mcp/verifyBearer.js";
 import { resolveMcpAccessProfile } from "../mcp/accessProfile.js";
 import { requireAccountPermission } from "../auth/authorize.js";
@@ -67,6 +68,18 @@ async function prepare(header:string|undefined,input:Compose,scope="mail.send") 
   return {identity,account,body,rendered,digest,renderDigest,to,subject,mode,inReplyTo,references,signatureApplied:Boolean(preferences.signature)};
 }
 export async function communityMailRoutes(app:FastifyInstance) {
+ app.post("/integrations/community/v1/files/export",{bodyLimit:4096,config:{rateLimit:{max:12,timeWindow:"1 minute"}}},async(req,reply)=>{
+  const input=z.object({accountId:z.uuid(),assetId:z.uuid()}).strict().parse(req.body);
+  const identity=await verifyMcpBearer(req.headers.authorization?.startsWith("Bearer ")?req.headers.authorization.slice(7):"");
+  if(!identity)throw unauthorized();
+  if(!process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID||identity.clientId!==process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID||!identity.oauthScopes.has("files.read"))throw forbidden();
+  if((await resolveMcpAccessProfile(identity.userId,identity.authUserId)).mode!=="mailbox")throw forbidden();
+  const account=await requireAccountPermission(identity.userId,input.accountId,"read");
+  if(account.status!=="active")throw forbidden();
+  const {metadata,bytes}=await exportCommunityFile(identity.userId,input.assetId);
+  return reply.header("Cache-Control","no-store").header("X-Content-Type-Options","nosniff").header("X-GSW-File-Metadata",Buffer.from(JSON.stringify(metadata)).toString("base64url")).type("application/octet-stream").send(bytes);
+ });
+
   app.post("/integrations/community/v1/compose/review",{bodyLimit:256*1024,config:{rateLimit:{max:12,timeWindow:"1 minute"}}},async(req,reply)=>{
     reply.header("Cache-Control","no-store");
     const key=reviewKey(),parsed=compose.safeParse(req.body);
