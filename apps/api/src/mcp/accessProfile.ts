@@ -9,6 +9,7 @@ export const identityScopes = new Set(["openid", "email", "profile", "offline_ac
 export function scopeAllowedForMode(mode: McpAccountMode, scope: string): boolean {
   if (identityScopes.has(scope)) return true;
   if (mode === "identity") return false;
+  if (scope === "ai.infer") return mode === "mailbox";
   if (scope === "automation.read" || scope === "automation.write") return mode === "mailbox";
   return (aiScopes as readonly string[]).includes(scope) && (mode === "admin" ? adminScopes.has(scope) : !adminScopes.has(scope));
 }
@@ -20,7 +21,7 @@ export async function resolveMcpAccessProfile(userId: string, authUserId: string
   const bindings = identity ? await db.select({ id: emailAccounts.id }).from(emailAccounts).leftJoin(mailAccountMemberships, eq(mailAccountMemberships.accountId,emailAccounts.id)).where(and(sql`lower(${emailAccounts.address}) = ${identity.email.toLowerCase()}`, or(eq(emailAccounts.userId,userId), and(eq(mailAccountMemberships.userId,userId),eq(mailAccountMemberships.authUserId,authUserId))))).limit(1) : [];
   const memberships = await db.select({ role: organizationMemberships.role, status: organizationMemberships.status }).from(organizationMemberships).where(eq(organizationMemberships.userId, userId));
   const mode = selectMcpAccountMode(bindings.length > 0, Boolean(identity) && memberships.some(row => row.status === "active" && (row.role === "owner" || row.role === "admin")));
-  return { mode, allowedScopes: [...identityScopes, ...aiScopes.filter(scope => scopeAllowedForMode(mode, scope))] };
+  return { mode, allowedScopes: [...identityScopes, ...[...aiScopes, "ai.infer"].filter(scope => scopeAllowedForMode(mode, scope))] };
 }
 export function toolAllowedForMode(mode: McpAccountMode, name: string, scopes: readonly string[] = []): boolean {
   if (["get_current_user", "list_capabilities"].includes(name)) return true;

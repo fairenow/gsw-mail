@@ -1,4 +1,5 @@
 export const permissionDescriptions: Record<string, string> = {
+  "ai.infer": "Use your GSW Mail AI model and subscription in an authorized connected app. Does not grant email access or sending by itself.",
   "mail.read": "Read and search messages, threads, folders, headers and attachments in mailboxes you can access.",
   "mail.write": "Create and edit drafts, manage folders, change read/star status, move messages and delete drafts or messages where the tool permits.",
   "mail.send": "Send, reply to and forward email to recipients. Sending requires explicit confirmation.",
