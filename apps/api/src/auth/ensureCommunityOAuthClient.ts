@@ -4,7 +4,7 @@ import { db } from "../db/client.js";
 import { oauthClient } from "../db/schema.js";
 import { config } from "../config.js";
 
-export const communityOAuthScopes=["openid","email","profile","offline_access","mail.read","mail.write","mail.send","templates.read","signatures.read","ai.infer","campaign.read","campaign.write","campaign.send","contacts.read","contacts.write","calendar.read","calendar.write","templates.write","files.read","files.write","images.generate","automations.read","tasks.read"];
+export const communityOAuthScopes=["openid","email","profile","offline_access","mail.read","mail.write","mail.send","templates.read","signatures.read","ai.infer","campaign.read","campaign.write","campaign.send","contacts.read","contacts.write","calendar.read","calendar.write","templates.write","files.read","files.write","images.generate","automations.read","automations.write","tasks.read"];
 export async function ensureCommunityOAuthClient():Promise<"not_configured"|"registered"|"existing"|"conflict">{
  const clientId=process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID,redirect=process.env.GSW_COMMUNITY_OAUTH_REDIRECT_URI;
  if(!clientId||!redirect)return "not_configured";

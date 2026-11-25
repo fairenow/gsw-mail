@@ -1,5 +1,7 @@
 import { setAutomationSummaryEmailPreference } from "../automationSummaryEmail.js";
 import { z } from "zod";
+import {checkCommunityAutomationGrant,validateCommunityAutomationScopes} from "../communityAutomationGrant.js";
+import {getAutomation} from "../automationService.js";
 import { grantAiScope } from "../agentState.js";
 import { createAutomation, deleteAutomation, listAutomations, updateAutomation, approveAutomationSending, revokeAutomationSending } from "../automationService.js";
 import type { AgentExecutionContext, AgentToolDefinition, AgentToolResult } from "./types.js";
@@ -99,6 +101,12 @@ export const automationCreateTool: AgentToolDefinition = {
     let createdAutomationId: string | null = null;
     try {
       const input = createInput.parse(rawInput);
+      if(ctx.communityAutomationClientId){
+        if(!ctx.communityAutomationGrant||ctx.communityAutomationGrant.clientId!==ctx.communityAutomationClientId||input.emailSummaryToOwner)throw new Error("Connected automation requires exact reviewed read-only authorization");
+        const requested=validateCommunityAutomationScopes(input.allowedScopes);
+        if(requested.length!==ctx.communityAutomationGrant.scopes.length||!requested.every(s=>ctx.communityAutomationGrant!.scopes.includes(s)))throw new Error("Automation scope review changed");
+        await checkCommunityAutomationGrant(ctx.userId,ctx.accountId,ctx.communityAutomationGrant);
+      }
       stage = "persist_automation";
       const automation = await createAutomation({
         userId: ctx.userId,
@@ -109,6 +117,7 @@ export const automationCreateTool: AgentToolDefinition = {
         timeZone: input.timeZone,
         schedule: input.schedule,
         allowedScopes: input.allowedScopes,
+        ...(ctx.communityAutomationGrant?{communityGrant:ctx.communityAutomationGrant}:{}),
       });
       createdAutomationId = automation.id;
       stage = "configure_email_summary";
@@ -221,6 +230,7 @@ export const automationUpdateTool: AgentToolDefinition = {
         schedule: scheduleSchema.optional(),
       }).parse(rawInput);
       const { automationId, ...patch } = input;
+      if(ctx.communityAutomationClientId){const existing=await getAutomation(ctx.userId,automationId);if(existing.communityGrant?.clientId!==ctx.communityAutomationClientId||existing.accountId!==ctx.accountId||Object.keys(patch).length!==1||patch.status!=="paused")throw new Error("Only pausing a connected-app automation in this mailbox is authorized");}
       const automation = await updateAutomation(ctx.userId, automationId, patch);
       return success(ctx, toolCallId, startedAt, {
         id: automation.id,
