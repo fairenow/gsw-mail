@@ -199,7 +199,7 @@ export async function communityAiRoutes(app:FastifyInstance){
     }
     if(!communityAiToolAllowed(policy.tool,current.identity.oauthScopes)){history.push({role:"tool",tool_call_id:call.id,content:"Tool unavailable"});continue;}
     const recorded=await recordAiToolCall({runId:run.id,conversationId:conversation.id,providerToolCallId:call.id,toolName:name,risk:policy.tool.risk,requiredScopes:[...policy.tool.requiredScopes],argumentsJson:call.function.arguments});
-    const data=await withToolBoundary(t=>communityAiToolAllowed(t,current.identity.oauthScopes)&&permitted.has(t.name),()=>executeAuthorizedCapability({toolName:name,rawArguments:call.function.arguments,toolCallId:recorded.id,context:{...createMcpExecutionContext(current.identity,accountId),conversationId:conversation.id}}));
+    const data=await withToolBoundary(t=>communityAiToolAllowed(t,current.identity.oauthScopes)&&permitted.has(t.name),()=>executeAuthorizedCapability({toolName:name,rawArguments:call.function.arguments,toolCallId:recorded.id,context:{...createMcpExecutionContext(current.identity,accountId),conversationId:conversation.id,communityAutomationClientId:current.identity.clientId}}));
     await recordAiToolResult(recorded.id,data.ok?{ok:true,data:data.data}:{ok:false,error:{code:"tool_failed",message:"Authorized read did not complete",retryable:false}});
     activity.push({name,ok:data.ok});
     history.push({role:"tool",tool_call_id:call.id,content:wrapUntrustedContent(JSON.stringify(data.ok?data.data:{error:"Operation failed"})??"No result","tool",14000)});

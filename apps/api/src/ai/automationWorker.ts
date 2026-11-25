@@ -264,6 +264,7 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
             timeZone: automation.timeZone,
             result: content,
             conversationId: automation.conversationId,
+            claimedAt:automation.runningAt,
           });
           if (automation.accountId&&!grant) {
             try {
@@ -283,7 +284,8 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
             runId: automationRun.id,
             schedule: automation.schedule,
             timeZone: automation.timeZone,
-            error,
+            error:automation.communityGrant?new Error("Connected automation needs renewed authorization or review"):error,
+            claimedAt:automation.runningAt,pause:Boolean(automation.communityGrant),
           });
           console.warn("[ai:automation] run failed", {
             automationId: automation.id,

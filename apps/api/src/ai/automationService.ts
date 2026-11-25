@@ -172,6 +172,7 @@ export async function completeAutomationRun(input: {
   timeZone: string;
   result: string;
   conversationId?: string | null;
+  claimedAt?: Date | null;
 }) {
   const now = new Date();
   const nextRunAt = input.schedule.frequency === "once"
@@ -193,16 +194,17 @@ export async function completeAutomationRun(input: {
       lastError: null,
       ...(input.conversationId ? { conversationId: input.conversationId } : {}),
       updatedAt: now,
-    }).where(eq(aiAutomations.id, input.automationId));
+    }).where(and(eq(aiAutomations.id,input.automationId),eq(aiAutomations.status,"active"),...(input.claimedAt?[eq(aiAutomations.runningAt,input.claimedAt)]:[])));
   });
 }
-
 export async function failAutomationRun(input: {
   automationId: string;
   runId: string;
   schedule: AutomationSchedule;
   timeZone: string;
   error: unknown;
+  claimedAt?: Date | null;
+  pause?: boolean;
 }) {
   const now = new Date();
   const message = input.error instanceof Error ? input.error.message : String(input.error);
@@ -218,16 +220,15 @@ export async function failAutomationRun(input: {
     }).where(eq(aiAutomationRuns.id, input.runId));
 
     await tx.update(aiAutomations).set({
-      status: nextRunAt ? "active" : "failed",
+      status: input.pause?"paused":nextRunAt ? "active" : "failed",
       nextRunAt: nextRunAt ?? now,
       lastRunAt: now,
       runningAt: null,
       lastError: message.slice(0, 4000),
       updatedAt: now,
-    }).where(eq(aiAutomations.id, input.automationId));
+    }).where(and(eq(aiAutomations.id,input.automationId),eq(aiAutomations.status,"active"),...(input.claimedAt?[eq(aiAutomations.runningAt,input.claimedAt)]:[])));
   });
 }
-
 export async function approveAutomationSending(input: {
   userId: string;
   automationId: string;

@@ -168,7 +168,7 @@ export const automationListTool: AgentToolDefinition = {
     try {
       const automations = await listAutomations(ctx.userId);
       return success(ctx, toolCallId, startedAt, {
-        automations: automations.slice(0, 100).map((automation) => ({
+        automations: automations.filter(a=>!ctx.communityAutomationClientId||a.accountId===ctx.accountId&&a.communityGrant?.clientId===ctx.communityAutomationClientId).slice(0, 100).map((automation) => ({
           id: automation.id,
           title: automation.title,
           instruction: automation.instruction,
