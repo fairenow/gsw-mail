@@ -544,6 +544,9 @@ async function runConversationTurn(input: {
     const execution=await executeAiTurn<ChatTurnResult,undefined>({
       provider,messages:input.providerMessages,maxToolRounds:6,maxCallsPerRound:4,
       prepareRound:async(turn,final)=>{
+        await requireAiSubscription(input.userId,input.accountId);
+        if(!(await getAiCapabilitySettings(input.userId)).enabled)throw forbidden("GSW AI is disabled in Settings.");
+        if(input.accountId)await requireAccountPermission(input.userId,input.accountId,"read");
         input.emit?.({type:"status",phase:"thinking",label:turn===0?"Thinking":final?"Summarizing verified results":"Reviewing what I found"});
         console.info(JSON.stringify({event:"gsw.chat.stage",stage:"provider.start",runId:run.id,turn,provider:provider.id,toolCount:final?0:tools?.length??0}));
         return {tools,context:undefined};
@@ -564,6 +567,7 @@ async function runConversationTurn(input: {
             "Do not call tools; do not tell the user to narrow their request.",
           ].join("\n"),onError:error=>{reportChatError(error,{operation:"chat.progress_summary",category:"chat",correlationId:run.id});}},
       onTool:async({round:turn,call,respond})=>{
+      await requireAiSubscription(input.userId,input.accountId);
       if (!toolContext) {
         const content = "Select a mailbox before asking me to inspect your mail.";
         await appendAiMessage({
@@ -758,6 +762,9 @@ async function runConversationTurn(input: {
       }
     });
     if(execution.kind==="stopped")return execution.value;
+    await requireAiSubscription(input.userId,input.accountId);
+    if(!(await getAiCapabilitySettings(input.userId)).enabled)throw forbidden("GSW AI is disabled in Settings.");
+    if(input.accountId)await requireAccountPermission(input.userId,input.accountId,"read");
     if (execution.kind === "completed"&&!execution.limitReached) {
         const result=execution.result,turn=execution.round;
         const content = result.content ?? "I couldn't produce a response.";

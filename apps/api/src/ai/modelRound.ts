@@ -5,7 +5,7 @@ export async function runModelRound(provider:AiProvider,input:AiProviderRunInput
  options.signal?.throwIfAborted();
  // Only a tool-free round can expose live answer text. Tool-selection rounds
  // may contain speculative prose and must not expose it as verified output.
- const result=await provider.run({...input,...(!input.tools?.length&&options.onDelta?{onTextDelta:options.onDelta}:{}),...(options.signal?{signal:options.signal}:{})});
+ const result=await provider.run({...input,...(!provider.id.startsWith("modal")&&!input.tools?.length&&options.onDelta?{onTextDelta:options.onDelta}:{}),...(options.signal?{signal:options.signal}:{})});
  options.signal?.throwIfAborted();
  if(!result.model||(!result.content?.trim()&&!result.toolCalls.length))throw new HttpError(502,"Model returned no usable response");
  const ids=new Set<string>();

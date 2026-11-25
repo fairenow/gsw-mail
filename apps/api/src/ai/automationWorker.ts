@@ -136,10 +136,11 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
           const toolDefinitions = agentMailRegistry.providerDefinitions(tool => toolNames.has(tool.name));
           const execution=await executeAiTurn<never,undefined>({
             provider,messages,maxToolRounds:8,maxCallsPerRound:8,
-            prepareRound:async()=>{await verifyGrant();return {tools:toolDefinitions,context:undefined};},
+            prepareRound:async()=>{await verifyGrant();await requireAiSubscription(automation.userId,automation.accountId??undefined);if(!(await getAiCapabilitySettings(automation.userId)).enabled)throw new Error("GSW AI is disabled");if(automation.accountId)await requireAccountPermission(automation.userId,automation.accountId,"read");return {tools:toolDefinitions,context:undefined};},
             onRoundResult:({result})=>{model=result.model;},
             finalization:{prompt:"The scheduled task has reached its tool-round budget. Summarize only verified results and identify unfinished work. Do not claim unverified actions.",onError:()=>undefined},
             onTool:async({call,respond})=>{
+              await requireAiSubscription(automation.userId,automation.accountId??undefined);
               const semanticName = call.function.name.replaceAll("__", ".");
               const definition = agentMailRegistry.definition(semanticName);
               let output: unknown;
@@ -241,6 +242,9 @@ export function createAutomationWorker(intervalMs = 60_000): AutomationWorker {
           });
           content=execution.kind==="completed"?execution.result.content?.trim()||"The scheduled task completed without a written result.":"The scheduled task reached its tool execution limit. Review its verified results.";
           await verifyGrant();
+          await requireAiSubscription(automation.userId,automation.accountId??undefined);
+          if(!(await getAiCapabilitySettings(automation.userId)).enabled)throw new Error("GSW AI is disabled");
+          if(automation.accountId)await requireAccountPermission(automation.userId,automation.accountId,"read");
           if(grant?.eventGrant&&automation.accountId)await readCommunityEventSnapshot(grant.eventGrant,automation.accountId);
           const result = { content, model };
           await appendAiMessage({
