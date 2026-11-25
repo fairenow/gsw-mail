@@ -39,7 +39,7 @@ export async function checkCommunityAutomationGrant(userId:string,accountId:stri
  if(!settings.enabled||!["automations.write",...scopes].every(s=>isAiScopeGloballyEnabled(settings,s)&&grants.has(s)))throw forbidden("Connected automation permission changed");
  return new Set(scopes);
 }
-export async function createCommunityAutomationGrant(identity:{userId:string;authUserId:string;clientId:string;oauthScopes:ReadonlySet<string>},accountId:string,requested:readonly string[]){
+export async function createCommunityAutomationGrant(identity:{userId:string;authUserId:string;clientId:string;oauthScopes:ReadonlySet<string>},accountId:string,requested:readonly string[]):Promise<CommunityAutomationGrant>{
  const scopes=validateCommunityAutomationScopes(requested);
  if(!["offline_access","ai.infer","automations.write",...scopes].every(s=>identity.oauthScopes.has(s)))throw forbidden("Connect again and approve the requested automation scopes");
  const consent=await consentFor(identity.userId,identity.authUserId,identity.clientId);
