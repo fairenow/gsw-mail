@@ -746,6 +746,7 @@ export const api = {
     return completed;
   },
   settings: () => cachedGet<ProductSettings>("/product/settings", 60_000, 10 * 60_000),
+  freshSettings: async () => { readCache.delete("/product/settings"); return get<ProductSettings>("/product/settings"); },
   prefetchSettings: () => { void cachedGet<ProductSettings>("/product/settings", 60_000, 10 * 60_000).catch(() => undefined); },
   updateSettings: async (body: { general?: Record<string, unknown>; compose?: Record<string, unknown>; contacts?: Record<string, unknown>; ai?: Record<string, unknown> }) => { const result = await patch<ProductSettings>("/product/settings", body); readCache.delete("/product/settings"); return result; },
   saveSignature: async (body: ProductSettings["signature"]) => { const result = await request("/product/signature", { method: "PUT", headers: headers(true), body: JSON.stringify(body) }).then((res) => json<ProductSettings["signature"]>(res)); readCache.delete("/product/settings"); return result; },
