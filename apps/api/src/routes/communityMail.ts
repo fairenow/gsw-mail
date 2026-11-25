@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { pool } from "../db/client.js";
+import { listManagedEventLinks } from "../booking/manageLinks.js";
 import { exportCommunityFile } from "../files/communityExport.js";
 import { verifyMcpBearer } from "../mcp/verifyBearer.js";
 import { resolveMcpAccessProfile } from "../mcp/accessProfile.js";
@@ -67,7 +69,31 @@ async function prepare(header:string|undefined,input:Compose,scope="mail.send") 
   const digest=communitySendDigest({userId:identity.userId,clientId:identity.clientId,accountId:account.id,senderAddress:account.address,senderName:account.displayName,to,subject,renderDigest,threading:JSON.stringify([input.replyMessageId??null,inReplyTo??null,references??null])});
   return {identity,account,body,rendered,digest,renderDigest,to,subject,mode,inReplyTo,references,signatureApplied:Boolean(preferences.signature)};
 }
+async function authorizeBooking(header:string|undefined,accountId:string){
+ const identity=await verifyMcpBearer(header?.startsWith("Bearer ")?header.slice(7):"");
+ if(!identity)throw unauthorized();
+ if(!process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID||identity.clientId!==process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID||!identity.oauthScopes.has("calendar.read"))throw forbidden();
+ if((await resolveMcpAccessProfile(identity.userId,identity.authUserId)).mode!=="mailbox")throw forbidden();
+ await requireAccountPermission(identity.userId,accountId,"manage");
+ return identity;
+}
 export async function communityMailRoutes(app:FastifyInstance) {
+ app.post("/integrations/community/v1/bookings/links",async(req,reply)=>{
+  reply.header("Cache-Control","no-store");
+  const {accountId}=z.object({accountId:z.uuid()}).strict().parse(req.body);
+  const identity=await authorizeBooking(req.headers.authorization,accountId);
+  const {links}=await listManagedEventLinks(identity.userId,accountId);
+  return {links:links.filter(l=>l.enabled).map(l=>({id:l.id,name:l.name,url:l.url,timeZone:l.timeZone,approval:l.approval}))};
+ });
+ app.post("/integrations/community/v1/bookings/reconcile",{bodyLimit:16000,config:{rateLimit:{max:30,timeWindow:"1 minute"}}},async(req,reply)=>{
+  reply.header("Cache-Control","no-store");
+  const input=z.object({accountId:z.uuid(),linkId:z.uuid(),requestIds:z.array(z.uuid()).max(100)}).strict().parse(req.body);
+  await authorizeBooking(req.headers.authorization,input.accountId);
+  const link=await pool.query("SELECT id FROM event_links WHERE id=$1 AND account_id=$2",[input.linkId,input.accountId]);
+  if(!link.rows[0])throw forbidden();
+  const {rows}=await pool.query(`SELECT id,request_id AS "requestId",email,status,starts_at AS "startsAt",ends_at AS "endsAt",updated_at AS "updatedAt" FROM event_bookings WHERE account_id=$1 AND link_id=$2 AND community_verified=true AND request_id=ANY($3::uuid[])`,[input.accountId,input.linkId,input.requestIds]);
+  return {bookings:rows};
+ });
  app.post("/integrations/community/v1/files/export",{bodyLimit:4096,config:{rateLimit:{max:12,timeWindow:"1 minute"}}},async(req,reply)=>{
   const input=z.object({accountId:z.uuid(),assetId:z.uuid()}).strict().parse(req.body);
   const identity=await verifyMcpBearer(req.headers.authorization?.startsWith("Bearer ")?req.headers.authorization.slice(7):"");

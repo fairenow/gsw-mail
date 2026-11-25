@@ -50,6 +50,7 @@ export type BookingRow = {
   event_id: string | null;
   meeting_url: string | null;
   payload_hash: string;
+  community_verified?: boolean;
 };
 type Database = Pick<PoolClient, "query">;
 const origin = "https://mail.guidedstepswellness.com";
@@ -214,7 +215,7 @@ export function createBookingService(
       );
     }
   }
-  async function submitBooking(link: EventLinkRow, raw: unknown) {
+  async function submitBooking(link: EventLinkRow, raw: unknown, communityVerified=false) {
     const input = bookingInputSchema.parse(raw);
     try {
       validateGuest(link.settings, input);
@@ -242,7 +243,7 @@ export function createBookingService(
         [link.id, input.requestId],
       );
       if (old.rows[0]) {
-        if (old.rows[0].payload_hash !== hash)
+        if (old.rows[0].payload_hash !== hash || Boolean(old.rows[0].community_verified)!==communityVerified)
           throw conflict("Please refresh before making a different booking");
         return { status: old.rows[0].status };
       }
@@ -268,7 +269,7 @@ export function createBookingService(
       const id = randomUUID(),
         status = link.settings.approval === "auto" ? "approved" : "pending";
       const inserted = await db.query<BookingRow>(
-        `INSERT INTO event_bookings(id,link_id,account_id,request_id,payload_hash,settings,name,email,phone,message,starts_at,ends_at,status,hold_until) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,LEAST($11::timestamptz,now()+interval '24 hours')) RETURNING *`,
+        `INSERT INTO event_bookings(id,link_id,account_id,request_id,payload_hash,settings,name,email,phone,message,starts_at,ends_at,status,hold_until,community_verified) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,LEAST($11::timestamptz,now()+interval '24 hours'),$14) RETURNING *`,
         [
           id,
           link.id,
@@ -283,6 +284,7 @@ export function createBookingService(
           slot.start,
           slot.end,
           status,
+          communityVerified,
         ],
       );
       if (status === "pending")

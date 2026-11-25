@@ -1,3 +1,5 @@
+import { communityProofSchema,verifyCommunityRegistration } from "../booking/communityRegistration.js";
+import { bookingInputSchema } from "../booking/policy.js";
 import { redeemNativeOwnerCode } from "../meetings/nativeOwnerCode.js";
 import { redeemOwnerCode } from "../meetings/ownerCode.js";
 import { verifyBookingDecisionToken } from "../booking/decisionToken.js";
@@ -164,7 +166,10 @@ export async function publicEventLinks(app: FastifyInstance) {
     },
     async (req, reply) => {
       const { slug } = z.object({ slug: z.string().max(70) }).parse(req.params);
-      const result = await submitBooking(await findLink(slug), req.body);
+      const {communityProof,...raw}=bookingInputSchema.extend({communityProof:communityProofSchema.optional()}).strict().parse(req.body);
+      const link=await findLink(slug);
+      if(communityProof)await verifyCommunityRegistration({linkId:link.id,requestId:raw.requestId,email:raw.email,proof:communityProof});
+      const result = await submitBooking(link,raw,Boolean(communityProof));
       return reply.code(201).send(result);
     },
   );
