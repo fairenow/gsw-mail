@@ -1,9 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { db, pool } from "../db/client.js";
-import { users, oauthConsent, oauthClient } from "../db/schema.js";
-import { and, eq } from "drizzle-orm";
-import { requireAccountPermission } from "../auth/authorize.js";
-import { resolveMcpAccessProfile } from "../mcp/accessProfile.js";
+import { pool } from "../db/client.js";
 import { launchCampaign,previewCampaign } from "./campaignService.js";
 import { COMMUNITY_AUDIENCE_TAG,validCampaignSchedule,sameCampaignLaunch } from "./communityCampaignPolicy.js";
 import { badRequest,conflict,forbidden,HttpError } from "../lib/errors.js";
@@ -20,7 +16,7 @@ export async function ensureCommunityCampaignQueue(){
 const required=["openid","campaign.send","mail.send","templates.read","signatures.read"];
 type Stage="lease"|"authorization"|"review"|"launch"|"finalize";
 function diagnosticCode(error:unknown){
- if(error instanceof HttpError)return "http_"+error.status;
+ if(error instanceof HttpError)return error.status===403&&authFailures.has(error.message)?error.message:"http_"+error.status;
  const code=(error as {code?:unknown}|null)?.code;
  if(typeof code==="string"&&/^[0-9A-Z]{5}$/.test(code))return "sql_"+code;
  if(error instanceof Error&&/lease/i.test(error.message))return "lease_unavailable";
@@ -33,27 +29,37 @@ function workerDiagnostic(campaignId:string,stage:Stage,code:string){
 }
 async function verifyScheduledReview(owner:Owner,job:Job){
  await assertCommunityCampaignAuthorization(owner,job.consent_id??undefined);
- if(!job.consent_id)throw forbidden();
+ if(!job.consent_id)denyAuthorization("saved_consent_missing");
  const preview=await previewCampaign({userId:owner.userId,accountId:owner.accountId,campaignId:job.campaign_id});
  if(preview.campaign.status!=="scheduled"||preview.campaign.reviewHash!==job.review_hash)throw conflict("Review changed");
 }
 
+// Check the saved principal, exact consent and live mailbox permissions in
+// one database snapshot. Never manufacture a bearer token or bypass consent.
+const authFailures=new Set(["client_mismatch","consent_missing_or_user_inactive","consent_changed","consent_scopes_missing","mailbox_identity_missing","mailbox_send_denied","saved_consent_missing"]);
+function denyAuthorization(code:string):never{throw forbidden(code);}
 async function assertCommunityCampaignAuthorization(owner:Owner,expectedConsentId?:string){
- if(!process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID||owner.clientId!==process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID)throw forbidden();
- // Use the canonical schema mappings (users.status maps to user_status),
- // matching the delegated bearer verifier and retaining live consent checks.
- const rows=await db.select({id:oauthConsent.id,scopes:oauthConsent.scopes})
-  .from(oauthConsent)
-  .innerJoin(oauthClient,eq(oauthConsent.clientId,oauthClient.clientId))
-  .innerJoin(users,eq(users.authUserId,oauthConsent.userId))
-  .where(and(eq(oauthConsent.userId,owner.authUserId),eq(oauthConsent.clientId,owner.clientId),
-   eq(users.id,owner.userId),eq(users.status,"active"),eq(oauthClient.disabled,false)))
-  .limit(1);
- if(!rows[0]||!required.every(scope=>rows[0]!.scopes.includes(scope))||(expectedConsentId!==undefined&&rows[0].id!==expectedConsentId))throw forbidden();
- if((await resolveMcpAccessProfile(owner.userId,owner.authUserId)).mode!=="mailbox")throw forbidden();
- const mailbox=await requireAccountPermission(owner.userId,owner.accountId,"send");
- if(mailbox.status!=="active")throw forbidden();
- return rows[0].id;
+ if(!process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID||owner.clientId!==process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID)denyAuthorization("client_mismatch");
+ const {rows}=await pool.query<{consent_id:string;scopes_ok:boolean;mailbox_identity:boolean;send_allowed:boolean}>(`
+ SELECT c.id AS consent_id,c.scopes @> $4::text[] AS scopes_ok,
+ EXISTS(SELECT 1 FROM auth_users au JOIN email_accounts e ON lower(e.address)=lower(au.email)
+  LEFT JOIN mail_account_memberships m ON m.account_id=e.id
+  WHERE au.id=$1 AND (e.user_id=$3 OR (m.user_id=$3 AND m.auth_user_id=$1))) AS mailbox_identity,
+ EXISTS(SELECT 1 FROM email_accounts e JOIN domains d ON d.id=e.domain_id
+  JOIN mail_account_memberships m ON m.account_id=e.id
+  WHERE e.id=$5::uuid AND m.user_id=$3 AND m.account_membership_role IN ('owner','delegate')
+  AND e.account_status='active') AS send_allowed
+ FROM oauth_consent c JOIN oauth_client cl ON cl.client_id=c.client_id AND cl.disabled=false
+ JOIN users u ON u.auth_user_id=c.user_id AND u.id=$3 AND u.user_status='active'
+ WHERE c.user_id=$1 AND c.client_id=$2
+ ORDER BY c.id LIMIT 2`,[owner.authUserId,owner.clientId,owner.userId,required,owner.accountId]);
+ const row=rows[0];
+ if(!row||rows.length!==1)denyAuthorization("consent_missing_or_user_inactive");
+ if(expectedConsentId!==undefined&&row.consent_id!==expectedConsentId)denyAuthorization("consent_changed");
+ if(row.scopes_ok!==true)denyAuthorization("consent_scopes_missing");
+ if(row.mailbox_identity!==true)denyAuthorization("mailbox_identity_missing");
+ if(row.send_allowed!==true)denyAuthorization("mailbox_send_denied");
+ return row.consent_id;
 }
 export async function enqueueCommunityCampaign(owner:Owner,campaignId:string,hash:string,scheduledAt:number){
  if(!Number.isSafeInteger(scheduledAt))throw badRequest("Invalid scheduled time");
@@ -118,11 +124,12 @@ export function startCommunityCampaignWorker(onError:(error:unknown)=>void){
     if(lost||stopped)throw new Error("Campaign worker lease unavailable");
     const row=await pool.query("SELECT 1 FROM community_campaign_jobs WHERE campaign_id=$1 AND lease_owner=$2 AND status='running' AND lease_expires_at>now()",[job.campaign_id,lease]);
     if(row.rows.length!==1)throw new Error("Campaign worker lease expired");
-    if(!job.consent_id)throw new Error("Campaign lacks a current authorization");
+    if(!job.consent_id)denyAuthorization("saved_consent_missing");
     await assertCommunityCampaignAuthorization(owner,job.consent_id);
    };
    let stage:Stage="lease";
    try{
+    stage="authorization";
     await check();
     stage="review";
     await verifyScheduledReview(owner,job);
@@ -151,8 +158,13 @@ export function startCommunityCampaignWorker(onError:(error:unknown)=>void){
   const {rows}=await pool.query<Job>("SELECT * FROM community_campaign_jobs WHERE status IN ('queued','failed','uncertain') ORDER BY scheduled_at LIMIT 20");
   for(const job of rows){
    const owner={userId:job.user_id,authUserId:job.auth_user_id,clientId:job.client_id,accountId:job.account_id};
-   try{await verifyScheduledReview(owner,job);workerDiagnostic(job.campaign_id,"review","preflight_passed");}
-   catch(error){workerDiagnostic(job.campaign_id,"review",diagnosticCode(error));}
+   let code="preflight_passed";
+   try{await verifyScheduledReview(owner,job);}catch(error){code=diagnosticCode(error);}
+   workerDiagnostic(job.campaign_id,"review",code);
+   // Persist diagnostic evidence only, never change a schedule or delivery state.
+   await pool.query(`UPDATE community_campaign_jobs SET result=jsonb_set(COALESCE(result,'{}'::jsonb),'{preflight}',$3::jsonb,true)
+    WHERE campaign_id=$1 AND status=$2 AND status IN ('queued','failed','uncertain') AND lease_owner IS NULL`,
+    [job.campaign_id,job.status,JSON.stringify({code,checkedAt:new Date().toISOString()})]);
   }
  })().catch(onError);
  const timer=setInterval(()=>void tick(),15000);timer.unref();void tick();
