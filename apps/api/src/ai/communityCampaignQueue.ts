@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { pool } from "../db/client.js";
+import { db, pool } from "../db/client.js";
+import { users, oauthConsent, oauthClient } from "../db/schema.js";
+import { and, eq } from "drizzle-orm";
 import { requireAccountPermission } from "../auth/authorize.js";
 import { resolveMcpAccessProfile } from "../mcp/accessProfile.js";
 import { launchCampaign,previewCampaign } from "./campaignService.js";
@@ -18,10 +20,15 @@ export async function ensureCommunityCampaignQueue(){
 const required=["openid","campaign.send","mail.send","templates.read","signatures.read"];
 async function assertCommunityCampaignAuthorization(owner:Owner,expectedConsentId?:string){
  if(!process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID||owner.clientId!==process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID)throw forbidden();
- const {rows}=await pool.query<{id:string;scopes:string[]}>(`SELECT c.id,c.scopes FROM oauth_consent c
- JOIN oauth_client cl ON cl.client_id=c.client_id AND cl.disabled=false
- JOIN users u ON u.auth_user_id=c.user_id AND u.status='active'
- WHERE c.user_id=$1 AND c.client_id=$2 AND u.id=$3 LIMIT 1`,[owner.authUserId,owner.clientId,owner.userId]);
+ // Use the canonical schema mappings (users.status maps to user_status),
+ // matching the delegated bearer verifier and retaining live consent checks.
+ const rows=await db.select({id:oauthConsent.id,scopes:oauthConsent.scopes})
+  .from(oauthConsent)
+  .innerJoin(oauthClient,eq(oauthConsent.clientId,oauthClient.clientId))
+  .innerJoin(users,eq(users.authUserId,oauthConsent.userId))
+  .where(and(eq(oauthConsent.userId,owner.authUserId),eq(oauthConsent.clientId,owner.clientId),
+   eq(users.id,owner.userId),eq(users.status,"active"),eq(oauthClient.disabled,false)))
+  .limit(1);
  if(!rows[0]||!required.every(scope=>rows[0]!.scopes.includes(scope))||(expectedConsentId!==undefined&&rows[0].id!==expectedConsentId))throw forbidden();
  if((await resolveMcpAccessProfile(owner.userId,owner.authUserId)).mode!=="mailbox")throw forbidden();
  const mailbox=await requireAccountPermission(owner.userId,owner.accountId,"send");
