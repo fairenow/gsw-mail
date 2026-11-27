@@ -1,0 +1,45 @@
+{
+  auto_https off
+  admin off
+}
+
+:{$PORT:8080} {
+  root * /srv
+  encode zstd gzip
+
+  @assets path /assets/*
+  header @assets Cache-Control "public, max-age=31536000, immutable"
+  @logo path /logo.png
+  header @logo Cache-Control "public, max-age=3600, stale-while-revalidate=86400"
+
+  route {
+    @docsHome {
+      host mail-docs.guidedstepswellness.com
+      path /
+    }
+    handle @docsHome {
+      rewrite * /docs/index.html
+      file_server
+    }
+    handle /docs {
+      rewrite * /docs/index.html
+      file_server
+    }
+    @spa path /booking/decision /book/* /settings/mcp-mailbox-recovery /support /mail /sign-in /oauth/select-account /oauth/consent /privacy /terms /account-deleted /auth/callback /sign-up /create-password /setup /control-center /settings /contacts /calendar /calendar/rsvp
+    handle @spa {
+      rewrite * /index.html
+      file_server
+    }
+    @api path /integrations /integrations/* /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/* /api /api/* /mail/* /admin /admin/* /product /product/* /health /auth/exchange /public/avatars /public/avatars/*
+    handle @api {
+      reverse_proxy https://gsw-mail-production.up.railway.app {
+        header_up Host {upstream_hostport}
+        header_up X-Forwarded-Host {http.request.host}
+        header_up X-Forwarded-Proto https
+      }
+    }
+    handle {
+      file_server
+    }
+  }
+}
