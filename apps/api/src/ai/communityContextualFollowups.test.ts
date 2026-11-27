@@ -1,0 +1,10 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {contextualFollowups} from "./communityContextualFollowups.js";
+const event={id:"event-id",title:"Christmas Celebration 2026",startTime:Date.UTC(2026,11,25),endTime:Date.UTC(2026,11,26),status:"published",approvalStatus:"approved"};
+const base={expandedAdmin:true,permissions:{events:{edit:true},registrations:{edit:true},volunteers:{edit:true},emailCampaigns:{send:true}},permitted:new Set<string>(),campaignAllowed:true,timeZone:"America/Detroit",now:Date.UTC(2026,10,26),prompt:"Show me the event"};
+test("ordinary event information is uncluttered",()=>{assert.equal(contextualFollowups({...base,event}),undefined);});
+test("verified pending records get relevant actions",()=>{const result=contextualFollowups({...base,event,records:{event,audienceType:"volunteers",statusCounts:{new:2,confirmed:1},totalRecords:3}});assert.equal(result?.kind,"actions");if(result?.kind==="actions"){assert.equal(result.options[0]?.label,"Review 2 pending volunteers");assert.match(result.options[1]?.value??"",/one separate message per eligible recipient/);}});
+test("no permission means no privileged suggestions",()=>{assert.equal(contextualFollowups({...base,event,permissions:{},expandedAdmin:false,records:{event,audienceType:"event_registrants",statusCounts:{pending:2},totalRecords:2}}),undefined);});
+test("reply suggestions require a verified message and authorized tool",()=>{const mail={messageId:"msg1",subject:"Question"};assert.equal(contextualFollowups({...base,mail}),undefined);assert.equal(contextualFollowups({...base,mail,permitted:new Set(["mail.reply"])})?.kind,"actions");});
+test("approval only when event is pending and active",()=>{assert.equal(contextualFollowups({...base,event:{...event,approvalStatus:"pending"}})?.kind,"actions");assert.equal(contextualFollowups({...base,event:{...event,approvalStatus:"pending"},now:event.endTime+1}),undefined);});
