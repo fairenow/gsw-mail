@@ -749,13 +749,17 @@ export class StalwartEngine implements MailEngine {
         mailboxIds: { [targetId]: true },
       };
     }
-    await this.emailSet(accountId, {
+    const responses = await this.emailSet(accountId, {
       accountId,
       update,
       create: undefined,
       destroy: undefined,
       ifInState: undefined,
     }, "move", { targetMailbox: toMailbox, targetMailboxId: targetId });
+    const failures = responses[0]?.[1]?.notUpdated as Record<string, { description?: string; type?: string }> | undefined;
+    const failed = messageIds.find(id => failures?.[id]);
+    if (failed) throw new Error(failures?.[failed]?.description ?? failures?.[failed]?.type ?? "Message move failed");
+    this.mailboxStatsUpdatedAt.delete(engineAccountId);
   }
 
   async destroy(engineAccountId: EngineAccountId, messageIds: EngineMessageId[]): Promise<void> {
@@ -950,6 +954,34 @@ export class StalwartEngine implements MailEngine {
     const buffer = Buffer.from(await res.arrayBuffer());
     const contentType = res.headers.get("content-type") ?? "application/octet-stream";
     return { contentType, content: buffer };
+  }
+
+  // Stalwart uses authenticated senders in the recipient's address books as
+  // a delivery-time spam override. Keep automatically trusted addresses in
+  // their own book, and never replace or duplicate an existing contact.
+  async ensureTrustedSender(engineAccountId: EngineAccountId, email: string): Promise<void> {
+    const { accountId } = await this.accountIdOf(engineAccountId);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const cards = (await this.client.call([["ContactCard/get", { accountId, ids: null, properties: ["id", "emails"] }, "trustcards"]]))[0]![1] as { state?: string; list?: JmapContact[] };
+        if ((cards.list ?? []).some(card => objectValues(card.emails).some(item => item.address.trim().toLowerCase() === email))) return;
+
+        const books = (await this.client.call([["AddressBook/get", { accountId, ids: null }, "trustbooks"]]))[0]![1] as { state?: string; list?: JmapAddressBook[] };
+        let bookId = books.list?.find(book => book.name === "Trusted Senders")?.id;
+        if (!bookId) {
+          const created = (await this.client.call([["AddressBook/set", { accountId, ifInState: books.state, create: { trusted: { name: "Trusted Senders" } } }, "trustbook"]]))[0]![1] as { created?: Record<string, { id?: string }>; notCreated?: Record<string, { description?: string }> };
+          bookId = created.created?.trusted?.id;
+          if (!bookId) throw new Error(created.notCreated?.trusted?.description ?? "Could not create Trusted Senders address book");
+        }
+        const input: EngineContactInput = { addressBookIds: [bookId], displayName: email, emails: [{ value: email, isPrimary: true }], phones: [] };
+        const result = (await this.client.call([["ContactCard/set", { accountId, ifInState: cards.state, create: { trusted: contactInputToCard(input, bookId, randomUUID()) } }, "trustsender"]]))[0]![1] as { created?: Record<string, { id?: string }>; notCreated?: Record<string, { description?: string }> };
+        if (!result.created?.trusted?.id) throw new Error(result.notCreated?.trusted?.description ?? "Could not save trusted sender");
+        return;
+      } catch (error) {
+        if (error instanceof JmapError && error.type === "stateMismatch" && attempt < 3) continue;
+        throw error;
+      }
+    }
   }
 
   async listAddressBooks(engineAccountId: EngineAccountId): Promise<EngineAddressBook[]> {
