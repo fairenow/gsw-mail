@@ -11,10 +11,21 @@ export async function communityConversation(owner:Owner,id:string|undefined,firs
  if(!row)throw new Error("Unable to create conversation");return row;
 }
 export async function listCommunityConversations(owner:Owner){
- return db.select({id:aiConversations.id,title:aiConversations.title,lastMessageAt:aiConversations.lastMessageAt}).from(aiConversations).where(and(scope(owner),eq(aiConversations.status,"active"))).orderBy(desc(aiConversations.lastMessageAt)).limit(50);
+ return db.select({id:aiConversations.id,title:aiConversations.title,lastMessageAt:aiConversations.lastMessageAt,status:aiConversations.status}).from(aiConversations).where(scope(owner)).orderBy(desc(aiConversations.lastMessageAt)).limit(50);
 }
 export async function communityTranscript(owner:Owner,id:string){
  await communityConversation(owner,id,"");
  const rows=await db.select({role:aiMessages.role,content:aiMessages.content}).from(aiMessages).where(eq(aiMessages.conversationId,id)).orderBy(desc(aiMessages.createdAt),desc(aiMessages.id)).limit(32);
  return rows.reverse().filter((row):row is {role:"user"|"assistant";content:string}=>row.role==="user"||row.role==="assistant");
+}
+
+export async function manageCommunityConversation(owner:Owner,id:string,operation:"rename"|"archive"|"restore"|"delete",title?:string){
+ const where=and(scope(owner),eq(aiConversations.id,id));
+ if(operation==="delete"){
+  const [row]=await db.delete(aiConversations).where(where).returning({id:aiConversations.id});
+  if(!row)throw notFound();return {deleted:true};
+ }
+ const patch=operation==="rename"?{title:title!.trim().slice(0,120),updatedAt:new Date()}:{status:operation==="archive"?"archived":"active",updatedAt:new Date()};
+ const [row]=await db.update(aiConversations).set(patch).where(where).returning({id:aiConversations.id,title:aiConversations.title,status:aiConversations.status});
+ if(!row)throw notFound();return {conversation:row};
 }
