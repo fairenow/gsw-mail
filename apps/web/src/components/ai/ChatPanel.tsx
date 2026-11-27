@@ -115,7 +115,7 @@ export function ChatPanel(props: { onOpenScheduledWork?: () => void } = {}) {
   useEffect(()=>{let active=true;setIdentityError(false);if(!account?.id)return;void getSession().then(session=>{if(!active)return;if(session?.user.id)setIdentity({id:session.user.id,accountId:account.id});else setIdentityError(true);}).catch(()=>{if(active)setIdentityError(true);});return()=>{active=false;};},[account?.id]);
   if (!aiAccess) return <section className="gsw-future-chat"><h2>GSW Chat</h2>{aiAccessLoading ? <p role="status">Checking AI subscription…</p> : <><p>Chat requires an active AI subscription for this workspace.</p><a className="gsw-primary-btn" href="/control-center#billing">Upgrade AI</a><p>If you don’t manage billing, ask your workspace owner to add AI.</p></>}</section>;
   if(!identity||identity.accountId!==account?.id)return <section className="gsw-future-chat"><p role="status">{identityError?"Unable to verify your chat identity. Refresh to try again.":"Restoring your chat…"}</p></section>;
-  return <SubscribedChatPanel key={identity.id+":"+account.id} userId={identity.id} {...props} />;
+  return <SubscribedChatPanel key={identity.id+":"+account?.id} userId={identity.id} {...props} />;
 }
 
 function SubscribedChatPanel({ onOpenScheduledWork,userId }: { onOpenScheduledWork?: () => void;userId:string }) {
@@ -124,6 +124,7 @@ function SubscribedChatPanel({ onOpenScheduledWork,userId }: { onOpenScheduledWo
   const [mediaPreview, setMediaPreview] = useState<AiChatAttachment | null>(null);
   const draftScope="mail:"+userId+":"+(account?.id??"none");
   const conversationKey=activeChatKey(draftScope);
+  const pendingDraftKey=conversationKey+":pending";
   const [conversationId, setConversationId] = useState<string | null>(()=>readChatValue(conversationKey)||null);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -208,6 +209,7 @@ function SubscribedChatPanel({ onOpenScheduledWork,userId }: { onOpenScheduledWo
           writeChatValue(conversationKey,result.conversationId);
         }
         if (result.status === "completed" && result.response) {
+          try{const pending=JSON.parse(readChatValue(pendingDraftKey)||"null");if(pending?.commandId===commandId&&typeof pending.key==="string"&&pending.key.startsWith(draftKey(draftScope,null).slice(0,-3))&&typeof pending.text==="string"){if(readChatValue(pending.key).trim()===pending.text.trim())writeChatValue(pending.key,"");if(pending.key===draftKey(draftScope,conversationId))clearSent(pending.text);writeChatValue(pendingDraftKey,"");}}catch{/* No matching pending draft. */}
           localStorage.removeItem(key);
           setActiveCommandId(null);
           const detail = result.conversationId ? await api.chatConversation(result.conversationId) : null;
@@ -626,7 +628,7 @@ function SubscribedChatPanel({ onOpenScheduledWork,userId }: { onOpenScheduledWo
     if (override && failedTurn && executionActivities.some((item) => item.status === "done" && item.toolName && /^(?:mail\\.|campaign\\.|calendar\\.|contacts\\.|automations\\.|files\\.)/.test(item.toolName)) && !window.confirm("Some operations may already have completed. Check the results before retrying to avoid duplicates. Retry anyway?")) return;
     const attachmentsForTurn = override && failedTurn ? failedTurn.attachments ?? [] : pendingAttachments;
     const content = typedContent || (attachmentsForTurn.length > 1 ? "Please review the attached files." : "Please review the attached file.");
-    if ((!typedContent && attachmentsForTurn.length === 0) || sending || uploadingFiles) return;
+    if ((!typedContent && attachmentsForTurn.length === 0) || sending || uploadingFiles || conversationLoading) return;
     const userMessage: AiChatMessage = { role: "user", content, attachments: attachmentsForTurn };
     const next = [...(override && failedTurn ? messages.slice(0, -1) : messages), userMessage].slice(-23);
     setMessages(next);
@@ -643,12 +645,14 @@ function SubscribedChatPanel({ onOpenScheduledWork,userId }: { onOpenScheduledWo
       const activeKey = `gsw-chat-active-command:${account?.id ?? "none"}`;
       const commandId = crypto.randomUUID();
       localStorage.setItem(activeKey,commandId);
+      if(typedContent)writeChatValue(pendingDraftKey,JSON.stringify({commandId,key:draftKey(draftScope,conversationId),text:typedContent}));
       setActiveCommandId(commandId);
       const response = await api.streamChat(account?.id ?? null, next, conversationId, handleStreamEvent, attachmentsForTurn.map((item) => item.assetId),commandId);
       if (stoppedCommandsRef.current.has(commandId)) return;
       localStorage.removeItem(activeKey);
       setActiveCommandId(null);
       clearSent(typedContent);
+      writeChatValue(pendingDraftKey,"");
       setConversationId(response.conversationId);
       writeChatValue(conversationKey, response.conversationId);
       setIntervention(response.intervention);
