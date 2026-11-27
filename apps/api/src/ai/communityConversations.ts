@@ -1,3 +1,4 @@
+import {followupSchema,type Followup} from "./communityFollowups.js";
 import { and,desc,eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { aiConversations,aiMessages } from "../db/schema.js";
@@ -15,8 +16,8 @@ export async function listCommunityConversations(owner:Owner){
 }
 export async function communityTranscript(owner:Owner,id:string){
  await communityConversation(owner,id,"");
- const rows=await db.select({role:aiMessages.role,content:aiMessages.content}).from(aiMessages).where(eq(aiMessages.conversationId,id)).orderBy(desc(aiMessages.createdAt),desc(aiMessages.id)).limit(32);
- return rows.reverse().filter((row):row is {role:"user"|"assistant";content:string}=>row.role==="user"||row.role==="assistant");
+ const rows=await db.select({role:aiMessages.role,content:aiMessages.content,metadata:aiMessages.metadata}).from(aiMessages).where(eq(aiMessages.conversationId,id)).orderBy(desc(aiMessages.createdAt),desc(aiMessages.id)).limit(32);
+ return rows.reverse().flatMap(row=>{if(row.role!=="user"&&row.role!=="assistant")return [];const followup=row.role==="assistant"?followupSchema.safeParse((row.metadata as {followup?:unknown}|null)?.followup):null;return [{role:row.role as "user"|"assistant",content:row.content,...(followup?.success?{followup:followup.data as Followup}:{})}];});
 }
 
 export async function manageCommunityConversation(owner:Owner,id:string,operation:"rename"|"archive"|"restore"|"delete",title?:string){
