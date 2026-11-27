@@ -6,7 +6,7 @@ function tool(name:string,description:string,properties:Record<string,unknown>={
  return {type:"function",function:{name:name.replaceAll(".","__"),description,parameters:{type:"object",properties,required,additionalProperties:false}}};
 }
 export const communityBridgeTools=[
- tool("community.admin.capabilities","Discover additional super-administrator Community operations and their native arguments. Use a module name to narrow the catalog.",{module:str}),
+ tool("community.admin.capabilities","Discover additional super-administrator Community operations. First omit module to list modules, then pass a module to get exact native arguments.",{module:str}),
  tool("community.admin.read","Execute a discovered read-only administrative operation. Supply exact native arguments as a JSON object string, omitting sessionToken.",{operation:str,argumentsJson:str,offset:{type:"integer",minimum:0}},["operation","argumentsJson"]),
  tool("community.admin.me","Read the current authenticated Community administrator, role and permitted modules."),
  tool("community.events.list","Find accessible Community events by title or slug. For upcoming events use period upcoming, for past use past; set status published when requested. Upcoming results are sorted earliest first. Returns dates and actual IDs.",{search:str,period:{type:"string",enum:["all","upcoming","ongoing","past"]},status:{type:"string",enum:["all","published"]},offset:{type:"integer",minimum:0},limit:{type:"integer",minimum:1,maximum:30}}),
