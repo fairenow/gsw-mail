@@ -6,6 +6,8 @@ import { requireUser } from "../auth/middleware.js";
 import { db } from "../db/client.js";
 import { inboundMessages, mailboxRole } from "../db/schema.js";
 import { getUserEngine } from "../engine/index.js";
+import { StalwartEngine } from "../engine/stalwart.js";
+import { markSenderNotSpam } from "../lib/markSenderNotSpam.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { activeScheduledEngineIds } from "../outbound/schedule.js";
 import { getOutboxMessage, listOutboxMessages, outboxCount } from "../outbound/scheduledOutbox.js";
@@ -150,6 +152,25 @@ export default async (app: FastifyInstance) => {
     const role = roleFromName(input.mailbox);
     if (role) await syncCache(input.accountId, req.params.id, { mailboxRole: role });
     return { messageId: req.params.id, mailbox: input.mailbox };
+  });
+
+  app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/not-spam", async (req) => {
+    const { accountId } = z.object({ accountId: z.string().uuid() }).parse(req.body);
+    if (isVirtualOutboxId(req.params.id)) throw badRequest("outbox messages cannot be marked not spam");
+    const engine = await getUserEngine({ productUserId: req.user!.id, authUserId: req.authUserId ?? req.user!.id, accountId, headers: req.headers as Record<string, string>, permission: "send" });
+    const trustedSender = await markSenderNotSpam(engine, accountId, req.params.id, async email => {
+      if (engine instanceof StalwartEngine) {
+        await engine.ensureTrustedSender(accountId, email);
+      } else {
+        // The in-memory demo engine has no incoming mail filter.
+        const contacts = await engine.listContacts(accountId);
+        if (!contacts.some(contact => contact.emails.some(value => value.value.trim().toLowerCase() === email))) {
+          await engine.createContact(accountId, { displayName: email, emails: [{ value: email, isPrimary: true }], phones: [] });
+        }
+      }
+    });
+    await syncCache(accountId, req.params.id, { mailboxRole: "inbox" });
+    return { messageId: req.params.id, mailbox: "Inbox", trustedSender };
   });
 
   app.post<{ Params: Params; Body: ActionBody }>("/mail/messages/:id/archive", async (req) => {

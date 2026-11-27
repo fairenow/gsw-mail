@@ -692,6 +692,7 @@ export const api = {
   bulk: async (accountId: string, ids: string[], action: BulkMailAction) => { const result = await post<{ updated: number; action: BulkMailAction }>("/mail/messages/bulk", { accountId, ids, action }, interactiveTimeout); clearAccountMailCache(accountId); return result; },
   archive: async (accountId: string, engineId: string) => { const result = await post(`/mail/messages/${engineId}/archive`, { accountId }); removeCachedMessage(accountId, engineId); return result; },
   trash: async (accountId: string, engineId: string) => { const result = await post(`/mail/messages/${engineId}/trash`, { accountId }); removeCachedMessage(accountId, engineId); return result; },
+  notSpam: async (accountId: string, engineId: string) => { const result = await post<{ trustedSender: string | null }>(`/mail/messages/${encodeURIComponent(engineId)}/not-spam`, { accountId }, interactiveTimeout); clearAccountMailCache(accountId); return result; },
   move: async (accountId: string, engineId: string, mailbox: string) => { const result = await post(`/mail/messages/${engineId}/move`, { accountId, mailbox }); removeCachedMessage(accountId, engineId); return result; },
   destroy: async (accountId: string, engineId: string) => { const result = await post(`/mail/messages/${engineId}/destroy`, { accountId }); removeCachedMessage(accountId, engineId); return result; },
   emptyTrash: async (accountId: string) => { const result = await post<{ deleted: number }>("/mail/messages/empty-trash", { accountId }); clearAccountMailCache(accountId); return result; },
