@@ -322,7 +322,10 @@ export async function communityAiRoutes(app:FastifyInstance){
     const result=execution.result;
     const finalAuth=await authorize(req.headers.authorization,accountId);
     const content=(auditEvidence.size?"## Verified Community database audit\n\n"+[...auditEvidence.values()].join("\n\n")+"\n\n## Analysis and next steps\n\n":"")+(result.content??"No response.");
-    const followup=contextualFollowups({event:verifiedEvents.size===1?[...verifiedEvents.values()][0]:undefined,records:verifiedEvents.size===1?verifiedRecords:undefined,mail:verifiedMail.size===1?[...verifiedMail.values()][0]:undefined,expandedAdmin:expandedAdminTools,permissions:profileData.success?profileData.data.permissions:null,permitted:lastPermitted,campaignAllowed:["campaign.write","campaign.send","mail.send"].every(scope=>finalAuth.identity.oauthScopes.has(scope)),timeZone,now:Date.now(),prompt});
+    const selectedEvent=verifiedEvents.size===1?[...verifiedEvents.values()][0]:undefined;
+    const selectedRecords=verifiedEvents.size===1?verifiedRecords:undefined;
+    const selectedMail=verifiedMail.size===1?[...verifiedMail.values()][0]:undefined;
+    const followup=contextualFollowups({...(selectedEvent?{event:selectedEvent}:{}),...(selectedRecords?{records:selectedRecords}:{}),...(selectedMail?{mail:selectedMail}:{}),expandedAdmin:expandedAdminTools,permissions:profileData.success?profileData.data.permissions:null,permitted:lastPermitted,campaignAllowed:["campaign.write","campaign.send","mail.send"].every(scope=>finalAuth.identity.oauthScopes.has(scope)),timeZone,now:Date.now(),prompt});
     await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model,...(followup?{metadata:{followup}}:{})});
     return await finish({conversationId:conversation.id,content,model:result.model,toolActivity:activity,...(followup?{followup}:{})});
 
