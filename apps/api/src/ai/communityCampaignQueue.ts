@@ -6,7 +6,7 @@ import { requireAccountPermission } from "../auth/authorize.js";
 import { resolveMcpAccessProfile } from "../mcp/accessProfile.js";
 import { launchCampaign,previewCampaign } from "./campaignService.js";
 import { COMMUNITY_AUDIENCE_TAG,validCampaignSchedule,sameCampaignLaunch } from "./communityCampaignPolicy.js";
-import { badRequest,conflict,forbidden } from "../lib/errors.js";
+import { badRequest,conflict,forbidden,HttpError } from "../lib/errors.js";
 type Owner={userId:string;authUserId:string;clientId:string;accountId:string};
 type Job={campaign_id:string;user_id:string;auth_user_id:string;client_id:string;consent_id:string|null;account_id:string;review_hash:string;scheduled_at:Date;status:string;lease_owner:string|null};
 export async function ensureCommunityCampaignQueue(){
@@ -18,6 +18,26 @@ export async function ensureCommunityCampaignQueue(){
  ); ALTER TABLE community_campaign_jobs ADD COLUMN IF NOT EXISTS consent_id text; CREATE INDEX IF NOT EXISTS community_campaign_jobs_due ON community_campaign_jobs(scheduled_at) WHERE status='queued';`);
 }
 const required=["openid","campaign.send","mail.send","templates.read","signatures.read"];
+type Stage="lease"|"authorization"|"review"|"launch"|"finalize";
+function diagnosticCode(error:unknown){
+ if(error instanceof HttpError)return "http_"+error.status;
+ const code=(error as {code?:unknown}|null)?.code;
+ if(typeof code==="string"&&/^[0-9A-Z]{5}$/.test(code))return "sql_"+code;
+ if(error instanceof Error&&/lease/i.test(error.message))return "lease_unavailable";
+ if(error instanceof Error&&/review changed/i.test(error.message))return "review_changed";
+ return "execution_error";
+}
+function workerDiagnostic(campaignId:string,stage:Stage,code:string){
+ // No recipient addresses, tokens, SQL parameters or message bodies in logs.
+ console.warn(JSON.stringify({event:"community_campaign_worker_diagnostic",campaignId,stage,code}));
+}
+async function verifyScheduledReview(owner:Owner,job:Job){
+ await assertCommunityCampaignAuthorization(owner,job.consent_id??undefined);
+ if(!job.consent_id)throw forbidden();
+ const preview=await previewCampaign({userId:owner.userId,accountId:owner.accountId,campaignId:job.campaign_id});
+ if(preview.campaign.status!=="scheduled"||preview.campaign.reviewHash!==job.review_hash)throw conflict("Review changed");
+}
+
 async function assertCommunityCampaignAuthorization(owner:Owner,expectedConsentId?:string){
  if(!process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID||owner.clientId!==process.env.GSW_COMMUNITY_OAUTH_CLIENT_ID)throw forbidden();
  // Use the canonical schema mappings (users.status maps to user_status),
@@ -66,7 +86,13 @@ export async function cancelCommunityCampaign(owner:Owner,campaignId:string){
   await client.query("BEGIN");
   const row=await client.query("SELECT id FROM ai_campaigns WHERE id=$1 AND user_id=$2 AND account_id=$3 AND status='scheduled' FOR UPDATE",[campaignId,owner.userId,owner.accountId]);
   if(!row.rowCount)throw conflict("Campaign is not awaiting launch");
-  const cancelled=await client.query(`UPDATE community_campaign_jobs SET status='cancelled',updated_at=now() WHERE campaign_id=$1 AND user_id=$2 AND account_id=$3 AND client_id=$4 AND status='queued'`,[campaignId,owner.userId,owner.accountId,owner.clientId]);
+  // A previously stopped pre-launch attempt is recoverable only if no
+  // recipient changed state and no outbound idempotency record exists.
+  const cancelled=await client.query(`UPDATE community_campaign_jobs j SET status='cancelled',updated_at=now()
+   WHERE campaign_id=$1 AND user_id=$2 AND account_id=$3 AND client_id=$4
+   AND (status='queued' OR (status IN ('failed','uncertain') AND lease_owner IS NULL
+    AND NOT EXISTS (SELECT 1 FROM ai_campaign_recipients r WHERE r.campaign_id=j.campaign_id AND (r.status<>'pending' OR r.send_id IS NOT NULL))
+    AND NOT EXISTS (SELECT 1 FROM outbound_messages o WHERE o.account_id=j.account_id AND o.client_request_id LIKE 'campaign:'||j.campaign_id::text||':%')))`,[campaignId,owner.userId,owner.accountId,owner.clientId]);
   if(!cancelled.rowCount)throw conflict("Campaign is already running");
   await client.query("UPDATE ai_campaigns SET status='draft',updated_at=now() WHERE id=$1",[campaignId]);
   await client.query("COMMIT");return {cancelled:true};
@@ -91,21 +117,44 @@ export function startCommunityCampaignWorker(onError:(error:unknown)=>void){
    const check=async()=>{
     if(lost||stopped)throw new Error("Campaign worker lease unavailable");
     const row=await pool.query("SELECT 1 FROM community_campaign_jobs WHERE campaign_id=$1 AND lease_owner=$2 AND status='running' AND lease_expires_at>now()",[job.campaign_id,lease]);
-    if(!row.rowCount)throw new Error("Campaign worker lease expired");
+    if(row.rows.length!==1)throw new Error("Campaign worker lease expired");
     if(!job.consent_id)throw new Error("Campaign lacks a current authorization");
     await assertCommunityCampaignAuthorization(owner,job.consent_id);
    };
+   let stage:Stage="lease";
    try{
     await check();
+    stage="review";
+    await verifyScheduledReview(owner,job);
+    stage="launch";
     const result=await launchCampaign({userId:owner.userId,authUserId:owner.authUserId,accountId:owner.accountId,headers:{}},job.campaign_id,job.review_hash,{scheduled:true,checkAuthorization:check});
+    stage="finalize";
     if(lost||stopped)throw new Error("Launch outcome needs verification");
     await pool.query(`UPDATE community_campaign_jobs SET status='completed',result=$3,lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE campaign_id=$1 AND lease_owner=$2 AND status='running' AND lease_expires_at>now()`,[job.campaign_id,lease,JSON.stringify({queued:result.sent,failed:result.failed,status:result.campaign.status})]);
-   }catch{
-    // Never auto-replay a potentially partially completed external send.
-    await pool.query(`UPDATE community_campaign_jobs SET status='uncertain',lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE campaign_id=$1 AND lease_owner=$2 AND status='running'`,[job.campaign_id,lease]);
+   }catch(error){
+    // A failed pre-launch is distinguishable from an uncertain external send.
+    // Keep the campaign locked until the user explicitly cancels and reviews it.
+    const code=diagnosticCode(error);
+    workerDiagnostic(job.campaign_id,stage,code);
+    await pool.query(`UPDATE community_campaign_jobs j SET status=CASE WHEN
+     EXISTS (SELECT 1 FROM ai_campaigns c WHERE c.id=j.campaign_id AND c.status='scheduled' AND c.launched_at IS NULL)
+     AND NOT EXISTS (SELECT 1 FROM ai_campaign_recipients r WHERE r.campaign_id=j.campaign_id AND (r.status<>'pending' OR r.send_id IS NOT NULL))
+     AND NOT EXISTS (SELECT 1 FROM outbound_messages o WHERE o.account_id=j.account_id AND o.client_request_id LIKE 'campaign:'||j.campaign_id::text||':%')
+     THEN 'failed' ELSE 'uncertain' END,
+     result=$3::jsonb,lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE campaign_id=$1 AND lease_owner=$2 AND status='running'`,[job.campaign_id,lease,JSON.stringify({stage,code})]);
    }finally{clearInterval(heartbeat);}
   }catch(error){onError(error);}finally{busy=false;}
  };
+ // A bounded, read-only startup preflight validates saved schedules without
+ // drafting, queueing, rescheduling or sending any email.
+ void (async()=>{
+  const {rows}=await pool.query<Job>("SELECT * FROM community_campaign_jobs WHERE status IN ('queued','failed','uncertain') ORDER BY scheduled_at LIMIT 20");
+  for(const job of rows){
+   const owner={userId:job.user_id,authUserId:job.auth_user_id,clientId:job.client_id,accountId:job.account_id};
+   try{await verifyScheduledReview(owner,job);workerDiagnostic(job.campaign_id,"review","preflight_passed");}
+   catch(error){workerDiagnostic(job.campaign_id,"review",diagnosticCode(error));}
+  }
+ })().catch(onError);
  const timer=setInterval(()=>void tick(),15000);timer.unref();void tick();
  return ()=>{stopped=true;clearInterval(timer);};
 }
