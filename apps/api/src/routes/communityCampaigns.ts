@@ -33,7 +33,8 @@ export async function communityCampaignRoutes(app:FastifyInstance){
  });
  app.post("/integrations/community/v1/campaigns/list",async(req)=>{
    const input=account.strict().parse(req.body);const identity=await auth(req.headers.authorization,input.accountId,"campaign.read");
-   return {campaigns:(await listCampaigns(identity.userId,100)).filter(c=>c.accountId===input.accountId&&c.audienceTags.includes(COMMUNITY_AUDIENCE_TAG)).map(c=>({id:c.id,title:c.title,subject:c.subject,status:c.status,recipientCount:c.recipientCount}))};
+   const campaigns=(await listCampaigns(identity.userId,100)).filter(c=>c.accountId===input.accountId&&c.audienceTags.includes(COMMUNITY_AUDIENCE_TAG));
+   return {campaigns:await Promise.all(campaigns.map(async c=>({id:c.id,title:c.title,subject:c.subject,status:c.status,recipientCount:c.recipientCount,job:await communityCampaignJob({...identity,accountId:input.accountId},c.id)})))};
  });
  app.post("/integrations/community/v1/campaigns/review",async(req)=>{
    const input=account.extend({campaignId:z.string().uuid()}).strict().parse(req.body);const identity=await auth(req.headers.authorization,input.accountId,"campaign.read");
