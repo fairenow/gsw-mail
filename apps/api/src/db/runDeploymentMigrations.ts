@@ -16,6 +16,7 @@ import { applyMcpApprovalMigration } from "./applyMcpApprovalMigration.js";
  * scoped advisory lock. The existing MCP approval pre-deploy runner remains.
  */
 export const DEPLOYMENT_MIGRATIONS = [
+  "0027_campaign_attachment_assets.sql",
   "0045_billing_foundation.sql",
   "0046_mailbox_storage_5gb.sql",
   "0047_mailbox_storage_minimum.sql",
