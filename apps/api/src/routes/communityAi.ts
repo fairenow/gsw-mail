@@ -176,7 +176,7 @@ export async function communityAiRoutes(app:FastifyInstance){
      const parsed=z.object({operation:z.string().max(100),argumentsJson:z.string().max(10000)}).strict().safeParse(parseCommunityActionArguments(call.function.arguments));
      if(!parsed.success){respond("Invalid administrative proposal");return undefined;}
      try{
-      const proposal=z.object({operation:z.string(),argumentsJson:z.string()}).strict().parse(await callCommunityBridge(communityContext,accountId,name,JSON.stringify(parsed.data)));
+      const proposal=z.object({operation:z.string(),argumentsJson:z.string(),effect:z.string().optional()}).strict().parse(await callCommunityBridge(communityContext,accountId,name,JSON.stringify(parsed.data)));
       const content="Review the proposed Community administrative action. Nothing has been changed.";
       await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model});
       return await finish({conversationId:conversation.id,content,model:result.model,toolActivity:activity,communityActionProposal:proposal});
