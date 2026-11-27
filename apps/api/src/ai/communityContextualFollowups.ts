@@ -25,14 +25,14 @@ export function contextualFollowups(input:{event?:Event;records?:{event:Event;au
    actions.push({label:"Review "+count+" pending "+noun,value:"Find the pending "+noun+" for "+eventLabel(records.event,input.timeZone)+". Show the exact records for review, then prepare individual confirmation actions for the selected records. Do not confirm without approval."});
   }
  }
- if(event&&input.expandedAdmin&&event.approvalStatus==="pending"&&can("events","edit")){
+ if(event&&event.endTime>input.now&&input.expandedAdmin&&event.approvalStatus==="pending"&&can("events","edit")){
   actions.push({label:"Review event approval",value:"Review the current approval status and details of "+eventLabel(event,input.timeZone)+". Prepare the native event approval for my review if it is still awaiting approval."});
  }
  // Do not offer mass outreach on every informational answer. Offer it when
  // the user is working on outreach, or has just retrieved a nonempty audience.
  const target=records?.event??event;
  const outreach=/\b(email|mail|message|contact|outreach|announcement|invite|invitation|remind|reminder|blast|campaign|follow.up)\b/i.test(input.prompt);
- if(target&&input.campaignAllowed&&can("emailCampaigns","send")&&(outreach||!!records&&records.totalRecords>0)){
+ if(target&&target.endTime>input.now&&input.campaignAllowed&&can("emailCampaigns","send")&&(outreach||!!records&&records.totalRecords>0)){
   const audience=records?.audienceType==="volunteers"?"volunteers":records?.audienceType==="event_registrants"?"registrants":records?.audienceType==="sponsors"?"sponsors":null;
   if(audience||outreach)actions.push({label:audience?"Prepare individual emails to "+audience:"Prepare event email campaign",value:"Prepare a reviewed email campaign for "+eventLabel(target,input.timeZone)+(audience?" targeting its "+audience:"")+". Verify the eligible recipients and draft the subject and content. Send one separate message per eligible recipient only after my explicit approval."});
  }
