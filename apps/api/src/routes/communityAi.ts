@@ -153,6 +153,18 @@ export async function communityAiRoutes(app:FastifyInstance){
    {role:"user",content:prompt}
   ];
   const activity:Array<{name:string;ok:boolean}>=[];
+  const auditEvidence=new Map<string,string>();
+  const auditSchema=z.object({source:z.literal("native_community_registration_records"),asOf:z.string(),events:z.array(z.object({id:z.string(),title:z.string(),startTime:z.number(),createdAt:z.number(),databaseInsertedAt:z.number(),totalRegistrations:z.number().int().nonnegative(),statusCounts:z.record(z.string(),z.number().int().nonnegative()),earliestRegistration:z.number().nullable(),latestRegistration:z.number().nullable(),registrationsPredatingEvent:z.number().int().nonnegative()})),truncated:z.boolean()});
+  function rememberAudit(data:unknown){
+   const parsed=auditSchema.safeParse(data);if(!parsed.success)return;
+   const date=(n:number|null)=>n===null?"None":new Intl.DateTimeFormat("en-US",{timeZone,year:"numeric",month:"short",day:"numeric",hour:"numeric",minute:"2-digit",timeZoneName:"short"}).format(n);
+   for(const event of parsed.data.events){
+    const title=event.title.replace(/[\r\n]/g," ").replace(/[|]/g,"/").slice(0,200);
+    const counts=Object.entries(event.statusCounts).map(([status,count])=>status+": "+count).join(", ")||"None";
+    auditEvidence.set(event.id,"**"+title+"** — "+date(event.startTime)+"\n- Original event creation: "+date(event.createdAt)+"\n- Database insertion: "+date(event.databaseInsertedAt)+"\n- Actual registration records: "+event.totalRegistrations+" ("+counts+")\n- Registration creation range: "+date(event.earliestRegistration)+" to "+date(event.latestRegistration)+"\n- Registrations predating original event creation: "+event.registrationsPredatingEvent);
+   }
+  }
+
   const run=await startAiRun({conversationId:conversation.id,userId:initial.identity.userId,accountId,provider:provider.id,metadata:{route:"community.chat",clientId:initial.identity.clientId}});
   const finish=async<T extends {model:string}>(value:T)=>{await completeAiRun(run.id,{model:value.model,metadata:{route:"community.chat",toolActivity:activity}});return value;};
   try{
@@ -194,6 +206,7 @@ export async function communityAiRoutes(app:FastifyInstance){
      try{
       const data=await callCommunityBridge(communityContext,accountId,name,call.function.arguments);
       activity.push({name,ok:true});
+      if(name==="community.events.audit")rememberAudit(data);
       if(name==="community.events.records"){
        const resolution=z.object({resolution:z.string(),candidates:z.array(z.object({title:z.string(),startTime:z.number(),status:z.string()})).optional(),totalCandidates:z.number().optional()}).passthrough().safeParse(data);
        if(resolution.success&&resolution.data.resolution==="clarification_required"){
@@ -294,7 +307,7 @@ export async function communityAiRoutes(app:FastifyInstance){
   if(execution.kind==="completed"){
     const result=execution.result;
     await authorize(req.headers.authorization,accountId);
-    const content=result.content??"No response.";
+    const content=(auditEvidence.size?"## Verified Community database audit\n\n"+[...auditEvidence.values()].join("\n\n")+"\n\n## Analysis and next steps\n\n":"")+(result.content??"No response.");
     await appendAiMessage({conversationId:conversation.id,role:"assistant",content,provider:provider.id,model:result.model});
     return await finish({conversationId:conversation.id,content,model:result.model,toolActivity:activity});
 
